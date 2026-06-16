@@ -6,7 +6,7 @@
 // ── CONFIG ───────────────────────────────────────────────
 const SERVER_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:3001'
-  : 'https://your-mortalive-server.railway.app'; // ← update after deploy
+  : 'https://mortalive-server-production.up.railway.app/'; // ← update after deploy
 
 const ICE_CONFIG = {
   iceServers: [
