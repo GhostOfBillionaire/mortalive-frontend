@@ -5,7 +5,7 @@ const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
   (location.hostname === 'localhost'
     ? 'http://localhost:3001'
-    : 'https://your-mortalive-server.up.railway.app'); // ← replace with your real Railway URL
+    : 'https://mortalive-server-production.up.railway.app'); // ← replace with your real Railway URL
 
 const ICE_CONFIG = {
   iceServers: [
