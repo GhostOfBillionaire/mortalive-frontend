@@ -41,7 +41,10 @@ const S = {
   onlineTimerStarted: false,
   pendingAction: null,
   replyTimer: null,
-  demoActive: false
+  demoActive: false,
+  searchId: 0,
+  demoFallbackTimer: null,
+  noMatchTimer: null
 };
 
 const strangerPool = [
@@ -156,6 +159,19 @@ function setPrimaryButtonsEnabled(enabled) {
     btn.disabled = !enabled;
     btn.classList.toggle('ready', enabled);
   });
+}
+
+function cleanupSocket() {
+  if (!S.socket) return;
+  try {
+    if (S.socket.connected) {
+      S.socket.emit('leave', { roomId: S.roomId });
+    }
+  } catch (e) {}
+  try { S.socket.removeAllListeners?.(); } catch (e) {}
+  try { S.socket.off?.(); } catch (e) {}
+  try { S.socket.disconnect?.(); } catch (e) {}
+  S.socket = null;
 }
 
 function updateConsentState() {
@@ -511,7 +527,8 @@ function initChatControls() {
 
   $('btn-try-demo')?.addEventListener('click', () => {
     clearTimeout(matchTimeout);
-    clearTimeout(S.noMatchTimeout);
+    clearTimeout(S.noMatchTimer);
+    clearTimeout(S.demoFallbackTimer);
     if (S.socket && S.socket.connected) removeFromQueueSafely();
     simulateDemoMatch();
   });
@@ -526,7 +543,7 @@ function initGlobalDefaults() {
   }
 }
 
-function initSocket() {
+function initSocket(searchId = S.searchId) {
   if (typeof io === 'undefined') {
     console.warn('[Mortalive] Socket.io client not loaded yet — retrying in 800ms before falling back to demo mode.');
     setTimeout(() => {
@@ -534,25 +551,28 @@ function initSocket() {
         console.error('[Mortalive] Socket.io still missing after retry — check that the CDN script tag loaded (network tab) and that you are testing the latest deploy, not a cached build.');
         return;
       }
-      initSocket();
+      initSocket(searchId);
     }, 800);
     return;
   }
 
   if (S.socket && S.socket.connected) {
-    S.socket.emit('queue', { mode: S.mode, pref: S.interest });
+    try { S.socket.emit('queue', { mode: S.mode, pref: S.interest }); } catch (e) {}
     return;
   }
 
   S.socket = io(SERVER_URL, { transports: ['websocket', 'polling'], timeout: 6000 });
 
   S.socket.on('connect', () => {
+    if (searchId !== S.searchId) return;
     S.socket.emit('queue', { mode: S.mode, pref: S.interest });
   });
 
   S.socket.on('matched', async (data) => {
+    if (searchId !== S.searchId) return;
     clearTimeout(matchTimeout);
-    clearTimeout(S.noMatchTimeout);
+    clearTimeout(S.noMatchTimer);
+    clearTimeout(S.demoFallbackTimer);
     S.matched = true;
     S.roomId = data.roomId;
     S.isInitiator = !!data.initiator;
@@ -611,6 +631,21 @@ function initSocket() {
 let matchTimeout = null;
 
 function startMatching() {
+  const searchId = ++S.searchId;
+
+  clearTimeout(matchTimeout);
+  clearTimeout(S.noMatchTimer);
+  clearTimeout(S.demoFallbackTimer);
+
+  S.matched = false;
+  S.demoActive = false;
+  S.roomId = null;
+  S.stranger = null;
+  S.isInitiator = false;
+  S.pendingCandidates = [];
+
+  cleanupSocket();
+
   showPage('pg-match');
   updateOnlineCount();
   setCallStatus('connecting', 'Searching…');
@@ -620,37 +655,31 @@ function startMatching() {
   const tryDemoReset = $('btn-try-demo');
   if (tryDemoReset) tryDemoReset.style.display = 'none';
 
-  initSocket();
+  initSocket(searchId);
 
-  S.matched = false; // reset; set to true inside the 'matched' socket handler
-
-  clearTimeout(matchTimeout);
-  clearTimeout(S.noMatchTimeout);
-
-  // Short check: if the socket itself never connects, fall back to demo quickly.
-  matchTimeout = setTimeout(() => {
+  // Only fall back to demo if the socket never connects at all.
+  // If the server is connected and the user is simply waiting in the queue,
+  // keep waiting so real peers can still join and match.
+  S.demoFallbackTimer = setTimeout(() => {
+    if (searchId !== S.searchId) return;
     if (!S.socket || !S.socket.connected) simulateDemoMatch();
-  }, 1800 + Math.random() * 1800);
+  }, 12000);
 
-  // Longer check: socket may be connected fine, but if nobody else is
-  // online to match with, the queue waits forever. After a reasonable
-  // wait, let the user know instead of leaving them on an endless spinner.
-  S.noMatchTimeout = setTimeout(() => {
-    if (S.matched) return; // already matched, nothing to do
+  // Keep the user informed if the queue is live but nobody has matched yet.
+  S.noMatchTimer = setTimeout(() => {
+    if (searchId !== S.searchId || S.matched) return;
     if (S.socket && S.socket.connected) {
-      // Real server connection works, just nobody else is queued right now.
-      setText('match-title', "No one's online right now");
+      setText('match-title', 'Still searching…');
       const sub = $('match-sub');
-      if (sub) sub.innerHTML = 'Nobody else is in the queue yet. You can keep waiting, or try a one-off demo chat while the site grows.';
+      if (sub) sub.innerHTML = 'You are connected to the server and waiting for someone to join. Leave this open a little longer, or go back and try again.';
       const tryDemo = $('btn-try-demo');
-      if (tryDemo) tryDemo.style.display = 'inline-flex';
-    } else {
-      simulateDemoMatch();
+      if (tryDemo) tryDemo.style.display = 'none';
     }
-  }, 15000);
+  }, 20000);
 }
 
 function removeFromQueueSafely() {
+
   if (S.socket && S.socket.connected) {
     try { S.socket.emit('leave', { roomId: S.roomId }); } catch (e) {}
   }
@@ -799,6 +828,8 @@ function monitorQuality() {
 function simulateDemoMatch() {
   if (S.demoActive) return;
   S.demoActive = true;
+  clearTimeout(S.noMatchTimer);
+  clearTimeout(S.demoFallbackTimer);
 
   let pool = [...strangerPool];
   if (S.interest && S.interest.toLowerCase().includes('high')) {
@@ -895,7 +926,14 @@ function beginChat() {
   }, 700);
 
   if (Math.random() > 0.35) {
-    const openers = ['hey!', 'hi there 👋', 'hello!', "what's up?", 'yo', 'heyyy 👀'];
+    const openers = [
+      'hey — I’m here if you want to chat',
+      'hello 👋 what are you into lately?',
+      'hi, I can keep you company for a bit',
+      'what’s up? tell me something random',
+      'I’m listening — start anywhere',
+      'hey, how’s your day going?'
+    ];
     setTimeout(() => appendMsg(openers[Math.floor(Math.random() * openers.length)], 'them'), 700 + Math.random() * 600);
   }
 }
@@ -946,7 +984,17 @@ function scheduleReply() {
   if (Math.random() > 0.22) {
     S.replyTimer = setTimeout(() => {
       if (S.socket && S.socket.connected) return;
-      appendMsg(autoReplies[Math.floor(Math.random() * autoReplies.length)], 'them');
+      const aiReplies = [
+        'I get that — keep going.',
+        'That’s interesting. Tell me more.',
+        'Okay, I’m with you.',
+        'Hmm, I’d say that depends on the person.',
+        'I can see why you’d think that.',
+        'That makes sense. What happened next?',
+        'Got it — what would you do differently?',
+        'I’m following. What’s your take?'
+      ];
+      appendMsg(aiReplies[Math.floor(Math.random() * aiReplies.length)], 'them');
     }, 1100 + Math.random() * 2800);
   }
 }
@@ -968,12 +1016,10 @@ function sendMsg() {
 function disconnectPeer() {
   clearTimeout(S.replyTimer);
   clearTimeout(matchTimeout);
+  clearTimeout(S.noMatchTimer);
+  clearTimeout(S.demoFallbackTimer);
 
-  if (S.socket) {
-    try {
-      S.socket.emit('leave', { roomId: S.roomId });
-    } catch (e) {}
-  }
+  cleanupSocket();
 
   if (S.pc) {
     try { S.pc.close(); } catch (e) {}
