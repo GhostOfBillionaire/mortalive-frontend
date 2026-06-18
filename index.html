@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Mortalive — Anonymous chat, simplified</title>
+<title>Mortalive — meet strangers instantly</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1012,7 +1012,7 @@ a{color:inherit}
                 <div class="brand-mark" aria-hidden="true"></div>
                 <div>
                   <div class="brand-name">Mortalive</div>
-                  <div class="brand-sub">Anonymous chat</div>
+                  <div class="brand-sub">Talk to strangers</div>
                 </div>
               </div>
             </div>
@@ -1020,12 +1020,12 @@ a{color:inherit}
           </div>
 
           <div class="hero-copy">
-            <h1 class="hero-title">A cleaner way to <em>talk to strangers</em>.</h1>
-            <p class="hero-text">Mortalive keeps the familiar random-chat feel, but with a softer light-grey and blue interface, easier navigation, and a layout that behaves better on desktop and mobile.</p>
+            <h1 class="hero-title">Meet strangers, the simple way.</h1>
+            <p class="hero-text">Mortalive keeps the classic random chat feel: fast matching, text or video, no signup, and a clean layout that works on desktop and mobile.</p>
 
             <div class="feature-row">
-              <span class="feature">Text or video</span>
-              <span class="feature">No account</span>
+              <span class="feature">Text or video chat</span>
+              <span class="feature">No signup needed</span>
               <span class="feature">Fast matching</span>
               <span class="feature">Anonymous by default</span>
             </div>
@@ -1033,12 +1033,12 @@ a{color:inherit}
 
           <div class="hero-visual">
             <div class="preview-box blue">
-              <strong>Simple interface</strong>
-              <span>Fewer screens, fewer distractions, and a layout that feels closer to a classic random chat site.</span>
+              <strong>Easy to use</strong>
+              <span>Fewer clicks, clearer choices, and a layout that feels familiar from the first tap.</span>
             </div>
             <div class="preview-box lav">
               <strong>Desktop friendly</strong>
-              <span>Responsive spacing and viewport-safe sizing to stop the top section from pushing outside the window.</span>
+              <span>Built to stay inside the window on laptops and larger screens.</span>
             </div>
           </div>
         </div>
@@ -1050,29 +1050,29 @@ a{color:inherit}
             <div class="brand-mark" aria-hidden="true"></div>
             <div>
               <div class="brand-name">Continue</div>
-              <div class="brand-sub">Before entering</div>
+              <div class="brand-sub">One quick step</div>
             </div>
           </div>
-          <h2 class="consent-title">Read once, then enter.</h2>
+          <h2 class="consent-title">A single consent step keeps things simple.</h2>
           <p class="consent-sub">A single consent step keeps the landing screen clean and fixes the clicking issues from the old custom toggle setup.</p>
         </div>
 
         <label class="toggle" for="landing-consent">
           <input id="landing-consent" type="checkbox">
           <span class="toggle-ui" aria-hidden="true"></span>
-          <span class="toggle-text"><b>I confirm I am 18+</b> and agree to Mortalive's Terms, privacy rules, and session policies.</span>
+          <span class="toggle-text"><b>I'm 18+</b> and agree to Mortalive's Terms, privacy rules, and session policies.</span>
         </label>
 
         <div class="notice">
-          <b>Quick note:</b> Video mode will ask for camera and microphone access. Text mode works without permissions.
+          <b>Before you start:</b> Video chat will ask for camera and microphone access. Text chat works without permissions.
         </div>
 
         <div class="enter-row">
-          <button class="btn btn-primary btn-wide" id="btn-enter" disabled>Enter Mortalive</button>
+          <button class="btn btn-primary btn-wide" id="btn-enter" disabled>Enter chat</button>
         </div>
 
         <div class="small-links">
-          By continuing, you agree to use the service responsibly and follow the community rules.
+          By continuing, you agree to use Mortalive responsibly and follow the community rules.
         </div>
       </div>
     </div>
@@ -1133,7 +1133,7 @@ a{color:inherit}
             <div class="brand-mark" aria-hidden="true"></div>
             <div>
               <div class="brand-name">Mortalive</div>
-              <div class="brand-sub">Lobby</div>
+              <div class="brand-sub">Choose how to start</div>
             </div>
           </div>
           <div class="mini-copy">Pick text or video, add an interest, then start matching. This keeps the flow close to the old random-chat experience without the heavy dashboard look.</div>
@@ -1145,8 +1145,8 @@ a{color:inherit}
       </div>
 
       <div class="mode-switch" id="mode-toggle">
-        <button class="mode-btn active" data-mode="text">💬 Text</button>
-        <button class="mode-btn" data-mode="video">📹 Video</button>
+        <button class="mode-btn active" data-mode="text">💬 Text chat</button>
+        <button class="mode-btn" data-mode="video">📹 Video chat</button>
       </div>
 
       <div class="lobby-grid">
@@ -1155,10 +1155,10 @@ a{color:inherit}
           <input id="interest-input" type="text" maxlength="64" placeholder="music, gaming, study, travel..." autocomplete="off">
           <div class="help-row">
             <span>Optional</span>
-            <span>Used for matching only if your backend supports it</span>
+            <span>Used to improve matching</span>
           </div>
         </div>
-        <button class="btn btn-primary" id="btn-find">Find a stranger</button>
+        <button class="btn btn-primary" id="btn-find">Start matching</button>
       </div>
 
       <div class="start-row">
@@ -1173,14 +1173,14 @@ a{color:inherit}
   <div class="wrap">
     <div class="card match-card">
       <div class="spinner" aria-hidden="true"></div>
-      <h2 class="match-title" id="match-title">Finding your match</h2>
-      <p class="match-sub" id="match-sub">Scanning <strong id="match-count">2,847</strong> people online right now.</p>
+      <h2 class="match-title" id="match-title">Looking for someone now</h2>
+      <p class="match-sub" id="match-sub">Matching you with someone from <strong id="match-count">2,847</strong> people online right now.</p>
       <div class="match-badge">
         <span class="dot" id="conn-dot"></span>
         <span id="conn-text">Searching…</span>
       </div>
       <div style="margin-top:18px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-        <button class="btn btn-ghost" id="btn-cancel">Cancel</button>
+        <button class="btn btn-ghost" id="btn-cancel">Stop searching</button>
         <button class="btn btn-primary" id="btn-try-demo" style="display:none;">Try a demo chat instead</button>
       </div>
     </div>
@@ -1195,14 +1195,14 @@ a{color:inherit}
         <div class="peer-ava" id="peer-ava">👤</div>
         <div class="peer-meta">
           <div class="peer-name" id="peer-name">Stranger</div>
-          <div class="peer-sub" id="peer-score">Anonymous chat · connected</div>
+          <div class="peer-sub" id="peer-score">You are connected · say hello</div>
         </div>
       </div>
 
       <div class="top-actions">
         <div class="conn-badge">
           <span class="conn-dot" id="call-dot"></span>
-          <span id="call-text">connecting</span>
+          <span id="call-text">Connecting…</span>
         </div>
         <button class="icon-btn" id="btn-toggle-video" title="Toggle video panel">📹</button>
         <button class="icon-btn" id="btn-rate-top" title="Rate chat">⭐</button>
@@ -1216,7 +1216,7 @@ a{color:inherit}
         <div class="video-feeds" id="video-feeds">
           <div class="no-video" id="no-video-ph">
             <div class="big">📹</div>
-            <div id="ph-txt">Waiting for video…</div>
+            <div id="ph-txt">Waiting for the other person’s camera…</div>
           </div>
           <video id="vid-remote" autoplay playsinline></video>
           <video id="vid-local" autoplay playsinline muted></video>
@@ -1234,7 +1234,7 @@ a{color:inherit}
       <div class="chat-panel">
         <div class="chat-messages" id="chat-msgs"></div>
         <div class="chat-input">
-          <input id="cin" type="text" placeholder="Say something…" maxlength="500" autocomplete="off">
+          <input id="cin" type="text" placeholder="Type your message…" maxlength="500" autocomplete="off">
           <button class="btn btn-primary send-btn" id="btn-send">➤</button>
         </div>
       </div>
@@ -1246,9 +1246,9 @@ a{color:inherit}
 <div class="overlay" id="rating-overlay">
   <div class="modal">
     <div class="modal-ico">⭐</div>
-    <div class="modal-title">Rate this chat</div>
-    <div class="modal-sub">A simple rating keeps the chat quality better without turning the UI into a dashboard.</div>
-    <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:10px;">Overall experience</div>
+    <div class="modal-title">How was this chat?</div>
+    <div class="modal-sub">Your rating helps keep future matches better for everyone.</div>
+    <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:10px;">Your rating</div>
     <div class="stars" id="stars">
       <span class="star" data-v="1">1</span>
       <span class="star" data-v="2">2</span>
@@ -1257,7 +1257,7 @@ a{color:inherit}
       <span class="star" data-v="5">5</span>
     </div>
 
-    <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin:16px 0 10px;">Tag the vibe</div>
+    <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin:16px 0 10px;">What felt right</div>
     <div class="vibes" id="vibes">
       <span class="vibe" data-v="funny">Funny</span>
       <span class="vibe" data-v="deep">Deep</span>
@@ -1269,7 +1269,7 @@ a{color:inherit}
 
     <div class="modal-row">
       <button class="btn btn-ghost" id="btn-skip-rating">Skip</button>
-      <button class="btn btn-primary" id="btn-submit-rating">Submit</button>
+      <button class="btn btn-primary" id="btn-submit-rating">Send rating</button>
     </div>
   </div>
 </div>
@@ -1278,8 +1278,8 @@ a{color:inherit}
 <div class="sheet-overlay" id="sheet-overlay">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h3 style="margin:0 0 8px;letter-spacing:-.04em;">Mortalive score</h3>
-    <p style="margin:0;color:var(--muted);line-height:1.6;">Hidden by default in the redesigned UI.</p>
+    <h3 style="margin:0 0 8px;letter-spacing:-.04em;">Chat info</h3>
+    <p style="margin:0;color:var(--muted);line-height:1.6;">This section stays hidden for now.</p>
   </div>
 </div>
 
