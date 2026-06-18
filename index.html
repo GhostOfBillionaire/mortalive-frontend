@@ -1173,14 +1173,15 @@ a{color:inherit}
   <div class="wrap">
     <div class="card match-card">
       <div class="spinner" aria-hidden="true"></div>
-      <h2 class="match-title">Finding your match</h2>
-      <p class="match-sub">Scanning <strong id="match-count">2,847</strong> people online right now.</p>
+      <h2 class="match-title" id="match-title">Finding your match</h2>
+      <p class="match-sub" id="match-sub">Scanning <strong id="match-count">2,847</strong> people online right now.</p>
       <div class="match-badge">
         <span class="dot" id="conn-dot"></span>
         <span id="conn-text">Searching…</span>
       </div>
-      <div style="margin-top:18px;">
+      <div style="margin-top:18px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
         <button class="btn btn-ghost" id="btn-cancel">Cancel</button>
+        <button class="btn btn-primary" id="btn-try-demo" style="display:none;">Try a demo chat instead</button>
       </div>
     </div>
   </div>
@@ -1286,8 +1287,7 @@ a{color:inherit}
 
 <script>
   // Set your deployed Railway server URL here (no trailing slash).
-  // Example: window.MORTALIVE_SERVER_URL = 'https://mortalive-server-production-xxxx.up.railway.app';
-  window.MORTALIVE_SERVER_URL = '';
+  window.MORTALIVE_SERVER_URL = 'https://mortalive-server-production.up.railway.app';
 </script>
 <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 <script src="app.js"></script>
