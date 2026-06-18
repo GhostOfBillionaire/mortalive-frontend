@@ -1,11 +1,17 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
+const BUILD_TAG = 'mortalive-build-2026-06-18-1'; // bump this string on every deploy to confirm cache is fresh
+
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
   (location.hostname === 'localhost'
     ? 'http://localhost:3001'
-    : 'https://mortalive-server-production.up.railway.app'); // ← replace with your real Railway URL
+    : 'https://mortalive-server-production.up.railway.app');
+
+console.log(`[Mortalive] ${BUILD_TAG} loaded`);
+console.log(`[Mortalive] SERVER_URL = ${SERVER_URL}`);
+console.log(`[Mortalive] Socket.io client ${typeof io === 'undefined' ? 'NOT LOADED ✗' : 'loaded ✓'}`);
 
 const ICE_CONFIG = {
   iceServers: [
@@ -457,7 +463,7 @@ function initChatControls() {
 
     panel.classList.add('visible');
     $('btn-toggle-video')?.classList.add('active');
-    if (!S.localStream || !S.localStream.active) showOwnCameraDemo();
+    if (S.demoActive && (!S.localStream || !S.localStream.active)) setupDemoVideo();
   });
 
   $('vc-mic')?.addEventListener('click', () => {
@@ -498,8 +504,16 @@ function initChatControls() {
 
   $('btn-cancel')?.addEventListener('click', () => {
     clearTimeout(matchTimeout);
+    clearTimeout(S.noMatchTimeout);
     disconnectPeer();
     showPage('pg-lobby');
+  });
+
+  $('btn-try-demo')?.addEventListener('click', () => {
+    clearTimeout(matchTimeout);
+    clearTimeout(S.noMatchTimeout);
+    if (S.socket && S.socket.connected) removeFromQueueSafely();
+    simulateDemoMatch();
   });
 }
 
@@ -514,7 +528,14 @@ function initGlobalDefaults() {
 
 function initSocket() {
   if (typeof io === 'undefined') {
-    console.log('[Mortalive] Socket.io missing; demo mode only.');
+    console.warn('[Mortalive] Socket.io client not loaded yet — retrying in 800ms before falling back to demo mode.');
+    setTimeout(() => {
+      if (typeof io === 'undefined') {
+        console.error('[Mortalive] Socket.io still missing after retry — check that the CDN script tag loaded (network tab) and that you are testing the latest deploy, not a cached build.');
+        return;
+      }
+      initSocket();
+    }, 800);
     return;
   }
 
@@ -531,6 +552,8 @@ function initSocket() {
 
   S.socket.on('matched', async (data) => {
     clearTimeout(matchTimeout);
+    clearTimeout(S.noMatchTimeout);
+    S.matched = true;
     S.roomId = data.roomId;
     S.isInitiator = !!data.initiator;
     S.stranger = {
@@ -591,25 +614,61 @@ function startMatching() {
   showPage('pg-match');
   updateOnlineCount();
   setCallStatus('connecting', 'Searching…');
+  setText('match-title', 'Finding your match');
+  const subReset = $('match-sub');
+  if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
+  const tryDemoReset = $('btn-try-demo');
+  if (tryDemoReset) tryDemoReset.style.display = 'none';
+
   initSocket();
 
+  S.matched = false; // reset; set to true inside the 'matched' socket handler
+
   clearTimeout(matchTimeout);
+  clearTimeout(S.noMatchTimeout);
+
+  // Short check: if the socket itself never connects, fall back to demo quickly.
   matchTimeout = setTimeout(() => {
     if (!S.socket || !S.socket.connected) simulateDemoMatch();
   }, 1800 + Math.random() * 1800);
+
+  // Longer check: socket may be connected fine, but if nobody else is
+  // online to match with, the queue waits forever. After a reasonable
+  // wait, let the user know instead of leaving them on an endless spinner.
+  S.noMatchTimeout = setTimeout(() => {
+    if (S.matched) return; // already matched, nothing to do
+    if (S.socket && S.socket.connected) {
+      // Real server connection works, just nobody else is queued right now.
+      setText('match-title', "No one's online right now");
+      const sub = $('match-sub');
+      if (sub) sub.innerHTML = 'Nobody else is in the queue yet. You can keep waiting, or try a one-off demo chat while the site grows.';
+      const tryDemo = $('btn-try-demo');
+      if (tryDemo) tryDemo.style.display = 'inline-flex';
+    } else {
+      simulateDemoMatch();
+    }
+  }, 15000);
+}
+
+function removeFromQueueSafely() {
+  if (S.socket && S.socket.connected) {
+    try { S.socket.emit('leave', { roomId: S.roomId }); } catch (e) {}
+  }
 }
 
 function hideRemoteVideo(message) {
-  const panel = $('video-panel');
   const remote = $('vid-remote');
   const noVideo = $('no-video-ph');
   const txt = $('ph-txt');
   const q = $('quality-bar');
 
-  if (panel) panel.classList.remove('has-remote');
   if (remote) {
     try {
-      if (remote.srcObject) remote.srcObject.getTracks().forEach((t) => t.stop());
+      // Same guard as disconnectPeer(): never stop tracks that actually
+      // belong to our own local camera stream (demo mode reuses it).
+      if (remote.srcObject && remote.srcObject !== S.localStream) {
+        remote.srcObject.getTracks().forEach((t) => t.stop());
+      }
     } catch (e) {}
     remote.srcObject = null;
     remote.style.display = 'none';
@@ -748,16 +807,22 @@ function simulateDemoMatch() {
 
   S.stranger = pool[Math.floor(Math.random() * pool.length)];
   S.roomId = `demo-${Date.now()}`;
+
+  // Decide once per match whether the "stranger" has their camera on.
+  // Roughly 6 in 10 strangers have video on, matching typical real usage.
+  S.demoStrangerCamOn = Math.random() < 0.6;
+
   beginChat();
 
   if (S.mode === 'video') {
     const panel = $('video-panel');
     if (panel) panel.classList.add('visible');
-    showOwnCameraDemo();
+    setupDemoVideo();
   }
 }
 
-async function showOwnCameraDemo() {
+async function setupDemoVideo() {
+  // Bring up the user's own camera exactly like a real call would.
   try {
     if (!S.localStream || !S.localStream.active) {
       S.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -768,11 +833,38 @@ async function showOwnCameraDemo() {
       localVid.srcObject = S.localStream;
       localVid.style.display = 'block';
     }
-    setText('ph-txt', 'Demo mode — deploy the server for live P2P video');
-    toast('Demo camera active', '📹');
   } catch (e) {
-    setText('ph-txt', 'Camera not available in demo');
+    // No camera available locally — that's fine, the demo can still show
+    // the "stranger" side; just keep the waiting placeholder for our own feed.
   }
+
+  // Believable connecting delay before the stranger's feed "arrives",
+  // same pacing a real WebRTC handshake would have.
+  setText('ph-txt', 'Waiting for video…');
+  const noVideoPh = $('no-video-ph');
+  const remoteVid = $('vid-remote');
+
+  setTimeout(() => {
+    if (!S.demoActive) return; // user already left before this fired
+
+    if (S.demoStrangerCamOn) {
+      // Mirror the user's own camera back as a stand-in remote feed so
+      // something is genuinely moving on screen, like a real peer would.
+      if (remoteVid && S.localStream) {
+        remoteVid.srcObject = S.localStream;
+        remoteVid.style.display = 'block';
+      }
+      if (noVideoPh) noVideoPh.style.display = 'none';
+      const qbar = $('quality-bar');
+      if (qbar) qbar.style.display = 'flex';
+    } else {
+      // Stranger has their camera off — show the same placeholder a real
+      // camera-off peer would produce, with their name instead of generic text.
+      if (remoteVid) remoteVid.style.display = 'none';
+      setText('ph-txt', `${S.stranger?.name || 'Stranger'}'s camera is off`);
+      if (noVideoPh) noVideoPh.style.display = 'flex';
+    }
+  }, 900 + Math.random() * 900);
 }
 
 function beginChat() {
@@ -891,7 +983,13 @@ function disconnectPeer() {
   const remoteVid = $('vid-remote');
   if (remoteVid) {
     try {
-      if (remoteVid.srcObject) remoteVid.srcObject.getTracks().forEach((t) => t.stop());
+      // In demo mode, vid-remote.srcObject is the SAME MediaStream object as
+      // our own local camera (reused as a stand-in "stranger" feed). Stopping
+      // its tracks here would kill our own camera. Only stop tracks that
+      // belong to a genuinely separate (real peer) stream.
+      if (remoteVid.srcObject && remoteVid.srcObject !== S.localStream) {
+        remoteVid.srcObject.getTracks().forEach((t) => t.stop());
+      }
     } catch (e) {}
     remoteVid.srcObject = null;
     remoteVid.style.display = 'none';
