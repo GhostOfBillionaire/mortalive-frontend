@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Mortalive — meet strangers instantly</title>
+<title>Mortalive — Anonymous chat, simplified</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -678,6 +678,7 @@ a{color:inherit}
 .icon-btn:hover{border-color:var(--border-strong);color:var(--text)}
 .icon-btn.danger:hover{border-color:rgba(229,72,77,.35);color:var(--danger)}
 
+
 .chat-body{
   flex:1;
   min-height:0;
@@ -698,13 +699,44 @@ a{color:inherit}
   position:relative;
   flex:1;
   min-height:0;
-  background:#121826;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  padding:12px;
+  background:#eef2f8;
   overflow:hidden;
   border-radius:var(--radius);
   border:1px solid var(--border);
   box-shadow:var(--shadow-soft);
 }
-#vid-remote{
+.camera-box{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  border-radius:18px;
+  overflow:hidden;
+  background:#121826;
+  border:1px solid rgba(216,222,233,.7);
+}
+.camera-label{
+  padding:10px 12px;
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:#fff;
+  background:rgba(18,24,38,.88);
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.camera-stage{
+  position:relative;
+  flex:1;
+  min-height:0;
+  background:#121826;
+}
+#vid-remote,
+#vid-local{
   width:100%;
   height:100%;
   object-fit:cover;
@@ -712,18 +744,7 @@ a{color:inherit}
   background:#121826;
 }
 #vid-local{
-  position:absolute;
-  right:12px;
-  bottom:12px;
-  width:128px;
-  height:92px;
-  object-fit:cover;
-  border-radius:14px;
-  border:2px solid rgba(255,255,255,.9);
-  display:none;
   transform:scaleX(-1);
-  background:#192232;
-  box-shadow:0 12px 24px rgba(0,0,0,.22);
 }
 .no-video{
   position:absolute;
@@ -745,8 +766,8 @@ a{color:inherit}
 }
 .quality{
   position:absolute;
-  left:12px;
-  top:12px;
+  left:24px;
+  top:24px;
   display:none;
   align-items:center;
   gap:8px;
@@ -756,6 +777,7 @@ a{color:inherit}
   color:#fff;
   font-size:12px;
   backdrop-filter:blur(10px);
+  z-index:2;
 }
 .quality .qdot{width:8px;height:8px;border-radius:50%;background:var(--success)}
 .video-controls{
@@ -765,7 +787,8 @@ a{color:inherit}
   flex-wrap:wrap;
 }
 .vc-btn{
-  width:44px;height:44px;
+  width:44px;
+  height:44px;
   border-radius:50%;
   border:1px solid var(--border);
   background:#fff;
@@ -776,103 +799,32 @@ a{color:inherit}
 .vc-btn.active,.vc-btn:hover{border-color:rgba(24,119,242,.35);color:var(--primary)}
 .vc-btn.off{border-color:rgba(229,72,77,.25);color:var(--danger);background:rgba(229,72,77,.06)}
 
-.chat-panel{
-  display:flex;
-  flex-direction:column;
-  overflow:hidden;
+@media (max-width: 980px){
+  .landing-grid,.perm-inner,.chat-body{grid-template-columns:1fr}
+  .hero-card,.consent-card{min-height:auto}
+  .chat-body{gap:14px}
 }
-.chat-messages{
-  flex:1;
-  min-height:0;
-  overflow:auto;
-  padding:16px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  background:#fff;
-  border:1px solid var(--border);
-  border-radius:var(--radius);
-  box-shadow:var(--shadow-soft);
+@media (max-width: 720px){
+  .wrap{width:min(100% - 20px, 1120px)}
+  .hero-card,.consent-card,.lobby-card,.perm-card,.match-card{padding:18px}
+  .hero-top,.lobby-head,.chat-topbar{flex-direction:column;align-items:flex-start}
+  .lobby-grid{grid-template-columns:1fr}
+  .start-row,.modal-row{flex-direction:column}
+  .mode-switch{grid-template-columns:1fr}
+  .chat-topbar{position:sticky;top:0;z-index:5}
+  #pg-chat{padding:10px}
+  .chat-shell{min-height:calc(100dvh - 20px)}
+  .msg{max-width:94%}
+  .peer-sub{white-space:normal}
+  .video-feeds{grid-template-columns:1fr}
+  .camera-box{min-height:240px}
+  #vid-local{width:100%;height:100%}
 }
-.sys-line{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  color:var(--muted-2);
-  font-size:12px;
-  padding:4px 0;
-}
-.sys-line::before,.sys-line::after{
-  content:'';
-  height:1px;
-  flex:1;
-  background:var(--border);
-}
-.msg{
-  display:flex;
-  gap:10px;
-  max-width:84%;
-  align-self:flex-start;
-}
-.msg.me{
-  align-self:flex-end;
-  flex-direction:row-reverse;
-}
-.msg-ava{
-  width:30px;height:30px;border-radius:50%;
-  display:grid;place-items:center;
-  background:#eef3fb;
-  border:1px solid var(--border);
-  flex:none;
-  font-size:13px;
-}
-.msg.me .msg-ava{
-  background:linear-gradient(135deg,var(--primary),var(--primary-2));
-  color:#fff;
-  border-color:transparent;
-}
-.msg-bubble{
-  padding:11px 14px;
-  border-radius:16px 16px 16px 5px;
-  border:1px solid var(--border);
-  background:var(--panel-soft);
-  color:var(--text);
-  line-height:1.55;
-  font-size:14px;
-  word-break:break-word;
-}
-.msg.me .msg-bubble{
-  background:var(--primary-soft);
-  border-color:rgba(24,119,242,.22);
-  border-radius:16px 16px 5px 16px;
-}
-.msg-time{
-  margin-top:4px;
-  font-size:10px;
-  color:var(--muted-2);
-  text-align:right;
-}
-.chat-input{
-  margin-top:12px;
-  display:flex;
-  gap:10px;
-}
-.chat-input input{
-  flex:1;
-  border:1px solid var(--border);
-  border-radius:16px;
-  padding:14px 16px;
-  background:#fff;
-  outline:none;
-}
-.chat-input input:focus{border-color:rgba(24,119,242,.45);box-shadow:0 0 0 4px rgba(24,119,242,.08)}
-.send-btn{
-  width:52px;
-  border-radius:16px;
-  padding:0;
-}
+</style>
+</head>
+<body>
+<div class="bg"></div>
 
-/* Modal / Sheet */
 .overlay{
   display:none;
   position:fixed;
@@ -1020,25 +972,25 @@ a{color:inherit}
           </div>
 
           <div class="hero-copy">
-            <h1 class="hero-title">Meet new people, instantly.</h1>
-            <p class="hero-text">Start a text or video chat in seconds. No signup required, and you stay anonymous unless you choose to share.</p>
+            <h1 class="hero-title">A cleaner way to <em>talk to strangers</em>.</h1>
+            <p class="hero-text">Mortalive keeps the familiar random-chat feel, but with a softer light-grey and blue interface, easier navigation, and a layout that behaves better on desktop and mobile.</p>
 
             <div class="feature-row">
-              <span class="feature">Text or video chat</span>
-              <span class="feature">No account needed</span>
-              <span class="feature">Quick matching</span>
+              <span class="feature">Text or video</span>
+              <span class="feature">No account</span>
+              <span class="feature">Fast matching</span>
               <span class="feature">Anonymous by default</span>
             </div>
           </div>
 
           <div class="hero-visual">
             <div class="preview-box blue">
-              <strong>Simple to start</strong>
-              <span>Choose how you want to chat, then we’ll find someone for you.</span>
+              <strong>Simple interface</strong>
+              <span>Fewer screens, fewer distractions, and a layout that feels closer to a classic random chat site.</span>
             </div>
             <div class="preview-box lav">
-              <strong>Made for phone and desktop</strong>
-              <span>Designed to look clean on phones, laptops, and larger screens.</span>
+              <strong>Desktop friendly</strong>
+              <span>Responsive spacing and viewport-safe sizing to stop the top section from pushing outside the window.</span>
             </div>
           </div>
         </div>
@@ -1049,22 +1001,22 @@ a{color:inherit}
           <div class="brand">
             <div class="brand-mark" aria-hidden="true"></div>
             <div>
-              <div class="brand-name">Before you start</div>
-              <div class="brand-sub">Confirm to enter</div>
+              <div class="brand-name">Continue</div>
+              <div class="brand-sub">Before entering</div>
             </div>
           </div>
-          <h2 class="consent-title">One confirmation is all it takes to enter.</h2>
-          <p class="consent-sub">Please confirm your age and agree to the rules before entering.</p>
+          <h2 class="consent-title">Read once, then enter.</h2>
+          <p class="consent-sub">A single consent step keeps the landing screen clean and fixes the clicking issues from the old custom toggle setup.</p>
         </div>
 
         <label class="toggle" for="landing-consent">
           <input id="landing-consent" type="checkbox">
           <span class="toggle-ui" aria-hidden="true"></span>
-          <span class="toggle-text"><b>I’m 18+</b> and agree to Mortalive’s Terms, privacy rules, and session policies.</span>
+          <span class="toggle-text"><b>I confirm I am 18+</b> and agree to Mortalive's Terms, privacy rules, and session policies.</span>
         </label>
 
         <div class="notice">
-          <b>What happens next:</b> Video chat will ask for camera and microphone access. Text chat works without them.
+          <b>Quick note:</b> Video mode will ask for camera and microphone access. Text mode works without permissions.
         </div>
 
         <div class="enter-row">
@@ -1072,7 +1024,7 @@ a{color:inherit}
         </div>
 
         <div class="small-links">
-          Please use Mortalive responsibly and follow the community rules.
+          By continuing, you agree to use the service responsibly and follow the community rules.
         </div>
       </div>
     </div>
@@ -1088,17 +1040,17 @@ a{color:inherit}
           <video id="perm-video" autoplay playsinline muted></video>
           <div class="perm-overlay" id="perm-overlay">
             <div class="icon">📷</div>
-            <div id="perm-overlay-txt">Allow camera access to preview your video before you start.</div>
+            <div id="perm-overlay-txt">Tap allow to preview your camera.</div>
           </div>
           <div class="status-chip">
             <span class="dot" id="perm-dot"></span>
-            <span id="perm-status-txt">Waiting for your choice</span>
+            <span id="perm-status-txt">Waiting for permission</span>
           </div>
         </div>
 
         <div class="perm-copy">
           <h2>Camera & microphone</h2>
-          <p>Video chat needs camera and microphone access. Skip this step to continue with text chat only.</p>
+          <p>Video chat needs browser permission. You can always skip this step and continue with text chat only.</p>
 
           <div class="permission-list">
             <div class="permission-item">
@@ -1133,20 +1085,20 @@ a{color:inherit}
             <div class="brand-mark" aria-hidden="true"></div>
             <div>
               <div class="brand-name">Mortalive</div>
-              <div class="brand-sub">Choose how you want to chat</div>
+              <div class="brand-sub">Lobby</div>
             </div>
           </div>
-          <div class="mini-copy">Pick text or video, add an interest if you want, then start matching.</div>
+          <div class="mini-copy">Pick text or video, add an interest, then start matching. This keeps the flow close to the old random-chat experience without the heavy dashboard look.</div>
         </div>
         <div class="live-line">
           <span class="live-dot"></span>
-          <span><strong id="online-n">2,847</strong> online</span>
+          <span><strong id="online-n">2,847</strong> online now</span>
         </div>
       </div>
 
       <div class="mode-switch" id="mode-toggle">
-        <button class="mode-btn active" data-mode="text">💬 Text chat</button>
-        <button class="mode-btn" data-mode="video">📹 Video chat</button>
+        <button class="mode-btn active" data-mode="text">💬 Text</button>
+        <button class="mode-btn" data-mode="video">📹 Video</button>
       </div>
 
       <div class="lobby-grid">
@@ -1155,7 +1107,7 @@ a{color:inherit}
           <input id="interest-input" type="text" maxlength="64" placeholder="music, gaming, study, travel..." autocomplete="off">
           <div class="help-row">
             <span>Optional</span>
-            <span>Helps find better matches</span>
+            <span>Used for matching only if your backend supports it</span>
           </div>
         </div>
         <button class="btn btn-primary" id="btn-find">Find a stranger</button>
@@ -1168,24 +1120,25 @@ a{color:inherit}
   </div>
 </section>
 
+
 <!-- Matching -->
 <section id="pg-match" class="page">
   <div class="wrap">
     <div class="card match-card">
       <div class="spinner" aria-hidden="true"></div>
-      <h2 class="match-title" id="match-title">Finding someone to talk to</h2>
-      <p class="match-sub" id="match-sub">Searching among <strong id="match-count">2,847</strong> people online right now.</p>
+      <h2 class="match-title" id="match-title">Finding your match</h2>
+      <p class="match-sub" id="match-sub">Scanning <strong id="match-count">2,847</strong> people online right now.</p>
       <div class="match-badge">
         <span class="dot" id="conn-dot"></span>
         <span id="conn-text">Searching…</span>
       </div>
       <div style="margin-top:18px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
         <button class="btn btn-ghost" id="btn-cancel">Cancel</button>
-        <button class="btn btn-primary" id="btn-try-demo" style="display:none;">Try our latest AI chat</button>
       </div>
     </div>
   </div>
 </section>
+
 
 <!-- Chat -->
 <section id="pg-chat" class="page">
@@ -1195,14 +1148,14 @@ a{color:inherit}
         <div class="peer-ava" id="peer-ava">👤</div>
         <div class="peer-meta">
           <div class="peer-name" id="peer-name">Stranger</div>
-          <div class="peer-sub" id="peer-score">Connected and ready</div>
+          <div class="peer-sub" id="peer-score">Anonymous chat · connected</div>
         </div>
       </div>
 
       <div class="top-actions">
         <div class="conn-badge">
           <span class="conn-dot" id="call-dot"></span>
-          <span id="call-text">Connecting…</span>
+          <span id="call-text">connecting</span>
         </div>
         <button class="icon-btn" id="btn-toggle-video" title="Toggle video panel">📹</button>
         <button class="icon-btn" id="btn-rate-top" title="Rate chat">⭐</button>
@@ -1214,13 +1167,28 @@ a{color:inherit}
     <div class="chat-body">
       <div class="video-panel" id="video-panel">
         <div class="video-feeds" id="video-feeds">
-          <div class="no-video" id="no-video-ph">
-            <div class="big">📹</div>
-            <div id="ph-txt">Waiting for the other person's camera…</div>
+          <div class="camera-box">
+            <div class="camera-label">Stranger</div>
+            <div class="camera-stage">
+              <div class="no-video" id="no-video-ph">
+                <div class="big">📹</div>
+                <div id="ph-txt">Waiting for video…</div>
+              </div>
+              <video id="vid-remote" autoplay playsinline></video>
+            </div>
           </div>
-          <video id="vid-remote" autoplay playsinline></video>
-          <video id="vid-local" autoplay playsinline muted></video>
-          <div class="quality" id="quality-bar"><span class="qdot" id="qual-dot"></span><span id="qual-text">HD</span></div>
+
+          <div class="camera-box">
+            <div class="camera-label">You</div>
+            <div class="camera-stage">
+              <video id="vid-local" autoplay playsinline muted></video>
+            </div>
+          </div>
+
+          <div class="quality" id="quality-bar">
+            <span class="qdot" id="qual-dot"></span>
+            <span id="qual-text">HD</span>
+          </div>
         </div>
 
         <div class="video-controls">
@@ -1234,7 +1202,7 @@ a{color:inherit}
       <div class="chat-panel">
         <div class="chat-messages" id="chat-msgs"></div>
         <div class="chat-input">
-          <input id="cin" type="text" placeholder="Type your message…" maxlength="500" autocomplete="off">
+          <input id="cin" type="text" placeholder="Say something…" maxlength="500" autocomplete="off">
           <button class="btn btn-primary send-btn" id="btn-send">➤</button>
         </div>
       </div>
@@ -1243,12 +1211,13 @@ a{color:inherit}
 </section>
 
 <!-- Rating -->
+
 <div class="overlay" id="rating-overlay">
   <div class="modal">
     <div class="modal-ico">⭐</div>
-    <div class="modal-title">How was your conversation?</div>
-    <div class="modal-sub">Your feedback helps improve future matches.</div>
-    <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:10px;">Your rating</div>
+    <div class="modal-title">Rate this chat</div>
+    <div class="modal-sub">A simple rating keeps the chat quality better without turning the UI into a dashboard.</div>
+    <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:10px;">Overall experience</div>
     <div class="stars" id="stars">
       <span class="star" data-v="1">1</span>
       <span class="star" data-v="2">2</span>
@@ -1257,7 +1226,7 @@ a{color:inherit}
       <span class="star" data-v="5">5</span>
     </div>
 
-    <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin:16px 0 10px;">What stood out</div>
+    <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin:16px 0 10px;">Tag the vibe</div>
     <div class="vibes" id="vibes">
       <span class="vibe" data-v="funny">Funny</span>
       <span class="vibe" data-v="deep">Deep</span>
@@ -1269,24 +1238,24 @@ a{color:inherit}
 
     <div class="modal-row">
       <button class="btn btn-ghost" id="btn-skip-rating">Skip</button>
-      <button class="btn btn-primary" id="btn-submit-rating">Submit rating</button>
+      <button class="btn btn-primary" id="btn-submit-rating">Submit</button>
     </div>
   </div>
 </div>
 
-<!-- Chat info -->
+<!-- Optional score sheet kept hidden for compatibility -->
 <div class="sheet-overlay" id="sheet-overlay">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h3 style="margin:0 0 8px;letter-spacing:-.04em;">Chat info</h3>
-    <p style="margin:0;color:var(--muted);line-height:1.6;">Only shown when opened.</p>
+    <h3 style="margin:0 0 8px;letter-spacing:-.04em;">Mortalive score</h3>
+    <p style="margin:0;color:var(--muted);line-height:1.6;">Hidden by default in the redesigned UI.</p>
   </div>
 </div>
 
 <div class="toast-root" id="toast-root"></div>
 
 <script>
-  // Mortalive server URL.
+  // Set your deployed Railway server URL here (no trailing slash).
   window.MORTALIVE_SERVER_URL = 'https://mortalive-server-production.up.railway.app';
 </script>
 <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
