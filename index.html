@@ -136,6 +136,12 @@ a{color:inherit}
 }
 .btn-ghost:hover{border-color:var(--border-strong)}
 
+.auth-tab.active{
+  background:linear-gradient(135deg,var(--primary),var(--primary-2));
+  border-color:transparent;
+  color:#fff;
+}
+
 .pill{
   display:inline-flex;
   align-items:center;
@@ -678,7 +684,6 @@ a{color:inherit}
 .icon-btn:hover{border-color:var(--border-strong);color:var(--text)}
 .icon-btn.danger:hover{border-color:rgba(229,72,77,.35);color:var(--danger)}
 
-
 .chat-body{
   flex:1;
   min-height:0;
@@ -699,44 +704,13 @@ a{color:inherit}
   position:relative;
   flex:1;
   min-height:0;
-  display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:12px;
-  padding:12px;
-  background:#eef2f8;
+  background:#121826;
   overflow:hidden;
   border-radius:var(--radius);
   border:1px solid var(--border);
   box-shadow:var(--shadow-soft);
 }
-.camera-box{
-  position:relative;
-  display:flex;
-  flex-direction:column;
-  min-width:0;
-  border-radius:18px;
-  overflow:hidden;
-  background:#121826;
-  border:1px solid rgba(216,222,233,.7);
-}
-.camera-label{
-  padding:10px 12px;
-  font-size:12px;
-  font-weight:800;
-  letter-spacing:.08em;
-  text-transform:uppercase;
-  color:#fff;
-  background:rgba(18,24,38,.88);
-  border-bottom:1px solid rgba(255,255,255,.06);
-}
-.camera-stage{
-  position:relative;
-  flex:1;
-  min-height:0;
-  background:#121826;
-}
-#vid-remote,
-#vid-local{
+#vid-remote{
   width:100%;
   height:100%;
   object-fit:cover;
@@ -744,7 +718,18 @@ a{color:inherit}
   background:#121826;
 }
 #vid-local{
+  position:absolute;
+  right:12px;
+  bottom:12px;
+  width:128px;
+  height:92px;
+  object-fit:cover;
+  border-radius:14px;
+  border:2px solid rgba(255,255,255,.9);
+  display:none;
   transform:scaleX(-1);
+  background:#192232;
+  box-shadow:0 12px 24px rgba(0,0,0,.22);
 }
 .no-video{
   position:absolute;
@@ -766,8 +751,8 @@ a{color:inherit}
 }
 .quality{
   position:absolute;
-  left:24px;
-  top:24px;
+  left:12px;
+  top:12px;
   display:none;
   align-items:center;
   gap:8px;
@@ -777,7 +762,6 @@ a{color:inherit}
   color:#fff;
   font-size:12px;
   backdrop-filter:blur(10px);
-  z-index:2;
 }
 .quality .qdot{width:8px;height:8px;border-radius:50%;background:var(--success)}
 .video-controls{
@@ -787,8 +771,7 @@ a{color:inherit}
   flex-wrap:wrap;
 }
 .vc-btn{
-  width:44px;
-  height:44px;
+  width:44px;height:44px;
   border-radius:50%;
   border:1px solid var(--border);
   background:#fff;
@@ -799,32 +782,103 @@ a{color:inherit}
 .vc-btn.active,.vc-btn:hover{border-color:rgba(24,119,242,.35);color:var(--primary)}
 .vc-btn.off{border-color:rgba(229,72,77,.25);color:var(--danger);background:rgba(229,72,77,.06)}
 
-@media (max-width: 980px){
-  .landing-grid,.perm-inner,.chat-body{grid-template-columns:1fr}
-  .hero-card,.consent-card{min-height:auto}
-  .chat-body{gap:14px}
+.chat-panel{
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
 }
-@media (max-width: 720px){
-  .wrap{width:min(100% - 20px, 1120px)}
-  .hero-card,.consent-card,.lobby-card,.perm-card,.match-card{padding:18px}
-  .hero-top,.lobby-head,.chat-topbar{flex-direction:column;align-items:flex-start}
-  .lobby-grid{grid-template-columns:1fr}
-  .start-row,.modal-row{flex-direction:column}
-  .mode-switch{grid-template-columns:1fr}
-  .chat-topbar{position:sticky;top:0;z-index:5}
-  #pg-chat{padding:10px}
-  .chat-shell{min-height:calc(100dvh - 20px)}
-  .msg{max-width:94%}
-  .peer-sub{white-space:normal}
-  .video-feeds{grid-template-columns:1fr}
-  .camera-box{min-height:240px}
-  #vid-local{width:100%;height:100%}
+.chat-messages{
+  flex:1;
+  min-height:0;
+  overflow:auto;
+  padding:16px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-soft);
 }
-</style>
-</head>
-<body>
-<div class="bg"></div>
+.sys-line{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  color:var(--muted-2);
+  font-size:12px;
+  padding:4px 0;
+}
+.sys-line::before,.sys-line::after{
+  content:'';
+  height:1px;
+  flex:1;
+  background:var(--border);
+}
+.msg{
+  display:flex;
+  gap:10px;
+  max-width:84%;
+  align-self:flex-start;
+}
+.msg.me{
+  align-self:flex-end;
+  flex-direction:row-reverse;
+}
+.msg-ava{
+  width:30px;height:30px;border-radius:50%;
+  display:grid;place-items:center;
+  background:#eef3fb;
+  border:1px solid var(--border);
+  flex:none;
+  font-size:13px;
+}
+.msg.me .msg-ava{
+  background:linear-gradient(135deg,var(--primary),var(--primary-2));
+  color:#fff;
+  border-color:transparent;
+}
+.msg-bubble{
+  padding:11px 14px;
+  border-radius:16px 16px 16px 5px;
+  border:1px solid var(--border);
+  background:var(--panel-soft);
+  color:var(--text);
+  line-height:1.55;
+  font-size:14px;
+  word-break:break-word;
+}
+.msg.me .msg-bubble{
+  background:var(--primary-soft);
+  border-color:rgba(24,119,242,.22);
+  border-radius:16px 16px 5px 16px;
+}
+.msg-time{
+  margin-top:4px;
+  font-size:10px;
+  color:var(--muted-2);
+  text-align:right;
+}
+.chat-input{
+  margin-top:12px;
+  display:flex;
+  gap:10px;
+}
+.chat-input input{
+  flex:1;
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:14px 16px;
+  background:#fff;
+  outline:none;
+}
+.chat-input input:focus{border-color:rgba(24,119,242,.45);box-shadow:0 0 0 4px rgba(24,119,242,.08)}
+.send-btn{
+  width:52px;
+  border-radius:16px;
+  padding:0;
+}
 
+/* Modal / Sheet */
 .overlay{
   display:none;
   position:fixed;
@@ -1031,6 +1085,78 @@ a{color:inherit}
   </div>
 </section>
 
+<!-- Auth: login / sign up / continue as guest -->
+<section id="pg-auth" class="page">
+  <div class="wrap">
+    <div class="card" style="max-width:480px;margin:40px auto;">
+      <div class="auth-tabs" style="display:flex;gap:8px;margin-bottom:18px;">
+        <button class="btn btn-ghost auth-tab active" id="tab-login" type="button" style="flex:1;">Log in</button>
+        <button class="btn btn-ghost auth-tab" id="tab-signup" type="button" style="flex:1;">Sign up</button>
+      </div>
+
+      <!-- Login form -->
+      <div id="auth-login-form">
+        <div class="field">
+          <label for="login-username">Username</label>
+          <input id="login-username" type="text" autocomplete="username" placeholder="yourname">
+        </div>
+        <div class="field">
+          <label for="login-password">Password</label>
+          <input id="login-password" type="password" autocomplete="current-password" placeholder="••••••••">
+        </div>
+        <div id="login-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
+        <button class="btn btn-primary btn-wide" id="btn-login" style="margin-top:8px;">Log in</button>
+        <button class="btn btn-ghost btn-wide" id="btn-forgot" type="button" style="margin-top:8px;">Forgot password?</button>
+      </div>
+
+      <!-- Signup form -->
+      <div id="auth-signup-form" style="display:none;">
+        <div class="field">
+          <label for="signup-username">Username</label>
+          <input id="signup-username" type="text" autocomplete="username" placeholder="3-20 letters, numbers, underscore" maxlength="20">
+        </div>
+        <div class="field">
+          <label for="signup-email">Email <span style="font-weight:400;color:var(--muted);">(for password reset only)</span></label>
+          <input id="signup-email" type="email" autocomplete="email" placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label for="signup-password">Password</label>
+          <input id="signup-password" type="password" autocomplete="new-password" placeholder="At least 6 characters">
+        </div>
+        <div id="signup-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
+        <button class="btn btn-primary btn-wide" id="btn-signup" style="margin-top:8px;">Create account</button>
+      </div>
+
+      <!-- Forgot password form -->
+      <div id="auth-forgot-form" style="display:none;">
+        <div class="field">
+          <label for="forgot-email">Email</label>
+          <input id="forgot-email" type="email" autocomplete="email" placeholder="you@example.com">
+        </div>
+        <div id="forgot-message" class="notice" style="display:none;"></div>
+        <button class="btn btn-primary btn-wide" id="btn-forgot-submit" style="margin-top:8px;">Send reset link</button>
+        <button class="btn btn-ghost btn-wide" id="btn-forgot-back" type="button" style="margin-top:8px;">Back to log in</button>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--muted);font-size:13px;">
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+        or
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+      </div>
+
+      <div class="field">
+        <label for="guest-name">Continue as guest</label>
+        <input id="guest-name" type="text" maxlength="24" placeholder="Pick a display name for this session" autocomplete="off">
+        <div class="help-row">
+          <span>No account needed</span>
+          <span>Guests don't earn a Magnet Score</span>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-wide" id="btn-continue-guest">Continue as guest</button>
+    </div>
+  </div>
+</section>
+
 <!-- Permission -->
 <section id="pg-perm" class="page">
   <div class="wrap">
@@ -1096,6 +1222,12 @@ a{color:inherit}
         </div>
       </div>
 
+      <div class="identity-row" id="identity-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0;padding:10px 14px;background:var(--panel-2,#f6f7fb);border:1px solid var(--border);border-radius:10px;font-size:13px;">
+        <span id="identity-label">Browsing as guest</span>
+        <button class="btn btn-ghost" id="btn-switch-account" type="button" style="padding:4px 10px;font-size:12px;">Log in / Sign up</button>
+        <button class="btn btn-ghost" id="btn-logout" type="button" style="padding:4px 10px;font-size:12px;display:none;">Log out</button>
+      </div>
+
       <div class="mode-switch" id="mode-toggle">
         <button class="mode-btn active" data-mode="text">💬 Text</button>
         <button class="mode-btn" data-mode="video">📹 Video</button>
@@ -1120,7 +1252,6 @@ a{color:inherit}
   </div>
 </section>
 
-
 <!-- Matching -->
 <section id="pg-match" class="page">
   <div class="wrap">
@@ -1134,11 +1265,11 @@ a{color:inherit}
       </div>
       <div style="margin-top:18px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
         <button class="btn btn-ghost" id="btn-cancel">Cancel</button>
+        <button class="btn btn-primary" id="btn-try-demo" style="display:none;">Try a demo chat instead</button>
       </div>
     </div>
   </div>
 </section>
-
 
 <!-- Chat -->
 <section id="pg-chat" class="page">
@@ -1167,28 +1298,13 @@ a{color:inherit}
     <div class="chat-body">
       <div class="video-panel" id="video-panel">
         <div class="video-feeds" id="video-feeds">
-          <div class="camera-box">
-            <div class="camera-label">Stranger</div>
-            <div class="camera-stage">
-              <div class="no-video" id="no-video-ph">
-                <div class="big">📹</div>
-                <div id="ph-txt">Waiting for video…</div>
-              </div>
-              <video id="vid-remote" autoplay playsinline></video>
-            </div>
+          <div class="no-video" id="no-video-ph">
+            <div class="big">📹</div>
+            <div id="ph-txt">Waiting for video…</div>
           </div>
-
-          <div class="camera-box">
-            <div class="camera-label">You</div>
-            <div class="camera-stage">
-              <video id="vid-local" autoplay playsinline muted></video>
-            </div>
-          </div>
-
-          <div class="quality" id="quality-bar">
-            <span class="qdot" id="qual-dot"></span>
-            <span id="qual-text">HD</span>
-          </div>
+          <video id="vid-remote" autoplay playsinline></video>
+          <video id="vid-local" autoplay playsinline muted></video>
+          <div class="quality" id="quality-bar"><span class="qdot" id="qual-dot"></span><span id="qual-text">HD</span></div>
         </div>
 
         <div class="video-controls">
@@ -1211,7 +1327,6 @@ a{color:inherit}
 </section>
 
 <!-- Rating -->
-
 <div class="overlay" id="rating-overlay">
   <div class="modal">
     <div class="modal-ico">⭐</div>
