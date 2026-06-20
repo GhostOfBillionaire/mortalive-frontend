@@ -1,16 +1,17 @@
-/* Mortalive — clean frontend app
-   Real matching only. No demo fallback. */
+/* Mortalive — simplified frontend app
+   Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-clean-2026-06-18-2';
+const BUILD_TAG = 'mortalive-build-2026-06-18-1'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
   (location.hostname === 'localhost'
     ? 'http://localhost:3001'
-    : location.origin);
+    : 'https://mortalive-server-production.up.railway.app');
 
 console.log(`[Mortalive] ${BUILD_TAG} loaded`);
 console.log(`[Mortalive] SERVER_URL = ${SERVER_URL}`);
+console.log(`[Mortalive] Socket.io client ${typeof io === 'undefined' ? 'NOT LOADED ✗' : 'loaded ✓'}`);
 
 const ICE_CONFIG = {
   iceServers: [
@@ -40,20 +41,47 @@ const S = {
   onlineTimerStarted: false,
   pendingAction: null,
   replyTimer: null,
-  searchId: 0,
-  matchTimeout: null,
-  noMatchTimer: null,
-  matched: false,
-  connectionReady: false
+  demoActive: false,
+  // identity
+  authToken: localStorage.getItem('mortalive_token') || null,
+  username: localStorage.getItem('mortalive_username') || null,
+  magnetScore: null,
+  isGuest: true,
+  guestName: localStorage.getItem('mortalive_guest_name') || ''
 };
 
-const AI_OPENERS = [
-  'hey — I’m here if you want to chat',
-  'hello 👋 what are you into lately?',
-  'hi, I can keep you company for a bit',
-  'what’s up? tell me something random',
-  'I’m listening — start anywhere',
-  'hey, how’s your day going?'
+const strangerPool = [
+  { name: 'Nova_82', score: 310, emoji: '🦊' },
+  { name: 'Theorist_X', score: 520, emoji: '🎭' },
+  { name: 'Mira_Glow', score: 88, emoji: '🌸' },
+  { name: 'Static_J', score: 205, emoji: '⚡' },
+  { name: 'DuskRider', score: 445, emoji: '🌙' },
+  { name: 'Cipher_9', score: 731, emoji: '🔮' },
+  { name: 'SunKid', score: 62, emoji: '☀️' },
+  { name: 'Nox_V', score: 890, emoji: '🖤' }
+];
+
+const autoReplies = [
+  'haha fr though 😂',
+  'okay that’s actually a good point',
+  'wait what do you do?',
+  'tbh I’ve been thinking about that too',
+  'lmao no way',
+  'that’s lowkey wild',
+  'okay so hear me out…',
+  'depends on what you mean',
+  'I feel like most people don’t realize',
+  'nah I disagree but I respect it',
+  'go on…',
+  'that reminds me of something',
+  'honestly same',
+  'ooh controversial 👀',
+  'solid point ngl',
+  'wait explain that more',
+  'no way lol',
+  'that’s actually kinda scary',
+  'based',
+  'wait are you serious?'
 ];
 
 function $(id) {
@@ -123,43 +151,47 @@ function setActiveMode(mode) {
   document.querySelectorAll('.mode-btn').forEach((b) => {
     b.classList.toggle('active', b.dataset.mode === S.mode);
   });
+  const modeLabel = $('mode-label');
+  if (modeLabel) modeLabel.textContent = S.mode === 'video' ? 'Video' : 'Text';
 }
 
 function setPrimaryButtonsEnabled(enabled) {
-  const ids = ['btn-enter'];
-  ids.forEach((id) => {
+  ['btn-enter', 'btn-start-text', 'btn-start-video', 'btn-start'].forEach((id) => {
     const btn = $(id);
-    if (btn) {
-      btn.disabled = !enabled;
-      btn.classList.toggle('ready', enabled);
-    }
+    if (!btn) return;
+    btn.disabled = !enabled;
+    btn.classList.toggle('ready', enabled);
   });
 }
 
 function updateConsentState() {
+  // Real <input type="checkbox" id="landing-consent"> used in the current HTML
   const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
+  const oldChecks = ['c1', 'c2', 'c3'].map((id) => $(id)).filter(Boolean);
+
   if (terms) {
     setPrimaryButtonsEnabled(!!terms.checked);
     return;
   }
-  const legacy = ['c1', 'c2', 'c3'].map((id) => $(id)).filter(Boolean);
-  if (legacy.length === 3) {
-    const all = legacy.every((box) => box.classList.contains('on'));
+
+  if (oldChecks.length === 3) {
+    const all = oldChecks.every((box) => box.classList.contains('on'));
     setPrimaryButtonsEnabled(all);
     return;
   }
+
   setPrimaryButtonsEnabled(true);
 }
 
 function initConsentGate() {
   const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
+
   if (terms) {
     terms.addEventListener('change', updateConsentState);
     updateConsentState();
     return;
   }
 
-  // Legacy fallback for older landing page variants.
   const ids = ['c1', 'c2', 'c3'];
   const boxes = ids.map((id) => $(id));
   if (boxes.every(Boolean)) {
@@ -176,6 +208,7 @@ function initConsentGate() {
       });
     });
   }
+
   updateConsentState();
 }
 
@@ -197,184 +230,299 @@ function ensureLobbyCameraPreview() {
   if (strip && S.localStream) strip.classList.add('visible');
 }
 
-function closePeerConnection() {
-  if (S.pc) {
-    try { S.pc.close(); } catch (e) {}
-    S.pc = null;
-  }
+function enterLobby() {
+  if (!S.camGranted) S.mode = 'text';
+  setActiveMode(S.mode);
+  showPage('pg-lobby');
+  ensureLobbyCameraPreview();
+  updateIdentityDisplay();
+}
 
-  const remoteVid = $('vid-remote');
-  if (remoteVid) {
-    try {
-      if (remoteVid.srcObject && remoteVid.srcObject !== S.localStream) {
-        remoteVid.srcObject.getTracks().forEach((t) => t.stop());
-      }
-    } catch (e) {}
-    remoteVid.srcObject = null;
-    remoteVid.style.display = 'none';
-  }
+function updateIdentityDisplay() {
+  const label = $('identity-label');
+  const switchBtn = $('btn-switch-account');
+  const logoutBtn = $('btn-logout');
+  const scorePill = $('score-pill-btn');
 
-  const localVid = $('vid-local');
-  if (localVid) localVid.style.display = 'none';
-
-  const noVideo = $('no-video-ph');
-  if (noVideo) noVideo.style.display = 'flex';
-
-  const quality = $('quality-bar');
-  if (quality) quality.style.display = 'none';
-
-  const phTxt = $('ph-txt');
-  if (phTxt) phTxt.textContent = 'Waiting for video…';
-
-  S.pendingCandidates = [];
-  S.camOff = false;
-  S.micMuted = false;
-
-  const micBtn = $('vc-mic');
-  if (micBtn) {
-    micBtn.textContent = '🎤';
-    micBtn.classList.remove('off');
-  }
-  const camBtn = $('vc-cam');
-  if (camBtn) {
-    camBtn.textContent = '📷';
-    camBtn.classList.remove('off');
+  if (!S.isGuest && S.username) {
+    if (label) label.textContent = `Logged in as ${S.username} · 🧲 ${S.magnetScore ?? '—'} Magnet Score`;
+    if (switchBtn) switchBtn.style.display = 'none';
+    if (logoutBtn) logoutBtn.style.display = '';
+    if (scorePill) scorePill.style.display = '';
+  } else {
+    if (label) label.textContent = `Browsing as guest "${S.guestName || 'Guest'}" — no Magnet Score`;
+    if (switchBtn) switchBtn.style.display = '';
+    if (logoutBtn) logoutBtn.style.display = 'none';
+    if (scorePill) scorePill.style.display = 'none';
   }
 }
 
-function cleanupSocket({ leaveRoom = false } = {}) {
-  if (!S.socket) return;
-
-  if (leaveRoom && S.roomId && S.socket.connected) {
-    try { S.socket.emit('leave', { roomId: S.roomId }); } catch (e) {}
-  }
-
-  try { S.socket.off(); } catch (e) {}
-  try { S.socket.disconnect(); } catch (e) {}
-  S.socket = null;
-  S.connectionReady = false;
-}
-
-function resetSession({ leaveRoom = false } = {}) {
-  clearTimeout(S.replyTimer);
-  clearTimeout(S.matchTimeout);
-  clearTimeout(S.noMatchTimer);
-
-  if (leaveRoom && S.roomId) {
-    try {
-      if (S.socket && S.socket.connected) S.socket.emit('leave', { roomId: S.roomId });
-    } catch (e) {}
-  }
-
-  closePeerConnection();
-  cleanupSocket({ leaveRoom: false });
-
-  S.roomId = null;
-  S.stranger = null;
-  S.isInitiator = false;
-  S.pendingCandidates = [];
-  S.matched = false;
-}
-
-async function requestCameraPermission() {
+function requestCameraPermission() {
   const btn = $('btn-allow');
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Waiting for browser permission…';
   }
 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    S.localStream = stream;
-    S.camGranted = true;
+  return navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    .then((stream) => {
+      S.localStream = stream;
+      S.camGranted = true;
 
-    const permVideo = $('perm-video');
-    const permOverlay = $('perm-overlay');
-    const permDot = $('perm-dot');
-    const permStsTxt = $('perm-status-txt');
-    const camLbl = $('cam-status-lbl');
-    const micLbl = $('mic-status-lbl');
+      const permVideo = $('perm-video');
+      const permOverlay = $('perm-overlay');
+      const permDot = $('perm-dot');
+      const permStsTxt = $('perm-status-txt');
+      const camLbl = $('cam-status-lbl');
+      const micLbl = $('mic-status-lbl');
 
-    if (permVideo) permVideo.srcObject = stream;
-    if (permOverlay) permOverlay.style.display = 'none';
-    if (permDot) permDot.className = 'dot ok';
-    if (permStsTxt) permStsTxt.textContent = 'Camera & mic active';
-    if (camLbl) {
-      camLbl.textContent = 'granted';
-      camLbl.className = 'badge ok';
+      if (permVideo) permVideo.srcObject = stream;
+      if (permOverlay) permOverlay.style.display = 'none';
+      if (permDot) permDot.className = 'dot ok';
+      if (permStsTxt) permStsTxt.textContent = 'Camera & mic active';
+      if (camLbl) {
+        camLbl.textContent = 'granted';
+        camLbl.className = 'badge ok';
+      }
+      if (micLbl) {
+        micLbl.textContent = 'granted';
+        micLbl.className = 'badge ok';
+      }
+
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Permissions granted';
+      }
+
+      const lobbyPreview = $('lobby-cam-preview');
+      if (lobbyPreview) lobbyPreview.srcObject = stream;
+
+      const camStrip = $('cam-strip');
+      if (camStrip) camStrip.classList.add('visible');
+
+      showPage('pg-lobby');
+
+      if (S.pendingAction === 'match') {
+        S.pendingAction = null;
+        setTimeout(startMatching, 350);
+      }
+    })
+    .catch((err) => {
+      console.warn('[Camera]', err.name, err.message);
+
+      const permDot = $('perm-dot');
+      const permStsTxt = $('perm-status-txt');
+      const camLbl = $('cam-status-lbl');
+      const micLbl = $('mic-status-lbl');
+      const permOverlay = $('perm-overlay');
+      const overlayTxt = $('perm-overlay-txt');
+
+      if (permDot) permDot.className = 'dot bad';
+      if (permStsTxt) permStsTxt.textContent = 'Permission denied';
+      if (camLbl) {
+        camLbl.textContent = 'denied';
+        camLbl.className = 'badge warn';
+      }
+      if (micLbl) {
+        micLbl.textContent = 'denied';
+        micLbl.className = 'badge warn';
+      }
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = err.name === 'NotFoundError' ? 'No camera found' : 'Try again';
+      }
+      if (permOverlay) permOverlay.style.display = 'flex';
+      if (overlayTxt) {
+        overlayTxt.textContent =
+          err.name === 'NotFoundError'
+            ? 'No camera was detected on this device.'
+            : 'Permission was denied. Check browser settings and try again.';
+      }
+
+      toast(err.name === 'NotFoundError' ? 'No camera detected' : 'Camera blocked', '⚠️');
+    });
+}
+
+function initAuthControls() {
+  const tabLogin  = $('tab-login');
+  const tabSignup = $('tab-signup');
+  const loginForm  = $('auth-login-form');
+  const signupForm = $('auth-signup-form');
+  const forgotForm = $('auth-forgot-form');
+
+  function showAuthTab(which) {
+    if (forgotForm) forgotForm.style.display = 'none';
+    if (which === 'login') {
+      if (loginForm) loginForm.style.display = '';
+      if (signupForm) signupForm.style.display = 'none';
+      tabLogin?.classList.add('active');
+      tabSignup?.classList.remove('active');
+    } else {
+      if (loginForm) loginForm.style.display = 'none';
+      if (signupForm) signupForm.style.display = '';
+      tabSignup?.classList.add('active');
+      tabLogin?.classList.remove('active');
     }
-    if (micLbl) {
-      micLbl.textContent = 'granted';
-      micLbl.className = 'badge ok';
+  }
+
+  tabLogin?.addEventListener('click', () => showAuthTab('login'));
+  tabSignup?.addEventListener('click', () => showAuthTab('signup'));
+
+  function setError(id, msg) {
+    const el = $(id);
+    if (!el) return;
+    if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
+    el.style.display = 'block';
+    el.textContent = msg;
+  }
+
+  function afterAuthSuccess(token, username, magnetScore) {
+    S.authToken = token;
+    S.username = username;
+    S.magnetScore = magnetScore;
+    S.isGuest = false;
+    localStorage.setItem('mortalive_token', token);
+    localStorage.setItem('mortalive_username', username);
+    toast(`Welcome, ${username}!`, '🧲');
+    enterLobby();
+  }
+
+  $('btn-login')?.addEventListener('click', async () => {
+    const username = ($('login-username')?.value || '').trim();
+    const password = $('login-password')?.value || '';
+    setError('login-error', null);
+    if (!username || !password) { setError('login-error', 'Enter your username and password.'); return; }
+
+    try {
+      const res = await fetch(`${SERVER_URL}/api/login`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError('login-error', data.error || 'Login failed.'); return; }
+      afterAuthSuccess(data.token, data.username, data.magnetScore);
+    } catch (e) {
+      setError('login-error', 'Could not reach the server. Try again in a moment.');
     }
+  });
 
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'Permissions granted';
+  $('btn-signup')?.addEventListener('click', async () => {
+    const username = ($('signup-username')?.value || '').trim();
+    const email    = ($('signup-email')?.value || '').trim();
+    const password = $('signup-password')?.value || '';
+    setError('signup-error', null);
+
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+      setError('signup-error', 'Username must be 3-20 characters: letters, numbers, underscore only.');
+      return;
     }
-
-    const lobbyPreview = $('lobby-cam-preview');
-    if (lobbyPreview) lobbyPreview.srcObject = stream;
-    const camStrip = $('cam-strip');
-    if (camStrip) camStrip.classList.add('visible');
-
-    if (S.pendingAction === 'match') {
-      S.pendingAction = null;
-      enterLobby();
-      setTimeout(() => startMatching(), 250);
+    if (password.length < 6) {
+      setError('signup-error', 'Password must be at least 6 characters.');
       return;
     }
 
+    try {
+      const res = await fetch(`${SERVER_URL}/api/signup`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, email: email || null })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError('signup-error', data.error || 'Could not create account.'); return; }
+      afterAuthSuccess(data.token, data.username, data.magnetScore);
+    } catch (e) {
+      setError('signup-error', 'Could not reach the server. Try again in a moment.');
+    }
+  });
+
+  $('btn-forgot')?.addEventListener('click', () => {
+    if (loginForm) loginForm.style.display = 'none';
+    if (forgotForm) forgotForm.style.display = '';
+  });
+  $('btn-forgot-back')?.addEventListener('click', () => {
+    if (forgotForm) forgotForm.style.display = 'none';
+    showAuthTab('login');
+  });
+  $('btn-forgot-submit')?.addEventListener('click', async () => {
+    const email = ($('forgot-email')?.value || '').trim();
+    const msgEl = $('forgot-message');
+    if (!email) return;
+    try {
+      const res = await fetch(`${SERVER_URL}/api/forgot-password`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      if (msgEl) {
+        msgEl.style.display = 'block';
+        msgEl.textContent = data.message || 'If an account exists for that email, a reset link will be sent soon.';
+      }
+    } catch (e) {
+      if (msgEl) { msgEl.style.display = 'block'; msgEl.textContent = 'Could not reach the server.'; }
+    }
+  });
+
+  $('btn-continue-guest')?.addEventListener('click', () => {
+    const name = ($('guest-name')?.value || '').trim();
+    S.authToken = null;
+    S.username = null;
+    S.magnetScore = null;
+    S.isGuest = true;
+    S.guestName = name.slice(0, 24) || `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
+    localStorage.removeItem('mortalive_token');
+    localStorage.removeItem('mortalive_username');
+    localStorage.setItem('mortalive_guest_name', S.guestName);
     enterLobby();
-  } catch (err) {
-    console.warn('[Camera]', err.name, err.message);
-    const permDot = $('perm-dot');
-    const permStsTxt = $('perm-status-txt');
-    const camLbl = $('cam-status-lbl');
-    const micLbl = $('mic-status-lbl');
-    const permOverlay = $('perm-overlay');
-    const overlayTxt = $('perm-overlay-txt');
+  });
 
-    if (permDot) permDot.className = 'dot bad';
-    if (permStsTxt) permStsTxt.textContent = 'Permission denied';
-    if (camLbl) {
-      camLbl.textContent = 'denied';
-      camLbl.className = 'badge warn';
-    }
-    if (micLbl) {
-      micLbl.textContent = 'denied';
-      micLbl.className = 'badge warn';
-    }
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = err.name === 'NotFoundError' ? 'No camera found' : 'Try again';
-    }
-    if (permOverlay) permOverlay.style.display = 'flex';
-    if (overlayTxt) {
-      overlayTxt.textContent =
-        err.name === 'NotFoundError'
-          ? 'No camera was detected on this device.'
-          : 'Permission was denied. Check browser settings and try again.';
-    }
+  const guestInput = $('guest-name');
+  if (guestInput && S.guestName) guestInput.value = S.guestName;
+}
 
-    toast(err.name === 'NotFoundError' ? 'No camera detected' : 'Camera blocked', '⚠️');
+// If a session token is already stored, validate it on load and skip
+// straight past the auth screen into the lobby on success.
+async function tryAutoLogin() {
+  if (!S.authToken) return false;
+  try {
+    const res = await fetch(`${SERVER_URL}/api/me`, {
+      headers: { Authorization: `Bearer ${S.authToken}` }
+    });
+    if (!res.ok) throw new Error('invalid session');
+    const data = await res.json();
+    S.username = data.username;
+    S.magnetScore = data.magnetScore;
+    S.isGuest = false;
+    return true;
+  } catch (e) {
+    S.authToken = null;
+    localStorage.removeItem('mortalive_token');
+    localStorage.removeItem('mortalive_username');
+    return false;
   }
 }
 
-function enterLobby() {
-  if (!S.camGranted) S.mode = 'text';
-  setActiveMode(S.mode);
-  showPage('pg-lobby');
-  ensureLobbyCameraPreview();
-}
+function initLandingActions() {
+  const startText = $('btn-start-text') || $('btn-enter') || $('btn-start');
+  const startVideo = $('btn-start-video');
 
-function initLandingControls() {
-  const btn = $('btn-enter');
-  if (btn) {
-    btn.addEventListener('click', () => {
-      startOnlineCounter();
-      showPage('pg-perm');
-    });
+  async function proceedPastLanding(mode) {
+    S.mode = mode;
+    S.pendingAction = null;
+    // tryAutoLogin() was kicked off in the background at page load; this
+    // just waits on that same result if it hasn't resolved yet.
+    const loggedIn = S.authToken ? await tryAutoLogin() : false;
+    if (loggedIn) {
+      enterLobby();
+    } else {
+      showPage('pg-auth');
+    }
+  }
+
+  if (startText) {
+    startText.addEventListener('click', () => proceedPastLanding('text'));
+  }
+
+  if (startVideo) {
+    startVideo.addEventListener('click', () => proceedPastLanding('video'));
   }
 }
 
@@ -386,15 +534,37 @@ function initPermissionControls() {
   if (btnSkipCam) {
     btnSkipCam.addEventListener('click', () => {
       S.camGranted = false;
-      S.pendingAction = null;
       S.mode = 'text';
-      setActiveMode('text');
-      enterLobby();
+      S.pendingAction = null;
+      document.querySelectorAll('.mode-btn').forEach((b) => b.classList.remove('active'));
+      const textBtn = document.querySelector('[data-mode="text"]');
+      if (textBtn) textBtn.classList.add('active');
+      showPage('pg-lobby');
     });
   }
 }
 
 function initLobbyControls() {
+  $('btn-switch-account')?.addEventListener('click', () => showPage('pg-auth'));
+
+  $('btn-logout')?.addEventListener('click', async () => {
+    try {
+      await fetch(`${SERVER_URL}/api/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${S.authToken}` }
+      });
+    } catch (e) {}
+    S.authToken = null;
+    S.username = null;
+    S.magnetScore = null;
+    S.isGuest = true;
+    localStorage.removeItem('mortalive_token');
+    localStorage.removeItem('mortalive_username');
+    toast('Logged out', '👋');
+    updateIdentityDisplay();
+    showPage('pg-auth');
+  });
+
   const modeToggle = $('mode-toggle');
   if (modeToggle) {
     modeToggle.addEventListener('click', (e) => {
@@ -406,7 +576,7 @@ function initLobbyControls() {
         S.mode = 'video';
         S.pendingAction = 'match';
         showPage('pg-perm');
-        toast('Allow camera first for video chat', '📹');
+        toast('Grant camera access to use video mode', '📹');
         return;
       }
 
@@ -437,36 +607,13 @@ function initLobbyControls() {
     btnFind.addEventListener('click', () => {
       const interest = $('interest-input');
       S.interest = (interest && interest.value ? interest.value : '').trim();
-
       if (S.mode === 'video' && !S.camGranted) {
         S.pendingAction = 'match';
         showPage('pg-perm');
         toast('Grant camera access to use video mode', '📹');
         return;
       }
-
       startMatching();
-    });
-  }
-
-  const scoreBtn = $('score-pill-btn');
-  const sheetOverlay = $('sheet-overlay');
-  if (scoreBtn && sheetOverlay) {
-    scoreBtn.addEventListener('click', () => sheetOverlay.classList.add('open'));
-    sheetOverlay.addEventListener('click', (e) => {
-      if (e.target === sheetOverlay) sheetOverlay.classList.remove('open');
-    });
-  }
-}
-
-function initMatchControls() {
-  const btnCancel = $('btn-cancel');
-  if (btnCancel) {
-    btnCancel.addEventListener('click', () => {
-      clearTimeout(S.matchTimeout);
-      clearTimeout(S.noMatchTimer);
-      resetSession({ leaveRoom: true });
-      enterLobby();
     });
   }
 }
@@ -487,23 +634,23 @@ function initChatControls() {
   $('btn-skip')?.addEventListener('click', () => {
     clearTimeout(S.replyTimer);
     logSession('end', { reason: 'skip', roomId: S.roomId });
-    resetSession({ leaveRoom: true });
+    disconnectPeer();
     addSysLine('↩ Skipping — searching next match…');
-    startMatching();
+    setTimeout(startMatching, 800);
   });
 
   $('btn-end')?.addEventListener('click', () => {
     clearTimeout(S.replyTimer);
     logSession('end', { reason: 'ended', roomId: S.roomId });
-    resetSession({ leaveRoom: true });
-    openRating();
+    disconnectPeer();
+    showPage('pg-lobby');
   });
 
   $('btn-toggle-video')?.addEventListener('click', () => {
     const panel = $('video-panel');
     if (!panel) return;
-
     const on = panel.classList.contains('visible');
+
     if (on) {
       panel.classList.remove('visible');
       $('btn-toggle-video')?.classList.remove('active');
@@ -519,6 +666,7 @@ function initChatControls() {
 
     panel.classList.add('visible');
     $('btn-toggle-video')?.classList.add('active');
+    if (S.demoActive && (!S.localStream || !S.localStream.active)) setupDemoVideo();
   });
 
   $('vc-mic')?.addEventListener('click', () => {
@@ -556,52 +704,19 @@ function initChatControls() {
     if (!document.fullscreenElement) feeds.requestFullscreen?.().catch(() => {});
     else document.exitFullscreen?.();
   });
-}
 
-function initRatingControls() {
-  const overlay = $('rating-overlay');
-  if (!overlay) return;
-
-  let stars = 0;
-
-  const openModal = () => {
-    stars = 0;
-    document.querySelectorAll('#stars .star').forEach((s) => s.classList.remove('lit'));
-    document.querySelectorAll('#vibes .vibe').forEach((v) => v.classList.remove('on'));
-    overlay.classList.add('open');
-  };
-
-  const closeModal = () => overlay.classList.remove('open');
-
-  $('btn-rate-top')?.addEventListener('click', openModal);
-
-  $('stars')?.addEventListener('click', (e) => {
-    const star = e.target.closest('.star');
-    if (!star) return;
-    stars = parseInt(star.dataset.v, 10) || 0;
-    document.querySelectorAll('#stars .star').forEach((s) => {
-      s.classList.toggle('lit', parseInt(s.dataset.v, 10) <= stars);
-    });
+  $('btn-cancel')?.addEventListener('click', () => {
+    clearTimeout(matchTimeout);
+    clearTimeout(S.noMatchTimeout);
+    disconnectPeer();
+    showPage('pg-lobby');
   });
 
-  $('vibes')?.addEventListener('click', (e) => {
-    const vibe = e.target.closest('.vibe');
-    if (!vibe) return;
-    vibe.classList.toggle('on');
-  });
-
-  $('btn-skip-rating')?.addEventListener('click', closeModal);
-
-  $('btn-submit-rating')?.addEventListener('click', () => {
-    if (!stars) {
-      toast('Pick a star rating first', '⭐');
-      return;
-    }
-    const vibes = Array.from(document.querySelectorAll('#vibes .vibe.on')).map((v) => v.dataset.v);
-    logSession('rating', { roomId: S.roomId, stars, vibes });
-    closeModal();
-    toast(stars >= 4 ? 'Thanks for the rating!' : 'Rating submitted', '⭐');
-    enterLobby();
+  $('btn-try-demo')?.addEventListener('click', () => {
+    clearTimeout(matchTimeout);
+    clearTimeout(S.noMatchTimeout);
+    if (S.socket && S.socket.connected) removeFromQueueSafely();
+    simulateDemoMatch();
   });
 }
 
@@ -614,51 +729,47 @@ function initGlobalDefaults() {
   }
 }
 
-function initSocket(searchId) {
+function initSocket() {
   if (typeof io === 'undefined') {
-    console.error('[Mortalive] Socket.io is not available.');
-    setCallStatus('failed', 'realtime unavailable');
-    toast('Realtime connection is not loaded', '⚠️');
+    console.warn('[Mortalive] Socket.io client not loaded yet — retrying in 800ms before falling back to demo mode.');
+    setTimeout(() => {
+      if (typeof io === 'undefined') {
+        console.error('[Mortalive] Socket.io still missing after retry — check that the CDN script tag loaded (network tab) and that you are testing the latest deploy, not a cached build.');
+        return;
+      }
+      initSocket();
+    }, 800);
     return;
   }
 
-  const socket = io(SERVER_URL, {
-    transports: ['websocket', 'polling'],
-    timeout: 10000,
-    reconnection: true,
-    reconnectionAttempts: 3,
-    reconnectionDelay: 500
+  if (S.socket && S.socket.connected) {
+    S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
+    return;
+  }
+
+  S.socket = io(SERVER_URL, { transports: ['websocket', 'polling'], timeout: 6000 });
+
+  S.socket.on('connect', () => {
+    S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
   });
 
-  S.socket = socket;
-  S.connectionReady = false;
-
-  socket.on('connect', () => {
-    if (searchId !== S.searchId) return;
-    S.connectionReady = true;
-    socket.emit('queue', { mode: S.mode, pref: S.interest });
-    setCallStatus('connecting', 'Waiting for someone…');
-  });
-
-  socket.on('matched', async (data) => {
-    if (searchId !== S.searchId) return;
-    clearTimeout(S.matchTimeout);
-    clearTimeout(S.noMatchTimer);
+  S.socket.on('matched', async (data) => {
+    clearTimeout(matchTimeout);
+    clearTimeout(S.noMatchTimeout);
     S.matched = true;
     S.roomId = data.roomId;
     S.isInitiator = !!data.initiator;
     S.stranger = {
       name: (data.peer && data.peer.name) || 'Stranger',
-      score: (data.peer && data.peer.score) || 0,
-      emoji: (data.peer && data.peer.emoji) || '👤'
+      score: data.peer && typeof data.peer.score === 'number' ? data.peer.score : null,
+      emoji: (data.peer && data.peer.emoji) || '👤',
+      isGuest: !!(data.peer && data.peer.isGuest)
     };
     beginChat();
-    if (S.mode === 'video') {
-      await startWebRTC();
-    }
+    if (S.mode === 'video') await startWebRTC();
   });
 
-  socket.on('signal', async (data) => {
+  S.socket.on('signal', async (data) => {
     if (!S.pc) return;
     try {
       if (data.type === 'offer') {
@@ -669,7 +780,7 @@ function initSocket(searchId) {
         S.pendingCandidates = [];
         const answer = await S.pc.createAnswer();
         await S.pc.setLocalDescription(answer);
-        socket.emit('signal', { roomId: S.roomId, type: answer.type, sdp: answer.sdp });
+        S.socket.emit('signal', { roomId: S.roomId, type: answer.type, sdp: answer.sdp });
       } else if (data.type === 'answer') {
         await S.pc.setRemoteDescription(new RTCSessionDescription(data));
         for (const c of S.pendingCandidates) {
@@ -688,62 +799,87 @@ function initSocket(searchId) {
     }
   });
 
-  socket.on('peer-chat', ({ text }) => appendMsg(text, 'them'));
+  S.socket.on('peer-chat', ({ text }) => appendMsg(text, 'them'));
 
-  socket.on('peer-disconnected', () => {
+  S.socket.on('peer-disconnected', () => {
     addSysLine('👋 Stranger disconnected');
     setCallStatus('failed', 'disconnected');
-    const txt = $('ph-txt');
-    if (txt) txt.textContent = 'Stranger disconnected';
-    closePeerConnection();
+    hideRemoteVideo('Stranger disconnected');
   });
 
-  socket.on('disconnect', () => {
-    if (searchId !== S.searchId) return;
-    if (!S.matched) setCallStatus('failed', 'reconnecting…');
-  });
-
-  socket.on('connect_error', (err) => {
-    if (searchId !== S.searchId) return;
+  S.socket.on('connect_error', (err) => {
     console.log('[Socket] connect_error:', err.message);
-    setCallStatus('failed', 'reconnecting…');
   });
 }
 
+let matchTimeout = null;
+
 function startMatching() {
-  const searchId = ++S.searchId;
-
-  clearTimeout(S.matchTimeout);
-  clearTimeout(S.noMatchTimer);
-
-  resetSession({ leaveRoom: true });
-
   showPage('pg-match');
   updateOnlineCount();
   setCallStatus('connecting', 'Searching…');
   setText('match-title', 'Finding your match');
   const subReset = $('match-sub');
   if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
+  const tryDemoReset = $('btn-try-demo');
+  if (tryDemoReset) tryDemoReset.style.display = 'none';
 
-  initSocket(searchId);
+  initSocket();
 
-  S.matchTimeout = setTimeout(() => {
-    if (searchId !== S.searchId) return;
-    if (!S.socket || !S.socket.connected) {
-      setText('match-title', 'Connecting to the server…');
-      const sub = $('match-sub');
-      if (sub) sub.textContent = 'Hang on while the connection comes up.';
-    }
-  }, 7000);
+  S.matched = false; // reset; set to true inside the 'matched' socket handler
 
-  S.noMatchTimer = setTimeout(() => {
-    if (searchId !== S.searchId || S.matched) return;
+  clearTimeout(matchTimeout);
+  clearTimeout(S.noMatchTimeout);
+
+  // Short check: if the socket itself never connects, fall back to demo quickly.
+  matchTimeout = setTimeout(() => {
+    if (!S.socket || !S.socket.connected) simulateDemoMatch();
+  }, 1800 + Math.random() * 1800);
+
+  // Longer check: socket may be connected fine, but if nobody else is
+  // online to match with, the queue waits forever. After a reasonable
+  // wait, let the user know instead of leaving them on an endless spinner.
+  S.noMatchTimeout = setTimeout(() => {
+    if (S.matched) return; // already matched, nothing to do
     if (S.socket && S.socket.connected) {
-      setText('match-title', 'Still searching…');
+      // Real server connection works, just nobody else is queued right now.
+      setText('match-title', "No one's online right now");
       const sub = $('match-sub');
-      if (sub) sub.textContent = 'You are connected to the server. Waiting for another person to join the queue.';
+      if (sub) sub.innerHTML = 'Nobody else is in the queue yet. You can keep waiting, or try a one-off demo chat while the site grows.';
+      const tryDemo = $('btn-try-demo');
+      if (tryDemo) tryDemo.style.display = 'inline-flex';
+    } else {
+      simulateDemoMatch();
     }
-  }, 20000);
+  }, 15000);
+}
+
+function removeFromQueueSafely() {
+  if (S.socket && S.socket.connected) {
+    try { S.socket.emit('leave', { roomId: S.roomId }); } catch (e) {}
+  }
+}
+
+function hideRemoteVideo(message) {
+  const remote = $('vid-remote');
+  const noVideo = $('no-video-ph');
+  const txt = $('ph-txt');
+  const q = $('quality-bar');
+
+  if (remote) {
+    try {
+      // Same guard as disconnectPeer(): never stop tracks that actually
+      // belong to our own local camera stream (demo mode reuses it).
+      if (remote.srcObject && remote.srcObject !== S.localStream) {
+        remote.srcObject.getTracks().forEach((t) => t.stop());
+      }
+    } catch (e) {}
+    remote.srcObject = null;
+    remote.style.display = 'none';
+  }
+  if (noVideo) noVideo.style.display = 'flex';
+  if (txt) txt.textContent = message || 'Waiting for video…';
+  if (q) q.style.display = 'none';
 }
 
 async function startWebRTC() {
@@ -756,7 +892,6 @@ async function startWebRTC() {
     const localVid = $('vid-local');
     const noVideo = $('no-video-ph');
     const txt = $('ph-txt');
-
     if (localVid) {
       localVid.srcObject = S.localStream;
       localVid.style.display = 'block';
@@ -817,9 +952,7 @@ async function startWebRTC() {
     if (S.isInitiator) {
       const offer = await S.pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: true });
       await S.pc.setLocalDescription(offer);
-      if (S.socket && S.socket.connected) {
-        S.socket.emit('signal', { roomId: S.roomId, type: offer.type, sdp: offer.sdp });
-      }
+      if (S.socket) S.socket.emit('signal', { roomId: S.roomId, type: offer.type, sdp: offer.sdp });
     }
   } catch (err) {
     console.error('[WebRTC]', err);
@@ -867,14 +1000,85 @@ function monitorQuality() {
   }, 4000);
 }
 
+function simulateDemoMatch() {
+  if (S.demoActive) return;
+  S.demoActive = true;
+
+  let pool = [...strangerPool];
+  if (S.interest && S.interest.toLowerCase().includes('high')) {
+    pool = pool.filter((s) => s.score > 300);
+  }
+
+  S.stranger = pool[Math.floor(Math.random() * pool.length)];
+  S.roomId = `demo-${Date.now()}`;
+
+  // Decide once per match whether the "stranger" has their camera on.
+  // Roughly 6 in 10 strangers have video on, matching typical real usage.
+  S.demoStrangerCamOn = Math.random() < 0.6;
+
+  beginChat();
+
+  if (S.mode === 'video') {
+    const panel = $('video-panel');
+    if (panel) panel.classList.add('visible');
+    setupDemoVideo();
+  }
+}
+
+async function setupDemoVideo() {
+  // Bring up the user's own camera exactly like a real call would.
+  try {
+    if (!S.localStream || !S.localStream.active) {
+      S.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      S.camGranted = true;
+    }
+    const localVid = $('vid-local');
+    if (localVid) {
+      localVid.srcObject = S.localStream;
+      localVid.style.display = 'block';
+    }
+  } catch (e) {
+    // No camera available locally — that's fine, the demo can still show
+    // the "stranger" side; just keep the waiting placeholder for our own feed.
+  }
+
+  // Believable connecting delay before the stranger's feed "arrives",
+  // same pacing a real WebRTC handshake would have.
+  setText('ph-txt', 'Waiting for video…');
+  const noVideoPh = $('no-video-ph');
+  const remoteVid = $('vid-remote');
+
+  setTimeout(() => {
+    if (!S.demoActive) return; // user already left before this fired
+
+    if (S.demoStrangerCamOn) {
+      // Mirror the user's own camera back as a stand-in remote feed so
+      // something is genuinely moving on screen, like a real peer would.
+      if (remoteVid && S.localStream) {
+        remoteVid.srcObject = S.localStream;
+        remoteVid.style.display = 'block';
+      }
+      if (noVideoPh) noVideoPh.style.display = 'none';
+      const qbar = $('quality-bar');
+      if (qbar) qbar.style.display = 'flex';
+    } else {
+      // Stranger has their camera off — show the same placeholder a real
+      // camera-off peer would produce, with their name instead of generic text.
+      if (remoteVid) remoteVid.style.display = 'none';
+      setText('ph-txt', `${S.stranger?.name || 'Stranger'}'s camera is off`);
+      if (noVideoPh) noVideoPh.style.display = 'flex';
+    }
+  }, 900 + Math.random() * 900);
+}
+
 function beginChat() {
   const msgs = $('chat-msgs');
   if (msgs) msgs.innerHTML = '';
 
-  const s = S.stranger || { name: 'Stranger', score: 0, emoji: '👤' };
+  const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
   setText('peer-ava', s.emoji);
   setText('peer-name', s.name);
-  setText('peer-score', 'Anonymous chat · connected');
+  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} Magnet Score · connected`);
 
   const panel = $('video-panel');
   if (S.mode === 'video') {
@@ -895,8 +1099,8 @@ function beginChat() {
   }, 700);
 
   if (Math.random() > 0.35) {
-    setTimeout(() => appendMsg(AI_OPENERS[Math.floor(Math.random() * AI_OPENERS.length)], 'them'),
-      700 + Math.random() * 600);
+    const openers = ['hey!', 'hi there 👋', 'hello!', "what's up?", 'yo', 'heyyy 👀'];
+    setTimeout(() => appendMsg(openers[Math.floor(Math.random() * openers.length)], 'them'), 700 + Math.random() * 600);
   }
 }
 
@@ -928,6 +1132,7 @@ function appendMsg(text, who) {
   msgs.scrollTop = msgs.scrollHeight;
 
   logSession('message', { roomId: S.roomId, text, who, ts: Date.now() });
+  if (who === 'me') scheduleReply();
 }
 
 function addSysLine(text) {
@@ -940,37 +1145,121 @@ function addSysLine(text) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
+function scheduleReply() {
+  clearTimeout(S.replyTimer);
+  if (Math.random() > 0.22) {
+    S.replyTimer = setTimeout(() => {
+      if (S.socket && S.socket.connected) return;
+      appendMsg(autoReplies[Math.floor(Math.random() * autoReplies.length)], 'them');
+    }, 1100 + Math.random() * 2800);
+  }
+}
+
 function sendMsg() {
   const inp = $('cin');
   if (!inp) return;
   const text = inp.value.trim();
   if (!text) return;
+
   inp.value = '';
   appendMsg(text, 'me');
+
   if (S.socket && S.socket.connected) {
     S.socket.emit('chat', { roomId: S.roomId, text });
-  } else {
-    toast('Still connecting to the chat server', '⚠️');
   }
 }
 
-function openRating() {
-  const overlay = $('rating-overlay');
-  if (!overlay) return;
-  document.querySelectorAll('.star').forEach((s) => s.classList.remove('lit'));
-  document.querySelectorAll('.vibe').forEach((v) => v.classList.remove('on'));
-  overlay.classList.add('open');
-}
+function disconnectPeer() {
+  clearTimeout(S.replyTimer);
+  clearTimeout(matchTimeout);
 
-function initBeforeUnload() {
-  window.addEventListener('beforeunload', () => {
+  if (S.socket) {
     try {
-      if (S.socket && S.socket.connected && S.roomId) {
-        S.socket.emit('leave', { roomId: S.roomId });
+      S.socket.emit('leave', { roomId: S.roomId });
+    } catch (e) {}
+  }
+
+  if (S.pc) {
+    try { S.pc.close(); } catch (e) {}
+    S.pc = null;
+  }
+
+  const remoteVid = $('vid-remote');
+  if (remoteVid) {
+    try {
+      // In demo mode, vid-remote.srcObject is the SAME MediaStream object as
+      // our own local camera (reused as a stand-in "stranger" feed). Stopping
+      // its tracks here would kill our own camera. Only stop tracks that
+      // belong to a genuinely separate (real peer) stream.
+      if (remoteVid.srcObject && remoteVid.srcObject !== S.localStream) {
+        remoteVid.srcObject.getTracks().forEach((t) => t.stop());
       }
     } catch (e) {}
-    cleanupSocket({ leaveRoom: false });
-    closePeerConnection();
+    remoteVid.srcObject = null;
+    remoteVid.style.display = 'none';
+  }
+
+  const localVid = $('vid-local');
+  if (localVid) localVid.style.display = 'none';
+
+  hideRemoteVideo('Waiting for video…');
+  S.pendingCandidates = [];
+  S.roomId = null;
+  S.stranger = null;
+  S.isInitiator = false;
+  S.demoActive = false;
+}
+
+function logSession(event, data) {
+  fetch(`${SERVER_URL}/api/log`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event, ...data, token: S.authToken, ts: Date.now() })
+  }).catch(() => {});
+}
+
+function initRatingControls() {
+  const overlay = $('rating-overlay');
+  if (!overlay) return;
+
+  let stars = 0;
+
+  const openModal = () => {
+    stars = 0;
+    document.querySelectorAll('#stars .star').forEach((s) => s.classList.remove('lit'));
+    document.querySelectorAll('#vibes .vibe').forEach((v) => v.classList.remove('on'));
+    overlay.classList.add('open');
+  };
+  const closeModal = () => overlay.classList.remove('open');
+
+  $('btn-rate-top')?.addEventListener('click', openModal);
+
+  $('stars')?.addEventListener('click', (e) => {
+    const star = e.target.closest('.star');
+    if (!star) return;
+    stars = parseInt(star.dataset.v, 10) || 0;
+    document.querySelectorAll('#stars .star').forEach((s) => {
+      s.classList.toggle('lit', parseInt(s.dataset.v, 10) <= stars);
+    });
+  });
+
+  $('vibes')?.addEventListener('click', (e) => {
+    const vibe = e.target.closest('.vibe');
+    if (!vibe) return;
+    vibe.classList.toggle('on');
+  });
+
+  $('btn-skip-rating')?.addEventListener('click', closeModal);
+
+  $('btn-submit-rating')?.addEventListener('click', () => {
+    if (!stars) {
+      toast('Pick a star rating first', '⭐');
+      return;
+    }
+    const vibes = Array.from(document.querySelectorAll('#vibes .vibe.on')).map((v) => v.dataset.v);
+    logSession('rating', { roomId: S.roomId, stars, vibes });
+    closeModal();
+    toast(stars >= 4 ? 'Thanks for the rating!' : 'Rating submitted', '⭐');
   });
 }
 
@@ -978,15 +1267,19 @@ ready(() => {
   initGlobalDefaults();
   startOnlineCounter();
   initConsentGate();
-  initLandingControls();
+  initLandingActions();
+  initAuthControls();
   initPermissionControls();
   initLobbyControls();
-  initMatchControls();
   initChatControls();
   initRatingControls();
-  initBeforeUnload();
 
   if ($('pg-land')) showPage('pg-land');
+
+  // Validate any stored session token in the background. If a returning
+  // user's account is reached on pg-auth, this lets us skip straight to
+  // the lobby instead of making them log in again every visit.
+  tryAutoLogin();
 
   if (navigator.mediaDevices && !navigator.mediaDevices.getUserMedia) {
     const btnAllow = $('btn-allow');
@@ -995,4 +1288,6 @@ ready(() => {
       btnAllow.textContent = 'Camera not supported in this browser';
     }
   }
+
+  window.addEventListener('beforeunload', () => disconnectPeer());
 });
