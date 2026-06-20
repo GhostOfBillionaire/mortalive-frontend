@@ -747,9 +747,23 @@ function initSocket() {
     return;
   }
 
-  S.socket = io(SERVER_URL, { transports: ['websocket', 'polling'], timeout: 6000 });
+  S.socket = io(SERVER_URL, {
+    transports: ['websocket', 'polling'],
+    timeout: 6000,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 4000
+  });
 
   S.socket.on('connect', () => {
+    // Fires on initial connect AND on every successful reconnect (e.g. a
+    // mobile tab resuming after being backgrounded). Only re-announce to
+    // the queue if we're still actually on the matching screen and haven't
+    // already been matched — otherwise a reconnect mid-chat or back in the
+    // lobby would silently throw the user back into search.
+    const onMatchingScreen = $('pg-match')?.classList.contains('active');
+    if (S.matched || !onMatchingScreen) return;
     S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
   });
 
@@ -1290,4 +1304,23 @@ ready(() => {
   }
 
   window.addEventListener('beforeunload', () => disconnectPeer());
+
+  // Mobile browsers can fully suspend JS execution while a tab is
+  // backgrounded (screen lock, app switch), not just the network — so
+  // Socket.io's own reconnection timers may not fire until the tab is
+  // foregrounded again. When that happens, actively check the connection
+  // and re-announce to the queue if we were mid-search.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!S.socket) return;
+    const onMatchingScreen = $('pg-match')?.classList.contains('active');
+    if (!onMatchingScreen || S.matched) return;
+
+    if (S.socket.connected) {
+      S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
+    } else {
+      S.socket.connect();
+      // The 'connect' handler above will re-emit 'queue' once it lands.
+    }
+  });
 });
