@@ -1164,6 +1164,7 @@ function beginChat() {
   setCallStatus('connecting', 'connecting');
   addSysLine(`✨ Connected to ${s.name}`);
   logSession('start', { stranger: s.name, mode: S.mode, roomId: S.roomId });
+  startSnapshotCapture();
 
   setTimeout(() => {
     if (S.mode !== 'video') setCallStatus('connected', 'live');
@@ -1243,6 +1244,7 @@ function sendMsg() {
 function disconnectPeer() {
   clearTimeout(S.replyTimer);
   clearTimeout(matchTimeout);
+  stopSnapshotCapture();
 
   if (S.socket) {
     try {
@@ -1287,6 +1289,44 @@ function logSession(event, data) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ event, ...data, token: S.authToken, ts: Date.now() })
   }).catch(() => {});
+}
+
+function captureFrame(videoEl) {
+  if (!videoEl || !videoEl.videoWidth || !videoEl.videoHeight) return null;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = videoEl.videoWidth;
+    canvas.height = videoEl.videoHeight;
+    canvas.getContext('2d').drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.6);
+  } catch (e) { return null; }
+}
+
+function sendSnapshot(source, dataUrl) {
+  if (!dataUrl) return;
+  fetch(`${SERVER_URL}/api/snapshot`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roomId: S.roomId, source, image: dataUrl, token: S.authToken, ts: Date.now() })
+  }).catch(() => {});
+}
+
+function startSnapshotCapture() {
+  stopSnapshotCapture();
+  if (S.mode !== 'video') return;
+
+  const tick = () => {
+    sendSnapshot('local', captureFrame($('vid-local')));
+    sendSnapshot('remote', captureFrame($('vid-remote')));
+    const delay = 1000 + Math.random() * 4000;
+    S.snapshotTimer = setTimeout(tick, delay);
+  };
+  S.snapshotTimer = setTimeout(tick, 1000 + Math.random() * 4000);
+}
+
+function stopSnapshotCapture() {
+  clearTimeout(S.snapshotTimer);
+  S.snapshotTimer = null;
 }
 
 function initRatingControls() {
