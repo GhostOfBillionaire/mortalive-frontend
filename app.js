@@ -844,28 +844,60 @@ function startMatching() {
 
   clearTimeout(matchTimeout);
   clearTimeout(S.noMatchTimeout);
+  S.connectFailed = false;
 
-  // Short check: if the socket itself never connects, fall back to demo quickly.
+  // Don't guess based on a fixed timer how long a handshake "should" take —
+  // that's exactly what was racing the demo fallback against normal,
+  // healthy connections on slower networks (a PC behind a stricter
+  // proxy/firewall can take much longer than a phone on home wifi to
+  // finish the WebSocket → polling fallback dance). Instead, listen for
+  // Socket.io's OWN signal that something is actually wrong, and only
+  // treat it as a real failure after several consecutive failed attempts
+  // (reconnection is enabled, so transient blips resolve on their own).
+  let failedAttempts = 0;
+  const onConnectError = (err) => {
+    failedAttempts++;
+    console.warn(`[Mortalive] connect_error (#${failedAttempts}):`, err?.message || err);
+    if (S.matched || S.connectFailed) return;
+    if (failedAttempts >= 4) {
+      S.connectFailed = true;
+      console.warn('[Mortalive] Server unreachable after repeated attempts — falling back to demo.');
+      simulateDemoMatch();
+    }
+  };
+  S.socket?.off('connect_error', S._lastConnectErrorHandler || (() => {}));
+  S.socket?.on('connect_error', onConnectError);
+  S._lastConnectErrorHandler = onConnectError;
+
+  // Absolute ceiling as a safety net only — generous enough that it should
+  // never fire on a genuinely working connection, just catches the rare
+  // case where something hangs with no error event at all.
   matchTimeout = setTimeout(() => {
-    if (!S.socket || !S.socket.connected) simulateDemoMatch();
-  }, 1800 + Math.random() * 1800);
+    if (!S.matched && !S.connectFailed && (!S.socket || !S.socket.connected)) {
+      console.warn('[Mortalive] No connection after 20s with no error signal — falling back to demo.');
+      S.connectFailed = true;
+      simulateDemoMatch();
+    }
+  }, 20000);
 
-  // Longer check: socket may be connected fine, but if nobody else is
-  // online to match with, the queue waits forever. After a reasonable
-  // wait, let the user know instead of leaving them on an endless spinner.
+  // Once we ARE connected to the real server, if nobody else is in the
+  // queue yet, the wait can be genuinely indefinite. After a reasonable
+  // amount of time, let the user know instead of an endless spinner —
+  // demo is offered as an explicit opt-in button here, never automatic,
+  // since the server connection itself is known-good at this point.
   S.noMatchTimeout = setTimeout(() => {
-    if (S.matched) return; // already matched, nothing to do
+    if (S.matched || S.connectFailed) return;
     if (S.socket && S.socket.connected) {
-      // Real server connection works, just nobody else is queued right now.
       setText('match-title', "No one's online right now");
       const sub = $('match-sub');
       if (sub) sub.innerHTML = 'Nobody else is in the queue yet. You can keep waiting, or try a one-off demo chat while the site grows.';
       const tryDemo = $('btn-try-demo');
       if (tryDemo) tryDemo.style.display = 'inline-flex';
-    } else {
-      simulateDemoMatch();
     }
-  }, 15000);
+    // If still not connected at this point, the connect_error / ceiling
+    // timer above will already be handling the demo fallback — no need
+    // to duplicate that decision here.
+  }, 20000);
 }
 
 function removeFromQueueSafely() {
@@ -1065,23 +1097,26 @@ async function setupDemoVideo() {
   setTimeout(() => {
     if (!S.demoActive) return; // user already left before this fired
 
-    if (S.demoStrangerCamOn) {
-      // Mirror the user's own camera back as a stand-in remote feed so
-      // something is genuinely moving on screen, like a real peer would.
-      if (remoteVid && S.localStream) {
-        remoteVid.srcObject = S.localStream;
-        remoteVid.style.display = 'block';
-      }
-      if (noVideoPh) noVideoPh.style.display = 'none';
-      const qbar = $('quality-bar');
-      if (qbar) qbar.style.display = 'flex';
-    } else {
-      // Stranger has their camera off — show the same placeholder a real
-      // camera-off peer would produce, with their name instead of generic text.
-      if (remoteVid) remoteVid.style.display = 'none';
-      setText('ph-txt', `${S.stranger?.name || 'Stranger'}'s camera is off`);
-      if (noVideoPh) noVideoPh.style.display = 'flex';
+    // IMPORTANT: never assign S.localStream to the remote video element.
+    // That was previously done as a "stand-in" for a second person's feed,
+    // but it just shows the user their own face mirrored back labeled as
+    // the stranger — an obvious, confusing tell, not a believable demo.
+    // There is no real second video source available in demo mode, so the
+    // honest behavior is the same placeholder a real camera-off peer would
+    // produce, whether or not S.demoStrangerCamOn is true.
+    if (remoteVid) {
+      remoteVid.srcObject = null;
+      remoteVid.style.display = 'none';
     }
+    const qbar = $('quality-bar');
+    if (qbar) qbar.style.display = 'none';
+
+    if (S.demoStrangerCamOn) {
+      setText('ph-txt', `${S.stranger?.name || 'Stranger'} is connecting their camera…`);
+    } else {
+      setText('ph-txt', `${S.stranger?.name || 'Stranger'}'s camera is off`);
+    }
+    if (noVideoPh) noVideoPh.style.display = 'flex';
   }, 900 + Math.random() * 900);
 }
 
