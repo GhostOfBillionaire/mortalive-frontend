@@ -750,7 +750,7 @@ function initSocket() {
     console.warn('[Mortalive] Socket.io client not loaded yet — retrying in 800ms before falling back to demo mode.');
     setTimeout(() => {
       if (typeof io === 'undefined') {
-        console.error('[Mortalive] Socket.io still missing after retry — check that the CDN script tag loaded (network tab) and that you are testing the latest deploy, not a cached build.');
+        console.error('[Mortalive] Socket.io still missing after retry — check that socket.io.min.js loaded successfully (Network tab), that it deployed alongside index.html/app.js, and that you are testing the latest deploy, not a cached build.');
         return;
       }
       initSocket();
