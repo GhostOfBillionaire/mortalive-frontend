@@ -1373,7 +1373,15 @@ a{color:inherit}
   // Set your deployed Railway server URL here (no trailing slash).
   window.MORTALIVE_SERVER_URL = 'https://mortalive-server-production.up.railway.app';
 </script>
-<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+<!--
+  Self-hosted, NOT loaded from a third-party CDN. cdn.socket.io is
+  routinely blocked by Brave's built-in Shields, uBlock Origin, AdGuard,
+  and some corporate/school network filters — silently breaking real-time
+  matching for anyone using those, with no visible error to the user other
+  than "no one is online." Serving this file from your own domain avoids
+  that entire class of problem.
+-->
+<script src="socket.io.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
