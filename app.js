@@ -231,7 +231,10 @@ function ensureLobbyCameraPreview() {
 }
 
 function enterLobby() {
-  if (!S.camGranted) S.mode = 'text';
+  if (!S.camGranted && S.mode === 'video') {
+    S.mode = 'text';
+    toast('No camera permission yet — defaulting to text mode', '💬');
+  }
   setActiveMode(S.mode);
   showPage('pg-lobby');
   ensureLobbyCameraPreview();
@@ -304,7 +307,14 @@ function requestCameraPermission() {
 
       if (S.pendingAction === 'match') {
         S.pendingAction = null;
+        // Permission just succeeded because the user wanted video mode —
+        // NOW it's safe to commit S.mode to 'video' and sync the visible
+        // toggle button, right before actually queuing for a match.
+        setActiveMode('video');
         setTimeout(startMatching, 350);
+      } else if (S.pendingAction === 'lobby-video') {
+        S.pendingAction = null;
+        setActiveMode('video');
       }
     })
     .catch((err) => {
@@ -573,7 +583,13 @@ function initLobbyControls() {
       const newMode = btn.dataset.mode || 'text';
 
       if (newMode === 'video' && !S.camGranted) {
-        S.mode = 'video';
+        // Don't flip S.mode to 'video' yet — that would desync the visible
+        // toggle (still showing 'Text' highlighted) from the internal
+        // state, and if the user backs out without granting permission,
+        // S.mode would be silently stuck on 'video' while every queue
+        // request is built for video mode and never matches a phone/PC
+        // that's actually sitting in the text queue. Only commit to video
+        // mode once permission is confirmed (see requestCameraPermission).
         S.pendingAction = 'match';
         showPage('pg-perm');
         toast('Grant camera access to use video mode', '📹');
@@ -865,7 +881,13 @@ function startMatching() {
       simulateDemoMatch();
     }
   };
-  S.socket?.off('connect_error', S._lastConnectErrorHandler || (() => {}));
+  // Properly remove any leftover listener from a previous attempt before
+  // attaching a new one — passing a fresh inline function to .off() (the
+  // old code did this) can never match what .on() actually registered, so
+  // stale handlers would silently pile up across repeated search attempts.
+  if (S.socket && S._lastConnectErrorHandler) {
+    S.socket.off('connect_error', S._lastConnectErrorHandler);
+  }
   S.socket?.on('connect_error', onConnectError);
   S._lastConnectErrorHandler = onConnectError;
 
