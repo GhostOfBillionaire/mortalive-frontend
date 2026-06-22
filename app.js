@@ -47,7 +47,8 @@ const S = {
   username: localStorage.getItem('mortalive_username') || null,
   magnetScore: null,
   isGuest: true,
-  guestName: localStorage.getItem('mortalive_guest_name') || ''
+  guestName: localStorage.getItem('mortalive_guest_name') || '',
+  localVideoShape: localStorage.getItem('mortalive_local_video_shape') || 'rect'
 };
 
 const strangerPool = [
@@ -144,6 +145,28 @@ function updateOnlineCount() {
   if (el) el.textContent = S.onlineCount.toLocaleString();
   const mc = $('match-count');
   if (mc) mc.textContent = S.onlineCount.toLocaleString();
+}
+
+function applyLocalVideoShape() {
+  const feeds = $('video-feeds');
+  const btn = $('vc-layout');
+  const shape = S.localVideoShape === 'square' ? 'square' : 'rect';
+  if (feeds) {
+    feeds.classList.toggle('layout-square', shape === 'square');
+    feeds.classList.toggle('layout-rect', shape !== 'square');
+  }
+  if (btn) {
+    btn.textContent = shape === 'square' ? '▣' : '▭';
+    btn.title = shape === 'square' ? 'Local preview: square' : 'Local preview: rectangle';
+    btn.classList.toggle('active', true);
+  }
+}
+
+function toggleLocalVideoShape() {
+  S.localVideoShape = S.localVideoShape === 'square' ? 'rect' : 'square';
+  localStorage.setItem('mortalive_local_video_shape', S.localVideoShape);
+  applyLocalVideoShape();
+  toast(S.localVideoShape === 'square' ? 'Local preview set to square' : 'Local preview set to rectangle', '🎬');
 }
 
 function setActiveMode(mode) {
@@ -484,6 +507,10 @@ function initAuthControls() {
     enterLobby();
   });
 
+  $('btn-auth-back-login')?.addEventListener('click', () => showPage('pg-land'));
+  $('btn-auth-back-signup')?.addEventListener('click', () => showPage('pg-land'));
+  $('btn-auth-back-forgot')?.addEventListener('click', () => showAuthTab('login'));
+
   const guestInput = $('guest-name');
   if (guestInput && S.guestName) guestInput.value = S.guestName;
 }
@@ -534,6 +561,15 @@ function initLandingActions() {
   if (startVideo) {
     startVideo.addEventListener('click', () => proceedPastLanding('video'));
   }
+}
+
+function initSetupBackButtons() {
+  document.querySelectorAll('.setup-back').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.target || 'pg-land';
+      showPage(target);
+    });
+  });
 }
 
 function initPermissionControls() {
@@ -707,6 +743,8 @@ function initChatControls() {
     toast(S.camOff ? 'Camera off' : 'Camera on', S.camOff ? '🚫' : '📷');
   });
 
+  $('vc-layout')?.addEventListener('click', toggleLocalVideoShape);
+
   $('vc-flip')?.addEventListener('click', () => {
     const v = $('vid-local');
     if (!v) return;
@@ -738,6 +776,7 @@ function initChatControls() {
 
 function initGlobalDefaults() {
   setActiveMode(S.mode);
+  applyLocalVideoShape();
   updateOnlineCount();
   setPrimaryButtonsEnabled(false);
   if (!$('landing-consent') && !$('terms') && !$('terms-checkbox') && !$('c1') && !$('c2') && !$('c3')) {
@@ -960,6 +999,7 @@ async function startWebRTC() {
     const localVid = $('vid-local');
     const noVideo = $('no-video-ph');
     const txt = $('ph-txt');
+    applyLocalVideoShape();
     if (localVid) {
       localVid.srcObject = S.localStream;
       localVid.style.display = 'block';
@@ -1152,6 +1192,7 @@ function beginChat() {
   setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} Magnet Score · connected`);
 
   const panel = $('video-panel');
+  applyLocalVideoShape();
   if (S.mode === 'video') {
     if (panel) panel.classList.add('visible');
     $('btn-toggle-video')?.classList.add('active');
@@ -1380,6 +1421,7 @@ ready(() => {
   initConsentGate();
   initLandingActions();
   initAuthControls();
+  initSetupBackButtons();
   initPermissionControls();
   initLobbyControls();
   initChatControls();
