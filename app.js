@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-06-18-1'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-06-22-2'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -48,7 +48,12 @@ const S = {
   magnetScore: null,
   isGuest: true,
   guestName: localStorage.getItem('mortalive_guest_name') || '',
-  localVideoShape: localStorage.getItem('mortalive_local_video_shape') || 'rect'
+  videoLayout: (function () {
+    const raw = localStorage.getItem('mortalive_video_layout') || localStorage.getItem('mortalive_local_video_shape') || 'horizontal';
+    const v = String(raw).toLowerCase();
+    if (['vertical', 'stack', 'stacked', 'portrait', 'square'].includes(v)) return 'vertical';
+    return 'horizontal';
+  })()
 };
 
 const strangerPool = [
@@ -147,26 +152,45 @@ function updateOnlineCount() {
   if (mc) mc.textContent = S.onlineCount.toLocaleString();
 }
 
-function applyLocalVideoShape() {
-  const feeds = $('video-feeds');
-  const btn = $('vc-layout');
-  const shape = S.localVideoShape === 'square' ? 'square' : 'rect';
-  if (feeds) {
-    feeds.classList.toggle('layout-square', shape === 'square');
-    feeds.classList.toggle('layout-rect', shape !== 'square');
-  }
-  if (btn) {
-    btn.textContent = shape === 'square' ? '▣' : '▭';
-    btn.title = shape === 'square' ? 'Local preview: square' : 'Local preview: rectangle';
-    btn.classList.toggle('active', true);
-  }
+function isCompactViewport() {
+  return window.matchMedia('(max-width: 720px)').matches;
 }
 
-function toggleLocalVideoShape() {
-  S.localVideoShape = S.localVideoShape === 'square' ? 'rect' : 'square';
-  localStorage.setItem('mortalive_local_video_shape', S.localVideoShape);
-  applyLocalVideoShape();
-  toast(S.localVideoShape === 'square' ? 'Local preview set to square' : 'Local preview set to rectangle', '🎬');
+function getEffectiveVideoLayout() {
+  if (isCompactViewport()) return 'vertical';
+  return S.videoLayout === 'vertical' ? 'vertical' : 'horizontal';
+}
+
+function syncVideoPanelButton(forcedLayout) {
+  const btn = $('vc-layout');
+  if (!btn) return;
+  const layout = forcedLayout || getEffectiveVideoLayout();
+  const isHorizontal = layout === 'horizontal';
+  btn.textContent = isHorizontal ? 'Layout: Side' : 'Layout: Stack';
+  btn.title = isHorizontal ? 'Switch to stacked layout' : 'Switch to side-by-side layout';
+  btn.disabled = isCompactViewport();
+}
+
+function applyVideoLayout() {
+  const feeds = $('video-feeds');
+  const layout = getEffectiveVideoLayout();
+  if (feeds) {
+    feeds.classList.toggle('layout-horizontal', layout === 'horizontal');
+    feeds.classList.toggle('layout-vertical', layout === 'vertical');
+  }
+  syncVideoPanelButton(layout);
+}
+
+function toggleVideoLayout() {
+  if (isCompactViewport()) {
+    applyVideoLayout();
+    toast('Phone stays in stacked layout', '📱');
+    return;
+  }
+  S.videoLayout = getEffectiveVideoLayout() === 'horizontal' ? 'vertical' : 'horizontal';
+  localStorage.setItem('mortalive_video_layout', S.videoLayout);
+  applyVideoLayout();
+  toast(S.videoLayout === 'horizontal' ? 'Camera layout set to side-by-side' : 'Camera layout set to stacked', '🎬');
 }
 
 function setActiveMode(mode) {
@@ -507,10 +531,6 @@ function initAuthControls() {
     enterLobby();
   });
 
-  $('btn-auth-back-login')?.addEventListener('click', () => showPage('pg-land'));
-  $('btn-auth-back-signup')?.addEventListener('click', () => showPage('pg-land'));
-  $('btn-auth-back-forgot')?.addEventListener('click', () => showAuthTab('login'));
-
   const guestInput = $('guest-name');
   if (guestInput && S.guestName) guestInput.value = S.guestName;
 }
@@ -743,7 +763,7 @@ function initChatControls() {
     toast(S.camOff ? 'Camera off' : 'Camera on', S.camOff ? '🚫' : '📷');
   });
 
-  $('vc-layout')?.addEventListener('click', toggleLocalVideoShape);
+  $('vc-layout')?.addEventListener('click', toggleVideoLayout);
 
   $('vc-flip')?.addEventListener('click', () => {
     const v = $('vid-local');
@@ -776,8 +796,8 @@ function initChatControls() {
 
 function initGlobalDefaults() {
   setActiveMode(S.mode);
-  applyLocalVideoShape();
   updateOnlineCount();
+  applyVideoLayout();
   setPrimaryButtonsEnabled(false);
   if (!$('landing-consent') && !$('terms') && !$('terms-checkbox') && !$('c1') && !$('c2') && !$('c3')) {
     setPrimaryButtonsEnabled(true);
@@ -999,7 +1019,6 @@ async function startWebRTC() {
     const localVid = $('vid-local');
     const noVideo = $('no-video-ph');
     const txt = $('ph-txt');
-    applyLocalVideoShape();
     if (localVid) {
       localVid.srcObject = S.localStream;
       localVid.style.display = 'block';
@@ -1192,7 +1211,7 @@ function beginChat() {
   setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} Magnet Score · connected`);
 
   const panel = $('video-panel');
-  applyLocalVideoShape();
+  applyVideoLayout();
   if (S.mode === 'video') {
     if (panel) panel.classList.add('visible');
     $('btn-toggle-video')?.classList.add('active');
@@ -1202,6 +1221,7 @@ function beginChat() {
   }
 
   showPage('pg-chat');
+  applyVideoLayout();
   setCallStatus('connecting', 'connecting');
   addSysLine(`✨ Connected to ${s.name}`);
   logSession('start', { stranger: s.name, mode: S.mode, roomId: S.roomId });
@@ -1443,6 +1463,9 @@ ready(() => {
   }
 
   window.addEventListener('beforeunload', () => disconnectPeer());
+  window.addEventListener('resize', () => {
+    applyVideoLayout();
+  });
 
   // Mobile browsers can fully suspend JS execution while a tab is
   // backgrounded (screen lock, app switch), not just the network — so
