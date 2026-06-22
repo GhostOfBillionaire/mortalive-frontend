@@ -142,134 +142,17 @@ a{color:inherit}
   color:#fff;
 }
 
-
-.setup-back{
-  padding:11px 14px;
-  border-radius:12px;
-  font-size:13px;
-}
-.auth-shell{
-  max-width:560px;
-  margin:40px auto;
-  padding:22px;
-}
-.auth-topbar{
-  display:flex;
+.pill{
+  display:inline-flex;
   align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  margin-bottom:16px;
-}
-.auth-guest{
-  padding:18px;
-  border-radius:18px;
+  gap:8px;
+  padding:8px 14px;
+  border-radius:999px;
+  background:#fff;
   border:1px solid var(--border);
-  background:linear-gradient(180deg, rgba(24,119,242,.06), rgba(255,255,255,.94));
-  box-shadow:var(--shadow-soft);
-  margin-bottom:18px;
-}
-.auth-guest-head{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:12px;
-  margin-bottom:14px;
-}
-.auth-guest h3{
-  margin:0;
-  font-size:20px;
-  letter-spacing:-.04em;
-}
-.auth-guest p{
-  margin:8px 0 0;
-  color:var(--muted);
-  line-height:1.6;
-  font-size:14px;
-}
-.auth-mini-note{
-  margin-top:10px;
-  font-size:12px;
-  color:var(--muted-2);
-  line-height:1.6;
-}
-.auth-divider{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  margin:18px 0;
   color:var(--muted);
   font-size:12px;
-  letter-spacing:.12em;
-  text-transform:uppercase;
-}
-.auth-divider::before,
-.auth-divider::after{
-  content:'';
-  height:1px;
-  flex:1;
-  background:var(--border);
-}
-.auth-tabs.auth-tabs-compact{
-  margin-bottom:14px;
-}
-.auth-tabs-compact .auth-tab{
-  padding:12px 14px;
-  font-size:13px;
-}
-.auth-form-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  margin-bottom:14px;
-}
-.auth-form-head .pill{
-  flex:none;
-}
-.auth-back-link{
-  border:1px solid var(--border);
-  background:#fff;
-  border-radius:12px;
-  padding:10px 12px;
-  font-size:13px;
-  font-weight:700;
-}
-.setup-row{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  margin-bottom:14px;
-}
-.setup-row .btn{
-  flex:none;
-}
-.setup-row .muted{
-  color:var(--muted);
-  font-size:13px;
-}
-.layout-toggle{
-  border:1px solid var(--border);
-  background:#fff;
-  border-radius:12px;
-  padding:10px 12px;
-  font-size:13px;
-  font-weight:700;
-  color:var(--text);
-}
-.layout-toggle.active{
-  background:var(--primary-soft);
-  border-color:rgba(24,119,242,.24);
-}
-.video-feeds.layout-square #vid-local{
-  width:112px;
-  height:112px;
-  aspect-ratio:1/1;
-}
-.video-feeds.layout-rect #vid-local{
-  width:128px;
-  height:92px;
-  aspect-ratio:4/3;
+  font-weight:600;
 }
 
 /* Landing */
@@ -730,16 +613,21 @@ a{color:inherit}
 /* Chat */
 #pg-chat{
   flex-direction:column;
-  padding:16px;
-  gap:16px;
+  padding:12px;
+  gap:12px;
+  height:100dvh;
+  overflow:hidden;
+  overscroll-behavior:none;
 }
 .chat-shell{
   width:min(1180px, 100%);
   margin:0 auto;
-  min-height:calc(100dvh - 32px);
+  height:100%;
+  min-height:0;
   display:flex;
   flex-direction:column;
-  gap:16px;
+  gap:12px;
+  overflow:hidden;
 }
 .chat-topbar{
   display:flex;
@@ -790,13 +678,19 @@ a{color:inherit}
   flex-wrap:wrap;
 }
 .icon-btn{
-  width:40px;height:40px;
-  border-radius:50%;
+  width:auto;
+  height:40px;
+  padding:0 16px;
+  border-radius:999px;
   border:1px solid var(--border);
   background:#fff;
   color:var(--muted);
-  display:grid;
-  place-items:center;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  white-space:nowrap;
+  font-weight:700;
+  gap:8px;
 }
 .icon-btn:hover{border-color:var(--border-strong);color:var(--text)}
 .icon-btn.danger:hover{border-color:rgba(229,72,77,.35);color:var(--danger)}
@@ -805,27 +699,39 @@ a{color:inherit}
   flex:1;
   min-height:0;
   display:grid;
-  grid-template-columns:minmax(0,1.06fr) minmax(320px,.94fr);
-  gap:16px;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  grid-template-rows:minmax(0,1fr);
+  gap:12px;
+  overflow:hidden;
+  align-items:stretch;
 }
 .video-panel,.chat-panel{
   min-height:0;
+  overflow:hidden;
+  max-height:100%;
 }
 .video-panel{
   display:none;
   flex-direction:column;
   overflow:hidden;
+  min-width:0;
+  height:100%;
 }
 .video-panel.visible{display:flex}
 .video-feeds{
   position:relative;
   flex:1;
   min-height:0;
+  height:100%;
   background:#121826;
   overflow:hidden;
   border-radius:var(--radius);
   border:1px solid var(--border);
   box-shadow:var(--shadow-soft);
+  display:grid;
+  gap:0;
+  align-items:stretch;
+  justify-items:stretch;
 }
 #vid-remote{
   width:100%;
@@ -847,6 +753,34 @@ a{color:inherit}
   transform:scaleX(-1);
   background:#192232;
   box-shadow:0 12px 24px rgba(0,0,0,.22);
+}
+.video-feeds.layout-horizontal{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-template-rows:1fr;
+}
+.video-feeds.layout-vertical{
+  grid-template-columns:1fr;
+  grid-template-rows:repeat(2,minmax(0,1fr));
+}
+.video-feeds.layout-horizontal #vid-remote,
+.video-feeds.layout-horizontal #vid-local,
+.video-feeds.layout-vertical #vid-remote,
+.video-feeds.layout-vertical #vid-local{
+  position:relative;
+  inset:auto;
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  object-fit:cover;
+  display:block;
+  border-radius:0;
+  background:#121826;
+}
+.video-feeds.layout-horizontal #vid-local,
+.video-feeds.layout-vertical #vid-local{
+  transform:scaleX(-1);
+  background:#192232;
 }
 .no-video{
   position:absolute;
@@ -888,13 +822,18 @@ a{color:inherit}
   flex-wrap:wrap;
 }
 .vc-btn{
-  width:44px;height:44px;
-  border-radius:50%;
+  width:auto;
+  height:40px;
+  padding:0 14px;
+  border-radius:999px;
   border:1px solid var(--border);
   background:#fff;
   color:var(--muted);
-  display:grid;
-  place-items:center;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  white-space:nowrap;
+  font-weight:700;
 }
 .vc-btn.active,.vc-btn:hover{border-color:rgba(24,119,242,.35);color:var(--primary)}
 .vc-btn.off{border-color:rgba(229,72,77,.25);color:var(--danger);background:rgba(229,72,77,.06)}
@@ -907,7 +846,9 @@ a{color:inherit}
 .chat-messages{
   flex:1;
   min-height:0;
-  overflow:auto;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
   padding:16px;
   display:flex;
   flex-direction:column;
@@ -1112,8 +1053,15 @@ a{color:inherit}
   .start-row,.modal-row{flex-direction:column}
   .mode-switch{grid-template-columns:1fr}
   .chat-topbar{position:sticky;top:0;z-index:5}
-  #pg-chat{padding:10px}
-  .chat-shell{min-height:calc(100dvh - 20px)}
+  #pg-chat{padding:8px;height:100dvh;overflow:hidden}
+  .chat-shell{height:100%;min-height:0;overflow:hidden}
+  .chat-body{grid-template-columns:1fr;grid-template-rows:minmax(240px, 42vh) minmax(0,1fr)}
+  .video-panel{height:100%;min-height:240px}
+  .video-feeds.layout-horizontal,
+  .video-feeds.layout-vertical{
+    grid-template-columns:1fr;
+    grid-template-rows:repeat(2,minmax(0,1fr));
+  }
   .msg{max-width:94%}
   .peer-sub{white-space:normal}
   #vid-local{width:96px;height:72px}
@@ -1205,47 +1153,14 @@ a{color:inherit}
 <!-- Auth: login / sign up / continue as guest -->
 <section id="pg-auth" class="page">
   <div class="wrap">
-    <div class="card auth-shell">
-      <div class="auth-topbar">
-        <button class="btn btn-ghost setup-back" type="button" data-target="pg-land">← Back</button>
-        <span class="pill">Guest-first · fast entry</span>
-      </div>
-
-      <div class="auth-guest">
-        <div class="auth-guest-head">
-          <div>
-            <h3>Continue as guest</h3>
-            <p>No account, no setup walls. Pick a name and jump in.</p>
-          </div>
-          <span class="pill">Recommended</span>
-        </div>
-
-        <div class="field">
-          <label for="guest-name">Guest name</label>
-          <input id="guest-name" type="text" maxlength="24" placeholder="Pick a display name for this session" autocomplete="off">
-          <div class="help-row">
-            <span>Private session name</span>
-            <span>Quickest way in</span>
-          </div>
-        </div>
-
-        <button class="btn btn-primary btn-wide" id="btn-continue-guest">Continue as guest</button>
-        <div class="auth-mini-note">You can still log in later from the lobby if you need an account.</div>
-      </div>
-
-      <div class="auth-divider">or use an account</div>
-
-      <div class="auth-tabs auth-tabs-compact" style="display:flex;gap:8px;">
+    <div class="card" style="max-width:480px;margin:40px auto;">
+      <div class="auth-tabs" style="display:flex;gap:8px;margin-bottom:18px;">
         <button class="btn btn-ghost auth-tab active" id="tab-login" type="button" style="flex:1;">Log in</button>
         <button class="btn btn-ghost auth-tab" id="tab-signup" type="button" style="flex:1;">Sign up</button>
       </div>
 
       <!-- Login form -->
       <div id="auth-login-form">
-        <div class="auth-form-head">
-          <span class="pill">Existing account</span>
-          <button class="btn btn-ghost auth-back-link" id="btn-auth-back-login" type="button">← Back</button>
-        </div>
         <div class="field">
           <label for="login-username">Username</label>
           <input id="login-username" type="text" autocomplete="username" placeholder="yourname">
@@ -1261,10 +1176,6 @@ a{color:inherit}
 
       <!-- Signup form -->
       <div id="auth-signup-form" style="display:none;">
-        <div class="auth-form-head">
-          <span class="pill">Create account</span>
-          <button class="btn btn-ghost auth-back-link" id="btn-auth-back-signup" type="button">← Back</button>
-        </div>
         <div class="field">
           <label for="signup-username">Username</label>
           <input id="signup-username" type="text" autocomplete="username" placeholder="3-20 letters, numbers, underscore" maxlength="20">
@@ -1283,10 +1194,6 @@ a{color:inherit}
 
       <!-- Forgot password form -->
       <div id="auth-forgot-form" style="display:none;">
-        <div class="auth-form-head">
-          <span class="pill">Reset link</span>
-          <button class="btn btn-ghost auth-back-link" id="btn-auth-back-forgot" type="button">← Back</button>
-        </div>
         <div class="field">
           <label for="forgot-email">Email</label>
           <input id="forgot-email" type="email" autocomplete="email" placeholder="you@example.com">
@@ -1295,6 +1202,22 @@ a{color:inherit}
         <button class="btn btn-primary btn-wide" id="btn-forgot-submit" style="margin-top:8px;">Send reset link</button>
         <button class="btn btn-ghost btn-wide" id="btn-forgot-back" type="button" style="margin-top:8px;">Back to log in</button>
       </div>
+
+      <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--muted);font-size:13px;">
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+        or
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+      </div>
+
+      <div class="field">
+        <label for="guest-name">Continue as guest</label>
+        <input id="guest-name" type="text" maxlength="24" placeholder="Pick a display name for this session" autocomplete="off">
+        <div class="help-row">
+          <span>No account needed</span>
+          <span>Guests don't earn a Magnet Score</span>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-wide" id="btn-continue-guest">Continue as guest</button>
     </div>
   </div>
 </section>
@@ -1303,10 +1226,6 @@ a{color:inherit}
 <section id="pg-perm" class="page">
   <div class="wrap">
     <div class="card perm-card">
-      <div class="setup-row">
-        <span class="pill">Video permission</span>
-        <button class="btn btn-ghost setup-back" type="button" data-target="pg-auth">← Back</button>
-      </div>
       <div class="perm-inner">
         <div class="perm-video-card">
           <video id="perm-video" autoplay playsinline muted></video>
@@ -1351,10 +1270,6 @@ a{color:inherit}
 <section id="pg-lobby" class="page">
   <div class="wrap">
     <div class="card lobby-card">
-      <div class="setup-row" style="margin-bottom:16px;">
-        <span class="pill">Setup</span>
-        <button class="btn btn-ghost setup-back" type="button" data-target="pg-auth">← Back</button>
-      </div>
       <div class="lobby-head">
         <div>
           <div class="brand">
@@ -1458,11 +1373,10 @@ a{color:inherit}
         </div>
 
         <div class="video-controls">
-          <button class="vc-btn" id="vc-mic" title="Mute microphone">🎤</button>
-          <button class="vc-btn" id="vc-cam" title="Toggle camera">📷</button>
-          <button class="vc-btn" id="vc-flip" title="Flip local camera">🔄</button>
-          <button class="vc-btn" id="vc-layout" title="Toggle local preview shape">▭</button>
-          <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶</button>
+          <button class="vc-btn" id="vc-mic" title="Mute microphone">Mic</button>
+          <button class="vc-btn" id="vc-cam" title="Toggle camera">Cam</button>
+          <button class="vc-btn" id="vc-flip" title="Flip local camera">Flip</button>
+          <button class="vc-btn" id="vc-fs" title="Fullscreen">Full</button>
         </div>
       </div>
 
