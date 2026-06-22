@@ -1449,7 +1449,7 @@ ready(() => {
   // Socket.io's own reconnection timers may not fire until the tab is
   // foregrounded again. When that happens, actively check the connection
   // and re-announce to the queue if we were mid-search.
-  document.addEventListener('visibilitychange', () => {
+  document.addEventListener('visibilitychange', () => { 
     if (document.visibilityState !== 'visible') return;
     if (!S.socket) return;
     const onMatchingScreen = $('pg-match')?.classList.contains('active');
