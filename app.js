@@ -1440,7 +1440,7 @@ ready(() => {
       btnAllow.disabled = true;
       btnAllow.textContent = 'Camera not supported in this browser';
     }
-  } 
+  }
 
   window.addEventListener('beforeunload', () => disconnectPeer());
 
