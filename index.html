@@ -613,20 +613,20 @@ a{color:inherit}
 /* Chat */
 #pg-chat{
   flex-direction:column;
-  padding:12px;
-  gap:12px;
+  padding:8px;
+  gap:8px;
   height:100dvh;
   overflow:hidden;
   overscroll-behavior:none;
 }
 .chat-shell{
-  width:min(1180px, 100%);
+  width:100%;
   margin:0 auto;
   height:100%;
   min-height:0;
   display:flex;
   flex-direction:column;
-  gap:12px;
+  gap:8px;
   overflow:hidden;
 }
 .chat-topbar{
@@ -634,7 +634,7 @@ a{color:inherit}
   align-items:center;
   justify-content:space-between;
   gap:12px;
-  padding:14px 16px;
+  padding:12px 14px;
 }
 .chat-peer{
   display:flex;
@@ -701,7 +701,7 @@ a{color:inherit}
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   grid-template-rows:minmax(0,1fr);
-  gap:12px;
+  gap:8px;
   overflow:hidden;
   align-items:stretch;
 }
@@ -719,7 +719,7 @@ a{color:inherit}
 }
 .video-panel.visible{display:flex}
 
-/* ==================== FIXED VIDEO FEEDS ==================== */
+/* ==================== FIXED SQUARE VIDEO FEEDS (Omegle-style) ==================== */
 .video-feeds{
   position:relative;
   flex:1;
@@ -736,7 +736,6 @@ a{color:inherit}
   justify-items:stretch;
 }
 
-/* Uniform aspect-ratio wrappers - prevents cropping */
 .video-wrapper {
   position: relative;
   overflow: hidden;
@@ -746,18 +745,10 @@ a{color:inherit}
   justify-content: center;
 }
 
-/* Mobile portrait bias (9:16) */
+/* Square on mobile (best for phones) */
 .video-wrapper.remote,
 .video-wrapper.local {
-  aspect-ratio: 9 / 16;
-}
-
-/* Desktop prefers landscape */
-@media (min-width: 721px) {
-  .video-wrapper.remote,
-  .video-wrapper.local {
-    aspect-ratio: 16 / 9;
-  }
+  aspect-ratio: 1 / 1;
 }
 
 #vid-remote,
@@ -766,15 +757,7 @@ a{color:inherit}
   height: 100%;
   display: block;
   background: #121826;
-  object-fit: contain; /* No cropping - full view with letterbox if needed */
-}
-
-/* Desktop horizontal can be more aggressive */
-@media (min-width: 721px) {
-  .video-feeds.layout-horizontal #vid-remote,
-  .video-feeds.layout-horizontal #vid-local {
-    object-fit: cover;
-  }
+  object-fit: contain; /* Full view, no cropping */
 }
 
 .video-feeds.layout-horizontal{
@@ -786,7 +769,7 @@ a{color:inherit}
   grid-template-rows:repeat(2,minmax(0,1fr));
 }
 
-/* Reset positioning inside wrappers */
+/* Reset positioning */
 .video-feeds.layout-horizontal #vid-remote,
 .video-feeds.layout-horizontal #vid-local,
 .video-feeds.layout-vertical #vid-remote,
@@ -805,17 +788,25 @@ a{color:inherit}
   background:#192232;
 }
 
-/* Mobile overrides */
+/* Mobile - make video panel take more space */
 @media (max-width: 720px){
+  #pg-chat{padding:6px; gap:6px;}
+  .chat-body{
+    grid-template-columns:1fr;
+    grid-template-rows:minmax(280px, 55vh) minmax(0,1fr); /* Bigger video area */
+  }
+  .video-panel{height:100%; min-height:280px;}
   .video-feeds.layout-horizontal,
   .video-feeds.layout-vertical{
     grid-template-columns:1fr;
-    grid-template-rows:repeat(2,minmax(0,1fr));
+    grid-template-rows:repeat(2, minmax(0,1fr));
   }
   #vid-local{
-    width:96px;
-    height:72px;
+    width:110px;
+    height:110px;
+    border-radius:12px;
   }
+  .video-controls{gap:8px; margin-top:8px;}
 }
 
 .no-video{
@@ -1079,22 +1070,16 @@ a{color:inherit}
 @media (max-width: 980px){
   .landing-grid,.perm-inner,.chat-body{grid-template-columns:1fr}
   .hero-card,.consent-card{min-height:auto}
-  .chat-body{gap:14px}
+  .chat-body{gap:8px}
 }
 @media (max-width: 720px){
-  .wrap{width:min(100% - 20px, 1120px)}
+  .wrap{width:min(100% - 16px, 1120px)}
   .hero-card,.consent-card,.lobby-card,.perm-card,.match-card{padding:18px}
   .hero-top,.lobby-head,.chat-topbar{flex-direction:column;align-items:flex-start}
   .lobby-grid{grid-template-columns:1fr}
   .start-row,.modal-row{flex-direction:column}
   .mode-switch{grid-template-columns:1fr}
   .chat-topbar{position:sticky;top:0;z-index:5}
-  #pg-chat{padding:8px;height:100dvh;overflow:hidden}
-  .chat-shell{height:100%;min-height:0;overflow:hidden}
-  .chat-body{grid-template-columns:1fr;grid-template-rows:minmax(240px, 42vh) minmax(0,1fr)}
-  .video-panel{height:100%;min-height:240px}
-  .msg{max-width:94%}
-  .peer-sub{white-space:normal}
 }
 </style>
 </head>
@@ -1398,7 +1383,7 @@ a{color:inherit}
             <div id="ph-txt">Waiting for video…</div>
           </div>
           
-          <!-- Wrapped videos for uniform aspect ratio -->
+          <!-- Square wrappers -->
           <div class="video-wrapper remote">
             <video id="vid-remote" autoplay playsinline></video>
           </div>
@@ -1475,14 +1460,6 @@ a{color:inherit}
   // Set your deployed Railway server URL here (no trailing slash).
   window.MORTALIVE_SERVER_URL = 'https://mortalive-server-production.up.railway.app';
 </script>
-<!--
-  Self-hosted, NOT loaded from a third-party CDN. cdn.socket.io is
-  routinely blocked by Brave's built-in Shields, uBlock Origin, AdGuard,
-  and some corporate/school network filters — silently breaking real-time
-  matching for anyone using those, with no visible error to the user other
-  than "no one is online." Serving this file from your own domain avoids
-  that entire class of problem.
--->
 <script src="socket.io.min.js"></script>
 <script src="app.js"></script>
 </body>
