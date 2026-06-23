@@ -136,6 +136,12 @@ a{color:inherit}
 }
 .btn-ghost:hover{border-color:var(--border-strong)}
 
+.auth-tab.active{
+  background:linear-gradient(135deg,var(--primary),var(--primary-2));
+  border-color:transparent;
+  color:#fff;
+}
+
 .pill{
   display:inline-flex;
   align-items:center;
@@ -157,7 +163,7 @@ a{color:inherit}
 }
 .landing-grid{
   display:grid;
-  grid-template-columns:1.08fr .92fr;
+  grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);
   gap:18px;
   align-items:stretch;
 }
@@ -167,16 +173,20 @@ a{color:inherit}
   flex-direction:column;
   justify-content:space-between;
   min-height:540px;
+  min-width:0;
 }
 .hero-top{
   display:flex;
   align-items:flex-start;
   justify-content:space-between;
   gap:16px;
+  flex-wrap:wrap;
+  min-width:0;
 }
 .hero-copy{
   max-width:560px;
   padding-top:10px;
+  min-width:0;
 }
 .hero-kicker{
   margin-bottom:18px;
@@ -351,7 +361,7 @@ a{color:inherit}
 }
 .perm-inner{
   display:grid;
-  grid-template-columns:1.05fr .95fr;
+  grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);
   gap:18px;
   align-items:stretch;
 }
@@ -603,16 +613,21 @@ a{color:inherit}
 /* Chat */
 #pg-chat{
   flex-direction:column;
-  padding:16px;
-  gap:16px;
+  padding:12px;
+  gap:12px;
+  height:100dvh;
+  overflow:hidden;
+  overscroll-behavior:none;
 }
 .chat-shell{
   width:min(1180px, 100%);
   margin:0 auto;
-  min-height:calc(100dvh - 32px);
+  height:100%;
+  min-height:0;
   display:flex;
   flex-direction:column;
-  gap:16px;
+  gap:12px;
+  overflow:hidden;
 }
 .chat-topbar{
   display:flex;
@@ -663,13 +678,19 @@ a{color:inherit}
   flex-wrap:wrap;
 }
 .icon-btn{
-  width:40px;height:40px;
-  border-radius:50%;
+  width:auto;
+  height:40px;
+  padding:0 16px;
+  border-radius:999px;
   border:1px solid var(--border);
   background:#fff;
   color:var(--muted);
-  display:grid;
-  place-items:center;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  white-space:nowrap;
+  font-weight:700;
+  gap:8px;
 }
 .icon-btn:hover{border-color:var(--border-strong);color:var(--text)}
 .icon-btn.danger:hover{border-color:rgba(229,72,77,.35);color:var(--danger)}
@@ -678,67 +699,89 @@ a{color:inherit}
   flex:1;
   min-height:0;
   display:grid;
-  grid-template-columns:minmax(0,1.06fr) minmax(320px,.94fr);
-  gap:16px;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  grid-template-rows:minmax(0,1fr);
+  gap:12px;
+  overflow:hidden;
+  align-items:stretch;
 }
 .video-panel,.chat-panel{
   min-height:0;
+  overflow:hidden;
+  max-height:100%;
 }
 .video-panel{
   display:none;
   flex-direction:column;
   overflow:hidden;
+  min-width:0;
+  height:100%;
 }
 .video-panel.visible{display:flex}
 .video-feeds{
+  position:relative;
   flex:1;
   min-height:0;
+  height:100%;
   background:#121826;
   overflow:hidden;
   border-radius:var(--radius);
   border:1px solid var(--border);
   box-shadow:var(--shadow-soft);
-  /* Flex container — each camera wrapper gets equal width */
-  display:flex;
-  flex-direction:row;
+  display:grid;
   gap:0;
-  position:relative;
+  align-items:stretch;
+  justify-items:stretch;
 }
-/* Each camera wrapper enforces a uniform 16:9 ratio so both feeds
-   have identical height regardless of the incoming camera's native ratio */
-.camera-wrapper{
-  flex:1;
-  aspect-ratio:16/9;
-  overflow:hidden;
-  background:#121826;
-  position:relative;
-}
-.camera-wrapper video{
+#vid-remote{
   width:100%;
   height:100%;
-  /* cover: fills the 16:9 container completely, crops edges on mismatch
-     (e.g. crops top/bottom of a 9:16 phone feed).
-     Switch to object-fit:contain to show full frame with black bars. */
+  object-fit:cover;
+  display:none;
+  background:#121826;
+}
+#vid-local{
+  position:absolute;
+  right:12px;
+  bottom:12px;
+  width:128px;
+  height:92px;
+  object-fit:cover;
+  border-radius:14px;
+  border:2px solid rgba(255,255,255,.9);
+  display:none;
+  transform:scaleX(-1);
+  background:#192232;
+  box-shadow:0 12px 24px rgba(0,0,0,.22);
+}
+.video-feeds.layout-horizontal{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-template-rows:1fr;
+}
+.video-feeds.layout-vertical{
+  grid-template-columns:1fr;
+  grid-template-rows:repeat(2,minmax(0,1fr));
+}
+.video-feeds.layout-horizontal #vid-remote,
+.video-feeds.layout-horizontal #vid-local,
+.video-feeds.layout-vertical #vid-remote,
+.video-feeds.layout-vertical #vid-local{
+  position:relative;
+  inset:auto;
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
   object-fit:cover;
   display:block;
+  border-radius:0;
+  background:#121826;
 }
-/* Remote feed wrapper — the big "stranger" camera */
-#wrapper-remote{
-  border-right:1px solid rgba(255,255,255,.06);
+.video-feeds.layout-horizontal #vid-local,
+.video-feeds.layout-vertical #vid-local{
+  transform:scaleX(-1);
+  background:#192232;
 }
-/* Local feed wrapper — the user's own camera */
-#wrapper-local video{
-  transform:scaleX(-1); /* mirror own camera */
-}
-/* When only one feed is active, let it fill the full container */
-#wrapper-remote:only-child,
-#wrapper-local:only-child{
-  flex:1;
-}
-/* Legacy: keep #vid-remote and #vid-local selectors working for JS .style.display */
-#vid-remote{display:none}
-#vid-local{display:none}
-/* Placeholder shown when no video is connected */
 .no-video{
   position:absolute;
   inset:0;
@@ -750,7 +793,6 @@ a{color:inherit}
   color:#d5def0;
   text-align:center;
   padding:18px;
-  z-index:2;
 }
 .no-video .big{
   width:72px;height:72px;border-radius:50%;
@@ -771,18 +813,8 @@ a{color:inherit}
   color:#fff;
   font-size:12px;
   backdrop-filter:blur(10px);
-  z-index:3;
 }
 .quality .qdot{width:8px;height:8px;border-radius:50%;background:var(--success)}
-/* Stacked (vertical) layout: remote on top, local below */
-.video-feeds.layout-vertical{
-  flex-direction:column;
-}
-/* Mobile: always stacked */
-@media(max-width:720px){
-  .video-feeds{flex-direction:column}
-  .camera-wrapper{flex:1;width:100%;aspect-ratio:16/9}
-}
 .video-controls{
   margin-top:12px;
   display:flex;
@@ -790,13 +822,18 @@ a{color:inherit}
   flex-wrap:wrap;
 }
 .vc-btn{
-  width:44px;height:44px;
-  border-radius:50%;
+  width:auto;
+  height:40px;
+  padding:0 14px;
+  border-radius:999px;
   border:1px solid var(--border);
   background:#fff;
   color:var(--muted);
-  display:grid;
-  place-items:center;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  white-space:nowrap;
+  font-weight:700;
 }
 .vc-btn.active,.vc-btn:hover{border-color:rgba(24,119,242,.35);color:var(--primary)}
 .vc-btn.off{border-color:rgba(229,72,77,.25);color:var(--danger);background:rgba(229,72,77,.06)}
@@ -809,7 +846,9 @@ a{color:inherit}
 .chat-messages{
   flex:1;
   min-height:0;
-  overflow:auto;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
   padding:16px;
   display:flex;
   flex-direction:column;
@@ -1002,35 +1041,30 @@ a{color:inherit}
 
 /* Responsive */
 @media (max-width: 980px){
-  .landing-grid,.perm-inner{grid-template-columns:1fr}
-  .chat-body{grid-template-columns:1fr}
+  .landing-grid,.perm-inner,.chat-body{grid-template-columns:1fr}
   .hero-card,.consent-card{min-height:auto}
   .chat-body{gap:14px}
 }
 @media (max-width: 720px){
-  /* On phones, hide the hero left column entirely so the consent card
-     (the toggle + Enter button) is the very first thing visible — no
-     scrolling required to reach the I'm-18 toggle. */
-  .hero-card{display:none}
-  .landing-grid{grid-template-columns:1fr}
-  .consent-card{
-    min-height:auto;
-    /* Vertically center the consent card in the full viewport */
-    min-height:100svh;
-    justify-content:center;
-  }
   .wrap{width:min(100% - 20px, 1120px)}
-  .hero-card,.lobby-card,.perm-card,.match-card{padding:18px}
-  .consent-card{padding:22px}
+  .hero-card,.consent-card,.lobby-card,.perm-card,.match-card{padding:18px}
   .hero-top,.lobby-head,.chat-topbar{flex-direction:column;align-items:flex-start}
   .lobby-grid{grid-template-columns:1fr}
   .start-row,.modal-row{flex-direction:column}
   .mode-switch{grid-template-columns:1fr}
   .chat-topbar{position:sticky;top:0;z-index:5}
-  #pg-chat{padding:10px}
-  .chat-shell{min-height:calc(100dvh - 20px)}
+  #pg-chat{padding:8px;height:100dvh;overflow:hidden}
+  .chat-shell{height:100%;min-height:0;overflow:hidden}
+  .chat-body{grid-template-columns:1fr;grid-template-rows:minmax(240px, 42vh) minmax(0,1fr)}
+  .video-panel{height:100%;min-height:240px}
+  .video-feeds.layout-horizontal,
+  .video-feeds.layout-vertical{
+    grid-template-columns:1fr;
+    grid-template-rows:repeat(2,minmax(0,1fr));
+  }
   .msg{max-width:94%}
   .peer-sub{white-space:normal}
+  #vid-local{width:96px;height:72px}
 }
 </style>
 </head>
@@ -1116,6 +1150,78 @@ a{color:inherit}
   </div>
 </section>
 
+<!-- Auth: login / sign up / continue as guest -->
+<section id="pg-auth" class="page">
+  <div class="wrap">
+    <div class="card" style="max-width:480px;margin:40px auto;">
+      <div class="auth-tabs" style="display:flex;gap:8px;margin-bottom:18px;">
+        <button class="btn btn-ghost auth-tab active" id="tab-login" type="button" style="flex:1;">Log in</button>
+        <button class="btn btn-ghost auth-tab" id="tab-signup" type="button" style="flex:1;">Sign up</button>
+      </div>
+
+      <!-- Login form -->
+      <div id="auth-login-form">
+        <div class="field">
+          <label for="login-username">Username</label>
+          <input id="login-username" type="text" autocomplete="username" placeholder="yourname">
+        </div>
+        <div class="field">
+          <label for="login-password">Password</label>
+          <input id="login-password" type="password" autocomplete="current-password" placeholder="••••••••">
+        </div>
+        <div id="login-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
+        <button class="btn btn-primary btn-wide" id="btn-login" style="margin-top:8px;">Log in</button>
+        <button class="btn btn-ghost btn-wide" id="btn-forgot" type="button" style="margin-top:8px;">Forgot password?</button>
+      </div>
+
+      <!-- Signup form -->
+      <div id="auth-signup-form" style="display:none;">
+        <div class="field">
+          <label for="signup-username">Username</label>
+          <input id="signup-username" type="text" autocomplete="username" placeholder="3-20 letters, numbers, underscore" maxlength="20">
+        </div>
+        <div class="field">
+          <label for="signup-email">Email <span style="font-weight:400;color:var(--muted);">(for password reset only)</span></label>
+          <input id="signup-email" type="email" autocomplete="email" placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label for="signup-password">Password</label>
+          <input id="signup-password" type="password" autocomplete="new-password" placeholder="At least 6 characters">
+        </div>
+        <div id="signup-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
+        <button class="btn btn-primary btn-wide" id="btn-signup" style="margin-top:8px;">Create account</button>
+      </div>
+
+      <!-- Forgot password form -->
+      <div id="auth-forgot-form" style="display:none;">
+        <div class="field">
+          <label for="forgot-email">Email</label>
+          <input id="forgot-email" type="email" autocomplete="email" placeholder="you@example.com">
+        </div>
+        <div id="forgot-message" class="notice" style="display:none;"></div>
+        <button class="btn btn-primary btn-wide" id="btn-forgot-submit" style="margin-top:8px;">Send reset link</button>
+        <button class="btn btn-ghost btn-wide" id="btn-forgot-back" type="button" style="margin-top:8px;">Back to log in</button>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--muted);font-size:13px;">
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+        or
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+      </div>
+
+      <div class="field">
+        <label for="guest-name">Continue as guest</label>
+        <input id="guest-name" type="text" maxlength="24" placeholder="Pick a display name for this session" autocomplete="off">
+        <div class="help-row">
+          <span>No account needed</span>
+          <span>Guests don't earn a Magnet Score</span>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-wide" id="btn-continue-guest">Continue as guest</button>
+    </div>
+  </div>
+</section>
+
 <!-- Permission -->
 <section id="pg-perm" class="page">
   <div class="wrap">
@@ -1181,9 +1287,15 @@ a{color:inherit}
         </div>
       </div>
 
+      <div class="identity-row" id="identity-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0;padding:10px 14px;background:var(--panel-2,#f6f7fb);border:1px solid var(--border);border-radius:10px;font-size:13px;">
+        <span id="identity-label">Browsing as guest</span>
+        <button class="btn btn-ghost" id="btn-switch-account" type="button" style="padding:4px 10px;font-size:12px;">Log in / Sign up</button>
+        <button class="btn btn-ghost" id="btn-logout" type="button" style="padding:4px 10px;font-size:12px;display:none;">Log out</button>
+      </div>
+
       <div class="mode-switch" id="mode-toggle">
-        <button class="mode-btn" data-mode="text">💬 Text</button>
-        <button class="mode-btn active" data-mode="video">📹 Video</button>
+        <button class="mode-btn active" data-mode="text">💬 Text</button>
+        <button class="mode-btn" data-mode="video">📹 Video</button>
       </div>
 
       <div class="lobby-grid">
@@ -1210,14 +1322,15 @@ a{color:inherit}
   <div class="wrap">
     <div class="card match-card">
       <div class="spinner" aria-hidden="true"></div>
-      <h2 class="match-title">Finding your match</h2>
-      <p class="match-sub">Scanning <strong id="match-count">2,847</strong> people online right now.</p>
+      <h2 class="match-title" id="match-title">Finding your match</h2>
+      <p class="match-sub" id="match-sub">Scanning <strong id="match-count">2,847</strong> people online right now.</p>
       <div class="match-badge">
         <span class="dot" id="conn-dot"></span>
         <span id="conn-text">Searching…</span>
       </div>
-      <div style="margin-top:18px;">
+      <div style="margin-top:18px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
         <button class="btn btn-ghost" id="btn-cancel">Cancel</button>
+        <button class="btn btn-primary" id="btn-try-demo" style="display:none;">Try a demo chat instead</button>
       </div>
     </div>
   </div>
@@ -1254,22 +1367,16 @@ a{color:inherit}
             <div class="big">📹</div>
             <div id="ph-txt">Waiting for video…</div>
           </div>
-          <!-- Uniform 16:9 wrapper for remote (stranger) camera -->
-          <div class="camera-wrapper" id="wrapper-remote">
-            <video id="vid-remote" autoplay playsinline></video>
-          </div>
-          <!-- Uniform 16:9 wrapper for local (own) camera -->
-          <div class="camera-wrapper" id="wrapper-local">
-            <video id="vid-local" autoplay playsinline muted></video>
-          </div>
+          <video id="vid-remote" autoplay playsinline></video>
+          <video id="vid-local" autoplay playsinline muted></video>
           <div class="quality" id="quality-bar"><span class="qdot" id="qual-dot"></span><span id="qual-text">HD</span></div>
         </div>
 
         <div class="video-controls">
-          <button class="vc-btn" id="vc-mic" title="Mute microphone">🎤</button>
-          <button class="vc-btn" id="vc-cam" title="Toggle camera">📷</button>
-          <button class="vc-btn" id="vc-flip" title="Flip local camera">🔄</button>
-          <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶</button>
+          <button class="vc-btn" id="vc-mic" title="Mute microphone">Mic</button>
+          <button class="vc-btn" id="vc-cam" title="Toggle camera">Cam</button>
+          <button class="vc-btn" id="vc-flip" title="Flip local camera">Flip</button>
+          <button class="vc-btn" id="vc-fs" title="Fullscreen">Full</button>
         </div>
       </div>
 
@@ -1327,7 +1434,19 @@ a{color:inherit}
 
 <div class="toast-root" id="toast-root"></div>
 
-<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+<script>
+  // Set your deployed Railway server URL here (no trailing slash).
+  window.MORTALIVE_SERVER_URL = 'https://mortalive-server-production.up.railway.app';
+</script>
+<!--
+  Self-hosted, NOT loaded from a third-party CDN. cdn.socket.io is
+  routinely blocked by Brave's built-in Shields, uBlock Origin, AdGuard,
+  and some corporate/school network filters — silently breaking real-time
+  matching for anyone using those, with no visible error to the user other
+  than "no one is online." Serving this file from your own domain avoids
+  that entire class of problem.
+-->
+<script src="socket.io.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
