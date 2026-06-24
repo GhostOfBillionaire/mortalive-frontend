@@ -159,43 +159,41 @@ a{color:inherit}
 #pg-land{
   align-items:center;
   justify-content:center;
-  min-height:100dvh;
-  padding:8px 0;
-  overflow:hidden;
+  padding:20px 0;
 }
 .landing-grid{
   display:grid;
   grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);
-  gap:14px;
-  align-items:center;
+  gap:18px;
+  align-items:stretch;
 }
 .hero-card{
-  padding:20px;
+  padding:30px;
   display:flex;
   flex-direction:column;
   justify-content:space-between;
-  min-height:auto;
+  min-height:540px;
   min-width:0;
 }
 .hero-top{
   display:flex;
   align-items:flex-start;
   justify-content:space-between;
-  gap:12px;
+  gap:16px;
   flex-wrap:wrap;
   min-width:0;
 }
 .hero-copy{
   max-width:560px;
-  padding-top:4px;
+  padding-top:10px;
   min-width:0;
 }
 .hero-kicker{
-  margin-bottom:14px;
+  margin-bottom:18px;
 }
 .hero-title{
   margin:0;
-  font-size:clamp(30px, 4vw, 54px);
+  font-size:clamp(32px, 4.4vw, 58px);
   line-height:1.03;
   letter-spacing:-0.06em;
 }
@@ -204,17 +202,17 @@ a{color:inherit}
   color:var(--primary);
 }
 .hero-text{
-  margin:12px 0 0;
+  margin:18px 0 0;
   color:var(--muted);
-  font-size:15px;
-  line-height:1.65;
+  font-size:16px;
+  line-height:1.7;
   max-width:50ch;
 }
 .feature-row{
   display:flex;
   flex-wrap:wrap;
   gap:10px;
-  margin-top:14px;
+  margin-top:22px;
 }
 .feature{
   padding:10px 12px;
@@ -226,16 +224,16 @@ a{color:inherit}
   font-weight:600;
 }
 .hero-foot{
-  margin-top:18px;
+  margin-top:26px;
   display:flex;
   gap:12px;
   flex-wrap:wrap;
 }
 .hero-visual{
-  margin-top:14px;
+  margin-top:26px;
   display:grid;
   grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:10px;
+  gap:12px;
 }
 .preview-box{
   border-radius:18px;
@@ -263,18 +261,18 @@ a{color:inherit}
 }
 
 .consent-card{
-  padding:20px;
+  padding:28px;
   display:flex;
   flex-direction:column;
   justify-content:center;
-  min-height:auto;
+  min-height:540px;
 }
 .consent-head{
-  margin-bottom:14px;
+  margin-bottom:18px;
 }
 .consent-title{
-  margin:10px 0 6px;
-  font-size:26px;
+  margin:12px 0 8px;
+  font-size:28px;
   line-height:1.08;
   letter-spacing:-0.05em;
 }
@@ -349,74 +347,6 @@ a{color:inherit}
   font-size:12px;
   color:var(--muted-2);
   line-height:1.6;
-}
-
-.auth-card{
-  max-width:520px;
-  margin:40px auto;
-  padding:22px;
-}
-.auth-card-inner{
-  display:flex;
-  flex-direction:column;
-  gap:18px;
-}
-.auth-guest-hero{
-  padding:18px;
-  border-radius:18px;
-  border:1px solid rgba(24,119,242,.16);
-  background:linear-gradient(180deg, rgba(24,119,242,.10), rgba(255,255,255,.96));
-}
-.auth-guest-hero h2{
-  margin:10px 0 8px;
-  font-size:24px;
-  line-height:1.08;
-  letter-spacing:-.05em;
-}
-.auth-guest-hero p{
-  margin:0;
-  color:var(--muted);
-  line-height:1.6;
-  font-size:14px;
-}
-.auth-guest-hero .field{
-  margin-top:14px;
-}
-.auth-guest-hero .btn-wide{
-  margin-top:14px !important;
-}
-.auth-divider{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  color:var(--muted);
-  font-size:12px;
-  text-transform:uppercase;
-  letter-spacing:.12em;
-  font-weight:700;
-}
-.auth-divider::before,
-.auth-divider::after{
-  content:'';
-  flex:1;
-  height:1px;
-  background:var(--border);
-}
-.auth-tabs{
-  display:flex;
-  gap:8px;
-}
-.auth-tab{
-  flex:1;
-}
-.auth-tab:not(.active){
-  opacity:.82;
-}
-.auth-secondary-note{
-  color:var(--muted);
-  font-size:12px;
-  line-height:1.5;
-  margin-top:6px;
 }
 
 /* Permission */
@@ -815,12 +745,10 @@ a{color:inherit}
   justify-content: center;
 }
 
-/* Portrait-friendly wrappers — keep both panes equal, crop desktop webcams into the slot */
+/* Square on mobile (best for phones) */
 .video-wrapper.remote,
 .video-wrapper.local {
-  aspect-ratio: 4 / 5;
-  min-width: 0;
-  min-height: 0;
+  aspect-ratio: 1 / 1;
 }
 
 #vid-remote,
@@ -829,8 +757,7 @@ a{color:inherit}
   height: 100%;
   display: block;
   background: #121826;
-  object-fit: cover; /* Fill the slot; desktop landscape feeds crop cleanly */
-  object-position: center center;
+  object-fit: contain; /* Full view, no cropping */
 }
 
 .video-feeds.layout-horizontal{
@@ -861,12 +788,12 @@ a{color:inherit}
   background:#192232;
 }
 
-/* Mobile - stacked vertical with equal size */
+/* Mobile - make video panel take more space */
 @media (max-width: 720px){
   #pg-chat{padding:6px; gap:6px;}
   .chat-body{
     grid-template-columns:1fr;
-    grid-template-rows:minmax(280px, 55vh) minmax(0,1fr);
+    grid-template-rows:minmax(280px, 55vh) minmax(0,1fr); /* Bigger video area */
   }
   .video-panel{height:100%; min-height:280px;}
   .video-feeds.layout-horizontal,
@@ -874,32 +801,10 @@ a{color:inherit}
     grid-template-columns:1fr;
     grid-template-rows:repeat(2, minmax(0,1fr));
   }
-  .video-wrapper.remote,
-  .video-wrapper.local{
-    aspect-ratio: 4 / 5;
-    border-radius: 20px;
-    border: 1px solid rgba(255,255,255,.08);
-    background:
-      radial-gradient(circle at top, rgba(255,255,255,.05), transparent 45%),
-      linear-gradient(180deg, #0f1726 0%, #121826 55%, #0f1726 100%);
-  }
-  .video-wrapper.remote::before,
-  .video-wrapper.local::before{
-    content:'';
-    position:absolute;
-    inset:10px;
-    border-radius:16px;
-    border:1px solid rgba(255,255,255,.06);
-    pointer-events:none;
-  }
-  #vid-remote,
   #vid-local{
-    object-fit: contain;
-    background: transparent;
-  }
-  #vid-local{
-    width:100%;
-    height:100%;
+    width:110px;
+    height:110px;
+    border-radius:12px;
   }
   .video-controls{gap:8px; margin-top:8px;}
 }
@@ -1263,83 +1168,71 @@ a{color:inherit}
 <!-- Auth: login / sign up / continue as guest -->
 <section id="pg-auth" class="page">
   <div class="wrap">
-    <div class="card auth-card">
-      <div class="auth-card-inner">
-        <div class="auth-guest-hero">
-          <div class="brand">
-            <div class="brand-mark" aria-hidden="true"></div>
-            <div>
-              <div class="brand-name">Fast entry</div>
-              <div class="brand-sub">Guest mode first</div>
-            </div>
-          </div>
-          <h2>Jump in as a guest.</h2>
-          <p>No account needed to start. Pick a display name and enter immediately. Login and signup stay below for people who want an account later.</p>
-
-          <div class="field">
-            <label for="guest-name">Continue as guest</label>
-            <input id="guest-name" type="text" maxlength="24" placeholder="Pick a display name for this session" autocomplete="off">
-            <div class="help-row">
-              <span>No account needed</span>
-              <span>Guests don't earn a Magnet Score</span>
-            </div>
-          </div>
-          <button class="btn btn-primary btn-wide" id="btn-continue-guest">Continue as guest</button>
-          <div class="auth-secondary-note">Fastest path: guest mode keeps the flow light and avoids the extra signup step.</div>
-        </div>
-
-        <div class="auth-divider">or use an account</div>
-
-        <div class="auth-tabs">
-          <button class="btn btn-ghost auth-tab active" id="tab-login" type="button">Log in</button>
-          <button class="btn btn-ghost auth-tab" id="tab-signup" type="button">Sign up</button>
-        </div>
-
-        <!-- Login form -->
-        <div id="auth-login-form">
-          <div class="field">
-            <label for="login-username">Username</label>
-            <input id="login-username" type="text" autocomplete="username" placeholder="yourname">
-          </div>
-          <div class="field">
-            <label for="login-password">Password</label>
-            <input id="login-password" type="password" autocomplete="current-password" placeholder="••••••••">
-          </div>
-          <div id="login-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
-          <button class="btn btn-primary btn-wide" id="btn-login" style="margin-top:8px;">Log in</button>
-          <button class="btn btn-ghost btn-wide" id="btn-forgot" type="button" style="margin-top:8px;">Forgot password?</button>
-        </div>
-
-        <!-- Signup form -->
-        <div id="auth-signup-form" style="display:none;">
-          <div class="field">
-            <label for="signup-username">Username</label>
-            <input id="signup-username" type="text" autocomplete="username" placeholder="3-20 letters, numbers, underscore" maxlength="20">
-          </div>
-          <div class="field">
-            <label for="signup-email">Email <span style="font-weight:400;color:var(--muted);">(for password reset only)</span></label>
-            <input id="signup-email" type="email" autocomplete="email" placeholder="you@example.com">
-          </div>
-          <div class="field">
-            <label for="signup-password">Password</label>
-            <input id="signup-password" type="password" autocomplete="new-password" placeholder="At least 6 characters">
-          </div>
-          <div id="signup-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
-          <button class="btn btn-primary btn-wide" id="btn-signup" style="margin-top:8px;">Create account</button>
-        </div>
-
-        <!-- Forgot password form -->
-        <div id="auth-forgot-form" style="display:none;">
-          <div class="field">
-            <label for="forgot-email">Email</label>
-            <input id="forgot-email" type="email" autocomplete="email" placeholder="you@example.com">
-          </div>
-          <div id="forgot-message" class="notice" style="display:none;"></div>
-          <button class="btn btn-primary btn-wide" id="btn-forgot-submit" style="margin-top:8px;">Send reset link</button>
-          <button class="btn btn-ghost btn-wide" id="btn-forgot-back" type="button" style="margin-top:8px;">Back to log in</button>
-        </div>
-
+    <div class="card" style="max-width:480px;margin:40px auto;">
+      <div class="auth-tabs" style="display:flex;gap:8px;margin-bottom:18px;">
+        <button class="btn btn-ghost auth-tab active" id="tab-login" type="button" style="flex:1;">Log in</button>
+        <button class="btn btn-ghost auth-tab" id="tab-signup" type="button" style="flex:1;">Sign up</button>
       </div>
+
+      <!-- Login form -->
+      <div id="auth-login-form">
+        <div class="field">
+          <label for="login-username">Username</label>
+          <input id="login-username" type="text" autocomplete="username" placeholder="yourname">
+        </div>
+        <div class="field">
+          <label for="login-password">Password</label>
+          <input id="login-password" type="password" autocomplete="current-password" placeholder="••••••••">
+        </div>
+        <div id="login-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
+        <button class="btn btn-primary btn-wide" id="btn-login" style="margin-top:8px;">Log in</button>
+        <button class="btn btn-ghost btn-wide" id="btn-forgot" type="button" style="margin-top:8px;">Forgot password?</button>
+      </div>
+
+      <!-- Signup form -->
+      <div id="auth-signup-form" style="display:none;">
+        <div class="field">
+          <label for="signup-username">Username</label>
+          <input id="signup-username" type="text" autocomplete="username" placeholder="3-20 letters, numbers, underscore" maxlength="20">
+        </div>
+        <div class="field">
+          <label for="signup-email">Email <span style="font-weight:400;color:var(--muted);">(for password reset only)</span></label>
+          <input id="signup-email" type="email" autocomplete="email" placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label for="signup-password">Password</label>
+          <input id="signup-password" type="password" autocomplete="new-password" placeholder="At least 6 characters">
+        </div>
+        <div id="signup-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
+        <button class="btn btn-primary btn-wide" id="btn-signup" style="margin-top:8px;">Create account</button>
+      </div>
+
+      <!-- Forgot password form -->
+      <div id="auth-forgot-form" style="display:none;">
+        <div class="field">
+          <label for="forgot-email">Email</label>
+          <input id="forgot-email" type="email" autocomplete="email" placeholder="you@example.com">
+        </div>
+        <div id="forgot-message" class="notice" style="display:none;"></div>
+        <button class="btn btn-primary btn-wide" id="btn-forgot-submit" style="margin-top:8px;">Send reset link</button>
+        <button class="btn btn-ghost btn-wide" id="btn-forgot-back" type="button" style="margin-top:8px;">Back to log in</button>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--muted);font-size:13px;">
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+        or
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+      </div>
+
+      <div class="field">
+        <label for="guest-name">Continue as guest</label>
+        <input id="guest-name" type="text" maxlength="24" placeholder="Pick a display name for this session" autocomplete="off">
+        <div class="help-row">
+          <span>No account needed</span>
+          <span>Guests don't earn a Magnet Score</span>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-wide" id="btn-continue-guest">Continue as guest</button>
     </div>
   </div>
 </section>
@@ -1416,8 +1309,8 @@ a{color:inherit}
       </div>
 
       <div class="mode-switch" id="mode-toggle">
-        <button class="mode-btn" data-mode="text">Text Chat</button>
-        <button class="mode-btn active" data-mode="video">Video Chat</button>
+        <button class="mode-btn active" data-mode="text">💬 Text</button>
+        <button class="mode-btn" data-mode="video">📹 Video</button>
       </div>
 
       <div class="lobby-grid">
@@ -1475,16 +1368,16 @@ a{color:inherit}
           <span class="conn-dot" id="call-dot"></span>
           <span id="call-text">connecting</span>
         </div>
-        <button class="icon-btn" id="btn-toggle-video" title="Toggle video panel">Video</button>
-        <button class="icon-btn" id="btn-rate-top" title="Rate chat">Rate</button>
-        <button class="icon-btn danger" id="btn-skip" title="Next">Next</button>
-        <button class="icon-btn danger" id="btn-end" title="End">Leave</button>
+        <button class="icon-btn" id="btn-toggle-video" title="Toggle video panel">📹</button>
+        <button class="icon-btn" id="btn-rate-top" title="Rate chat">⭐</button>
+        <button class="icon-btn danger" id="btn-skip" title="Next">⏭</button>
+        <button class="icon-btn danger" id="btn-end" title="End">✕</button>
       </div>
     </div>
 
     <div class="chat-body">
       <div class="video-panel" id="video-panel">
-        <div class="video-feeds layout-horizontal" id="video-feeds">
+        <div class="video-feeds" id="video-feeds">
           <div class="no-video" id="no-video-ph">
             <div class="big">📹</div>
             <div id="ph-txt">Waiting for video…</div>
@@ -1504,7 +1397,6 @@ a{color:inherit}
         <div class="video-controls">
           <button class="vc-btn" id="vc-mic" title="Mute microphone">Mic</button>
           <button class="vc-btn" id="vc-cam" title="Toggle camera">Cam</button>
-          <button class="vc-btn" id="vc-layout" title="Switch camera layout">Layout</button>
           <button class="vc-btn" id="vc-flip" title="Flip local camera">Flip</button>
           <button class="vc-btn" id="vc-fs" title="Fullscreen">Full</button>
         </div>
