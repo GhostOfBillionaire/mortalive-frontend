@@ -30,18 +30,15 @@
   --radius-sm:14px;
   --radius-xs:10px;
 }
-
 *{box-sizing:border-box}
 html,body{margin:0;min-height:100%;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
 body{min-height:100dvh}
 button,input{font:inherit}
 button{cursor:pointer}
 a{color:inherit}
-
 ::-webkit-scrollbar{width:10px;height:10px}
 ::-webkit-scrollbar-thumb{background:#c8d0dc;border-radius:99px;border:2px solid transparent;background-clip:content-box}
 ::-webkit-scrollbar-track{background:transparent}
-
 .page{
   display:none;
   min-height:100dvh;
@@ -49,7 +46,6 @@ a{color:inherit}
   position:relative;
 }
 .page.active{display:flex}
-
 .bg{
   position:fixed;
   inset:0;
@@ -60,7 +56,6 @@ a{color:inherit}
     linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
   z-index:0;
 }
-
 .wrap{
   position:relative;
   z-index:1;
@@ -68,7 +63,6 @@ a{color:inherit}
   margin:auto;
   padding:24px 0;
 }
-
 /* Brand */
 .brand{
   display:flex;
@@ -102,7 +96,6 @@ a{color:inherit}
   text-transform:uppercase;
   margin-top:2px;
 }
-
 /* Shared cards */
 .card{
   background:rgba(255,255,255,.88);
@@ -111,7 +104,6 @@ a{color:inherit}
   border-radius:var(--radius);
   box-shadow:var(--shadow);
 }
-
 .btn{
   border:0;
   border-radius:14px;
@@ -121,27 +113,23 @@ a{color:inherit}
 }
 .btn:hover{transform:translateY(-1px)}
 .btn:disabled{cursor:not-allowed;opacity:.45;transform:none}
-
 .btn-primary{
   background:linear-gradient(135deg,var(--primary),var(--primary-2));
   color:#fff;
   box-shadow:0 12px 30px rgba(24,119,242,.22);
 }
 .btn-primary:hover{box-shadow:0 14px 34px rgba(24,119,242,.28)}
-
 .btn-ghost{
   background:#fff;
   border:1px solid var(--border);
   color:var(--text);
 }
 .btn-ghost:hover{border-color:var(--border-strong)}
-
 .auth-tab.active{
   background:linear-gradient(135deg,var(--primary),var(--primary-2));
   border-color:transparent;
   color:#fff;
 }
-
 .pill{
   display:inline-flex;
   align-items:center;
@@ -154,7 +142,6 @@ a{color:inherit}
   font-size:12px;
   font-weight:600;
 }
-
 /* Landing */
 #pg-land{
   align-items:center;
@@ -261,7 +248,6 @@ a{color:inherit}
     linear-gradient(180deg, rgba(109,94,252,.11), rgba(255,255,255,.92)),
     #fff;
 }
-
 .consent-card{
   padding:20px;
   display:flex;
@@ -350,7 +336,6 @@ a{color:inherit}
   color:var(--muted-2);
   line-height:1.6;
 }
-
 .auth-card{
   max-width:520px;
   margin:40px auto;
@@ -418,7 +403,6 @@ a{color:inherit}
   line-height:1.5;
   margin-top:6px;
 }
-
 /* Permission */
 #pg-perm{
   align-items:center;
@@ -534,7 +518,6 @@ a{color:inherit}
   gap:12px;
   flex-wrap:wrap;
 }
-
 /* Lobby */
 #pg-lobby{
   align-items:center;
@@ -634,7 +617,6 @@ a{color:inherit}
   display:flex;
   gap:12px;
 }
-
 /* Matching */
 #pg-match{
   align-items:center;
@@ -679,7 +661,6 @@ a{color:inherit}
   color:var(--muted);
   font-size:12px;
 }
-
 /* Chat */
 #pg-chat{
   flex-direction:column;
@@ -764,7 +745,6 @@ a{color:inherit}
 }
 .icon-btn:hover{border-color:var(--border-strong);color:var(--text)}
 .icon-btn.danger:hover{border-color:rgba(229,72,77,.35);color:var(--danger)}
-
 .chat-body{
   flex:1;
   min-height:0;
@@ -788,7 +768,6 @@ a{color:inherit}
   height:100%;
 }
 .video-panel.visible{display:flex}
-
 /* ==================== FIXED SQUARE VIDEO FEEDS (Omegle-style) ==================== */
 .video-feeds{
   position:relative;
@@ -805,7 +784,6 @@ a{color:inherit}
   align-items:stretch;
   justify-items:stretch;
 }
-
 .video-wrapper {
   position: relative;
   overflow: hidden;
@@ -814,7 +792,6 @@ a{color:inherit}
   align-items: center;
   justify-content: center;
 }
-
 /* Portrait-friendly wrappers — keep both panes equal, crop desktop webcams into the slot */
 .video-wrapper.remote,
 .video-wrapper.local {
@@ -822,7 +799,6 @@ a{color:inherit}
   min-width: 0;
   min-height: 0;
 }
-
 #vid-remote,
 #vid-local {
   width: 100%;
@@ -832,7 +808,6 @@ a{color:inherit}
   object-fit: cover; /* Fill the slot; desktop landscape feeds crop cleanly */
   object-position: center center;
 }
-
 .video-feeds.layout-horizontal{
   grid-template-columns: repeat(2,minmax(0,1fr));
   grid-template-rows:1fr;
@@ -841,7 +816,6 @@ a{color:inherit}
   grid-template-columns:1fr;
   grid-template-rows:repeat(2,minmax(0,1fr));
 }
-
 /* Reset positioning */
 .video-feeds.layout-horizontal #vid-remote,
 .video-feeds.layout-horizontal #vid-local,
@@ -855,12 +829,10 @@ a{color:inherit}
   min-height:0;
   border-radius:0;
 }
-
 #vid-local {
   transform:scaleX(-1);
   background:#192232;
 }
-
 /* Mobile - stacked vertical with equal size */
 @media (max-width: 720px){
   #pg-chat{padding:6px; gap:6px;}
@@ -903,7 +875,6 @@ a{color:inherit}
   }
   .video-controls{gap:8px; margin-top:8px;}
 }
-
 .no-video{
   position:absolute;
   inset:0;
@@ -959,7 +930,6 @@ a{color:inherit}
 }
 .vc-btn.active,.vc-btn:hover{border-color:rgba(24,119,242,.35);color:var(--primary)}
 .vc-btn.off{border-color:rgba(229,72,77,.25);color:var(--danger);background:rgba(229,72,77,.06)}
-
 .chat-panel{
   display:flex;
   flex-direction:column;
@@ -1057,7 +1027,6 @@ a{color:inherit}
   border-radius:16px;
   padding:0;
 }
-
 /* Modal / Sheet */
 .overlay{
   display:none;
@@ -1160,7 +1129,6 @@ a{color:inherit}
   animation:toastIn .18s ease-out;
 }
 @keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-
 /* Responsive */
 @media (max-width: 980px){
   .landing-grid,.perm-inner,.chat-body{grid-template-columns:1fr}
@@ -1180,7 +1148,6 @@ a{color:inherit}
 </head>
 <body>
 <div class="bg"></div>
-
 <!-- Landing -->
 <section id="pg-land" class="page active">
   <div class="wrap">
@@ -1199,11 +1166,9 @@ a{color:inherit}
             </div>
             <span class="pill">18+ only · consent required</span>
           </div>
-
           <div class="hero-copy">
             <h1 class="hero-title">A cleaner way to <em>talk to strangers</em>.</h1>
             <p class="hero-text">Mortalive keeps the familiar random-chat feel, but with a softer light-grey and blue interface, easier navigation, and a layout that behaves better on desktop and mobile.</p>
-
             <div class="feature-row">
               <span class="feature">Text or video</span>
               <span class="feature">No account</span>
@@ -1211,7 +1176,6 @@ a{color:inherit}
               <span class="feature">Anonymous by default</span>
             </div>
           </div>
-
           <div class="hero-visual">
             <div class="preview-box blue">
               <strong>Simple interface</strong>
@@ -1224,7 +1188,6 @@ a{color:inherit}
           </div>
         </div>
       </div>
-
       <div class="card consent-card">
         <div class="consent-head">
           <div class="brand">
@@ -1237,21 +1200,17 @@ a{color:inherit}
           <h2 class="consent-title">Read once, then enter.</h2>
           <p class="consent-sub">A single consent step keeps the landing screen clean and fixes the clicking issues from the old custom toggle setup.</p>
         </div>
-
         <label class="toggle" for="landing-consent">
           <input id="landing-consent" type="checkbox">
           <span class="toggle-ui" aria-hidden="true"></span>
           <span class="toggle-text"><b>I confirm I am 18+</b> and agree to Mortalive's Terms, privacy rules, and session policies.</span>
         </label>
-
         <div class="notice">
           <b>Quick note:</b> Video mode will ask for camera and microphone access. Text mode works without permissions.
         </div>
-
         <div class="enter-row">
           <button class="btn btn-primary btn-wide" id="btn-enter" disabled>Enter Mortalive</button>
         </div>
-
         <div class="small-links">
           By continuing, you agree to use the service responsibly and follow the community rules.
         </div>
@@ -1259,7 +1218,6 @@ a{color:inherit}
     </div>
   </div>
 </section>
-
 <!-- Auth: login / sign up / continue as guest -->
 <section id="pg-auth" class="page">
   <div class="wrap">
@@ -1275,7 +1233,6 @@ a{color:inherit}
           </div>
           <h2>Jump in as a guest.</h2>
           <p>No account needed to start. Pick a display name and enter immediately. Login and signup stay below for people who want an account later.</p>
-
           <div class="field">
             <label for="guest-name">Continue as guest</label>
             <input id="guest-name" type="text" maxlength="24" placeholder="Pick a display name for this session" autocomplete="off">
@@ -1287,14 +1244,11 @@ a{color:inherit}
           <button class="btn btn-primary btn-wide" id="btn-continue-guest">Continue as guest</button>
           <div class="auth-secondary-note">Fastest path: guest mode keeps the flow light and avoids the extra signup step.</div>
         </div>
-
         <div class="auth-divider">or use an account</div>
-
         <div class="auth-tabs">
           <button class="btn btn-ghost auth-tab active" id="tab-login" type="button">Log in</button>
           <button class="btn btn-ghost auth-tab" id="tab-signup" type="button">Sign up</button>
         </div>
-
         <!-- Login form -->
         <div id="auth-login-form">
           <div class="field">
@@ -1309,7 +1263,6 @@ a{color:inherit}
           <button class="btn btn-primary btn-wide" id="btn-login" style="margin-top:8px;">Log in</button>
           <button class="btn btn-ghost btn-wide" id="btn-forgot" type="button" style="margin-top:8px;">Forgot password?</button>
         </div>
-
         <!-- Signup form -->
         <div id="auth-signup-form" style="display:none;">
           <div class="field">
@@ -1327,7 +1280,6 @@ a{color:inherit}
           <div id="signup-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
           <button class="btn btn-primary btn-wide" id="btn-signup" style="margin-top:8px;">Create account</button>
         </div>
-
         <!-- Forgot password form -->
         <div id="auth-forgot-form" style="display:none;">
           <div class="field">
@@ -1338,12 +1290,10 @@ a{color:inherit}
           <button class="btn btn-primary btn-wide" id="btn-forgot-submit" style="margin-top:8px;">Send reset link</button>
           <button class="btn btn-ghost btn-wide" id="btn-forgot-back" type="button" style="margin-top:8px;">Back to log in</button>
         </div>
-
       </div>
     </div>
   </div>
 </section>
-
 <!-- Permission -->
 <section id="pg-perm" class="page">
   <div class="wrap">
@@ -1360,11 +1310,9 @@ a{color:inherit}
             <span id="perm-status-txt">Waiting for permission</span>
           </div>
         </div>
-
         <div class="perm-copy">
           <h2>Camera & microphone</h2>
           <p>Video chat needs browser permission. You can always skip this step and continue with text chat only.</p>
-
           <div class="permission-list">
             <div class="permission-item">
               <span>📷</span>
@@ -1377,7 +1325,6 @@ a{color:inherit}
               <span class="badge warn" id="mic-status-lbl">waiting</span>
             </div>
           </div>
-
           <div class="perm-actions">
             <button class="btn btn-primary" id="btn-allow">Allow camera & mic</button>
             <button class="btn btn-ghost" id="btn-skip-cam">Skip to text chat</button>
@@ -1387,7 +1334,6 @@ a{color:inherit}
     </div>
   </div>
 </section>
-
 <!-- Lobby -->
 <section id="pg-lobby" class="page">
   <div class="wrap">
@@ -1408,18 +1354,15 @@ a{color:inherit}
           <span><strong id="online-n">2,847</strong> online now</span>
         </div>
       </div>
-
       <div class="identity-row" id="identity-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0;padding:10px 14px;background:var(--panel-2,#f6f7fb);border:1px solid var(--border);border-radius:10px;font-size:13px;">
         <span id="identity-label">Browsing as guest</span>
         <button class="btn btn-ghost" id="btn-switch-account" type="button" style="padding:4px 10px;font-size:12px;">Log in / Sign up</button>
         <button class="btn btn-ghost" id="btn-logout" type="button" style="padding:4px 10px;font-size:12px;display:none;">Log out</button>
       </div>
-
       <div class="mode-switch" id="mode-toggle">
         <button class="mode-btn" data-mode="text">Text Chat</button>
         <button class="mode-btn active" data-mode="video">Video Chat</button>
       </div>
-
       <div class="lobby-grid">
         <div class="field">
           <label for="interest-input">Interest</label>
@@ -1431,14 +1374,12 @@ a{color:inherit}
         </div>
         <button class="btn btn-primary" id="btn-find">Find a stranger</button>
       </div>
-
       <div class="start-row">
         <button class="btn btn-ghost" id="score-pill-btn" type="button" style="display:none;">Open score sheet</button>
       </div>
     </div>
   </div>
 </section>
-
 <!-- Matching -->
 <section id="pg-match" class="page">
   <div class="wrap">
@@ -1457,7 +1398,6 @@ a{color:inherit}
     </div>
   </div>
 </section>
-
 <!-- Chat -->
 <section id="pg-chat" class="page">
   <div class="chat-shell">
@@ -1469,7 +1409,6 @@ a{color:inherit}
           <div class="peer-sub" id="peer-score">Anonymous chat · connected</div>
         </div>
       </div>
-
       <div class="top-actions">
         <div class="conn-badge">
           <span class="conn-dot" id="call-dot"></span>
@@ -1481,7 +1420,6 @@ a{color:inherit}
         <button class="icon-btn danger" id="btn-end" title="End">Leave</button>
       </div>
     </div>
-
     <div class="chat-body">
       <div class="video-panel" id="video-panel">
         <div class="video-feeds layout-horizontal" id="video-feeds">
@@ -1489,7 +1427,7 @@ a{color:inherit}
             <div class="big">📹</div>
             <div id="ph-txt">Waiting for video…</div>
           </div>
-          
+         
           <!-- Square wrappers -->
           <div class="video-wrapper remote">
             <video id="vid-remote" autoplay playsinline></video>
@@ -1497,10 +1435,9 @@ a{color:inherit}
           <div class="video-wrapper local">
             <video id="vid-local" autoplay playsinline muted></video>
           </div>
-          
+         
           <div class="quality" id="quality-bar"><span class="qdot" id="qual-dot"></span><span id="qual-text">HD</span></div>
         </div>
-
         <div class="video-controls">
           <button class="vc-btn" id="vc-mic" title="Mute microphone">Mic</button>
           <button class="vc-btn" id="vc-cam" title="Toggle camera">Cam</button>
@@ -1509,7 +1446,6 @@ a{color:inherit}
           <button class="vc-btn" id="vc-fs" title="Fullscreen">Full</button>
         </div>
       </div>
-
       <div class="chat-panel">
         <div class="chat-messages" id="chat-msgs"></div>
         <div class="chat-input">
@@ -1520,7 +1456,6 @@ a{color:inherit}
     </div>
   </div>
 </section>
-
 <!-- Rating -->
 <div class="overlay" id="rating-overlay">
   <div class="modal">
@@ -1535,7 +1470,6 @@ a{color:inherit}
       <span class="star" data-v="4">4</span>
       <span class="star" data-v="5">5</span>
     </div>
-
     <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin:16px 0 10px;">Tag the vibe</div>
     <div class="vibes" id="vibes">
       <span class="vibe" data-v="funny">Funny</span>
@@ -1545,14 +1479,12 @@ a{color:inherit}
       <span class="vibe" data-v="chill">Chill</span>
       <span class="vibe" data-v="honest">Honest</span>
     </div>
-
     <div class="modal-row">
       <button class="btn btn-ghost" id="btn-skip-rating">Skip</button>
       <button class="btn btn-primary" id="btn-submit-rating">Submit</button>
     </div>
   </div>
 </div>
-
 <!-- Optional score sheet kept hidden for compatibility -->
 <div class="sheet-overlay" id="sheet-overlay">
   <div class="sheet">
@@ -1561,9 +1493,7 @@ a{color:inherit}
     <p style="margin:0;color:var(--muted);line-height:1.6;">Hidden by default in the redesigned UI.</p>
   </div>
 </div>
-
 <div class="toast-root" id="toast-root"></div>
-
 <script>
   // Set your deployed Railway server URL here (no trailing slash).
   window.MORTALIVE_SERVER_URL = 'https://mortalive-server-production.up.railway.app';
@@ -1571,4 +1501,4 @@ a{color:inherit}
 <script src="socket.io.min.js"></script>
 <script src="app.js"></script>
 </body>
-</html>
+</html>"
