@@ -828,7 +828,7 @@ a{color:inherit}
   height: 100%;
   display: block;
   background: #121826;
-  object-fit: cover; /* Fill the slot; desktop landscape feeds crop cleanly */
+  object-fit: cover;
   object-position: center center;
 }
 
@@ -868,8 +868,6 @@ a{color:inherit}
     grid-template-rows:minmax(280px, 55vh) minmax(0,1fr);
   }
   .video-panel{height:100%; min-height:280px;}
-  
-  /* === UPDATED: Respect layout toggle on mobile === */
   .video-feeds.layout-horizontal{
     grid-template-columns:repeat(2,minmax(0,1fr));
     grid-template-rows:1fr;
@@ -878,7 +876,6 @@ a{color:inherit}
     grid-template-columns:1fr;
     grid-template-rows:repeat(2, minmax(0,1fr));
   }
-  
   .video-wrapper.remote,
   .video-wrapper.local{
     aspect-ratio: 9 / 16;
@@ -964,6 +961,11 @@ a{color:inherit}
 }
 .vc-btn.active,.vc-btn:hover{border-color:rgba(24,119,242,.35);color:var(--primary)}
 .vc-btn.off{border-color:rgba(229,72,77,.25);color:var(--danger);background:rgba(229,72,77,.06)}
+
+#btn-end{
+  color:#e5484d;
+  font-size:18px;
+}
 
 .chat-panel{
   display:flex;
@@ -1480,10 +1482,10 @@ a{color:inherit}
           <span class="conn-dot" id="call-dot"></span>
           <span id="call-text">connecting</span>
         </div>
-        <button class="icon-btn" id="btn-toggle-video" title="Toggle video panel">Video</button>
+        <!-- Video button removed -->
         <button class="icon-btn" id="btn-rate-top" title="Rate chat">Rate</button>
         <button class="icon-btn danger" id="btn-skip" title="Next">Next</button>
-        <button class="icon-btn danger" id="btn-end" title="End">Leave</button>
+        <button class="icon-btn danger" id="btn-end" title="Leave">❌</button>
       </div>
     </div>
 
@@ -1507,11 +1509,12 @@ a{color:inherit}
         </div>
 
         <div class="video-controls">
-          <button class="vc-btn" id="vc-mic" title="Mute microphone">Mic</button>
-          <button class="vc-btn" id="vc-cam" title="Toggle camera">Cam</button>
-          <button class="vc-btn" id="vc-layout" title="Switch camera layout">Layout</button>
-          <button class="vc-btn" id="vc-flip" title="Flip local camera">Flip</button>
-          <button class="vc-btn" id="vc-fs" title="Fullscreen">Full</button>
+          <button class="vc-btn" id="vc-mic" title="Microphone">🎤</button>
+          <button class="vc-btn" id="vc-cam" title="Camera">📷</button>
+          <!-- Layout button hidden for now -->
+          <!-- <button class="vc-btn" id="vc-layout" title="Layout">◫</button> -->
+          <button class="vc-btn" id="vc-flip" title="Switch Camera">🔄</button>
+          <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶</button>
         </div>
       </div>
 
