@@ -25,7 +25,7 @@ const ICE_CONFIG = {
 };
 
 const S = {
-  mode: 'text',
+  mode: 'video',
   interest: '',
   roomId: null,
   stranger: null,
@@ -278,10 +278,6 @@ function ensureLobbyCameraPreview() {
 }
 
 function enterLobby() {
-  if (!S.camGranted && S.mode === 'video') {
-    S.mode = 'text';
-    toast('No camera permission yet — defaulting to text mode', '💬');
-  }
   setActiveMode(S.mode);
   showPage('pg-lobby');
   ensureLobbyCameraPreview();
@@ -639,13 +635,6 @@ function initLobbyControls() {
       const newMode = btn.dataset.mode || 'text';
 
       if (newMode === 'video' && !S.camGranted) {
-        // Don't flip S.mode to 'video' yet — that would desync the visible
-        // toggle (still showing 'Text' highlighted) from the internal
-        // state, and if the user backs out without granting permission,
-        // S.mode would be silently stuck on 'video' while every queue
-        // request is built for video mode and never matches a phone/PC
-        // that's actually sitting in the text queue. Only commit to video
-        // mode once permission is confirmed (see requestCameraPermission).
         S.pendingAction = 'match';
         showPage('pg-perm');
         toast('Grant camera access to use video mode', '📹');
