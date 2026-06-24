@@ -815,10 +815,12 @@ a{color:inherit}
   justify-content: center;
 }
 
-/* Uniform 16:9 wrapper — same height on both feeds */
+/* Portrait-friendly wrappers — keep both panes equal, crop desktop webcams into the slot */
 .video-wrapper.remote,
 .video-wrapper.local {
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 4 / 5;
+  min-width: 0;
+  min-height: 0;
 }
 
 #vid-remote,
@@ -827,7 +829,8 @@ a{color:inherit}
   height: 100%;
   display: block;
   background: #121826;
-  object-fit: contain; /* Full feed visible, may letterbox if ratio differs */
+  object-fit: cover; /* Fill the slot; desktop landscape feeds crop cleanly */
+  object-position: center center;
 }
 
 .video-feeds.layout-horizontal{
@@ -870,6 +873,14 @@ a{color:inherit}
   .video-feeds.layout-vertical{
     grid-template-columns:1fr;
     grid-template-rows:repeat(2, minmax(0,1fr));
+  }
+  .video-wrapper.remote,
+  .video-wrapper.local{
+    aspect-ratio: 4 / 5;
+  }
+  #vid-remote,
+  #vid-local{
+    object-fit: contain;
   }
   #vid-local{
     width:100%;
