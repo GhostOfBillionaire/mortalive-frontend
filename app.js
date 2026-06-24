@@ -32,8 +32,6 @@ const S = {
   socket: null,
   pc: null,
   localStream: null,
-  outgoingStream: null,
-  portraitPipeline: null,
   isInitiator: false,
   pendingCandidates: [],
   camGranted: false,
@@ -193,116 +191,6 @@ function toggleVideoLayout() {
   localStorage.setItem('mortalive_video_layout', S.videoLayout);
   applyVideoLayout();
   toast(S.videoLayout === 'horizontal' ? 'Camera layout set to side-by-side' : 'Camera layout set to stacked', '🎬');
-}
-
-const PORTRAIT_TARGET_RATIO = 4 / 5;
-
-function stopPortraitPipeline() {
-  if (!S.portraitPipeline) return;
-
-  const pipeline = S.portraitPipeline;
-  try {
-    if (pipeline.rafId) cancelAnimationFrame(pipeline.rafId);
-  } catch (e) {}
-
-  try {
-    if (pipeline.sourceVideo) {
-      pipeline.sourceVideo.pause?.();
-      pipeline.sourceVideo.srcObject = null;
-      pipeline.sourceVideo.removeAttribute('src');
-      pipeline.sourceVideo.load?.();
-    }
-  } catch (e) {}
-
-  try {
-    if (pipeline.canvasStream) {
-      pipeline.canvasStream.getTracks().forEach((track) => track.stop());
-    }
-  } catch (e) {}
-
-  S.portraitPipeline = null;
-  S.outgoingStream = null;
-}
-
-async function ensurePortraitOutgoingStream(sourceStream) {
-  if (!sourceStream || !sourceStream.active) return null;
-
-  if (
-    S.outgoingStream &&
-    S.portraitPipeline &&
-    S.portraitPipeline.sourceStream === sourceStream &&
-    S.portraitPipeline.canvasStream
-  ) {
-    return S.portraitPipeline.canvasStream;
-  }
-
-  stopPortraitPipeline();
-
-  const sourceVideo = document.createElement('video');
-  sourceVideo.playsInline = true;
-  sourceVideo.autoplay = true;
-  sourceVideo.muted = true;
-  sourceVideo.srcObject = sourceStream;
-
-  await new Promise((resolve) => {
-    const done = () => resolve();
-    sourceVideo.onloadedmetadata = done;
-    sourceVideo.oncanplay = done;
-    sourceVideo.onerror = done;
-  }).catch(() => {});
-
-  try {
-    await sourceVideo.play();
-  } catch (e) {}
-
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d', { alpha: false });
-
-  const setCanvasSize = () => {
-    const baseW = 960;
-    canvas.width = baseW;
-    canvas.height = Math.round(baseW / PORTRAIT_TARGET_RATIO);
-  };
-  setCanvasSize();
-
-  const pipeline = {
-    sourceStream,
-    sourceVideo,
-    canvas,
-    canvasStream: null,
-    rafId: 0
-  };
-
-  const draw = () => {
-    if (sourceVideo.readyState >= 2 && sourceVideo.videoWidth && sourceVideo.videoHeight && ctx) {
-      const vw = sourceVideo.videoWidth;
-      const vh = sourceVideo.videoHeight;
-      const sourceRatio = vw / vh;
-
-      let sx = 0;
-      let sy = 0;
-      let sw = vw;
-      let sh = vh;
-
-      if (sourceRatio > PORTRAIT_TARGET_RATIO) {
-        sw = vh * PORTRAIT_TARGET_RATIO;
-        sx = (vw - sw) / 2;
-      } else {
-        sh = vw / PORTRAIT_TARGET_RATIO;
-        sy = (vh - sh) / 2;
-      }
-
-      ctx.drawImage(sourceVideo, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-    }
-    pipeline.rafId = requestAnimationFrame(draw);
-  };
-  draw();
-
-  const canvasStream = canvas.captureStream(30);
-  pipeline.canvasStream = canvasStream;
-  S.portraitPipeline = pipeline;
-  S.outgoingStream = canvasStream;
-  return canvasStream;
 }
 
 function setActiveMode(mode) {
@@ -1130,11 +1018,7 @@ async function startWebRTC() {
     S.pc = new RTCPeerConnection(ICE_CONFIG);
     S.pendingCandidates = [];
 
-    const portraitStream = await ensurePortraitOutgoingStream(S.localStream);
-    if (portraitStream) {
-      portraitStream.getVideoTracks().forEach((track) => S.pc.addTrack(track, portraitStream));
-    }
-    S.localStream.getAudioTracks().forEach((track) => S.pc.addTrack(track, S.localStream));
+    S.localStream.getTracks().forEach((track) => S.pc.addTrack(track, S.localStream));
 
     S.pc.ontrack = (event) => {
       const remoteVid = $('vid-remote');
@@ -1441,7 +1325,6 @@ function disconnectPeer() {
   const localVid = $('vid-local');
   if (localVid) localVid.style.display = 'none';
 
-  stopPortraitPipeline();
   hideRemoteVideo('Waiting for video…');
   S.pendingCandidates = [];
   S.roomId = null;
