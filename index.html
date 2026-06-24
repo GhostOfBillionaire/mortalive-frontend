@@ -613,28 +613,23 @@ a{color:inherit}
 /* Chat */
 #pg-chat{
   flex-direction:column;
-  padding:8px;
-  gap:8px;
-  height:100dvh;
-  overflow:hidden;
-  overscroll-behavior:none;
+  padding:16px;
+  gap:16px;
 }
 .chat-shell{
-  width:100%;
+  width:min(1180px, 100%);
   margin:0 auto;
-  height:100%;
-  min-height:0;
+  min-height:calc(100dvh - 32px);
   display:flex;
   flex-direction:column;
-  gap:8px;
-  overflow:hidden;
+  gap:16px;
 }
 .chat-topbar{
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:12px;
-  padding:12px 14px;
+  padding:14px 16px;
 }
 .chat-peer{
   display:flex;
@@ -678,19 +673,13 @@ a{color:inherit}
   flex-wrap:wrap;
 }
 .icon-btn{
-  width:auto;
-  height:40px;
-  padding:0 16px;
-  border-radius:999px;
+  width:40px;height:40px;
+  border-radius:50%;
   border:1px solid var(--border);
   background:#fff;
   color:var(--muted);
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  white-space:nowrap;
-  font-weight:700;
-  gap:8px;
+  display:grid;
+  place-items:center;
 }
 .icon-btn:hover{border-color:var(--border-strong);color:var(--text)}
 .icon-btn.danger:hover{border-color:rgba(229,72,77,.35);color:var(--danger)}
@@ -699,116 +688,49 @@ a{color:inherit}
   flex:1;
   min-height:0;
   display:grid;
-  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  grid-template-rows:minmax(0,1fr);
-  gap:8px;
-  overflow:hidden;
-  align-items:stretch;
+  grid-template-columns:minmax(0,1.06fr) minmax(320px,.94fr);
+  gap:16px;
 }
 .video-panel,.chat-panel{
   min-height:0;
-  overflow:hidden;
-  max-height:100%;
 }
 .video-panel{
   display:none;
   flex-direction:column;
   overflow:hidden;
-  min-width:0;
-  height:100%;
 }
 .video-panel.visible{display:flex}
-
-/* ==================== FIXED SQUARE VIDEO FEEDS (Omegle-style) ==================== */
 .video-feeds{
   position:relative;
   flex:1;
   min-height:0;
-  height:100%;
   background:#121826;
   overflow:hidden;
   border-radius:var(--radius);
   border:1px solid var(--border);
   box-shadow:var(--shadow-soft);
-  display:grid;
-  gap:0;
-  align-items:stretch;
-  justify-items:stretch;
 }
-
-.video-wrapper {
-  position: relative;
-  overflow: hidden;
-  background: #000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+#vid-remote{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:none;
+  background:#121826;
 }
-
-/* Square on mobile (best for phones) */
-.video-wrapper.remote,
-.video-wrapper.local {
-  aspect-ratio: 1 / 1;
-}
-
-#vid-remote,
-#vid-local {
-  width: 100%;
-  height: 100%;
-  display: block;
-  background: #121826;
-  object-fit: contain; /* Full view, no cropping */
-}
-
-.video-feeds.layout-horizontal{
-  grid-template-columns: repeat(2,minmax(0,1fr));
-  grid-template-rows:1fr;
-}
-.video-feeds.layout-vertical{
-  grid-template-columns:1fr;
-  grid-template-rows:repeat(2,minmax(0,1fr));
-}
-
-/* Reset positioning */
-.video-feeds.layout-horizontal #vid-remote,
-.video-feeds.layout-horizontal #vid-local,
-.video-feeds.layout-vertical #vid-remote,
-.video-feeds.layout-vertical #vid-local,
-#vid-remote,
-#vid-local {
-  position: relative;
-  inset:auto;
-  min-width:0;
-  min-height:0;
-  border-radius:0;
-}
-
-#vid-local {
+#vid-local{
+  position:absolute;
+  right:12px;
+  bottom:12px;
+  width:128px;
+  height:92px;
+  object-fit:cover;
+  border-radius:14px;
+  border:2px solid rgba(255,255,255,.9);
+  display:none;
   transform:scaleX(-1);
   background:#192232;
+  box-shadow:0 12px 24px rgba(0,0,0,.22);
 }
-
-/* Mobile - make video panel take more space */
-@media (max-width: 720px){
-  #pg-chat{padding:6px; gap:6px;}
-  .chat-body{
-    grid-template-columns:1fr;
-    grid-template-rows:minmax(280px, 55vh) minmax(0,1fr); /* Bigger video area */
-  }
-  .video-panel{height:100%; min-height:280px;}
-  .video-feeds.layout-horizontal,
-  .video-feeds.layout-vertical{
-    grid-template-columns:1fr;
-    grid-template-rows:repeat(2, minmax(0,1fr));
-  }
-  #vid-local{
-    width:110px;
-    height:110px;
-    border-radius:12px;
-  }
-  .video-controls{gap:8px; margin-top:8px;}
-}
-
 .no-video{
   position:absolute;
   inset:0;
@@ -849,18 +771,13 @@ a{color:inherit}
   flex-wrap:wrap;
 }
 .vc-btn{
-  width:auto;
-  height:40px;
-  padding:0 14px;
-  border-radius:999px;
+  width:44px;height:44px;
+  border-radius:50%;
   border:1px solid var(--border);
   background:#fff;
   color:var(--muted);
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  white-space:nowrap;
-  font-weight:700;
+  display:grid;
+  place-items:center;
 }
 .vc-btn.active,.vc-btn:hover{border-color:rgba(24,119,242,.35);color:var(--primary)}
 .vc-btn.off{border-color:rgba(229,72,77,.25);color:var(--danger);background:rgba(229,72,77,.06)}
@@ -873,9 +790,7 @@ a{color:inherit}
 .chat-messages{
   flex:1;
   min-height:0;
-  overflow-y:auto;
-  overflow-x:hidden;
-  overscroll-behavior:contain;
+  overflow:auto;
   padding:16px;
   display:flex;
   flex-direction:column;
@@ -1070,17 +985,160 @@ a{color:inherit}
 @media (max-width: 980px){
   .landing-grid,.perm-inner,.chat-body{grid-template-columns:1fr}
   .hero-card,.consent-card{min-height:auto}
-  .chat-body{gap:8px}
+  .chat-body{gap:14px}
 }
 @media (max-width: 720px){
-  .wrap{width:min(100% - 16px, 1120px)}
+  .wrap{width:min(100% - 20px, 1120px)}
   .hero-card,.consent-card,.lobby-card,.perm-card,.match-card{padding:18px}
   .hero-top,.lobby-head,.chat-topbar{flex-direction:column;align-items:flex-start}
   .lobby-grid{grid-template-columns:1fr}
   .start-row,.modal-row{flex-direction:column}
   .mode-switch{grid-template-columns:1fr}
   .chat-topbar{position:sticky;top:0;z-index:5}
+  #pg-chat{padding:10px}
+  .chat-shell{min-height:calc(100dvh - 20px)}
+  .msg{max-width:94%}
+  .peer-sub{white-space:normal}
+  #vid-local{width:96px;height:72px}
 }
+
+/* Sakura theme overrides — neutral core, blossom atmosphere */
+:root{
+  --sakura:#f3aac7;
+  --sakura-soft:rgba(243,170,199,.16);
+  --sakura-strong:rgba(243,170,199,.28);
+}
+
+.bg{
+  background:
+    radial-gradient(circle at 12% 12%, rgba(243,170,199,.22), transparent 23%),
+    radial-gradient(circle at 86% 14%, rgba(243,170,199,.18), transparent 20%),
+    radial-gradient(circle at 16% 84%, rgba(243,170,199,.14), transparent 24%),
+    radial-gradient(circle at 82% 78%, rgba(243,170,199,.14), transparent 22%),
+    radial-gradient(circle at 50% 8%, rgba(24,119,242,.10), transparent 24%),
+    linear-gradient(180deg, #fbfdff 0%, #eef4fb 100%);
+}
+
+.bg::before,
+.bg::after{
+  content:'';
+  position:fixed;
+  inset:-10%;
+  pointer-events:none;
+  opacity:.55;
+  background-image:
+    radial-gradient(circle at 7% 18%, rgba(243,170,199,.28) 0 3px, transparent 4px),
+    radial-gradient(circle at 20% 14%, rgba(243,170,199,.18) 0 2px, transparent 3px),
+    radial-gradient(circle at 31% 30%, rgba(243,170,199,.16) 0 2px, transparent 3px),
+    radial-gradient(circle at 74% 20%, rgba(243,170,199,.22) 0 3px, transparent 4px),
+    radial-gradient(circle at 89% 33%, rgba(243,170,199,.18) 0 2px, transparent 3px),
+    radial-gradient(circle at 62% 78%, rgba(243,170,199,.14) 0 3px, transparent 4px),
+    radial-gradient(circle at 15% 84%, rgba(243,170,199,.14) 0 3px, transparent 4px);
+  filter: blur(.2px);
+}
+
+.brand-mark{
+  box-shadow:0 10px 26px rgba(24,119,242,.18), 0 0 0 1px rgba(243,170,199,.15);
+}
+
+.card{
+  box-shadow:0 18px 50px rgba(18,28,45,.08), 0 0 0 1px rgba(243,170,199,.05);
+}
+
+.btn-primary{
+  box-shadow:0 12px 30px rgba(24,119,242,.20), 0 0 0 1px rgba(243,170,199,.06);
+}
+
+.preview-box,
+.notice,
+.pill,
+.btn-ghost,
+.feature,
+.mode-switch,
+.permission-item,
+.match-badge,
+.conn-badge,
+.msg-bubble,
+.chat-messages,
+.chat-topbar,
+.lobby-card,
+.perm-card,
+.match-card,
+.auth-card{
+  border-color:rgba(216,222,233,.88);
+}
+
+.hero-title em{
+  color:var(--primary);
+}
+
+.video-panel{
+  position:relative;
+}
+
+.video-panel:fullscreen,
+.video-panel:-webkit-full-screen{
+  width:100vw;
+  height:100dvh;
+  background:#0f1628;
+  padding:12px;
+}
+
+.video-panel:fullscreen .video-feeds,
+.video-panel:-webkit-full-screen .video-feeds{
+  height:100%;
+  min-height:0;
+  flex:1;
+}
+
+.video-panel:fullscreen .video-controls,
+.video-panel:-webkit-full-screen .video-controls{
+  position:absolute;
+  left:12px;
+  right:12px;
+  bottom:max(12px, env(safe-area-inset-bottom));
+  margin-top:0;
+  justify-content:center;
+  gap:8px;
+  z-index:4;
+  padding:10px 12px;
+  border-radius:18px;
+  background:rgba(15,22,40,.78);
+  backdrop-filter:blur(14px);
+  box-shadow:0 18px 45px rgba(0,0,0,.24);
+}
+
+.video-panel:fullscreen .vc-btn,
+.video-panel:-webkit-full-screen .vc-btn{
+  border-color:rgba(255,255,255,.12);
+  background:rgba(255,255,255,.08);
+  color:#fff;
+}
+
+.video-panel:fullscreen .vc-btn.active,
+.video-panel:fullscreen .vc-btn:hover,
+.video-panel:-webkit-full-screen .vc-btn.active,
+.video-panel:-webkit-full-screen .vc-btn:hover{
+  color:#fff;
+  border-color:rgba(255,255,255,.28);
+  background:rgba(255,255,255,.14);
+}
+
+@media (max-width: 720px){
+  .video-panel:fullscreen .video-controls,
+  .video-panel:-webkit-full-screen .video-controls{
+    gap:6px;
+    padding:10px 10px;
+    flex-wrap:wrap;
+  }
+
+  .video-panel:fullscreen .vc-btn,
+  .video-panel:-webkit-full-screen .vc-btn{
+    width:42px;
+    height:42px;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -1382,23 +1440,16 @@ a{color:inherit}
             <div class="big">📹</div>
             <div id="ph-txt">Waiting for video…</div>
           </div>
-          
-          <!-- Square wrappers -->
-          <div class="video-wrapper remote">
-            <video id="vid-remote" autoplay playsinline></video>
-          </div>
-          <div class="video-wrapper local">
-            <video id="vid-local" autoplay playsinline muted></video>
-          </div>
-          
+          <video id="vid-remote" autoplay playsinline></video>
+          <video id="vid-local" autoplay playsinline muted></video>
           <div class="quality" id="quality-bar"><span class="qdot" id="qual-dot"></span><span id="qual-text">HD</span></div>
         </div>
 
         <div class="video-controls">
-          <button class="vc-btn" id="vc-mic" title="Mute microphone">Mic</button>
-          <button class="vc-btn" id="vc-cam" title="Toggle camera">Cam</button>
-          <button class="vc-btn" id="vc-flip" title="Flip local camera">Flip</button>
-          <button class="vc-btn" id="vc-fs" title="Fullscreen">Full</button>
+          <button class="vc-btn" id="vc-mic" title="Mute microphone">🎤</button>
+          <button class="vc-btn" id="vc-cam" title="Toggle camera">📷</button>
+          <button class="vc-btn" id="vc-flip" title="Flip local camera">🔄</button>
+          <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶</button>
         </div>
       </div>
 
@@ -1460,7 +1511,15 @@ a{color:inherit}
   // Set your deployed Railway server URL here (no trailing slash).
   window.MORTALIVE_SERVER_URL = 'https://mortalive-server-production.up.railway.app';
 </script>
+<!--
+  Self-hosted, NOT loaded from a third-party CDN. cdn.socket.io is
+  routinely blocked by Brave's built-in Shields, uBlock Origin, AdGuard,
+  and some corporate/school network filters — silently breaking real-time
+  matching for anyone using those, with no visible error to the user other
+  than "no one is online." Serving this file from your own domain avoids
+  that entire class of problem.
+-->
 <script src="socket.io.min.js"></script>
-<script src="app.js"></script>
+<script src="app_sakura.js"></script>
 </body>
 </html>
