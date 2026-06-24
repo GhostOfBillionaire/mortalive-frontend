@@ -1,1316 +1,1594 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Mortalive — Anonymous chat, simplified</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
-:root{
-  --bg:#f3f5f8;
-  --bg2:#e8edf5;
-  --panel:#ffffff;
-  --panel-soft:#f8fafc;
-  --border:#d8dee9;
-  --border-strong:#c7d0df;
-  --text:#1c2430;
-  --muted:#667084;
-  --muted-2:#8a94a6;
-  --primary:#1877f2;
-  --primary-2:#6d5efc;
-  --primary-soft:rgba(24,119,242,.12);
-  --primary-soft-2:rgba(109,94,252,.12);
-  --danger:#e5484d;
-  --success:#2cb67d;
-  --shadow:0 18px 50px rgba(18, 28, 45, .08);
-  --shadow-soft:0 10px 30px rgba(18, 28, 45, .06);
-  --radius:22px;
-  --radius-sm:14px;
-  --radius-xs:10px;
+/* Mortalive — simplified frontend app
+   Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
+
+const BUILD_TAG = 'mortalive-build-2026-06-22-2'; // bump this string on every deploy to confirm cache is fresh
+
+const SERVER_URL =
+  window.MORTALIVE_SERVER_URL ||
+  (location.hostname === 'localhost'
+    ? 'http://localhost:3001'
+    : 'https://mortalive-server-production.up.railway.app');
+
+console.log(`[Mortalive] ${BUILD_TAG} loaded`);
+console.log(`[Mortalive] SERVER_URL = ${SERVER_URL}`);
+console.log(`[Mortalive] Socket.io client ${typeof io === 'undefined' ? 'NOT LOADED ✗' : 'loaded ✓'}`);
+
+const ICE_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+  ]
+};
+
+const S = {
+  mode: 'video',
+  interest: '',
+  roomId: null,
+  stranger: null,
+  socket: null,
+  pc: null,
+  localStream: null,
+  outgoingStream: null,
+  portraitPipeline: null,
+  isInitiator: false,
+  pendingCandidates: [],
+  camGranted: false,
+  micMuted: false,
+  camOff: false,
+  onlineCount: 2847,
+  onlineTimerStarted: false,
+  pendingAction: null,
+  replyTimer: null,
+  demoActive: false,
+  // identity
+  authToken: localStorage.getItem('mortalive_token') || null,
+  username: localStorage.getItem('mortalive_username') || null,
+  magnetScore: null,
+  isGuest: true,
+  guestName: localStorage.getItem('mortalive_guest_name') || '',
+  videoLayout: (function () {
+    const raw = localStorage.getItem('mortalive_video_layout') || localStorage.getItem('mortalive_local_video_shape') || 'horizontal';
+    const v = String(raw).toLowerCase();
+    if (['vertical', 'stack', 'stacked', 'portrait', 'square'].includes(v)) return 'vertical';
+    return 'horizontal';
+  })()
+};
+
+const strangerPool = [
+  { name: 'Nova_82', score: 310, emoji: '🦊' },
+  { name: 'Theorist_X', score: 520, emoji: '🎭' },
+  { name: 'Mira_Glow', score: 88, emoji: '🌸' },
+  { name: 'Static_J', score: 205, emoji: '⚡' },
+  { name: 'DuskRider', score: 445, emoji: '🌙' },
+  { name: 'Cipher_9', score: 731, emoji: '🔮' },
+  { name: 'SunKid', score: 62, emoji: '☀️' },
+  { name: 'Nox_V', score: 890, emoji: '🖤' }
+];
+
+const autoReplies = [
+  'haha fr though 😂',
+  'okay that’s actually a good point',
+  'wait what do you do?',
+  'tbh I’ve been thinking about that too',
+  'lmao no way',
+  'that’s lowkey wild',
+  'okay so hear me out…',
+  'depends on what you mean',
+  'I feel like most people don’t realize',
+  'nah I disagree but I respect it',
+  'go on…',
+  'that reminds me of something',
+  'honestly same',
+  'ooh controversial 👀',
+  'solid point ngl',
+  'wait explain that more',
+  'no way lol',
+  'that’s actually kinda scary',
+  'based',
+  'wait are you serious?'
+];
+
+function $(id) {
+  return document.getElementById(id);
 }
 
-*{box-sizing:border-box}
-html,body{margin:0;min-height:100%;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
-body{min-height:100dvh}
-button,input{font:inherit}
-button{cursor:pointer}
-a{color:inherit}
-
-::-webkit-scrollbar{width:10px;height:10px}
-::-webkit-scrollbar-thumb{background:#c8d0dc;border-radius:99px;border:2px solid transparent;background-clip:content-box}
-::-webkit-scrollbar-track{background:transparent}
-
-.page{
-  display:none;
-  min-height:100dvh;
-  width:100%;
-  position:relative;
-}
-.page.active{display:flex}
-
-.bg{
-  position:fixed;
-  inset:0;
-  pointer-events:none;
-  background:
-    radial-gradient(circle at 10% 10%, rgba(24,119,242,.12), transparent 30%),
-    radial-gradient(circle at 90% 90%, rgba(109,94,252,.10), transparent 28%),
-    linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
-  z-index:0;
-}
-
-.wrap{
-  position:relative;
-  z-index:1;
-  width:min(1120px, calc(100% - 32px));
-  margin:auto;
-  padding:24px 0;
-}
-
-/* Brand */
-.brand{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  font-weight:800;
-  letter-spacing:-0.04em;
-}
-.brand-mark{
-  width:34px;height:34px;border-radius:50%;
-  background:linear-gradient(135deg,var(--primary),var(--primary-2));
-  display:grid;place-items:center;
-  color:#fff;
-  box-shadow:0 10px 26px rgba(24,119,242,.22);
-  flex:none;
-  position:relative;
-}
-.brand-mark::after{
-  content:'';
-  width:10px;height:10px;border-radius:50%;
-  background:#fff;
-  opacity:.95;
-}
-.brand-name{
-  font-size:22px;
-}
-.brand-sub{
-  font-size:12px;
-  color:var(--muted);
-  letter-spacing:.14em;
-  text-transform:uppercase;
-  margin-top:2px;
-}
-
-/* Shared cards */
-.card{
-  background:rgba(255,255,255,.88);
-  backdrop-filter:blur(14px);
-  border:1px solid rgba(216,222,233,.9);
-  border-radius:var(--radius);
-  box-shadow:var(--shadow);
-}
-
-.btn{
-  border:0;
-  border-radius:14px;
-  padding:14px 18px;
-  font-weight:700;
-  transition:transform .18s ease, box-shadow .18s ease, opacity .18s ease, background .18s ease, border-color .18s ease;
-}
-.btn:hover{transform:translateY(-1px)}
-.btn:disabled{cursor:not-allowed;opacity:.45;transform:none}
-
-.btn-primary{
-  background:linear-gradient(135deg,var(--primary),var(--primary-2));
-  color:#fff;
-  box-shadow:0 12px 30px rgba(24,119,242,.22);
-}
-.btn-primary:hover{box-shadow:0 14px 34px rgba(24,119,242,.28)}
-
-.btn-ghost{
-  background:#fff;
-  border:1px solid var(--border);
-  color:var(--text);
-}
-.btn-ghost:hover{border-color:var(--border-strong)}
-
-.pill{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding:8px 14px;
-  border-radius:999px;
-  background:#fff;
-  border:1px solid var(--border);
-  color:var(--muted);
-  font-size:12px;
-  font-weight:600;
-}
-
-/* Landing */
-#pg-land{
-  align-items:center;
-  justify-content:center;
-  padding:20px 0;
-}
-.landing-grid{
-  display:grid;
-  grid-template-columns:1.08fr .92fr;
-  gap:18px;
-  align-items:stretch;
-}
-.hero-card{
-  padding:30px;
-  display:flex;
-  flex-direction:column;
-  justify-content:space-between;
-  min-height:540px;
-}
-.hero-top{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:16px;
-}
-.hero-copy{
-  max-width:560px;
-  padding-top:10px;
-}
-.hero-kicker{
-  margin-bottom:18px;
-}
-.hero-title{
-  margin:0;
-  font-size:clamp(32px, 4.4vw, 58px);
-  line-height:1.03;
-  letter-spacing:-0.06em;
-}
-.hero-title em{
-  font-style:normal;
-  color:var(--primary);
-}
-.hero-text{
-  margin:18px 0 0;
-  color:var(--muted);
-  font-size:16px;
-  line-height:1.7;
-  max-width:50ch;
-}
-.feature-row{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-  margin-top:22px;
-}
-.feature{
-  padding:10px 12px;
-  border-radius:999px;
-  background:var(--panel-soft);
-  border:1px solid var(--border);
-  font-size:13px;
-  color:var(--text);
-  font-weight:600;
-}
-.hero-foot{
-  margin-top:26px;
-  display:flex;
-  gap:12px;
-  flex-wrap:wrap;
-}
-.hero-visual{
-  margin-top:26px;
-  display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:12px;
-}
-.preview-box{
-  border-radius:18px;
-  border:1px solid var(--border);
-  background:
-    linear-gradient(180deg, rgba(24,119,242,.08), rgba(255,255,255,.92)),
-    #fff;
-  padding:18px;
-  min-height:120px;
-  display:flex;
-  flex-direction:column;
-  justify-content:space-between;
-}
-.preview-box strong{font-size:16px}
-.preview-box span{color:var(--muted);font-size:13px;line-height:1.5}
-.preview-box.blue{
-  background:
-    linear-gradient(180deg, rgba(24,119,242,.13), rgba(255,255,255,.92)),
-    #fff;
-}
-.preview-box.lav{
-  background:
-    linear-gradient(180deg, rgba(109,94,252,.11), rgba(255,255,255,.92)),
-    #fff;
-}
-
-.consent-card{
-  padding:28px;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  min-height:540px;
-}
-.consent-head{
-  margin-bottom:18px;
-}
-.consent-title{
-  margin:12px 0 8px;
-  font-size:28px;
-  line-height:1.08;
-  letter-spacing:-0.05em;
-}
-.consent-sub{
-  margin:0;
-  color:var(--muted);
-  line-height:1.65;
-  font-size:15px;
-}
-.notice{
-  margin-top:16px;
-  padding:12px 14px;
-  border-radius:14px;
-  background:var(--panel-soft);
-  border:1px solid var(--border);
-  color:var(--muted);
-  font-size:13px;
-  line-height:1.6;
-}
-.notice b{color:var(--text)}
-.toggle{
-  margin-top:18px;
-  padding:16px;
-  border-radius:16px;
-  border:1px solid var(--border);
-  background:#fff;
-  display:flex;
-  align-items:flex-start;
-  gap:12px;
-  cursor:pointer;
-  user-select:none;
-}
-.toggle input{
-  position:absolute;
-  opacity:0;
-  pointer-events:none;
-}
-.toggle-ui{
-  width:22px;height:22px;border-radius:7px;
-  border:1.8px solid var(--border-strong);
-  background:#fff;
-  flex:none;
-  display:grid;
-  place-items:center;
-  transition:all .18s ease;
-  margin-top:1px;
-}
-.toggle input:checked + .toggle-ui{
-  background:linear-gradient(135deg,var(--primary),var(--primary-2));
-  border-color:transparent;
-}
-.toggle input:checked + .toggle-ui::after{
-  content:'✓';
-  color:#fff;
-  font-size:13px;
-  font-weight:800;
-}
-.toggle-text{
-  font-size:14px;
-  line-height:1.55;
-  color:var(--muted);
-}
-.toggle-text b{color:var(--text)}
-.enter-row{
-  margin-top:18px;
-  display:flex;
-  gap:12px;
-}
-.btn-wide{width:100%;padding:15px 18px}
-.small-links{
-  margin-top:14px;
-  font-size:12px;
-  color:var(--muted-2);
-  line-height:1.6;
-}
-
-/* Permission */
-#pg-perm{
-  align-items:center;
-  justify-content:center;
-  padding:24px 0;
-}
-.perm-card{
-  width:min(680px, calc(100% - 32px));
-  padding:24px;
-}
-.perm-inner{
-  display:grid;
-  grid-template-columns:1.05fr .95fr;
-  gap:18px;
-  align-items:stretch;
-}
-.perm-video-card{
-  border-radius:18px;
-  overflow:hidden;
-  border:1px solid var(--border);
-  background:#f7f9fc;
-  min-height:330px;
-  position:relative;
-}
-#perm-video{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  display:block;
-  transform:scaleX(-1);
-  background:#dfe6f1;
-}
-.perm-overlay{
-  position:absolute;
-  inset:0;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  gap:10px;
-  color:var(--muted-2);
-  text-align:center;
-  padding:20px;
-}
-.perm-overlay .icon{
-  width:68px;height:68px;border-radius:50%;
-  background:#fff;
-  border:1px solid var(--border);
-  display:grid;place-items:center;
-  font-size:28px;
-  box-shadow:var(--shadow-soft);
-}
-.status-chip{
-  position:absolute;
-  left:12px;bottom:12px;
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding:8px 12px;
-  border-radius:999px;
-  background:rgba(255,255,255,.9);
-  border:1px solid rgba(216,222,233,.95);
-  font-size:12px;
-  color:var(--muted);
-}
-.dot{
-  width:8px;height:8px;border-radius:50%;
-  background:var(--muted-2);
-}
-.dot.ok{background:var(--success)}
-.dot.bad{background:var(--danger)}
-.perm-copy{
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-}
-.perm-copy h2{
-  margin:0;
-  font-size:26px;
-  letter-spacing:-0.05em;
-}
-.perm-copy p{
-  margin:12px 0 0;
-  color:var(--muted);
-  line-height:1.65;
-}
-.permission-list{
-  margin-top:16px;
-  display:grid;
-  gap:10px;
-}
-.permission-item{
-  display:flex;
-  gap:10px;
-  align-items:center;
-  padding:12px 14px;
-  border-radius:14px;
-  border:1px solid var(--border);
-  background:#fff;
-  color:var(--muted);
-}
-.permission-item strong{color:var(--text)}
-.permission-item .badge{
-  margin-left:auto;
-  font-size:12px;
-  font-weight:700;
-}
-.badge.ok{color:var(--success)}
-.badge.warn{color:var(--primary)}
-.perm-actions{
-  margin-top:18px;
-  display:flex;
-  gap:12px;
-  flex-wrap:wrap;
-}
-
-/* Lobby */
-#pg-lobby{
-  align-items:center;
-  justify-content:center;
-  padding:24px 0;
-}
-.lobby-card{
-  width:min(720px, calc(100% - 32px));
-  padding:22px;
-}
-.lobby-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:14px;
-  margin-bottom:18px;
-}
-.mini-copy{
-  color:var(--muted);
-  font-size:13px;
-  line-height:1.6;
-  margin-top:8px;
-  max-width:62ch;
-}
-.mode-switch{
-  display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:8px;
-  margin-top:18px;
-  padding:6px;
-  border-radius:16px;
-  background:#eef2f8;
-  border:1px solid var(--border);
-}
-.mode-btn{
-  border:0;
-  border-radius:12px;
-  padding:13px 14px;
-  background:transparent;
-  color:var(--muted);
-  font-weight:700;
-}
-.mode-btn.active{
-  background:#fff;
-  color:var(--text);
-  box-shadow:0 6px 16px rgba(18,28,45,.06);
-}
-.lobby-grid{
-  margin-top:18px;
-  display:grid;
-  grid-template-columns:1fr auto;
-  gap:12px;
-  align-items:end;
-}
-.field label{
-  display:block;
-  font-size:12px;
-  color:var(--muted);
-  margin-bottom:8px;
-  font-weight:700;
-  letter-spacing:.04em;
-  text-transform:uppercase;
-}
-.field input{
-  width:100%;
-  padding:14px 15px;
-  border-radius:14px;
-  border:1px solid var(--border);
-  background:#fff;
-  color:var(--text);
-  outline:none;
-}
-.field input:focus{border-color:rgba(24,119,242,.45);box-shadow:0 0 0 4px rgba(24,119,242,.08)}
-.help-row{
-  margin-top:10px;
-  display:flex;
-  justify-content:space-between;
-  gap:10px;
-  color:var(--muted-2);
-  font-size:12px;
-  flex-wrap:wrap;
-}
-.live-line{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  color:var(--muted);
-  font-size:13px;
-}
-.live-dot{
-  width:9px;height:9px;border-radius:50%;
-  background:var(--success);
-  box-shadow:0 0 0 6px rgba(44,182,125,.12);
-}
-.start-row{
-  margin-top:18px;
-  display:flex;
-  gap:12px;
-}
-
-/* Matching */
-#pg-match{
-  align-items:center;
-  justify-content:center;
-  padding:24px 0;
-}
-.match-card{
-  width:min(420px, calc(100% - 32px));
-  padding:28px 24px;
-  text-align:center;
-}
-.spinner{
-  width:88px;
-  height:88px;
-  border-radius:50%;
-  margin:0 auto 18px;
-  border:4px solid #dfe6f1;
-  border-top-color:var(--primary);
-  border-right-color:var(--primary-2);
-  animation:spin 1s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg)}}
-.match-title{
-  margin:0;
-  font-size:24px;
-  letter-spacing:-.05em;
-}
-.match-sub{
-  margin:10px 0 0;
-  color:var(--muted);
-  line-height:1.6;
-}
-.match-badge{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  margin-top:16px;
-  padding:9px 14px;
-  border-radius:999px;
-  background:#fff;
-  border:1px solid var(--border);
-  color:var(--muted);
-  font-size:12px;
-}
-
-/* Chat */
-#pg-chat{
-  flex-direction:column;
-  padding:16px;
-  gap:16px;
-}
-.chat-shell{
-  width:min(1180px, 100%);
-  margin:0 auto;
-  min-height:calc(100dvh - 32px);
-  display:flex;
-  flex-direction:column;
-  gap:16px;
-}
-.chat-topbar{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  padding:14px 16px;
-}
-.chat-peer{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  min-width:0;
-}
-.peer-ava{
-  width:42px;height:42px;border-radius:50%;
-  display:grid;place-items:center;
-  background:linear-gradient(135deg,var(--primary),var(--primary-2));
-  color:#fff;
-  font-size:18px;
-  flex:none;
-  box-shadow:0 10px 24px rgba(24,119,242,.20);
-}
-.peer-meta{min-width:0}
-.peer-name{font-size:15px;font-weight:800;line-height:1.1}
-.peer-sub{font-size:12px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.conn-badge{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding:8px 12px;
-  border-radius:999px;
-  background:#fff;
-  border:1px solid var(--border);
-  color:var(--muted);
-  font-size:12px;
-  font-weight:600;
-}
-.conn-dot{
-  width:8px;height:8px;border-radius:50%;
-  background:#f0b429;
-}
-.conn-dot.connected{background:var(--success)}
-.conn-dot.failed{background:var(--danger)}
-.top-actions{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-}
-.icon-btn{
-  width:40px;height:40px;
-  border-radius:50%;
-  border:1px solid var(--border);
-  background:#fff;
-  color:var(--muted);
-  display:grid;
-  place-items:center;
-}
-.icon-btn:hover{border-color:var(--border-strong);color:var(--text)}
-.icon-btn.danger:hover{border-color:rgba(229,72,77,.35);color:var(--danger)}
-
-.chat-body{
-  flex:1;
-  min-height:0;
-  display:grid;
-  grid-template-columns:minmax(0,1.06fr) minmax(320px,.94fr);
-  gap:16px;
-}
-.video-panel,.chat-panel{
-  min-height:0;
-}
-.video-panel{
-  display:none;
-  flex-direction:column;
-  overflow:hidden;
-}
-.video-panel.visible{display:flex}
-.video-feeds{
-  position:relative;
-  flex:1;
-  min-height:0;
-  background:#121826;
-  overflow:hidden;
-  border-radius:var(--radius);
-  border:1px solid var(--border);
-  box-shadow:var(--shadow-soft);
-  display:flex;
-  flex-direction:row;
-  gap:0;
-}
-/* Uniform 16:9 wrapper — forces identical height on both feeds
-   regardless of each camera's native aspect ratio */
-.camera-wrapper{
-  flex:1;
-  aspect-ratio:16/9;
-  overflow:hidden;
-  background:#121826;
-  position:relative;
-}
-.camera-wrapper video{
-  width:100%;
-  height:100%;
-  object-fit:cover; /* fills container, crops edges on ratio mismatch */
-  display:block;
-}
-/* Mirror own camera */
-#wrapper-local video{
-  transform:scaleX(-1);
-}
-/* Separator line between the two feeds */
-#wrapper-remote{
-  border-right:1px solid rgba(255,255,255,.06);
-}
-/* Legacy selectors — JS still targets these for srcObject */
-#vid-remote{ background:#121826; }
-#vid-local{  background:#192232; }
-/* Mobile: stack feeds vertically with a portrait frame */
-@media(max-width:720px){
-  .video-feeds{ flex-direction:column; }
-  .camera-wrapper{
-    width:100%;
-    aspect-ratio:9/16;
-    background:#121826;
-    border:1px solid rgba(255,255,255,.08);
-    border-radius:18px;
-  }
-  .camera-wrapper video{
-    object-fit:contain;
-    background:#121826;
+function ready(fn) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', fn, { once: true });
+  } else {
+    fn();
   }
 }
-.no-video{
-  position:absolute;
-  inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  flex-direction:column;
-  gap:10px;
-  color:#d5def0;
-  text-align:center;
-  padding:18px;
-}
-.no-video .big{
-  width:72px;height:72px;border-radius:50%;
-  display:grid;place-items:center;
-  background:rgba(255,255,255,.08);
-  font-size:30px;
-}
-.quality{
-  position:absolute;
-  left:12px;
-  top:12px;
-  display:none;
-  align-items:center;
-  gap:8px;
-  padding:7px 11px;
-  border-radius:999px;
-  background:rgba(18,24,38,.7);
-  color:#fff;
-  font-size:12px;
-  backdrop-filter:blur(10px);
-}
-.quality .qdot{width:8px;height:8px;border-radius:50%;background:var(--success)}
-.video-controls{
-  margin-top:12px;
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-}
-.vc-btn{
-  width:44px;height:44px;
-  border-radius:50%;
-  border:1px solid var(--border);
-  background:#fff;
-  color:var(--muted);
-  display:grid;
-  place-items:center;
-}
-.vc-btn.active,.vc-btn:hover{border-color:rgba(24,119,242,.35);color:var(--primary)}
-.vc-btn.off{border-color:rgba(229,72,77,.25);color:var(--danger);background:rgba(229,72,77,.06)}
 
-.chat-panel{
-  display:flex;
-  flex-direction:column;
-  overflow:hidden;
-}
-.chat-messages{
-  flex:1;
-  min-height:0;
-  overflow:auto;
-  padding:16px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  background:#fff;
-  border:1px solid var(--border);
-  border-radius:var(--radius);
-  box-shadow:var(--shadow-soft);
-}
-.sys-line{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  color:var(--muted-2);
-  font-size:12px;
-  padding:4px 0;
-}
-.sys-line::before,.sys-line::after{
-  content:'';
-  height:1px;
-  flex:1;
-  background:var(--border);
-}
-.msg{
-  display:flex;
-  gap:10px;
-  max-width:84%;
-  align-self:flex-start;
-}
-.msg.me{
-  align-self:flex-end;
-  flex-direction:row-reverse;
-}
-.msg-ava{
-  width:30px;height:30px;border-radius:50%;
-  display:grid;place-items:center;
-  background:#eef3fb;
-  border:1px solid var(--border);
-  flex:none;
-  font-size:13px;
-}
-.msg.me .msg-ava{
-  background:linear-gradient(135deg,var(--primary),var(--primary-2));
-  color:#fff;
-  border-color:transparent;
-}
-.msg-bubble{
-  padding:11px 14px;
-  border-radius:16px 16px 16px 5px;
-  border:1px solid var(--border);
-  background:var(--panel-soft);
-  color:var(--text);
-  line-height:1.55;
-  font-size:14px;
-  word-break:break-word;
-}
-.msg.me .msg-bubble{
-  background:var(--primary-soft);
-  border-color:rgba(24,119,242,.22);
-  border-radius:16px 16px 5px 16px;
-}
-.msg-time{
-  margin-top:4px;
-  font-size:10px;
-  color:var(--muted-2);
-  text-align:right;
-}
-.chat-input{
-  margin-top:12px;
-  display:flex;
-  gap:10px;
-}
-.chat-input input{
-  flex:1;
-  border:1px solid var(--border);
-  border-radius:16px;
-  padding:14px 16px;
-  background:#fff;
-  outline:none;
-}
-.chat-input input:focus{border-color:rgba(24,119,242,.45);box-shadow:0 0 0 4px rgba(24,119,242,.08)}
-.send-btn{
-  width:52px;
-  border-radius:16px;
-  padding:0;
+function showPage(id) {
+  document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
+  const page = $(id);
+  if (page) page.classList.add('active');
+  window.scrollTo(0, 0);
 }
 
-/* Modal / Sheet */
-.overlay{
-  display:none;
-  position:fixed;
-  inset:0;
-  background:rgba(9,14,22,.56);
-  backdrop-filter:blur(10px);
-  z-index:100;
-  padding:18px;
-  align-items:center;
-  justify-content:center;
+function toast(msg, icon = '✅') {
+  let root = $('toast-root');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'toast-root';
+    document.body.appendChild(root);
+  }
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = `${icon} ${msg}`;
+  root.appendChild(el);
+  setTimeout(() => (el.style.opacity = '0'), 2400);
+  setTimeout(() => el.remove(), 2800);
 }
-.overlay.open{display:flex}
-.modal{
-  width:min(420px,100%);
-  background:#fff;
-  border:1px solid var(--border);
-  border-radius:22px;
-  box-shadow:var(--shadow);
-  padding:24px;
-  text-align:center;
-}
-.modal-ico{font-size:40px}
-.modal-title{font-size:22px;letter-spacing:-.05em;margin-top:8px}
-.modal-sub{color:var(--muted);line-height:1.6;margin:10px 0 18px}
-.stars,.vibes{
-  display:flex;
-  gap:8px;
-  justify-content:center;
-  flex-wrap:wrap;
-}
-.star,.vibe{
-  border:1px solid var(--border);
-  background:#fff;
-  border-radius:999px;
-  padding:8px 12px;
-  color:var(--muted);
-  font-size:13px;
-  cursor:pointer;
-}
-.star.lit,.vibe.on{
-  border-color:rgba(24,119,242,.26);
-  background:var(--primary-soft);
-  color:var(--text);
-}
-.modal-row{
-  display:flex;
-  gap:10px;
-  margin-top:18px;
-}
-.modal-row .btn{flex:1}
-.sheet-overlay{
-  display:none;
-  position:fixed;
-  inset:0;
-  background:rgba(9,14,22,.56);
-  backdrop-filter:blur(10px);
-  z-index:90;
-  padding:18px;
-  align-items:flex-end;
-  justify-content:center;
-}
-.sheet-overlay.open{display:flex}
-.sheet{
-  width:min(500px,100%);
-  background:#fff;
-  border:1px solid var(--border);
-  border-radius:24px 24px 18px 18px;
-  box-shadow:var(--shadow);
-  padding:22px;
-  max-height:82vh;
-  overflow:auto;
-}
-.sheet-handle{
-  width:38px;height:4px;border-radius:99px;
-  background:#dde4ee;
-  margin:0 auto 18px;
-}
-.toast-root{
-  position:fixed;
-  left:50%;
-  bottom:22px;
-  transform:translateX(-50%);
-  z-index:120;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  align-items:center;
-  pointer-events:none;
-}
-.toast{
-  background:#fff;
-  border:1px solid var(--border);
-  border-radius:999px;
-  padding:11px 16px;
-  box-shadow:var(--shadow-soft);
-  color:var(--text);
-  font-size:13px;
-  white-space:nowrap;
-  animation:toastIn .18s ease-out;
-}
-@keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
-/* Responsive */
-@media (max-width: 980px){
-  .landing-grid,.perm-inner,.chat-body{grid-template-columns:1fr}
-  .hero-card,.consent-card{min-height:auto}
-  .chat-body{gap:14px}
+function fmtTime() {
+  const d = new Date();
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
-@media (max-width: 720px){
-  .wrap{width:min(100% - 20px, 1120px)}
-  .hero-card,.consent-card,.lobby-card,.perm-card,.match-card{padding:18px}
-  .hero-top,.lobby-head,.chat-topbar{flex-direction:column;align-items:flex-start}
-  .lobby-grid{grid-template-columns:1fr}
-  .start-row,.modal-row{flex-direction:column}
-  .mode-switch{grid-template-columns:1fr}
-  .chat-topbar{position:sticky;top:0;z-index:5}
-  #pg-chat{padding:10px}
-  .chat-shell{min-height:calc(100dvh - 20px)}
-  .msg{max-width:94%}
-  .peer-sub{white-space:normal}
-  #vid-remote,#vid-local{
-    width:100%;
-    height:100%;
+
+function setText(id, value) {
+  const el = $(id);
+  if (el) el.textContent = value;
+}
+
+function setCallStatus(state, label) {
+  ['conn-dot', 'call-dot'].forEach((id) => {
+    const el = $(id);
+    if (el) el.className = `cbd ${state}`;
+  });
+  ['conn-text', 'call-text'].forEach((id) => {
+    const el = $(id);
+    if (el) el.textContent = label;
+  });
+}
+
+function updateOnlineCount() {
+  const el = $('online-n') || $('online-count') || $('online-users');
+  if (el) el.textContent = S.onlineCount.toLocaleString();
+  const mc = $('match-count');
+  if (mc) mc.textContent = S.onlineCount.toLocaleString();
+}
+
+function isCompactViewport() {
+  return window.matchMedia('(max-width: 720px)').matches;
+}
+
+function getEffectiveVideoLayout() {
+  if (isCompactViewport()) return 'vertical';
+  return S.videoLayout === 'vertical' ? 'vertical' : 'horizontal';
+}
+
+function syncVideoPanelButton(forcedLayout) {
+  const btn = $('vc-layout');
+  if (!btn) return;
+  const layout = forcedLayout || getEffectiveVideoLayout();
+  const isHorizontal = layout === 'horizontal';
+  btn.textContent = isHorizontal ? 'Layout: Side' : 'Layout: Stack';
+  btn.title = isHorizontal ? 'Switch to stacked layout' : 'Switch to side-by-side layout';
+  btn.disabled = isCompactViewport();
+}
+
+function applyVideoLayout() {
+  const feeds = $('video-feeds');
+  const layout = getEffectiveVideoLayout();
+  if (feeds) {
+    feeds.classList.toggle('layout-horizontal', layout === 'horizontal');
+    feeds.classList.toggle('layout-vertical', layout === 'vertical');
+  }
+  syncVideoPanelButton(layout);
+}
+
+function toggleVideoLayout() {
+  if (isCompactViewport()) {
+    applyVideoLayout();
+    toast('Phone stays in stacked layout', '📱');
+    return;
+  }
+  S.videoLayout = getEffectiveVideoLayout() === 'horizontal' ? 'vertical' : 'horizontal';
+  localStorage.setItem('mortalive_video_layout', S.videoLayout);
+  applyVideoLayout();
+  toast(S.videoLayout === 'horizontal' ? 'Camera layout set to side-by-side' : 'Camera layout set to stacked', '🎬');
+}
+
+const PORTRAIT_TARGET_RATIO = 4 / 5;
+
+function stopPortraitPipeline() {
+  if (!S.portraitPipeline) return;
+
+  const pipeline = S.portraitPipeline;
+  try {
+    if (pipeline.rafId) cancelAnimationFrame(pipeline.rafId);
+  } catch (e) {}
+
+  try {
+    if (pipeline.sourceVideo) {
+      pipeline.sourceVideo.pause?.();
+      pipeline.sourceVideo.srcObject = null;
+      pipeline.sourceVideo.removeAttribute('src');
+      pipeline.sourceVideo.load?.();
+    }
+  } catch (e) {}
+
+  try {
+    if (pipeline.canvasStream) {
+      pipeline.canvasStream.getTracks().forEach((track) => track.stop());
+    }
+  } catch (e) {}
+
+  S.portraitPipeline = null;
+  S.outgoingStream = null;
+}
+
+async function ensurePortraitOutgoingStream(sourceStream) {
+  if (!sourceStream || !sourceStream.active) return null;
+
+  if (
+    S.outgoingStream &&
+    S.portraitPipeline &&
+    S.portraitPipeline.sourceStream === sourceStream &&
+    S.portraitPipeline.canvasStream
+  ) {
+    return S.portraitPipeline.canvasStream;
+  }
+
+  stopPortraitPipeline();
+
+  const sourceVideo = document.createElement('video');
+  sourceVideo.playsInline = true;
+  sourceVideo.autoplay = true;
+  sourceVideo.muted = true;
+  sourceVideo.srcObject = sourceStream;
+
+  await new Promise((resolve) => {
+    const done = () => resolve();
+    sourceVideo.onloadedmetadata = done;
+    sourceVideo.oncanplay = done;
+    sourceVideo.onerror = done;
+  }).catch(() => {});
+
+  try {
+    await sourceVideo.play();
+  } catch (e) {}
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  const setCanvasSize = () => {
+    const baseW = 960;
+    canvas.width = baseW;
+    canvas.height = Math.round(baseW / PORTRAIT_TARGET_RATIO);
+  };
+  setCanvasSize();
+
+  const pipeline = {
+    sourceStream,
+    sourceVideo,
+    canvas,
+    canvasStream: null,
+    rafId: 0
+  };
+
+  const draw = () => {
+    if (sourceVideo.readyState >= 2 && sourceVideo.videoWidth && sourceVideo.videoHeight && ctx) {
+      const vw = sourceVideo.videoWidth;
+      const vh = sourceVideo.videoHeight;
+      const sourceRatio = vw / vh;
+
+      let sx = 0;
+      let sy = 0;
+      let sw = vw;
+      let sh = vh;
+
+      if (sourceRatio > PORTRAIT_TARGET_RATIO) {
+        sw = vh * PORTRAIT_TARGET_RATIO;
+        sx = (vw - sw) / 2;
+      } else {
+        sh = vw / PORTRAIT_TARGET_RATIO;
+        sy = (vh - sh) / 2;
+      }
+
+      ctx.drawImage(sourceVideo, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    }
+    pipeline.rafId = requestAnimationFrame(draw);
+  };
+  draw();
+
+  const canvasStream = canvas.captureStream(30);
+  pipeline.canvasStream = canvasStream;
+  S.portraitPipeline = pipeline;
+  S.outgoingStream = canvasStream;
+  return canvasStream;
+}
+
+function setActiveMode(mode) {
+  S.mode = mode === 'video' ? 'video' : 'text';
+  document.querySelectorAll('.mode-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.mode === S.mode);
+  });
+  const modeLabel = $('mode-label');
+  if (modeLabel) modeLabel.textContent = S.mode === 'video' ? 'Video' : 'Text';
+}
+
+function setPrimaryButtonsEnabled(enabled) {
+  ['btn-enter', 'btn-start-text', 'btn-start-video', 'btn-start'].forEach((id) => {
+    const btn = $(id);
+    if (!btn) return;
+    btn.disabled = !enabled;
+    btn.classList.toggle('ready', enabled);
+  });
+}
+
+function updateConsentState() {
+  // Real <input type="checkbox" id="landing-consent"> used in the current HTML
+  const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
+  const oldChecks = ['c1', 'c2', 'c3'].map((id) => $(id)).filter(Boolean);
+
+  if (terms) {
+    setPrimaryButtonsEnabled(!!terms.checked);
+    return;
+  }
+
+  if (oldChecks.length === 3) {
+    const all = oldChecks.every((box) => box.classList.contains('on'));
+    setPrimaryButtonsEnabled(all);
+    return;
+  }
+
+  setPrimaryButtonsEnabled(true);
+}
+
+function initConsentGate() {
+  const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
+
+  if (terms) {
+    terms.addEventListener('change', updateConsentState);
+    updateConsentState();
+    return;
+  }
+
+  const ids = ['c1', 'c2', 'c3'];
+  const boxes = ids.map((id) => $(id));
+  if (boxes.every(Boolean)) {
+    const checks = { c1: false, c2: false, c3: false };
+    ids.forEach((id) => {
+      const box = $(id);
+      const row = box && box.closest('.chk-row');
+      if (!row) return;
+      row.addEventListener('click', () => {
+        checks[id] = !checks[id];
+        box.classList.toggle('on', checks[id]);
+        const all = Object.values(checks).every(Boolean);
+        setPrimaryButtonsEnabled(all);
+      });
+    });
+  }
+
+  updateConsentState();
+}
+
+function startOnlineCounter() {
+  if (S.onlineTimerStarted) return;
+  S.onlineTimerStarted = true;
+  updateOnlineCount();
+  setInterval(() => {
+    S.onlineCount += Math.floor(Math.random() * 22) - 11;
+    S.onlineCount = Math.max(1500, Math.min(6000, S.onlineCount));
+    updateOnlineCount();
+  }, 3500);
+}
+
+function ensureLobbyCameraPreview() {
+  const preview = $('lobby-cam-preview');
+  if (preview && S.localStream) preview.srcObject = S.localStream;
+  const strip = $('cam-strip');
+  if (strip && S.localStream) strip.classList.add('visible');
+}
+
+function enterLobby() {
+  setActiveMode(S.mode);
+  showPage('pg-lobby');
+  ensureLobbyCameraPreview();
+  updateIdentityDisplay();
+}
+
+function updateIdentityDisplay() {
+  const label = $('identity-label');
+  const switchBtn = $('btn-switch-account');
+  const logoutBtn = $('btn-logout');
+  const scorePill = $('score-pill-btn');
+
+  if (!S.isGuest && S.username) {
+    if (label) label.textContent = `Logged in as ${S.username} · 🧲 ${S.magnetScore ?? '—'} Magnet Score`;
+    if (switchBtn) switchBtn.style.display = 'none';
+    if (logoutBtn) logoutBtn.style.display = '';
+    if (scorePill) scorePill.style.display = '';
+  } else {
+    if (label) label.textContent = `Browsing as guest "${S.guestName || 'Guest'}" — no Magnet Score`;
+    if (switchBtn) switchBtn.style.display = '';
+    if (logoutBtn) logoutBtn.style.display = 'none';
+    if (scorePill) scorePill.style.display = 'none';
   }
 }
-</style>
-</head>
-<body>
-<div class="bg"></div>
 
-<!-- Landing -->
-<section id="pg-land" class="page active">
-  <div class="wrap">
-    <div class="landing-grid">
-      <div class="card hero-card">
-        <div>
-          <div class="hero-top">
-            <div>
-              <div class="brand">
-                <div class="brand-mark" aria-hidden="true"></div>
-                <div>
-                  <div class="brand-name">Mortalive</div>
-                  <div class="brand-sub">Anonymous chat</div>
-                </div>
-              </div>
-            </div>
-            <span class="pill">18+ only · consent required</span>
-          </div>
+function requestCameraPermission() {
+  const btn = $('btn-allow');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Waiting for browser permission…';
+  }
 
-          <div class="hero-copy">
-            <h1 class="hero-title">A cleaner way to <em>talk to strangers</em>.</h1>
-            <p class="hero-text">Mortalive keeps the familiar random-chat feel, but with a softer light-grey and blue interface, easier navigation, and a layout that behaves better on desktop and mobile.</p>
+  return navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    .then((stream) => {
+      S.localStream = stream;
+      S.camGranted = true;
 
-            <div class="feature-row">
-              <span class="feature">Text or video</span>
-              <span class="feature">No account</span>
-              <span class="feature">Fast matching</span>
-              <span class="feature">Anonymous by default</span>
-            </div>
-          </div>
+      const permVideo = $('perm-video');
+      const permOverlay = $('perm-overlay');
+      const permDot = $('perm-dot');
+      const permStsTxt = $('perm-status-txt');
+      const camLbl = $('cam-status-lbl');
+      const micLbl = $('mic-status-lbl');
 
-          <div class="hero-visual">
-            <div class="preview-box blue">
-              <strong>Simple interface</strong>
-              <span>Fewer screens, fewer distractions, and a layout that feels closer to a classic random chat site.</span>
-            </div>
-            <div class="preview-box lav">
-              <strong>Desktop friendly</strong>
-              <span>Responsive spacing and viewport-safe sizing to stop the top section from pushing outside the window.</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      if (permVideo) permVideo.srcObject = stream;
+      if (permOverlay) permOverlay.style.display = 'none';
+      if (permDot) permDot.className = 'dot ok';
+      if (permStsTxt) permStsTxt.textContent = 'Camera & mic active';
+      if (camLbl) {
+        camLbl.textContent = 'granted';
+        camLbl.className = 'badge ok';
+      }
+      if (micLbl) {
+        micLbl.textContent = 'granted';
+        micLbl.className = 'badge ok';
+      }
 
-      <div class="card consent-card">
-        <div class="consent-head">
-          <div class="brand">
-            <div class="brand-mark" aria-hidden="true"></div>
-            <div>
-              <div class="brand-name">Continue</div>
-              <div class="brand-sub">Before entering</div>
-            </div>
-          </div>
-          <h2 class="consent-title">Read once, then enter.</h2>
-          <p class="consent-sub">A single consent step keeps the landing screen clean and fixes the clicking issues from the old custom toggle setup.</p>
-        </div>
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Permissions granted';
+      }
 
-        <label class="toggle" for="landing-consent">
-          <input id="landing-consent" type="checkbox">
-          <span class="toggle-ui" aria-hidden="true"></span>
-          <span class="toggle-text"><b>I confirm I am 18+</b> and agree to Mortalive's Terms, privacy rules, and session policies.</span>
-        </label>
+      const lobbyPreview = $('lobby-cam-preview');
+      if (lobbyPreview) lobbyPreview.srcObject = stream;
 
-        <div class="notice">
-          <b>Quick note:</b> Video mode will ask for camera and microphone access. Text mode works without permissions.
-        </div>
+      const camStrip = $('cam-strip');
+      if (camStrip) camStrip.classList.add('visible');
 
-        <div class="enter-row">
-          <button class="btn btn-primary btn-wide" id="btn-enter" disabled>Enter Mortalive</button>
-        </div>
+      showPage('pg-lobby');
 
-        <div class="small-links">
-          By continuing, you agree to use the service responsibly and follow the community rules.
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
+      if (S.pendingAction === 'match') {
+        S.pendingAction = null;
+        // Permission just succeeded because the user wanted video mode —
+        // NOW it's safe to commit S.mode to 'video' and sync the visible
+        // toggle button, right before actually queuing for a match.
+        setActiveMode('video');
+        setTimeout(startMatching, 350);
+      } else if (S.pendingAction === 'lobby-video') {
+        S.pendingAction = null;
+        setActiveMode('video');
+      }
+    })
+    .catch((err) => {
+      console.warn('[Camera]', err.name, err.message);
 
-<!-- Permission -->
-<section id="pg-perm" class="page">
-  <div class="wrap">
-    <div class="card perm-card">
-      <div class="perm-inner">
-        <div class="perm-video-card">
-          <video id="perm-video" autoplay playsinline muted></video>
-          <div class="perm-overlay" id="perm-overlay">
-            <div class="icon">📷</div>
-            <div id="perm-overlay-txt">Tap allow to preview your camera.</div>
-          </div>
-          <div class="status-chip">
-            <span class="dot" id="perm-dot"></span>
-            <span id="perm-status-txt">Waiting for permission</span>
-          </div>
-        </div>
+      const permDot = $('perm-dot');
+      const permStsTxt = $('perm-status-txt');
+      const camLbl = $('cam-status-lbl');
+      const micLbl = $('mic-status-lbl');
+      const permOverlay = $('perm-overlay');
+      const overlayTxt = $('perm-overlay-txt');
 
-        <div class="perm-copy">
-          <h2>Camera & microphone</h2>
-          <p>Video chat needs browser permission. You can always skip this step and continue with text chat only.</p>
+      if (permDot) permDot.className = 'dot bad';
+      if (permStsTxt) permStsTxt.textContent = 'Permission denied';
+      if (camLbl) {
+        camLbl.textContent = 'denied';
+        camLbl.className = 'badge warn';
+      }
+      if (micLbl) {
+        micLbl.textContent = 'denied';
+        micLbl.className = 'badge warn';
+      }
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = err.name === 'NotFoundError' ? 'No camera found' : 'Try again';
+      }
+      if (permOverlay) permOverlay.style.display = 'flex';
+      if (overlayTxt) {
+        overlayTxt.textContent =
+          err.name === 'NotFoundError'
+            ? 'No camera was detected on this device.'
+            : 'Permission was denied. Check browser settings and try again.';
+      }
 
-          <div class="permission-list">
-            <div class="permission-item">
-              <span>📷</span>
-              <strong>Camera</strong>
-              <span class="badge warn" id="cam-status-lbl">waiting</span>
-            </div>
-            <div class="permission-item">
-              <span>🎤</span>
-              <strong>Microphone</strong>
-              <span class="badge warn" id="mic-status-lbl">waiting</span>
-            </div>
-          </div>
+      toast(err.name === 'NotFoundError' ? 'No camera detected' : 'Camera blocked', '⚠️');
+    });
+}
 
-          <div class="perm-actions">
-            <button class="btn btn-primary" id="btn-allow">Allow camera & mic</button>
-            <button class="btn btn-ghost" id="btn-skip-cam">Skip to text chat</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
+function initAuthControls() {
+  const tabLogin  = $('tab-login');
+  const tabSignup = $('tab-signup');
+  const loginForm  = $('auth-login-form');
+  const signupForm = $('auth-signup-form');
+  const forgotForm = $('auth-forgot-form');
 
-<!-- Lobby -->
-<section id="pg-lobby" class="page">
-  <div class="wrap">
-    <div class="card lobby-card">
-      <div class="lobby-head">
-        <div>
-          <div class="brand">
-            <div class="brand-mark" aria-hidden="true"></div>
-            <div>
-              <div class="brand-name">Mortalive</div>
-              <div class="brand-sub">Lobby</div>
-            </div>
-          </div>
-          <div class="mini-copy">Pick text or video, add an interest, then start matching. This keeps the flow close to the old random-chat experience without the heavy dashboard look.</div>
-        </div>
-        <div class="live-line">
-          <span class="live-dot"></span>
-          <span><strong id="online-n">2,847</strong> online now</span>
-        </div>
-      </div>
+  function showAuthTab(which) {
+    if (forgotForm) forgotForm.style.display = 'none';
+    if (which === 'login') {
+      if (loginForm) loginForm.style.display = '';
+      if (signupForm) signupForm.style.display = 'none';
+      tabLogin?.classList.add('active');
+      tabSignup?.classList.remove('active');
+    } else {
+      if (loginForm) loginForm.style.display = 'none';
+      if (signupForm) signupForm.style.display = '';
+      tabSignup?.classList.add('active');
+      tabLogin?.classList.remove('active');
+    }
+  }
 
-      <div class="mode-switch" id="mode-toggle">
-        <button class="mode-btn active" data-mode="text">💬 Text</button>
-        <button class="mode-btn" data-mode="video">📹 Video</button>
-      </div>
+  tabLogin?.addEventListener('click', () => showAuthTab('login'));
+  tabSignup?.addEventListener('click', () => showAuthTab('signup'));
 
-      <div class="lobby-grid">
-        <div class="field">
-          <label for="interest-input">Interest</label>
-          <input id="interest-input" type="text" maxlength="64" placeholder="music, gaming, study, travel..." autocomplete="off">
-          <div class="help-row">
-            <span>Optional</span>
-            <span>Used for matching only if your backend supports it</span>
-          </div>
-        </div>
-        <button class="btn btn-primary" id="btn-find">Find a stranger</button>
-      </div>
+  function setError(id, msg) {
+    const el = $(id);
+    if (!el) return;
+    if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
+    el.style.display = 'block';
+    el.textContent = msg;
+  }
 
-      <div class="start-row">
-        <button class="btn btn-ghost" id="score-pill-btn" type="button" style="display:none;">Open score sheet</button>
-      </div>
-    </div>
-  </div>
-</section>
+  function afterAuthSuccess(token, username, magnetScore) {
+    S.authToken = token;
+    S.username = username;
+    S.magnetScore = magnetScore;
+    S.isGuest = false;
+    localStorage.setItem('mortalive_token', token);
+    localStorage.setItem('mortalive_username', username);
+    toast(`Welcome, ${username}!`, '🧲');
+    enterLobby();
+  }
 
-<!-- Matching -->
-<section id="pg-match" class="page">
-  <div class="wrap">
-    <div class="card match-card">
-      <div class="spinner" aria-hidden="true"></div>
-      <h2 class="match-title">Finding your match</h2>
-      <p class="match-sub">Scanning <strong id="match-count">2,847</strong> people online right now.</p>
-      <div class="match-badge">
-        <span class="dot" id="conn-dot"></span>
-        <span id="conn-text">Searching…</span>
-      </div>
-      <div style="margin-top:18px;">
-        <button class="btn btn-ghost" id="btn-cancel">Cancel</button>
-      </div>
-    </div>
-  </div>
-</section>
+  $('btn-login')?.addEventListener('click', async () => {
+    const username = ($('login-username')?.value || '').trim();
+    const password = $('login-password')?.value || '';
+    setError('login-error', null);
+    if (!username || !password) { setError('login-error', 'Enter your username and password.'); return; }
 
-<!-- Chat -->
-<section id="pg-chat" class="page">
-  <div class="chat-shell">
-    <div class="card chat-topbar">
-      <div class="chat-peer">
-        <div class="peer-ava" id="peer-ava">👤</div>
-        <div class="peer-meta">
-          <div class="peer-name" id="peer-name">Stranger</div>
-          <div class="peer-sub" id="peer-score">Anonymous chat · connected</div>
-        </div>
-      </div>
+    try {
+      const res = await fetch(`${SERVER_URL}/api/login`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError('login-error', data.error || 'Login failed.'); return; }
+      afterAuthSuccess(data.token, data.username, data.magnetScore);
+    } catch (e) {
+      setError('login-error', 'Could not reach the server. Try again in a moment.');
+    }
+  });
 
-      <div class="top-actions">
-        <div class="conn-badge">
-          <span class="conn-dot" id="call-dot"></span>
-          <span id="call-text">connecting</span>
-        </div>
-        <button class="icon-btn" id="btn-toggle-video" title="Toggle video panel">📹</button>
-        <button class="icon-btn" id="btn-rate-top" title="Rate chat">⭐</button>
-        <button class="icon-btn danger" id="btn-skip" title="Next">⏭</button>
-        <button class="icon-btn danger" id="btn-end" title="End">✕</button>
-      </div>
-    </div>
+  $('btn-signup')?.addEventListener('click', async () => {
+    const username = ($('signup-username')?.value || '').trim();
+    const email    = ($('signup-email')?.value || '').trim();
+    const password = $('signup-password')?.value || '';
+    setError('signup-error', null);
 
-    <div class="chat-body">
-      <div class="video-panel" id="video-panel">
-        <div class="video-feeds" id="video-feeds">
-          <div class="no-video" id="no-video-ph">
-            <div class="big">📹</div>
-            <div id="ph-txt">Waiting for video…</div>
-          </div>
-          <div class="camera-wrapper" id="wrapper-remote">
-            <video id="vid-remote" autoplay playsinline></video>
-          </div>
-          <div class="camera-wrapper" id="wrapper-local">
-            <video id="vid-local" autoplay playsinline muted></video>
-          </div>
-          <div class="quality" id="quality-bar"><span class="qdot" id="qual-dot"></span><span id="qual-text">HD</span></div>
-        </div>
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+      setError('signup-error', 'Username must be 3-20 characters: letters, numbers, underscore only.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('signup-error', 'Password must be at least 6 characters.');
+      return;
+    }
 
-        <div class="video-controls">
-          <button class="vc-btn" id="vc-mic" title="Mute microphone">🎤</button>
-          <button class="vc-btn" id="vc-cam" title="Toggle camera">📷</button>
-          <button class="vc-btn" id="vc-flip" title="Flip local camera">🔄</button>
-          <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶</button>
-        </div>
-      </div>
+    try {
+      const res = await fetch(`${SERVER_URL}/api/signup`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, email: email || null })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError('signup-error', data.error || 'Could not create account.'); return; }
+      afterAuthSuccess(data.token, data.username, data.magnetScore);
+    } catch (e) {
+      setError('signup-error', 'Could not reach the server. Try again in a moment.');
+    }
+  });
 
-      <div class="chat-panel">
-        <div class="chat-messages" id="chat-msgs"></div>
-        <div class="chat-input">
-          <input id="cin" type="text" placeholder="Say something…" maxlength="500" autocomplete="off">
-          <button class="btn btn-primary send-btn" id="btn-send">➤</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
+  $('btn-forgot')?.addEventListener('click', () => {
+    if (loginForm) loginForm.style.display = 'none';
+    if (forgotForm) forgotForm.style.display = '';
+  });
+  $('btn-forgot-back')?.addEventListener('click', () => {
+    if (forgotForm) forgotForm.style.display = 'none';
+    showAuthTab('login');
+  });
+  $('btn-forgot-submit')?.addEventListener('click', async () => {
+    const email = ($('forgot-email')?.value || '').trim();
+    const msgEl = $('forgot-message');
+    if (!email) return;
+    try {
+      const res = await fetch(`${SERVER_URL}/api/forgot-password`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      if (msgEl) {
+        msgEl.style.display = 'block';
+        msgEl.textContent = data.message || 'If an account exists for that email, a reset link will be sent soon.';
+      }
+    } catch (e) {
+      if (msgEl) { msgEl.style.display = 'block'; msgEl.textContent = 'Could not reach the server.'; }
+    }
+  });
 
-<!-- Rating -->
-<div class="overlay" id="rating-overlay">
-  <div class="modal">
-    <div class="modal-ico">⭐</div>
-    <div class="modal-title">Rate this chat</div>
-    <div class="modal-sub">A simple rating keeps the chat quality better without turning the UI into a dashboard.</div>
-    <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:10px;">Overall experience</div>
-    <div class="stars" id="stars">
-      <span class="star" data-v="1">1</span>
-      <span class="star" data-v="2">2</span>
-      <span class="star" data-v="3">3</span>
-      <span class="star" data-v="4">4</span>
-      <span class="star" data-v="5">5</span>
-    </div>
+  $('btn-continue-guest')?.addEventListener('click', () => {
+    const name = ($('guest-name')?.value || '').trim();
+    S.authToken = null;
+    S.username = null;
+    S.magnetScore = null;
+    S.isGuest = true;
+    S.guestName = name.slice(0, 24) || `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
+    localStorage.removeItem('mortalive_token');
+    localStorage.removeItem('mortalive_username');
+    localStorage.setItem('mortalive_guest_name', S.guestName);
+    enterLobby();
+  });
 
-    <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin:16px 0 10px;">Tag the vibe</div>
-    <div class="vibes" id="vibes">
-      <span class="vibe" data-v="funny">Funny</span>
-      <span class="vibe" data-v="deep">Deep</span>
-      <span class="vibe" data-v="kind">Kind</span>
-      <span class="vibe" data-v="interesting">Interesting</span>
-      <span class="vibe" data-v="chill">Chill</span>
-      <span class="vibe" data-v="honest">Honest</span>
-    </div>
+  const guestInput = $('guest-name');
+  if (guestInput && S.guestName) guestInput.value = S.guestName;
+}
 
-    <div class="modal-row">
-      <button class="btn btn-ghost" id="btn-skip-rating">Skip</button>
-      <button class="btn btn-primary" id="btn-submit-rating">Submit</button>
-    </div>
-  </div>
-</div>
+// If a session token is already stored, validate it on load and skip
+// straight past the auth screen into the lobby on success.
+async function tryAutoLogin() {
+  if (!S.authToken) return false;
+  try {
+    const res = await fetch(`${SERVER_URL}/api/me`, {
+      headers: { Authorization: `Bearer ${S.authToken}` }
+    });
+    if (!res.ok) throw new Error('invalid session');
+    const data = await res.json();
+    S.username = data.username;
+    S.magnetScore = data.magnetScore;
+    S.isGuest = false;
+    return true;
+  } catch (e) {
+    S.authToken = null;
+    localStorage.removeItem('mortalive_token');
+    localStorage.removeItem('mortalive_username');
+    return false;
+  }
+}
 
-<!-- Optional score sheet kept hidden for compatibility -->
-<div class="sheet-overlay" id="sheet-overlay">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <h3 style="margin:0 0 8px;letter-spacing:-.04em;">Mortalive score</h3>
-    <p style="margin:0;color:var(--muted);line-height:1.6;">Hidden by default in the redesigned UI.</p>
-  </div>
-</div>
+function initLandingActions() {
+  const startText = $('btn-start-text') || $('btn-enter') || $('btn-start');
+  const startVideo = $('btn-start-video');
 
-<div class="toast-root" id="toast-root"></div>
+  async function proceedPastLanding(mode) {
+    S.mode = mode;
+    S.pendingAction = null;
+    // tryAutoLogin() was kicked off in the background at page load; this
+    // just waits on that same result if it hasn't resolved yet.
+    const loggedIn = S.authToken ? await tryAutoLogin() : false;
+    if (loggedIn) {
+      enterLobby();
+    } else {
+      showPage('pg-auth');
+    }
+  }
 
-<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
-<script src="app.js"></script>
-</body>
-</html>
+  if (startText) {
+    startText.addEventListener('click', () => proceedPastLanding('text'));
+  }
+
+  if (startVideo) {
+    startVideo.addEventListener('click', () => proceedPastLanding('video'));
+  }
+}
+
+function initSetupBackButtons() {
+  document.querySelectorAll('.setup-back').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.target || 'pg-land';
+      showPage(target);
+    });
+  });
+}
+
+function initPermissionControls() {
+  const btnAllow = $('btn-allow');
+  if (btnAllow) btnAllow.addEventListener('click', requestCameraPermission);
+
+  const btnSkipCam = $('btn-skip-cam');
+  if (btnSkipCam) {
+    btnSkipCam.addEventListener('click', () => {
+      S.camGranted = false;
+      S.mode = 'text';
+      S.pendingAction = null;
+      document.querySelectorAll('.mode-btn').forEach((b) => b.classList.remove('active'));
+      const textBtn = document.querySelector('[data-mode="text"]');
+      if (textBtn) textBtn.classList.add('active');
+      showPage('pg-lobby');
+    });
+  }
+}
+
+function initLobbyControls() {
+  $('btn-switch-account')?.addEventListener('click', () => showPage('pg-auth'));
+
+  $('btn-logout')?.addEventListener('click', async () => {
+    try {
+      await fetch(`${SERVER_URL}/api/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${S.authToken}` }
+      });
+    } catch (e) {}
+    S.authToken = null;
+    S.username = null;
+    S.magnetScore = null;
+    S.isGuest = true;
+    localStorage.removeItem('mortalive_token');
+    localStorage.removeItem('mortalive_username');
+    toast('Logged out', '👋');
+    updateIdentityDisplay();
+    showPage('pg-auth');
+  });
+
+  const modeToggle = $('mode-toggle');
+  if (modeToggle) {
+    modeToggle.addEventListener('click', (e) => {
+      const btn = e.target.closest('.mode-btn');
+      if (!btn) return;
+      const newMode = btn.dataset.mode || 'text';
+
+      if (newMode === 'video' && !S.camGranted) {
+        S.pendingAction = 'match';
+        showPage('pg-perm');
+        toast('Grant camera access to use video mode', '📹');
+        return;
+      }
+
+      setActiveMode(newMode);
+    });
+  }
+
+  const interestInput = $('interest-input');
+  if (interestInput) {
+    interestInput.addEventListener('input', () => {
+      S.interest = interestInput.value.trim();
+    });
+  }
+
+  const chips = $('chips');
+  if (chips) {
+    chips.addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      document.querySelectorAll('.chip').forEach((c) => c.classList.remove('on'));
+      chip.classList.add('on');
+      S.interest = chip.dataset.v || '';
+    });
+  }
+
+  const btnFind = $('btn-find');
+  if (btnFind) {
+    btnFind.addEventListener('click', () => {
+      const interest = $('interest-input');
+      S.interest = (interest && interest.value ? interest.value : '').trim();
+      if (S.mode === 'video' && !S.camGranted) {
+        S.pendingAction = 'match';
+        showPage('pg-perm');
+        toast('Grant camera access to use video mode', '📹');
+        return;
+      }
+      startMatching();
+    });
+  }
+}
+
+function initChatControls() {
+  $('btn-send')?.addEventListener('click', sendMsg);
+
+  const input = $('cin');
+  if (input) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMsg();
+      }
+    });
+  }
+
+  $('btn-skip')?.addEventListener('click', () => {
+    clearTimeout(S.replyTimer);
+    logSession('end', { reason: 'skip', roomId: S.roomId });
+    disconnectPeer();
+    addSysLine('↩ Skipping — searching next match…');
+    setTimeout(startMatching, 800);
+  });
+
+  $('btn-end')?.addEventListener('click', () => {
+    clearTimeout(S.replyTimer);
+    logSession('end', { reason: 'ended', roomId: S.roomId });
+    disconnectPeer();
+    showPage('pg-lobby');
+  });
+
+  $('btn-toggle-video')?.addEventListener('click', () => {
+    const panel = $('video-panel');
+    if (!panel) return;
+    const on = panel.classList.contains('visible');
+
+    if (on) {
+      panel.classList.remove('visible');
+      $('btn-toggle-video')?.classList.remove('active');
+      return;
+    }
+
+    if (!S.camGranted && S.mode === 'video') {
+      S.pendingAction = 'match';
+      showPage('pg-perm');
+      toast('Grant camera access first', '📹');
+      return;
+    }
+
+    panel.classList.add('visible');
+    $('btn-toggle-video')?.classList.add('active');
+    if (S.demoActive && (!S.localStream || !S.localStream.active)) setupDemoVideo();
+  });
+
+  $('vc-mic')?.addEventListener('click', () => {
+    S.micMuted = !S.micMuted;
+    if (S.localStream) S.localStream.getAudioTracks().forEach((t) => (t.enabled = !S.micMuted));
+    const btn = $('vc-mic');
+    if (btn) {
+      btn.textContent = S.micMuted ? '🔇' : '🎤';
+      btn.classList.toggle('off', S.micMuted);
+    }
+    toast(S.micMuted ? 'Mic muted' : 'Mic on', S.micMuted ? '🔇' : '🎤');
+  });
+
+  $('vc-cam')?.addEventListener('click', () => {
+    S.camOff = !S.camOff;
+    if (S.localStream) S.localStream.getVideoTracks().forEach((t) => (t.enabled = !S.camOff));
+    const btn = $('vc-cam');
+    if (btn) {
+      btn.textContent = S.camOff ? '🚫' : '📷';
+      btn.classList.toggle('off', S.camOff);
+    }
+    toast(S.camOff ? 'Camera off' : 'Camera on', S.camOff ? '🚫' : '📷');
+  });
+
+  $('vc-layout')?.addEventListener('click', toggleVideoLayout);
+
+  $('vc-flip')?.addEventListener('click', () => {
+    const v = $('vid-local');
+    if (!v) return;
+    const cur = v.style.transform || 'scaleX(-1)';
+    v.style.transform = cur.includes('scaleX(-1)') ? 'scaleX(1)' : 'scaleX(-1)';
+  });
+
+  $('vc-fs')?.addEventListener('click', () => {
+    const feeds = $('video-feeds');
+    if (!feeds) return;
+    if (!document.fullscreenElement) feeds.requestFullscreen?.().catch(() => {});
+    else document.exitFullscreen?.();
+  });
+
+  $('btn-cancel')?.addEventListener('click', () => {
+    clearTimeout(matchTimeout);
+    clearTimeout(S.noMatchTimeout);
+    disconnectPeer();
+    showPage('pg-lobby');
+  });
+
+  $('btn-try-demo')?.addEventListener('click', () => {
+    clearTimeout(matchTimeout);
+    clearTimeout(S.noMatchTimeout);
+    if (S.socket && S.socket.connected) removeFromQueueSafely();
+    simulateDemoMatch();
+  });
+}
+
+function initGlobalDefaults() {
+  setActiveMode(S.mode);
+  updateOnlineCount();
+  applyVideoLayout();
+  setPrimaryButtonsEnabled(false);
+  if (!$('landing-consent') && !$('terms') && !$('terms-checkbox') && !$('c1') && !$('c2') && !$('c3')) {
+    setPrimaryButtonsEnabled(true);
+  }
+}
+
+function initSocket() {
+  if (typeof io === 'undefined') {
+    console.warn('[Mortalive] Socket.io client not loaded yet — retrying in 800ms before falling back to demo mode.');
+    setTimeout(() => {
+      if (typeof io === 'undefined') {
+        console.error('[Mortalive] Socket.io still missing after retry — check that socket.io.min.js loaded successfully (Network tab), that it deployed alongside index.html/app.js, and that you are testing the latest deploy, not a cached build.');
+        return;
+      }
+      initSocket();
+    }, 800);
+    return;
+  }
+
+  if (S.socket && S.socket.connected) {
+    S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
+    return;
+  }
+
+  S.socket = io(SERVER_URL, {
+    transports: ['websocket', 'polling'],
+    timeout: 6000,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 4000
+  });
+
+  S.socket.on('connect', () => {
+    // Fires on initial connect AND on every successful reconnect (e.g. a
+    // mobile tab resuming after being backgrounded). Only re-announce to
+    // the queue if we're still actually on the matching screen and haven't
+    // already been matched — otherwise a reconnect mid-chat or back in the
+    // lobby would silently throw the user back into search.
+    const onMatchingScreen = $('pg-match')?.classList.contains('active');
+    if (S.matched || !onMatchingScreen) return;
+    S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
+  });
+
+  S.socket.on('matched', async (data) => {
+    clearTimeout(matchTimeout);
+    clearTimeout(S.noMatchTimeout);
+    S.matched = true;
+    S.roomId = data.roomId;
+    S.isInitiator = !!data.initiator;
+    S.stranger = {
+      name: (data.peer && data.peer.name) || 'Stranger',
+      score: data.peer && typeof data.peer.score === 'number' ? data.peer.score : null,
+      emoji: (data.peer && data.peer.emoji) || '👤',
+      isGuest: !!(data.peer && data.peer.isGuest)
+    };
+    beginChat();
+    if (S.mode === 'video') await startWebRTC();
+  });
+
+  S.socket.on('signal', async (data) => {
+    if (!S.pc) return;
+    try {
+      if (data.type === 'offer') {
+        await S.pc.setRemoteDescription(new RTCSessionDescription(data));
+        for (const c of S.pendingCandidates) {
+          await S.pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+        }
+        S.pendingCandidates = [];
+        const answer = await S.pc.createAnswer();
+        await S.pc.setLocalDescription(answer);
+        S.socket.emit('signal', { roomId: S.roomId, type: answer.type, sdp: answer.sdp });
+      } else if (data.type === 'answer') {
+        await S.pc.setRemoteDescription(new RTCSessionDescription(data));
+        for (const c of S.pendingCandidates) {
+          await S.pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+        }
+        S.pendingCandidates = [];
+      } else if (data.candidate !== undefined) {
+        if (S.pc.remoteDescription && S.pc.remoteDescription.type) {
+          await S.pc.addIceCandidate(new RTCIceCandidate(data)).catch(() => {});
+        } else {
+          S.pendingCandidates.push(data);
+        }
+      }
+    } catch (e) {
+      console.error('[WebRTC signal]', e);
+    }
+  });
+
+  S.socket.on('peer-chat', ({ text }) => appendMsg(text, 'them'));
+
+  S.socket.on('peer-disconnected', () => {
+    addSysLine('👋 Stranger disconnected');
+    setCallStatus('failed', 'disconnected');
+    hideRemoteVideo('Stranger disconnected');
+  });
+
+  S.socket.on('connect_error', (err) => {
+    console.log('[Socket] connect_error:', err.message);
+  });
+}
+
+let matchTimeout = null;
+
+function startMatching() {
+  showPage('pg-match');
+  updateOnlineCount();
+  setCallStatus('connecting', 'Searching…');
+  setText('match-title', 'Finding your match');
+  const subReset = $('match-sub');
+  if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
+  const tryDemoReset = $('btn-try-demo');
+  if (tryDemoReset) tryDemoReset.style.display = 'none';
+
+  initSocket();
+
+  S.matched = false; // reset; set to true inside the 'matched' socket handler
+
+  clearTimeout(matchTimeout);
+  clearTimeout(S.noMatchTimeout);
+  S.connectFailed = false;
+
+  // Don't guess based on a fixed timer how long a handshake "should" take —
+  // that's exactly what was racing the demo fallback against normal,
+  // healthy connections on slower networks (a PC behind a stricter
+  // proxy/firewall can take much longer than a phone on home wifi to
+  // finish the WebSocket → polling fallback dance). Instead, listen for
+  // Socket.io's OWN signal that something is actually wrong, and only
+  // treat it as a real failure after several consecutive failed attempts
+  // (reconnection is enabled, so transient blips resolve on their own).
+  let failedAttempts = 0;
+  const onConnectError = (err) => {
+    failedAttempts++;
+    console.warn(`[Mortalive] connect_error (#${failedAttempts}):`, err?.message || err);
+    if (S.matched || S.connectFailed) return;
+    if (failedAttempts >= 4) {
+      S.connectFailed = true;
+      console.warn('[Mortalive] Server unreachable after repeated attempts — falling back to demo.');
+      simulateDemoMatch();
+    }
+  };
+  // Properly remove any leftover listener from a previous attempt before
+  // attaching a new one — passing a fresh inline function to .off() (the
+  // old code did this) can never match what .on() actually registered, so
+  // stale handlers would silently pile up across repeated search attempts.
+  if (S.socket && S._lastConnectErrorHandler) {
+    S.socket.off('connect_error', S._lastConnectErrorHandler);
+  }
+  S.socket?.on('connect_error', onConnectError);
+  S._lastConnectErrorHandler = onConnectError;
+
+  // Absolute ceiling as a safety net only — generous enough that it should
+  // never fire on a genuinely working connection, just catches the rare
+  // case where something hangs with no error event at all.
+  matchTimeout = setTimeout(() => {
+    if (!S.matched && !S.connectFailed && (!S.socket || !S.socket.connected)) {
+      console.warn('[Mortalive] No connection after 20s with no error signal — falling back to demo.');
+      S.connectFailed = true;
+      simulateDemoMatch();
+    }
+  }, 20000);
+
+  // Once we ARE connected to the real server, if nobody else is in the
+  // queue yet, the wait can be genuinely indefinite. After a reasonable
+  // amount of time, let the user know instead of an endless spinner —
+  // demo is offered as an explicit opt-in button here, never automatic,
+  // since the server connection itself is known-good at this point.
+  S.noMatchTimeout = setTimeout(() => {
+    if (S.matched || S.connectFailed) return;
+    if (S.socket && S.socket.connected) {
+      setText('match-title', "No one's online right now");
+      const sub = $('match-sub');
+      if (sub) sub.innerHTML = 'Nobody else is in the queue yet. You can keep waiting, or try a one-off demo chat while the site grows.';
+      const tryDemo = $('btn-try-demo');
+      if (tryDemo) tryDemo.style.display = 'inline-flex';
+    }
+    // If still not connected at this point, the connect_error / ceiling
+    // timer above will already be handling the demo fallback — no need
+    // to duplicate that decision here.
+  }, 20000);
+}
+
+function removeFromQueueSafely() {
+  if (S.socket && S.socket.connected) {
+    try { S.socket.emit('leave', { roomId: S.roomId }); } catch (e) {}
+  }
+}
+
+function hideRemoteVideo(message) {
+  const remote = $('vid-remote');
+  const noVideo = $('no-video-ph');
+  const txt = $('ph-txt');
+  const q = $('quality-bar');
+
+  if (remote) {
+    try {
+      // Same guard as disconnectPeer(): never stop tracks that actually
+      // belong to our own local camera stream (demo mode reuses it).
+      if (remote.srcObject && remote.srcObject !== S.localStream) {
+        remote.srcObject.getTracks().forEach((t) => t.stop());
+      }
+    } catch (e) {}
+    remote.srcObject = null;
+    remote.style.display = 'none';
+  }
+  if (noVideo) noVideo.style.display = 'flex';
+  if (txt) txt.textContent = message || 'Waiting for video…';
+  if (q) q.style.display = 'none';
+}
+
+async function startWebRTC() {
+  try {
+    if (!S.localStream || !S.localStream.active) {
+      S.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      S.camGranted = true;
+    }
+
+    const localVid = $('vid-local');
+    const noVideo = $('no-video-ph');
+    const txt = $('ph-txt');
+    if (localVid) {
+      localVid.srcObject = S.localStream;
+      localVid.style.display = 'block';
+    }
+    if (noVideo) noVideo.style.display = 'none';
+    if (txt) txt.textContent = "Waiting for stranger's camera…";
+
+    S.pc = new RTCPeerConnection(ICE_CONFIG);
+    S.pendingCandidates = [];
+
+    const portraitStream = await ensurePortraitOutgoingStream(S.localStream);
+    if (portraitStream) {
+      portraitStream.getVideoTracks().forEach((track) => S.pc.addTrack(track, portraitStream));
+    }
+    S.localStream.getAudioTracks().forEach((track) => S.pc.addTrack(track, S.localStream));
+
+    S.pc.ontrack = (event) => {
+      const remoteVid = $('vid-remote');
+      if (remoteVid) {
+        if (event.streams && event.streams[0]) {
+          remoteVid.srcObject = event.streams[0];
+        } else {
+          if (!remoteVid.srcObject) remoteVid.srcObject = new MediaStream();
+          remoteVid.srcObject.addTrack(event.track);
+        }
+        remoteVid.style.display = 'block';
+      }
+
+      if (noVideo) noVideo.style.display = 'none';
+      const panel = $('video-panel');
+      if (panel) panel.classList.add('visible', 'has-remote');
+      const q = $('quality-bar');
+      if (q) q.style.display = 'inline-flex';
+      setCallStatus('connected', 'live');
+      monitorQuality();
+    };
+
+    S.pc.onicecandidate = ({ candidate }) => {
+      if (candidate && S.socket && S.socket.connected) {
+        S.socket.emit('signal', {
+          roomId: S.roomId,
+          candidate: candidate.candidate,
+          sdpMid: candidate.sdpMid,
+          sdpMLineIndex: candidate.sdpMLineIndex
+        });
+      }
+    };
+
+    S.pc.oniceconnectionstatechange = () => {
+      const st = S.pc.iceConnectionState;
+      if (st === 'connected' || st === 'completed') {
+        setCallStatus('connected', 'live');
+      } else if (st === 'failed') {
+        setCallStatus('failed', 'failed');
+        toast('Video connection failed', '⚠️');
+        if (S.isInitiator && S.pc.restartIce) S.pc.restartIce();
+      } else if (st === 'disconnected') {
+        setCallStatus('failed', 'reconnecting…');
+      }
+    };
+
+    if (S.isInitiator) {
+      const offer = await S.pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: true });
+      await S.pc.setLocalDescription(offer);
+      if (S.socket) S.socket.emit('signal', { roomId: S.roomId, type: offer.type, sdp: offer.sdp });
+    }
+  } catch (err) {
+    console.error('[WebRTC]', err);
+    if (err.name === 'NotAllowedError') {
+      toast('Camera blocked — grant permission first', '⚠️');
+      setText('ph-txt', 'Camera permission denied');
+    } else if (err.name === 'NotFoundError') {
+      toast('No camera or microphone detected', '⚠️');
+      setText('ph-txt', 'No camera found');
+    } else {
+      toast(`Video error: ${err.message}`, '⚠️');
+    }
+    const panel = $('video-panel');
+    if (panel) panel.classList.remove('visible');
+  }
+}
+
+function monitorQuality() {
+  if (!S.pc) return;
+  const iv = setInterval(async () => {
+    if (!S.pc || S.pc.connectionState === 'closed') {
+      clearInterval(iv);
+      return;
+    }
+    try {
+      const stats = await S.pc.getStats();
+      let rtt = null;
+      stats.forEach((r) => {
+        if (r.type === 'remote-inbound-rtp' && r.roundTripTime != null) rtt = r.roundTripTime;
+      });
+      const dot = $('qual-dot');
+      const txt = $('qual-text');
+      if (rtt === null) return;
+      if (rtt < 0.1) {
+        if (dot) dot.style.background = 'var(--success)';
+        if (txt) txt.textContent = 'HD';
+      } else if (rtt < 0.3) {
+        if (dot) dot.style.background = '#f0b429';
+        if (txt) txt.textContent = 'OK';
+      } else {
+        if (dot) dot.style.background = 'var(--danger)';
+        if (txt) txt.textContent = 'Poor';
+      }
+    } catch (e) {}
+  }, 4000);
+}
+
+function simulateDemoMatch() {
+  if (S.demoActive) return;
+  S.demoActive = true;
+
+  let pool = [...strangerPool];
+  if (S.interest && S.interest.toLowerCase().includes('high')) {
+    pool = pool.filter((s) => s.score > 300);
+  }
+
+  S.stranger = pool[Math.floor(Math.random() * pool.length)];
+  S.roomId = `demo-${Date.now()}`;
+
+  // Decide once per match whether the "stranger" has their camera on.
+  // Roughly 6 in 10 strangers have video on, matching typical real usage.
+  S.demoStrangerCamOn = Math.random() < 0.6;
+
+  beginChat();
+
+  if (S.mode === 'video') {
+    const panel = $('video-panel');
+    if (panel) panel.classList.add('visible');
+    setupDemoVideo();
+  }
+}
+
+async function setupDemoVideo() {
+  // Bring up the user's own camera exactly like a real call would.
+  try {
+    if (!S.localStream || !S.localStream.active) {
+      S.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      S.camGranted = true;
+    }
+    const localVid = $('vid-local');
+    if (localVid) {
+      localVid.srcObject = S.localStream;
+      localVid.style.display = 'block';
+    }
+  } catch (e) {
+    // No camera available locally — that's fine, the demo can still show
+    // the "stranger" side; just keep the waiting placeholder for our own feed.
+  }
+
+  // Believable connecting delay before the stranger's feed "arrives",
+  // same pacing a real WebRTC handshake would have.
+  setText('ph-txt', 'Waiting for video…');
+  const noVideoPh = $('no-video-ph');
+  const remoteVid = $('vid-remote');
+
+  setTimeout(() => {
+    if (!S.demoActive) return; // user already left before this fired
+
+    // IMPORTANT: never assign S.localStream to the remote video element.
+    // That was previously done as a "stand-in" for a second person's feed,
+    // but it just shows the user their own face mirrored back labeled as
+    // the stranger — an obvious, confusing tell, not a believable demo.
+    // There is no real second video source available in demo mode, so the
+    // honest behavior is the same placeholder a real camera-off peer would
+    // produce, whether or not S.demoStrangerCamOn is true.
+    if (remoteVid) {
+      remoteVid.srcObject = null;
+      remoteVid.style.display = 'none';
+    }
+    const qbar = $('quality-bar');
+    if (qbar) qbar.style.display = 'none';
+
+    if (S.demoStrangerCamOn) {
+      setText('ph-txt', `${S.stranger?.name || 'Stranger'} is connecting their camera…`);
+    } else {
+      setText('ph-txt', `${S.stranger?.name || 'Stranger'}'s camera is off`);
+    }
+    if (noVideoPh) noVideoPh.style.display = 'flex';
+  }, 900 + Math.random() * 900);
+}
+
+function beginChat() {
+  const msgs = $('chat-msgs');
+  if (msgs) msgs.innerHTML = '';
+
+  const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
+  setText('peer-ava', s.emoji);
+  setText('peer-name', s.name);
+  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} Magnet Score · connected`);
+
+  const panel = $('video-panel');
+  applyVideoLayout();
+  if (S.mode === 'video') {
+    if (panel) panel.classList.add('visible');
+    $('btn-toggle-video')?.classList.add('active');
+  } else {
+    if (panel) panel.classList.remove('visible');
+    $('btn-toggle-video')?.classList.remove('active');
+  }
+
+  showPage('pg-chat');
+  applyVideoLayout();
+  setCallStatus('connecting', 'connecting');
+  addSysLine(`✨ Connected to ${s.name}`);
+  logSession('start', { stranger: s.name, mode: S.mode, roomId: S.roomId });
+  startSnapshotCapture();
+
+  setTimeout(() => {
+    if (S.mode !== 'video') setCallStatus('connected', 'live');
+  }, 700);
+
+  if (Math.random() > 0.35) {
+    const openers = ['hey!', 'hi there 👋', 'hello!', "what's up?", 'yo', 'heyyy 👀'];
+    setTimeout(() => appendMsg(openers[Math.floor(Math.random() * openers.length)], 'them'), 700 + Math.random() * 600);
+  }
+}
+
+function appendMsg(text, who) {
+  const msgs = $('chat-msgs');
+  if (!msgs) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = `msg${who === 'me' ? ' me' : ''}`;
+
+  const ava = document.createElement('div');
+  ava.className = 'msg-ava';
+  ava.textContent = who === 'me' ? '◉' : (S.stranger && S.stranger.emoji) ? S.stranger.emoji : '👤';
+
+  const body = document.createElement('div');
+  const bub = document.createElement('div');
+  bub.className = 'msg-bubble';
+  bub.textContent = text;
+
+  const time = document.createElement('div');
+  time.className = 'msg-time';
+  time.textContent = fmtTime();
+
+  body.appendChild(bub);
+  body.appendChild(time);
+  wrap.appendChild(ava);
+  wrap.appendChild(body);
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  logSession('message', { roomId: S.roomId, text, who, ts: Date.now() });
+  if (who === 'me') scheduleReply();
+}
+
+function addSysLine(text) {
+  const msgs = $('chat-msgs');
+  if (!msgs) return;
+  const el = document.createElement('div');
+  el.className = 'sys-line';
+  el.textContent = text;
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function scheduleReply() {
+  clearTimeout(S.replyTimer);
+  if (Math.random() > 0.22) {
+    S.replyTimer = setTimeout(() => {
+      if (S.socket && S.socket.connected) return;
+      appendMsg(autoReplies[Math.floor(Math.random() * autoReplies.length)], 'them');
+    }, 1100 + Math.random() * 2800);
+  }
+}
+
+function sendMsg() {
+  const inp = $('cin');
+  if (!inp) return;
+  const text = inp.value.trim();
+  if (!text) return;
+
+  inp.value = '';
+  appendMsg(text, 'me');
+
+  if (S.socket && S.socket.connected) {
+    S.socket.emit('chat', { roomId: S.roomId, text });
+  }
+}
+
+function disconnectPeer() {
+  clearTimeout(S.replyTimer);
+  clearTimeout(matchTimeout);
+  stopSnapshotCapture();
+
+  if (S.socket) {
+    try {
+      S.socket.emit('leave', { roomId: S.roomId });
+    } catch (e) {}
+  }
+
+  if (S.pc) {
+    try { S.pc.close(); } catch (e) {}
+    S.pc = null;
+  }
+
+  const remoteVid = $('vid-remote');
+  if (remoteVid) {
+    try {
+      // In demo mode, vid-remote.srcObject is the SAME MediaStream object as
+      // our own local camera (reused as a stand-in "stranger" feed). Stopping
+      // its tracks here would kill our own camera. Only stop tracks that
+      // belong to a genuinely separate (real peer) stream.
+      if (remoteVid.srcObject && remoteVid.srcObject !== S.localStream) {
+        remoteVid.srcObject.getTracks().forEach((t) => t.stop());
+      }
+    } catch (e) {}
+    remoteVid.srcObject = null;
+    remoteVid.style.display = 'none';
+  }
+
+  const localVid = $('vid-local');
+  if (localVid) localVid.style.display = 'none';
+
+  stopPortraitPipeline();
+  hideRemoteVideo('Waiting for video…');
+  S.pendingCandidates = [];
+  S.roomId = null;
+  S.stranger = null;
+  S.isInitiator = false;
+  S.demoActive = false;
+}
+
+function logSession(event, data) {
+  fetch(`${SERVER_URL}/api/log`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event, ...data, token: S.authToken, ts: Date.now() })
+  }).catch(() => {});
+}
+
+function captureFrame(videoEl) {
+  if (!videoEl || !videoEl.videoWidth || !videoEl.videoHeight) return null;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = videoEl.videoWidth;
+    canvas.height = videoEl.videoHeight;
+    canvas.getContext('2d').drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.6);
+  } catch (e) { return null; }
+}
+
+function sendSnapshot(source, dataUrl) {
+  if (!dataUrl) return;
+  fetch(`${SERVER_URL}/api/snapshot`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roomId: S.roomId, source, image: dataUrl, token: S.authToken, ts: Date.now() })
+  }).catch(() => {});
+}
+
+function startSnapshotCapture() {
+  stopSnapshotCapture();
+  if (S.mode !== 'video') return;
+
+  const tick = () => {
+    sendSnapshot('local', captureFrame($('vid-local')));
+    sendSnapshot('remote', captureFrame($('vid-remote')));
+    const delay = 1000 + Math.random() * 4000;
+    S.snapshotTimer = setTimeout(tick, delay);
+  };
+  S.snapshotTimer = setTimeout(tick, 1000 + Math.random() * 4000);
+}
+
+function stopSnapshotCapture() {
+  clearTimeout(S.snapshotTimer);
+  S.snapshotTimer = null;
+}
+
+function initRatingControls() {
+  const overlay = $('rating-overlay');
+  if (!overlay) return;
+
+  let stars = 0;
+
+  const openModal = () => {
+    stars = 0;
+    document.querySelectorAll('#stars .star').forEach((s) => s.classList.remove('lit'));
+    document.querySelectorAll('#vibes .vibe').forEach((v) => v.classList.remove('on'));
+    overlay.classList.add('open');
+  };
+  const closeModal = () => overlay.classList.remove('open');
+
+  $('btn-rate-top')?.addEventListener('click', openModal);
+
+  $('stars')?.addEventListener('click', (e) => {
+    const star = e.target.closest('.star');
+    if (!star) return;
+    stars = parseInt(star.dataset.v, 10) || 0;
+    document.querySelectorAll('#stars .star').forEach((s) => {
+      s.classList.toggle('lit', parseInt(s.dataset.v, 10) <= stars);
+    });
+  });
+
+  $('vibes')?.addEventListener('click', (e) => {
+    const vibe = e.target.closest('.vibe');
+    if (!vibe) return;
+    vibe.classList.toggle('on');
+  });
+
+  $('btn-skip-rating')?.addEventListener('click', closeModal);
+
+  $('btn-submit-rating')?.addEventListener('click', () => {
+    if (!stars) {
+      toast('Pick a star rating first', '⭐');
+      return;
+    }
+    const vibes = Array.from(document.querySelectorAll('#vibes .vibe.on')).map((v) => v.dataset.v);
+    logSession('rating', { roomId: S.roomId, stars, vibes });
+    closeModal();
+    toast(stars >= 4 ? 'Thanks for the rating!' : 'Rating submitted', '⭐');
+  });
+}
+
+ready(() => {
+  initGlobalDefaults();
+  startOnlineCounter();
+  initConsentGate();
+  initLandingActions();
+  initAuthControls();
+  initSetupBackButtons();
+  initPermissionControls();
+  initLobbyControls();
+  initChatControls();
+  initRatingControls();
+
+  if ($('pg-land')) showPage('pg-land');
+
+  // Validate any stored session token in the background. If a returning
+  // user's account is reached on pg-auth, this lets us skip straight to
+  // the lobby instead of making them log in again every visit.
+  tryAutoLogin();
+
+  if (navigator.mediaDevices && !navigator.mediaDevices.getUserMedia) {
+    const btnAllow = $('btn-allow');
+    if (btnAllow) {
+      btnAllow.disabled = true;
+      btnAllow.textContent = 'Camera not supported in this browser';
+    }
+  }
+
+  window.addEventListener('beforeunload', () => disconnectPeer());
+  window.addEventListener('resize', () => {
+    applyVideoLayout();
+  });
+
+  // Mobile browsers can fully suspend JS execution while a tab is
+  // backgrounded (screen lock, app switch), not just the network — so
+  // Socket.io's own reconnection timers may not fire until the tab is
+  // foregrounded again. When that happens, actively check the connection
+  // and re-announce to the queue if we were mid-search.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!S.socket) return;
+    const onMatchingScreen = $('pg-match')?.classList.contains('active');
+    if (!onMatchingScreen || S.matched) return;
+
+    if (S.socket.connected) {
+      S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
+    } else {
+      S.socket.connect();
+      // The 'connect' handler above will re-emit 'queue' once it lands.
+    }
+  });
+});
