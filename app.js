@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-06-25-2'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-06-25-3'; // bump this string on every deploy to confirm cache is fresh
 const VIDEO_LAYOUT_KEY = 'mortalive_video_layout_v3';
 
 const SERVER_URL =
@@ -739,7 +739,10 @@ function initChatControls() {
     toast(S.camOff ? 'Camera off' : 'Camera on', S.camOff ? '🚫' : '📷');
   });
 
+  /* Layout button disabled for now */
+  /*
   $('vc-layout')?.addEventListener('click', toggleVideoLayout);
+  */
 
   $('vc-flip')?.addEventListener('click', () => {
     const v = $('vid-local');
