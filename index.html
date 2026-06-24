@@ -877,10 +877,25 @@ a{color:inherit}
   .video-wrapper.remote,
   .video-wrapper.local{
     aspect-ratio: 4 / 5;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,.08);
+    background:
+      radial-gradient(circle at top, rgba(255,255,255,.05), transparent 45%),
+      linear-gradient(180deg, #0f1726 0%, #121826 55%, #0f1726 100%);
+  }
+  .video-wrapper.remote::before,
+  .video-wrapper.local::before{
+    content:'';
+    position:absolute;
+    inset:10px;
+    border-radius:16px;
+    border:1px solid rgba(255,255,255,.06);
+    pointer-events:none;
   }
   #vid-remote,
   #vid-local{
     object-fit: contain;
+    background: transparent;
   }
   #vid-local{
     width:100%;
