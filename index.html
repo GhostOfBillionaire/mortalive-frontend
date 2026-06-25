@@ -814,7 +814,7 @@ a{color:inherit}
   justify-content: center;
 }
 
-/* Portrait-friendly wrappers — keep both panes equal, crop desktop webcams into the slot */
+/* Portrait-friendly wrappers */
 .video-wrapper.remote,
 .video-wrapper.local {
   aspect-ratio: 4 / 5;
@@ -860,7 +860,7 @@ a{color:inherit}
   background:#192232;
 }
 
-/* Mobile - stacked vertical with equal size */
+/* Mobile - horizontal by default (side-by-side) */
 @media (max-width: 720px){
   #pg-chat{padding:6px; gap:6px;}
   .chat-body{
@@ -868,6 +868,7 @@ a{color:inherit}
     grid-template-rows:minmax(280px, 55vh) minmax(0,1fr);
   }
   .video-panel{height:100%; min-height:280px;}
+  
   .video-feeds.layout-horizontal{
     grid-template-columns:repeat(2,minmax(0,1fr));
     grid-template-rows:1fr;
@@ -876,6 +877,7 @@ a{color:inherit}
     grid-template-columns:1fr;
     grid-template-rows:repeat(2, minmax(0,1fr));
   }
+  
   .video-wrapper.remote,
   .video-wrapper.local{
     aspect-ratio: 9 / 16;
@@ -904,6 +906,17 @@ a{color:inherit}
     height:100%;
   }
   .video-controls{gap:8px; margin-top:8px;}
+}
+
+/* Fullscreen fix - buttons visible */
+:fullscreen .video-controls,
+:-webkit-full-screen .video-controls,
+:-moz-full-screen .video-controls,
+:full-screen .video-controls {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  z-index: 2147483647 !important;
 }
 
 .no-video{
@@ -1267,7 +1280,7 @@ a{color:inherit}
   </div>
 </section>
 
-<!-- Auth: login / sign up / continue as guest -->
+<!-- Auth -->
 <section id="pg-auth" class="page">
   <div class="wrap">
     <div class="card auth-card">
@@ -1302,7 +1315,6 @@ a{color:inherit}
           <button class="btn btn-ghost auth-tab" id="tab-signup" type="button">Sign up</button>
         </div>
 
-        <!-- Login form -->
         <div id="auth-login-form">
           <div class="field">
             <label for="login-username">Username</label>
@@ -1317,7 +1329,6 @@ a{color:inherit}
           <button class="btn btn-ghost btn-wide" id="btn-forgot" type="button" style="margin-top:8px;">Forgot password?</button>
         </div>
 
-        <!-- Signup form -->
         <div id="auth-signup-form" style="display:none;">
           <div class="field">
             <label for="signup-username">Username</label>
@@ -1335,7 +1346,6 @@ a{color:inherit}
           <button class="btn btn-primary btn-wide" id="btn-signup" style="margin-top:8px;">Create account</button>
         </div>
 
-        <!-- Forgot password form -->
         <div id="auth-forgot-form" style="display:none;">
           <div class="field">
             <label for="forgot-email">Email</label>
@@ -1345,7 +1355,6 @@ a{color:inherit}
           <button class="btn btn-primary btn-wide" id="btn-forgot-submit" style="margin-top:8px;">Send reset link</button>
           <button class="btn btn-ghost btn-wide" id="btn-forgot-back" type="button" style="margin-top:8px;">Back to log in</button>
         </div>
-
       </div>
     </div>
   </div>
@@ -1482,7 +1491,6 @@ a{color:inherit}
           <span class="conn-dot" id="call-dot"></span>
           <span id="call-text">connecting</span>
         </div>
-        <!-- Video button removed -->
         <button class="icon-btn" id="btn-rate-top" title="Rate chat">Rate</button>
         <button class="icon-btn danger" id="btn-skip" title="Next">Next</button>
         <button class="icon-btn danger" id="btn-end" title="Leave">❌</button>
@@ -1497,7 +1505,6 @@ a{color:inherit}
             <div id="ph-txt">Waiting for video…</div>
           </div>
           
-          <!-- Square wrappers -->
           <div class="video-wrapper remote">
             <video id="vid-remote" autoplay playsinline></video>
           </div>
@@ -1511,8 +1518,6 @@ a{color:inherit}
         <div class="video-controls">
           <button class="vc-btn" id="vc-mic" title="Microphone">🎤</button>
           <button class="vc-btn" id="vc-cam" title="Camera">📷</button>
-          <!-- Layout button hidden for now -->
-          <!-- <button class="vc-btn" id="vc-layout" title="Layout">◫</button> -->
           <button class="vc-btn" id="vc-flip" title="Switch Camera">🔄</button>
           <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶</button>
         </div>
@@ -1561,7 +1566,7 @@ a{color:inherit}
   </div>
 </div>
 
-<!-- Optional score sheet kept hidden for compatibility -->
+<!-- Optional score sheet -->
 <div class="sheet-overlay" id="sheet-overlay">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -1573,7 +1578,6 @@ a{color:inherit}
 <div class="toast-root" id="toast-root"></div>
 
 <script>
-  // Set your deployed Railway server URL here (no trailing slash).
   window.MORTALIVE_SERVER_URL = 'https://mortalive-server-production.up.railway.app';
 </script>
 <script src="socket.io.min.js"></script>
