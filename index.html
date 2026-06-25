@@ -814,7 +814,7 @@ a{color:inherit}
   justify-content: center;
 }
 
-/* Portrait-friendly wrappers */
+/* Portrait-friendly wrappers — keep both panes equal, crop desktop webcams into the slot */
 .video-wrapper.remote,
 .video-wrapper.local {
   aspect-ratio: 4 / 5;
@@ -860,7 +860,7 @@ a{color:inherit}
   background:#192232;
 }
 
-/* Mobile - horizontal by default (side-by-side) */
+/* Mobile - vertical stacked (up and down) by default - better for phone fullscreen */
 @media (max-width: 720px){
   #pg-chat{padding:6px; gap:6px;}
   .chat-body{
@@ -869,10 +869,7 @@ a{color:inherit}
   }
   .video-panel{height:100%; min-height:280px;}
   
-  .video-feeds.layout-horizontal{
-    grid-template-columns:repeat(2,minmax(0,1fr));
-    grid-template-rows:1fr;
-  }
+  .video-feeds.layout-horizontal,
   .video-feeds.layout-vertical{
     grid-template-columns:1fr;
     grid-template-rows:repeat(2, minmax(0,1fr));
@@ -908,7 +905,7 @@ a{color:inherit}
   .video-controls{gap:8px; margin-top:8px;}
 }
 
-/* Fullscreen fix - buttons visible */
+/* Fullscreen visibility fix for buttons */
 :fullscreen .video-controls,
 :-webkit-full-screen .video-controls,
 :-moz-full-screen .video-controls,
@@ -1280,7 +1277,7 @@ a{color:inherit}
   </div>
 </section>
 
-<!-- Auth -->
+<!-- Auth: login / sign up / continue as guest -->
 <section id="pg-auth" class="page">
   <div class="wrap">
     <div class="card auth-card">
@@ -1315,6 +1312,7 @@ a{color:inherit}
           <button class="btn btn-ghost auth-tab" id="tab-signup" type="button">Sign up</button>
         </div>
 
+        <!-- Login form -->
         <div id="auth-login-form">
           <div class="field">
             <label for="login-username">Username</label>
@@ -1329,6 +1327,7 @@ a{color:inherit}
           <button class="btn btn-ghost btn-wide" id="btn-forgot" type="button" style="margin-top:8px;">Forgot password?</button>
         </div>
 
+        <!-- Signup form -->
         <div id="auth-signup-form" style="display:none;">
           <div class="field">
             <label for="signup-username">Username</label>
@@ -1346,6 +1345,7 @@ a{color:inherit}
           <button class="btn btn-primary btn-wide" id="btn-signup" style="margin-top:8px;">Create account</button>
         </div>
 
+        <!-- Forgot password form -->
         <div id="auth-forgot-form" style="display:none;">
           <div class="field">
             <label for="forgot-email">Email</label>
@@ -1355,6 +1355,7 @@ a{color:inherit}
           <button class="btn btn-primary btn-wide" id="btn-forgot-submit" style="margin-top:8px;">Send reset link</button>
           <button class="btn btn-ghost btn-wide" id="btn-forgot-back" type="button" style="margin-top:8px;">Back to log in</button>
         </div>
+
       </div>
     </div>
   </div>
@@ -1499,7 +1500,7 @@ a{color:inherit}
 
     <div class="chat-body">
       <div class="video-panel" id="video-panel">
-        <div class="video-feeds layout-horizontal" id="video-feeds">
+        <div class="video-feeds layout-vertical" id="video-feeds">
           <div class="no-video" id="no-video-ph">
             <div class="big">📹</div>
             <div id="ph-txt">Waiting for video…</div>
@@ -1566,7 +1567,7 @@ a{color:inherit}
   </div>
 </div>
 
-<!-- Optional score sheet -->
+<!-- Optional score sheet kept hidden for compatibility -->
 <div class="sheet-overlay" id="sheet-overlay">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -1578,6 +1579,7 @@ a{color:inherit}
 <div class="toast-root" id="toast-root"></div>
 
 <script>
+  // Set your deployed Railway server URL here (no trailing slash).
   window.MORTALIVE_SERVER_URL = 'https://mortalive-server-production.up.railway.app';
 </script>
 <script src="socket.io.min.js"></script>
