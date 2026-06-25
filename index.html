@@ -828,7 +828,7 @@ a{color:inherit}
   height: 100%;
   display: block;
   background: #121826;
-  object-fit: cover;
+  object-fit: cover; /* Fill the slot; desktop landscape feeds crop cleanly */
   object-position: center center;
 }
 
@@ -860,7 +860,7 @@ a{color:inherit}
   background:#192232;
 }
 
-/* Mobile - vertical stacked (up and down) by default - better for phone fullscreen */
+/* Mobile - stacked vertical with equal size */
 @media (max-width: 720px){
   #pg-chat{padding:6px; gap:6px;}
   .chat-body{
@@ -869,7 +869,11 @@ a{color:inherit}
   }
   .video-panel{height:100%; min-height:280px;}
   
-  .video-feeds.layout-horizontal,
+  /* === UPDATED: Respect layout toggle on mobile === */
+  .video-feeds.layout-horizontal{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-template-rows:1fr;
+  }
   .video-feeds.layout-vertical{
     grid-template-columns:1fr;
     grid-template-rows:repeat(2, minmax(0,1fr));
@@ -903,17 +907,6 @@ a{color:inherit}
     height:100%;
   }
   .video-controls{gap:8px; margin-top:8px;}
-}
-
-/* Fullscreen visibility fix for buttons */
-:fullscreen .video-controls,
-:-webkit-full-screen .video-controls,
-:-moz-full-screen .video-controls,
-:full-screen .video-controls {
-  display: flex !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  z-index: 2147483647 !important;
 }
 
 .no-video{
@@ -971,11 +964,6 @@ a{color:inherit}
 }
 .vc-btn.active,.vc-btn:hover{border-color:rgba(24,119,242,.35);color:var(--primary)}
 .vc-btn.off{border-color:rgba(229,72,77,.25);color:var(--danger);background:rgba(229,72,77,.06)}
-
-#btn-end{
-  color:#e5484d;
-  font-size:18px;
-}
 
 .chat-panel{
   display:flex;
@@ -1492,20 +1480,22 @@ a{color:inherit}
           <span class="conn-dot" id="call-dot"></span>
           <span id="call-text">connecting</span>
         </div>
+        <button class="icon-btn" id="btn-toggle-video" title="Toggle video panel">Video</button>
         <button class="icon-btn" id="btn-rate-top" title="Rate chat">Rate</button>
         <button class="icon-btn danger" id="btn-skip" title="Next">Next</button>
-        <button class="icon-btn danger" id="btn-end" title="Leave">❌</button>
+        <button class="icon-btn danger" id="btn-end" title="End">Leave</button>
       </div>
     </div>
 
     <div class="chat-body">
       <div class="video-panel" id="video-panel">
-        <div class="video-feeds layout-vertical" id="video-feeds">
+        <div class="video-feeds layout-horizontal" id="video-feeds">
           <div class="no-video" id="no-video-ph">
             <div class="big">📹</div>
             <div id="ph-txt">Waiting for video…</div>
           </div>
           
+          <!-- Square wrappers -->
           <div class="video-wrapper remote">
             <video id="vid-remote" autoplay playsinline></video>
           </div>
@@ -1517,10 +1507,11 @@ a{color:inherit}
         </div>
 
         <div class="video-controls">
-          <button class="vc-btn" id="vc-mic" title="Microphone">🎤</button>
-          <button class="vc-btn" id="vc-cam" title="Camera">📷</button>
-          <button class="vc-btn" id="vc-flip" title="Switch Camera">🔄</button>
-          <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶</button>
+          <button class="vc-btn" id="vc-mic" title="Mute microphone">Mic</button>
+          <button class="vc-btn" id="vc-cam" title="Toggle camera">Cam</button>
+          <button class="vc-btn" id="vc-layout" title="Switch camera layout">Layout</button>
+          <button class="vc-btn" id="vc-flip" title="Flip local camera">Flip</button>
+          <button class="vc-btn" id="vc-fs" title="Fullscreen">Full</button>
         </div>
       </div>
 
