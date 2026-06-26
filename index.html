@@ -30,6 +30,7 @@
   --radius-sm:14px;
   --radius-xs:10px;
 }
+
 *{box-sizing:border-box}
 html,body{margin:0;min-height:100%;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
 body{min-height:100dvh}
@@ -764,6 +765,11 @@ a{color:inherit}
 .icon-btn:hover{border-color:var(--border-strong);color:var(--text)}
 .icon-btn.danger:hover{border-color:rgba(229,72,77,.35);color:var(--danger)}
 
+#btn-end{
+  color:var(--danger);
+  font-size:18px;
+}
+
 .chat-body{
   flex:1;
   min-height:0;
@@ -868,8 +874,6 @@ a{color:inherit}
     grid-template-rows:minmax(280px, 55vh) minmax(0,1fr);
   }
   .video-panel{height:100%; min-height:280px;}
-  
-  /* === UPDATED: Respect layout toggle on mobile === */
   .video-feeds.layout-horizontal{
     grid-template-columns:repeat(2,minmax(0,1fr));
     grid-template-rows:1fr;
@@ -878,10 +882,9 @@ a{color:inherit}
     grid-template-columns:1fr;
     grid-template-rows:repeat(2, minmax(0,1fr));
   }
-  
   .video-wrapper.remote,
   .video-wrapper.local{
-    aspect-ratio: 9 / 16;
+    aspect-ratio: 4 / 5;
     border-radius: 20px;
     border: 1px solid rgba(255,255,255,.08);
     background:
@@ -899,7 +902,7 @@ a{color:inherit}
   }
   #vid-remote,
   #vid-local{
-    object-fit: cover;
+    object-fit: contain;
     background: transparent;
   }
   #vid-local{
@@ -907,6 +910,30 @@ a{color:inherit}
     height:100%;
   }
   .video-controls{gap:8px; margin-top:8px;}
+}
+
+@media (max-width: 720px) {
+  :fullscreen .video-feeds,
+  :-webkit-full-screen .video-feeds,
+  :-moz-full-screen .video-feeds,
+  :full-screen .video-feeds {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: repeat(2, minmax(0,1fr)) !important;
+  }
+
+  :fullscreen .video-controls,
+  :-webkit-full-screen .video-controls,
+  :-moz-full-screen .video-controls,
+  :full-screen .video-controls {
+    display:flex !important;
+    opacity:1 !important;
+    visibility:visible !important;
+    z-index:2147483647 !important;
+    background:rgba(0,0,0,.65) !important;
+    padding:12px;
+    border-radius:12px;
+    margin:8px;
+  }
 }
 
 .no-video{
@@ -1293,6 +1320,8 @@ a{color:inherit}
           <div class="auth-secondary-note">Fastest path: guest mode keeps the flow light and avoids the extra signup step.</div>
         </div>
 
+        <button class="btn btn-ghost setup-back" data-target="pg-land" type="button" style="margin-bottom:10px;">← Back</button>
+
         <div class="auth-divider">or use an account</div>
 
         <div class="auth-tabs">
@@ -1353,6 +1382,7 @@ a{color:inherit}
 <section id="pg-perm" class="page">
   <div class="wrap">
     <div class="card perm-card">
+      <button class="btn btn-ghost setup-back" data-target="pg-lobby" type="button" style="margin-bottom:12px;">← Back</button>
       <div class="perm-inner">
         <div class="perm-video-card">
           <video id="perm-video" autoplay playsinline muted></video>
@@ -1480,7 +1510,6 @@ a{color:inherit}
           <span class="conn-dot" id="call-dot"></span>
           <span id="call-text">connecting</span>
         </div>
-        <button class="icon-btn" id="btn-toggle-video" title="Toggle video panel">Video</button>
         <button class="icon-btn" id="btn-rate-top" title="Rate chat">Rate</button>
         <button class="icon-btn danger" id="btn-skip" title="Next">Next</button>
         <button class="icon-btn danger" id="btn-end" title="End">Leave</button>
@@ -1507,11 +1536,15 @@ a{color:inherit}
         </div>
 
         <div class="video-controls">
-          <button class="vc-btn" id="vc-mic" title="Mute microphone">Mic</button>
-          <button class="vc-btn" id="vc-cam" title="Toggle camera">Cam</button>
-          <button class="vc-btn" id="vc-layout" title="Switch camera layout">Layout</button>
-          <button class="vc-btn" id="vc-flip" title="Flip local camera">Flip</button>
-          <button class="vc-btn" id="vc-fs" title="Fullscreen">Full</button>
+          <button class="vc-btn" id="vc-mic" title="Microphone">🎤</button>
+          <button class="vc-btn" id="vc-cam" title="Camera">📷</button>
+
+          <!-- Layout kept for future use
+          <button class="vc-btn" id="vc-layout" title="Switch camera layout">◫</button>
+          -->
+
+          <button class="vc-btn" id="vc-flip" title="Switch Camera">🔄</button>
+          <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶</button>
         </div>
       </div>
 
