@@ -1301,6 +1301,51 @@ a{color:inherit}
   .mode-switch{grid-template-columns:1fr}
   .chat-topbar{position:sticky;top:0;z-index:5}
 }
+
+/* FINAL OVERRIDE: phone fullscreen must stack vertically */
+@media (max-width: 720px){
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds{
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    grid-template-rows:repeat(2,minmax(0,1fr)) !important;
+    gap:0 !important;
+    align-items:stretch !important;
+    justify-items:stretch !important;
+    grid-auto-flow:row !important;
+  }
+
+  #video-panel:fullscreen .video-feeds.layout-horizontal,
+  #video-panel:-webkit-full-screen .video-feeds.layout-horizontal,
+  #video-panel:-moz-full-screen .video-feeds.layout-horizontal,
+  #video-panel:fullscreen .video-feeds.layout-vertical,
+  #video-panel:-webkit-full-screen .video-feeds.layout-vertical,
+  #video-panel:-moz-full-screen .video-feeds.layout-vertical{
+    grid-template-columns:1fr !important;
+    grid-template-rows:repeat(2,minmax(0,1fr)) !important;
+  }
+
+  #video-panel:fullscreen .video-wrapper.remote,
+  #video-panel:fullscreen .video-wrapper.local,
+  #video-panel:-webkit-full-screen .video-wrapper.remote,
+  #video-panel:-webkit-full-screen .video-wrapper.local,
+  #video-panel:-moz-full-screen .video-wrapper.remote,
+  #video-panel:-moz-full-screen .video-wrapper.local{
+    aspect-ratio:1 / 1 !important;
+    min-height:0 !important;
+  }
+
+  #video-panel:fullscreen #vid-remote,
+  #video-panel:fullscreen #vid-local,
+  #video-panel:-webkit-full-screen #vid-remote,
+  #video-panel:-webkit-full-screen #vid-local,
+  #video-panel:-moz-full-screen #vid-remote,
+  #video-panel:-moz-full-screen #vid-local{
+    object-fit:cover !important;
+  }
+}
+
 </style>
 </head>
 <body>
