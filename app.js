@@ -48,12 +48,7 @@ const S = {
   magnetScore: null,
   isGuest: true,
   guestName: localStorage.getItem('mortalive_guest_name') || '',
-  videoLayout: (function () {
-    const raw = localStorage.getItem('mortalive_video_layout') || localStorage.getItem('mortalive_local_video_shape') || 'horizontal';
-    const v = String(raw).toLowerCase();
-    if (['vertical', 'stack', 'stacked', 'portrait', 'square'].includes(v)) return 'vertical';
-    return 'horizontal';
-  })()
+  videoLayout: 'horizontal'
 };
 
 const strangerPool = [
@@ -157,7 +152,6 @@ function isCompactViewport() {
 }
 
 function getEffectiveVideoLayout() {
-  if (isCompactViewport()) return 'vertical';
   return S.videoLayout === 'vertical' ? 'vertical' : 'horizontal';
 }
 
@@ -752,7 +746,9 @@ function initChatControls() {
     toast(S.camOff ? 'Camera off' : 'Camera on', S.camOff ? '🚫' : '📷');
   });
 
+  /* Layout toggle kept for future use
   $('vc-layout')?.addEventListener('click', toggleVideoLayout);
+  */
 
   $('vc-flip')?.addEventListener('click', () => {
     const v = $('vid-local');
@@ -762,9 +758,9 @@ function initChatControls() {
   });
 
   $('vc-fs')?.addEventListener('click', () => {
-    const feeds = $('video-feeds');
-    if (!feeds) return;
-    if (!document.fullscreenElement) feeds.requestFullscreen?.().catch(() => {});
+    const panel = $('video-panel');
+    if (!panel) return;
+    if (!document.fullscreenElement) panel.requestFullscreen?.().catch(() => {});
     else document.exitFullscreen?.();
   });
 
