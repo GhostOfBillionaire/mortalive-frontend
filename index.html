@@ -30,7 +30,6 @@
   --radius-sm:14px;
   --radius-xs:10px;
 }
-
 *{box-sizing:border-box}
 html,body{margin:0;min-height:100%;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
 body{min-height:100dvh}
@@ -765,11 +764,6 @@ a{color:inherit}
 .icon-btn:hover{border-color:var(--border-strong);color:var(--text)}
 .icon-btn.danger:hover{border-color:rgba(229,72,77,.35);color:var(--danger)}
 
-#btn-end{
-  color:var(--danger);
-  font-size:18px;
-}
-
 .chat-body{
   flex:1;
   min-height:0;
@@ -866,7 +860,7 @@ a{color:inherit}
   background:#192232;
 }
 
-/* Mobile - stacked vertical with equal size */
+/* Mobile - side-by-side by default */
 @media (max-width: 720px){
   #pg-chat{padding:6px; gap:6px;}
   .chat-body{
@@ -874,17 +868,19 @@ a{color:inherit}
     grid-template-rows:minmax(280px, 55vh) minmax(0,1fr);
   }
   .video-panel{height:100%; min-height:280px;}
+
   .video-feeds.layout-horizontal{
     grid-template-columns:repeat(2,minmax(0,1fr));
     grid-template-rows:1fr;
   }
   .video-feeds.layout-vertical{
     grid-template-columns:1fr;
-    grid-template-rows:repeat(2, minmax(0,1fr));
+    grid-template-rows:repeat(2,minmax(0,1fr));
   }
+
   .video-wrapper.remote,
   .video-wrapper.local{
-    aspect-ratio: 4 / 5;
+    aspect-ratio: 9 / 16;
     border-radius: 20px;
     border: 1px solid rgba(255,255,255,.08);
     background:
@@ -902,7 +898,7 @@ a{color:inherit}
   }
   #vid-remote,
   #vid-local{
-    object-fit: contain;
+    object-fit: cover;
     background: transparent;
   }
   #vid-local{
@@ -912,28 +908,85 @@ a{color:inherit}
   .video-controls{gap:8px; margin-top:8px;}
 }
 
+/* Phone fullscreen ONLY: stacked up/down with square boxes */
 @media (max-width: 720px) {
-  :fullscreen .video-feeds,
-  :-webkit-full-screen .video-feeds,
-  :-moz-full-screen .video-feeds,
-  :full-screen .video-feeds {
-    grid-template-columns: 1fr !important;
-    grid-template-rows: repeat(2, minmax(0,1fr)) !important;
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds{
+    grid-template-columns:1fr !important;
+    grid-template-rows:repeat(2,minmax(0,1fr)) !important;
   }
 
-  :fullscreen .video-controls,
-  :-webkit-full-screen .video-controls,
-  :-moz-full-screen .video-controls,
-  :full-screen .video-controls {
-    display:flex !important;
-    opacity:1 !important;
-    visibility:visible !important;
-    z-index:2147483647 !important;
-    background:rgba(0,0,0,.65) !important;
-    padding:12px;
-    border-radius:12px;
-    margin:8px;
+  #video-panel:fullscreen .video-wrapper.remote,
+  #video-panel:fullscreen .video-wrapper.local,
+  #video-panel:-webkit-full-screen .video-wrapper.remote,
+  #video-panel:-webkit-full-screen .video-wrapper.local,
+  #video-panel:-moz-full-screen .video-wrapper.remote,
+  #video-panel:-moz-full-screen .video-wrapper.local{
+    aspect-ratio:1 / 1 !important;
   }
+}
+
+/* Fullscreen buttons visibility */
+#video-panel:fullscreen .video-controls,
+#video-panel:-webkit-full-screen .video-controls,
+#video-panel:-moz-full-screen .video-controls{
+  display:flex !important;
+  opacity:1 !important;
+  visibility:visible !important;
+  z-index:2147483647 !important;
+  background:rgba(0,0,0,.65) !important;
+  padding:12px;
+  border-radius:12px;
+  margin:8px;
+}
+
+@media (max-width: 720px){
+  #pg-chat{padding:6px; gap:6px;}
+  .chat-body{
+    grid-template-columns:1fr;
+    grid-template-rows:minmax(280px, 55vh) minmax(0,1fr);
+  }
+  .video-panel{height:100%; min-height:280px;}
+  
+  /* === UPDATED: Respect layout toggle on mobile === */
+  .video-feeds.layout-horizontal{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-template-rows:1fr;
+  }
+  .video-feeds.layout-vertical{
+    grid-template-columns:1fr;
+    grid-template-rows:repeat(2, minmax(0,1fr));
+  }
+  
+  .video-wrapper.remote,
+  .video-wrapper.local{
+    aspect-ratio: 9 / 16;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,.08);
+    background:
+      radial-gradient(circle at top, rgba(255,255,255,.05), transparent 45%),
+      linear-gradient(180deg, #0f1726 0%, #121826 55%, #0f1726 100%);
+  }
+  .video-wrapper.remote::before,
+  .video-wrapper.local::before{
+    content:'';
+    position:absolute;
+    inset:10px;
+    border-radius:16px;
+    border:1px solid rgba(255,255,255,.06);
+    pointer-events:none;
+  }
+  #vid-remote,
+  #vid-local{
+    object-fit: cover;
+    background: transparent;
+  }
+  #vid-local{
+    width:100%;
+    height:100%;
+  }
+  .video-controls{gap:8px; margin-top:8px;}
 }
 
 .no-video{
@@ -991,6 +1044,32 @@ a{color:inherit}
 }
 .vc-btn.active,.vc-btn:hover{border-color:rgba(24,119,242,.35);color:var(--primary)}
 .vc-btn.off{border-color:rgba(229,72,77,.25);color:var(--danger);background:rgba(229,72,77,.06)}
+
+#btn-end{
+  color:#e5484d;
+  font-size:18px;
+}
+
+#video-panel:fullscreen,
+#video-panel:-webkit-full-screen,
+#video-panel:-moz-full-screen{
+  background:#121826;
+  padding:8px;
+  gap:8px;
+}
+
+#video-panel:fullscreen .video-controls,
+#video-panel:-webkit-full-screen .video-controls,
+#video-panel:-moz-full-screen .video-controls{
+  display:flex !important;
+  opacity:1 !important;
+  visibility:visible !important;
+  z-index:2147483647 !important;
+  background:rgba(0,0,0,.65) !important;
+  padding:12px;
+  border-radius:12px;
+  margin:8px;
+}
 
 .chat-panel{
   display:flex;
@@ -1320,8 +1399,6 @@ a{color:inherit}
           <div class="auth-secondary-note">Fastest path: guest mode keeps the flow light and avoids the extra signup step.</div>
         </div>
 
-        <button class="btn btn-ghost setup-back" data-target="pg-land" type="button" style="margin-bottom:10px;">← Back</button>
-
         <div class="auth-divider">or use an account</div>
 
         <div class="auth-tabs">
@@ -1382,7 +1459,6 @@ a{color:inherit}
 <section id="pg-perm" class="page">
   <div class="wrap">
     <div class="card perm-card">
-      <button class="btn btn-ghost setup-back" data-target="pg-lobby" type="button" style="margin-bottom:12px;">← Back</button>
       <div class="perm-inner">
         <div class="perm-video-card">
           <video id="perm-video" autoplay playsinline muted></video>
@@ -1512,7 +1588,7 @@ a{color:inherit}
         </div>
         <button class="icon-btn" id="btn-rate-top" title="Rate chat">Rate</button>
         <button class="icon-btn danger" id="btn-skip" title="Next">Next</button>
-        <button class="icon-btn danger" id="btn-end" title="End">Leave</button>
+        <button class="icon-btn danger" id="btn-end" title="Leave">❌</button>
       </div>
     </div>
 
@@ -1536,14 +1612,12 @@ a{color:inherit}
         </div>
 
         <div class="video-controls">
-          <button class="vc-btn" id="vc-mic" title="Microphone">🎤</button>
-          <button class="vc-btn" id="vc-cam" title="Camera">📷</button>
-
+          <button class="vc-btn" id="vc-mic" title="Mute microphone">🎤</button>
+          <button class="vc-btn" id="vc-cam" title="Toggle camera">📷</button>
           <!-- Layout kept for future use
           <button class="vc-btn" id="vc-layout" title="Switch camera layout">◫</button>
           -->
-
-          <button class="vc-btn" id="vc-flip" title="Switch Camera">🔄</button>
+          <button class="vc-btn" id="vc-flip" title="Flip local camera">🔄</button>
           <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶</button>
         </div>
       </div>
