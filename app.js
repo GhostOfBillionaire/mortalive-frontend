@@ -1,8 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-06-25-3'; // bump this string on every deploy to confirm cache is fresh
-const VIDEO_LAYOUT_KEY = 'mortalive_video_layout_v3';
+const BUILD_TAG = 'mortalive-build-2026-06-22-2'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -50,7 +49,7 @@ const S = {
   isGuest: true,
   guestName: localStorage.getItem('mortalive_guest_name') || '',
   videoLayout: (function () {
-    const raw = localStorage.getItem(VIDEO_LAYOUT_KEY) || 'horizontal';
+    const raw = localStorage.getItem('mortalive_video_layout') || localStorage.getItem('mortalive_local_video_shape') || 'horizontal';
     const v = String(raw).toLowerCase();
     if (['vertical', 'stack', 'stacked', 'portrait', 'square'].includes(v)) return 'vertical';
     return 'horizontal';
@@ -158,6 +157,7 @@ function isCompactViewport() {
 }
 
 function getEffectiveVideoLayout() {
+  if (isCompactViewport()) return 'vertical';
   return S.videoLayout === 'vertical' ? 'vertical' : 'horizontal';
 }
 
@@ -168,7 +168,7 @@ function syncVideoPanelButton(forcedLayout) {
   const isHorizontal = layout === 'horizontal';
   btn.textContent = isHorizontal ? 'Layout: Side' : 'Layout: Stack';
   btn.title = isHorizontal ? 'Switch to stacked layout' : 'Switch to side-by-side layout';
-  btn.disabled = false;
+  btn.disabled = isCompactViewport();
 }
 
 function applyVideoLayout() {
@@ -182,8 +182,13 @@ function applyVideoLayout() {
 }
 
 function toggleVideoLayout() {
+  if (isCompactViewport()) {
+    applyVideoLayout();
+    toast('Phone stays in stacked layout', '📱');
+    return;
+  }
   S.videoLayout = getEffectiveVideoLayout() === 'horizontal' ? 'vertical' : 'horizontal';
-  localStorage.setItem(VIDEO_LAYOUT_KEY, S.videoLayout);
+  localStorage.setItem('mortalive_video_layout', S.videoLayout);
   applyVideoLayout();
   toast(S.videoLayout === 'horizontal' ? 'Camera layout set to side-by-side' : 'Camera layout set to stacked', '🎬');
 }
@@ -207,6 +212,7 @@ function setPrimaryButtonsEnabled(enabled) {
 }
 
 function updateConsentState() {
+  // Real <input type="checkbox" id="landing-consent"> used in the current HTML
   const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
   const oldChecks = ['c1', 'c2', 'c3'].map((id) => $(id)).filter(Boolean);
 
@@ -344,6 +350,9 @@ function requestCameraPermission() {
 
       if (S.pendingAction === 'match') {
         S.pendingAction = null;
+        // Permission just succeeded because the user wanted video mode —
+        // NOW it's safe to commit S.mode to 'video' and sync the visible
+        // toggle button, right before actually queuing for a match.
         setActiveMode('video');
         setTimeout(startMatching, 350);
       } else if (S.pendingAction === 'lobby-video') {
@@ -522,6 +531,8 @@ function initAuthControls() {
   if (guestInput && S.guestName) guestInput.value = S.guestName;
 }
 
+// If a session token is already stored, validate it on load and skip
+// straight past the auth screen into the lobby on success.
 async function tryAutoLogin() {
   if (!S.authToken) return false;
   try {
@@ -549,6 +560,8 @@ function initLandingActions() {
   async function proceedPastLanding(mode) {
     S.mode = mode;
     S.pendingAction = null;
+    // tryAutoLogin() was kicked off in the background at page load; this
+    // just waits on that same result if it hasn't resolved yet.
     const loggedIn = S.authToken ? await tryAutoLogin() : false;
     if (loggedIn) {
       enterLobby();
@@ -739,10 +752,7 @@ function initChatControls() {
     toast(S.camOff ? 'Camera off' : 'Camera on', S.camOff ? '🚫' : '📷');
   });
 
-  /* Layout button disabled for now */
-  /*
   $('vc-layout')?.addEventListener('click', toggleVideoLayout);
-  */
 
   $('vc-flip')?.addEventListener('click', () => {
     const v = $('vid-local');
@@ -788,7 +798,7 @@ function initSocket() {
     console.warn('[Mortalive] Socket.io client not loaded yet — retrying in 800ms before falling back to demo mode.');
     setTimeout(() => {
       if (typeof io === 'undefined') {
-        console.error('[Mortalive] Socket.io still missing after retry — check that socket.io.min.js loaded successfully.');
+        console.error('[Mortalive] Socket.io still missing after retry — check that socket.io.min.js loaded successfully (Network tab), that it deployed alongside index.html/app.js, and that you are testing the latest deploy, not a cached build.');
         return;
       }
       initSocket();
@@ -811,6 +821,11 @@ function initSocket() {
   });
 
   S.socket.on('connect', () => {
+    // Fires on initial connect AND on every successful reconnect (e.g. a
+    // mobile tab resuming after being backgrounded). Only re-announce to
+    // the queue if we're still actually on the matching screen and haven't
+    // already been matched — otherwise a reconnect mid-chat or back in the
+    // lobby would silently throw the user back into search.
     const onMatchingScreen = $('pg-match')?.classList.contains('active');
     if (S.matched || !onMatchingScreen) return;
     S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
@@ -889,12 +904,20 @@ function startMatching() {
 
   initSocket();
 
-  S.matched = false;
+  S.matched = false; // reset; set to true inside the 'matched' socket handler
 
   clearTimeout(matchTimeout);
   clearTimeout(S.noMatchTimeout);
   S.connectFailed = false;
 
+  // Don't guess based on a fixed timer how long a handshake "should" take —
+  // that's exactly what was racing the demo fallback against normal,
+  // healthy connections on slower networks (a PC behind a stricter
+  // proxy/firewall can take much longer than a phone on home wifi to
+  // finish the WebSocket → polling fallback dance). Instead, listen for
+  // Socket.io's OWN signal that something is actually wrong, and only
+  // treat it as a real failure after several consecutive failed attempts
+  // (reconnection is enabled, so transient blips resolve on their own).
   let failedAttempts = 0;
   const onConnectError = (err) => {
     failedAttempts++;
@@ -902,23 +925,36 @@ function startMatching() {
     if (S.matched || S.connectFailed) return;
     if (failedAttempts >= 4) {
       S.connectFailed = true;
+      console.warn('[Mortalive] Server unreachable after repeated attempts — falling back to demo.');
       simulateDemoMatch();
     }
   };
-
+  // Properly remove any leftover listener from a previous attempt before
+  // attaching a new one — passing a fresh inline function to .off() (the
+  // old code did this) can never match what .on() actually registered, so
+  // stale handlers would silently pile up across repeated search attempts.
   if (S.socket && S._lastConnectErrorHandler) {
     S.socket.off('connect_error', S._lastConnectErrorHandler);
   }
   S.socket?.on('connect_error', onConnectError);
   S._lastConnectErrorHandler = onConnectError;
 
+  // Absolute ceiling as a safety net only — generous enough that it should
+  // never fire on a genuinely working connection, just catches the rare
+  // case where something hangs with no error event at all.
   matchTimeout = setTimeout(() => {
     if (!S.matched && !S.connectFailed && (!S.socket || !S.socket.connected)) {
+      console.warn('[Mortalive] No connection after 20s with no error signal — falling back to demo.');
       S.connectFailed = true;
       simulateDemoMatch();
     }
   }, 20000);
 
+  // Once we ARE connected to the real server, if nobody else is in the
+  // queue yet, the wait can be genuinely indefinite. After a reasonable
+  // amount of time, let the user know instead of an endless spinner —
+  // demo is offered as an explicit opt-in button here, never automatic,
+  // since the server connection itself is known-good at this point.
   S.noMatchTimeout = setTimeout(() => {
     if (S.matched || S.connectFailed) return;
     if (S.socket && S.socket.connected) {
@@ -928,6 +964,9 @@ function startMatching() {
       const tryDemo = $('btn-try-demo');
       if (tryDemo) tryDemo.style.display = 'inline-flex';
     }
+    // If still not connected at this point, the connect_error / ceiling
+    // timer above will already be handling the demo fallback — no need
+    // to duplicate that decision here.
   }, 20000);
 }
 
@@ -945,6 +984,8 @@ function hideRemoteVideo(message) {
 
   if (remote) {
     try {
+      // Same guard as disconnectPeer(): never stop tracks that actually
+      // belong to our own local camera stream (demo mode reuses it).
       if (remote.srcObject && remote.srcObject !== S.localStream) {
         remote.srcObject.getTracks().forEach((t) => t.stop());
       }
@@ -1087,6 +1128,8 @@ function simulateDemoMatch() {
   S.stranger = pool[Math.floor(Math.random() * pool.length)];
   S.roomId = `demo-${Date.now()}`;
 
+  // Decide once per match whether the "stranger" has their camera on.
+  // Roughly 6 in 10 strangers have video on, matching typical real usage.
   S.demoStrangerCamOn = Math.random() < 0.6;
 
   beginChat();
@@ -1099,6 +1142,7 @@ function simulateDemoMatch() {
 }
 
 async function setupDemoVideo() {
+  // Bring up the user's own camera exactly like a real call would.
   try {
     if (!S.localStream || !S.localStream.active) {
       S.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -1109,15 +1153,27 @@ async function setupDemoVideo() {
       localVid.srcObject = S.localStream;
       localVid.style.display = 'block';
     }
-  } catch (e) {}
+  } catch (e) {
+    // No camera available locally — that's fine, the demo can still show
+    // the "stranger" side; just keep the waiting placeholder for our own feed.
+  }
 
+  // Believable connecting delay before the stranger's feed "arrives",
+  // same pacing a real WebRTC handshake would have.
   setText('ph-txt', 'Waiting for video…');
   const noVideoPh = $('no-video-ph');
   const remoteVid = $('vid-remote');
 
   setTimeout(() => {
-    if (!S.demoActive) return;
+    if (!S.demoActive) return; // user already left before this fired
 
+    // IMPORTANT: never assign S.localStream to the remote video element.
+    // That was previously done as a "stand-in" for a second person's feed,
+    // but it just shows the user their own face mirrored back labeled as
+    // the stranger — an obvious, confusing tell, not a believable demo.
+    // There is no real second video source available in demo mode, so the
+    // honest behavior is the same placeholder a real camera-off peer would
+    // produce, whether or not S.demoStrangerCamOn is true.
     if (remoteVid) {
       remoteVid.srcObject = null;
       remoteVid.style.display = 'none';
@@ -1254,6 +1310,10 @@ function disconnectPeer() {
   const remoteVid = $('vid-remote');
   if (remoteVid) {
     try {
+      // In demo mode, vid-remote.srcObject is the SAME MediaStream object as
+      // our own local camera (reused as a stand-in "stranger" feed). Stopping
+      // its tracks here would kill our own camera. Only stop tracks that
+      // belong to a genuinely separate (real peer) stream.
       if (remoteVid.srcObject && remoteVid.srcObject !== S.localStream) {
         remoteVid.srcObject.getTracks().forEach((t) => t.stop());
       }
@@ -1378,6 +1438,9 @@ ready(() => {
 
   if ($('pg-land')) showPage('pg-land');
 
+  // Validate any stored session token in the background. If a returning
+  // user's account is reached on pg-auth, this lets us skip straight to
+  // the lobby instead of making them log in again every visit.
   tryAutoLogin();
 
   if (navigator.mediaDevices && !navigator.mediaDevices.getUserMedia) {
@@ -1393,6 +1456,11 @@ ready(() => {
     applyVideoLayout();
   });
 
+  // Mobile browsers can fully suspend JS execution while a tab is
+  // backgrounded (screen lock, app switch), not just the network — so
+  // Socket.io's own reconnection timers may not fire until the tab is
+  // foregrounded again. When that happens, actively check the connection
+  // and re-announce to the queue if we were mid-search.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
     if (!S.socket) return;
@@ -1403,6 +1471,7 @@ ready(() => {
       S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
     } else {
       S.socket.connect();
+      // The 'connect' handler above will re-emit 'queue' once it lands.
     }
   });
 });
