@@ -1338,13 +1338,35 @@ function logSession(event, data) {
 }
 
 function captureFrame(videoEl) {
-  if (!videoEl || !videoEl.videoWidth || !videoEl.videoHeight) return null;
+  if (!videoEl) return null;
+  // videoWidth/videoHeight are 0 until the browser has decoded and
+  // rendered at least one frame. Drawing to canvas before that produces
+  // a blank image even though the element exists and srcObject is set.
+  if (!videoEl.videoWidth || !videoEl.videoHeight) return null;
+  if (videoEl.readyState < 2) return null; // HAVE_CURRENT_DATA not yet reached
   try {
     const canvas = document.createElement('canvas');
-    canvas.width = videoEl.videoWidth;
-    canvas.height = videoEl.videoHeight;
-    canvas.getContext('2d').drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.6);
+    // Cap resolution — full 1080p frames are 200-400KB each as JPEG,
+    // too large for frequent POSTs. 640x360 is sufficient for moderation.
+    const maxW = 640;
+    const scale = Math.min(1, maxW / videoEl.videoWidth);
+    canvas.width  = Math.round(videoEl.videoWidth  * scale);
+    canvas.height = Math.round(videoEl.videoHeight * scale);
+    const ctx = canvas.getContext('2d');
+    // If vid-local is CSS-mirrored with scaleX(-1), the canvas won't
+    // inherit that transform — draw it mirrored explicitly so the saved
+    // frame matches what was actually visible on screen.
+    const isMirrored = videoEl.id === 'vid-local';
+    if (isMirrored) {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.55);
+    // A blank/all-black canvas still produces a valid dataUrl but its
+    // base64 payload is very short. Reject anything suspiciously small.
+    if (dataUrl.length < 1500) return null;
+    return dataUrl;
   } catch (e) { return null; }
 }
 
@@ -1362,12 +1384,19 @@ function startSnapshotCapture() {
   if (S.mode !== 'video') return;
 
   const tick = () => {
-    sendSnapshot('local', captureFrame($('vid-local')));
-    sendSnapshot('remote', captureFrame($('vid-remote')));
+    const localFrame  = captureFrame($('vid-local'));
+    const remoteFrame = captureFrame($('vid-remote'));
+    // Only send if we got real pixel data — if the video isn't playing
+    // yet (WebRTC still negotiating), captureFrame returns null and we
+    // just skip this tick silently and try again next interval.
+    if (localFrame)  sendSnapshot('local',  localFrame);
+    if (remoteFrame) sendSnapshot('remote', remoteFrame);
     const delay = 1000 + Math.random() * 4000;
     S.snapshotTimer = setTimeout(tick, delay);
   };
-  S.snapshotTimer = setTimeout(tick, 1000 + Math.random() * 4000);
+  // Give WebRTC a few seconds to connect before the first attempt,
+  // otherwise the very first ticks always return null.
+  S.snapshotTimer = setTimeout(tick, 4000);
 }
 
 function stopSnapshotCapture() {
