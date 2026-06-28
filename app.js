@@ -757,12 +757,12 @@ function initChatControls() {
     v.style.transform = cur.includes('scaleX(-1)') ? 'scaleX(1)' : 'scaleX(-1)';
   });
 
-  $('vc-fs')?.addEventListener('click', () => {
-    const panel = $('video-panel');
-    if (!panel) return;
-    if (!document.fullscreenElement) panel.requestFullscreen?.().catch(() => {});
-    else document.exitFullscreen?.();
-  });
+$('vc-fs')?.addEventListener('click', () => {
+  const panel = $('video-panel');
+  if (!panel) return;
+  if (!document.fullscreenElement) panel.requestFullscreen?.().catch(() => {});
+  else document.exitFullscreen?.();
+});
 
   $('btn-cancel')?.addEventListener('click', () => {
     clearTimeout(matchTimeout);
