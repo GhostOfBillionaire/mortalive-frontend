@@ -909,17 +909,29 @@ a{color:inherit}
 }
 
 /* Phone fullscreen ONLY: stacked up/down with square boxes */
-@media (max-width: 720px) {
-  #video-panel:fullscreen .video-feeds,
-  #video-panel:-webkit-full-screen .video-feeds,
-  #video-panel:-moz-full-screen .video-feeds{
+@media (max-width:720px){
+
+#video-panel:fullscreen .video-feeds.layout-horizontal,
+#video-panel:-webkit-full-screen .video-feeds.layout-horizontal{
+
     display:grid !important;
+
     grid-template-columns:1fr !important;
-    grid-template-rows:repeat(2,minmax(0,1fr)) !important;
-    gap:0 !important;
-    align-items:stretch !important;
-    justify-items:stretch !important;
-  }
+
+    grid-template-rows:1fr 1fr !important;
+
+}
+
+#video-panel:fullscreen .video-wrapper,
+#video-panel:-webkit-full-screen .video-wrapper{
+
+    aspect-ratio:1/1 !important;
+
+    height:100% !important;
+
+}
+
+}
 
   #video-panel:fullscreen .video-wrapper.remote,
   #video-panel:fullscreen .video-wrapper.local,
