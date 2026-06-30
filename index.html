@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Mortalive — Anonymous chat, simplified</title>
+<title>Mortalive — Private chat, simplified</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -447,6 +447,84 @@ a{color:inherit}
   font-size:12px;
   line-height:1.5;
   margin-top:6px;
+}
+
+.page-back{
+  white-space:nowrap;
+  padding:10px 14px;
+  border-radius:999px;
+  font-size:13px;
+  line-height:1;
+}
+.auth-card-top,
+.perm-card-top,
+.lobby-card-top,
+.match-card-top{
+  display:flex;
+  justify-content:flex-start;
+  margin-bottom:14px;
+}
+.trust-carousel{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:10px;
+  margin-bottom:16px;
+}
+.trust-slide{
+  position:relative;
+  overflow:hidden;
+  min-height:128px;
+  padding:14px;
+  border-radius:18px;
+  border:1px solid rgba(24,119,242,.12);
+  background:linear-gradient(180deg, rgba(255,255,255,.92), rgba(241,246,255,.92));
+  box-shadow:0 18px 40px rgba(18,28,45,.06);
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  gap:6px;
+  animation:trustFade 16s infinite;
+}
+.trust-slide::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:radial-gradient(circle at 20% 20%, rgba(24,119,242,.12), transparent 35%), radial-gradient(circle at 80% 15%, rgba(109,94,252,.10), transparent 30%);
+  pointer-events:none;
+}
+.trust-slide strong,
+.trust-slide span,
+.trust-kicker{
+  position:relative;
+  z-index:1;
+}
+.trust-slide strong{
+  font-size:15px;
+  letter-spacing:-.03em;
+  color:#0f1730;
+}
+.trust-slide span{
+  font-size:12px;
+  line-height:1.5;
+  color:var(--muted);
+}
+.trust-kicker{
+  display:inline-flex;
+  width:max-content;
+  padding:6px 10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.82);
+  border:1px solid rgba(24,119,242,.10);
+  color:#4a5a78;
+  font-size:11px;
+  font-weight:700;
+}
+.trust-slide.s2{animation-delay:4s}
+.trust-slide.s3{animation-delay:8s}
+.trust-slide.s4{animation-delay:12s}
+@keyframes trustFade{
+  0%, 18%{transform:translateY(0);opacity:1}
+  25%, 100%{transform:translateY(4px);opacity:.6}
 }
 
 /* Permission */
@@ -1679,6 +1757,9 @@ body{
   .hero-visual{
     grid-template-columns:1fr;
   }
+  .trust-carousel{
+    grid-template-columns:1fr 1fr;
+  }
 }
 @media (max-width: 720px){
   #pg-land{
@@ -1701,6 +1782,9 @@ body{
   .rule-item{
     padding:11px 12px;
   }
+  .trust-carousel{
+    grid-template-columns:1fr;
+  }
 }
 
 </style>
@@ -1709,23 +1793,24 @@ body{
 <div class="bg"></div>
 
 <!-- Landing -->
-<section id="pg-land" class="page active">
+<section id="pg-land" class="page">
   <div class="wrap">
     <div class="sakura-topbar card" aria-label="Mortalive header">
       <div class="brand sakura-brand">
         <div class="brand-mark" aria-hidden="true"></div>
         <div>
           <div class="brand-name">Mortalive</div>
-          <div class="brand-sub">Anonymous chat, simplified</div>
+          <div class="brand-sub">Private chat, simplified</div>
         </div>
       </div>
       <nav class="sakura-nav" aria-label="Primary">
         <a href="#pg-land">About</a>
         <a href="#pg-land">Safety</a>
-        <a href="#pg-lobby">Magnet™</a>
+        <a href="#pg-lobby">Buddh score</a>
         <a href="#pg-auth">Blog</a>
         <a href="#pg-chat">Support</a>
       </nav>
+      <a class="btn btn-ghost page-back" href="#pg-auth">← Back</a>
       <div class="pill sakura-status"><span class="live-dot" aria-hidden="true"></span>2,847 Online</div>
     </div>
     <div class="landing-grid">
@@ -1736,30 +1821,30 @@ body{
               <div class="brand">
                 <div class="brand-mark" aria-hidden="true"></div>
                 <div>
-                  <div class="brand-name">Mortalive</div>
-                  <div class="brand-sub">Anonymous chat</div>
+                  <div class="brand-name">Quick start</div>
+                  <div class="brand-sub">Guest or account</div>
                 </div>
               </div>
             </div>
-            <span class="pill">18+ only · consent required</span>
+            <span class="pill">Age check before entry</span>
           </div>
 
           <div class="hero-copy">
-            <div class="hero-kicker">100% Anonymous · No Sign-up</div>
+            <div class="hero-kicker">Fast entry · Guest or account</div>
             <h1 class="hero-title">Meet. Chat.<br><em>Connect</em>.</h1>
-            <p class="hero-text">Randomly connect with real people. Text or video chat. No names, no pressure.</p>
+            <p class="hero-text">Randomly connect with people. Text or video chat. Simple, private, and easy to use.</p>
 
             <div class="feature-row">
               <span class="feature">Text or video</span>
               <span class="feature">Fast matching</span>
-              <span class="feature">Anonymous by default</span>
-              <span class="feature">No account needed</span>
+              <span class="feature">Private by design</span>
+              <span class="feature">No account required</span>
             </div>
           </div>
 
           <div class="hero-visual">
             <div class="preview-box blue">
-              <strong>100% Anonymous</strong>
+              <strong>Private by default</strong>
               <span>Your privacy is always protected.</span>
             </div>
             <div class="preview-box lav">
@@ -1784,7 +1869,7 @@ body{
             </div>
           </div>
           <h2 class="consent-title">Your Space, Your Rules</h2>
-          <p class="consent-sub">Be kind, keep it anonymous, and start chatting when you're ready.</p>
+          <p class="consent-sub">Be kind, keep it private, and start chatting when you're ready.</p>
         </div>
 
         <div class="rule-stack" aria-label="Community reminders">
@@ -1794,11 +1879,11 @@ body{
           </div>
           <div class="rule-item">
             <div class="rule-ico">◎</div>
-            <div><strong>No personal info</strong><span>Keep it anonymous.</span></div>
+            <div><strong>No personal info</strong><span>Keep it private.</span></div>
           </div>
           <div class="rule-item">
             <div class="rule-ico">18+</div>
-            <div><strong>18+ only</strong><span>Adults only platform.</span></div>
+            <div><strong>Age check</strong><span>Keep the entry lightweight.</span></div>
           </div>
           <div class="rule-item">
             <div class="rule-ico">!</div>
@@ -1813,7 +1898,7 @@ body{
         <label class="toggle" for="landing-consent">
           <input id="landing-consent" type="checkbox">
           <span class="toggle-ui" aria-hidden="true"></span>
-          <span class="toggle-text"><b>I confirm I am 18+</b> and agree to Mortalive's Terms, privacy rules, and session policies.</span>
+          <span class="toggle-text"><b>I agree to Mortalive's Terms</b> and confirm I meet the age requirement for this space.</span>
         </label>
 
         <div class="enter-row">
@@ -1829,38 +1914,48 @@ body{
 </section>
 
 <!-- Auth: login / sign up / continue as guest -->
-<section id="pg-auth" class="page">
+<section id="pg-auth" class="page active">
   <div class="wrap">
     <div class="card auth-card">
+      <div class="auth-card-top">
+        <a class="btn btn-ghost page-back" href="#pg-land">← Back</a>
+      </div>
       <div class="auth-card-inner">
+        <div class="trust-carousel" aria-label="Trust slideshow">
+          <div class="trust-slide s1"><span class="trust-kicker">Pic A</span><strong>Private spaces</strong><span>Comfort-first design for calmer conversations.</span></div>
+          <div class="trust-slide s2"><span class="trust-kicker">Pic B</span><strong>Real-time matching</strong><span>Quick starts that feel light and natural.</span></div>
+          <div class="trust-slide s3"><span class="trust-kicker">Pic C</span><strong>Simple controls</strong><span>Everything stays easy to reach on mobile.</span></div>
+          <div class="trust-slide s4"><span class="trust-kicker">Pic D</span><strong>Built for trust</strong><span>Clear wording and a softer entry flow.</span></div>
+        </div>
         <div class="auth-guest-hero">
           <div class="brand">
             <div class="brand-mark" aria-hidden="true"></div>
             <div>
-              <div class="brand-name">Fast entry</div>
+              <div class="brand-name">Mortalive</div>
               <div class="brand-sub">Guest mode first</div>
             </div>
           </div>
           <h2>Jump in as a guest.</h2>
-          <p>No account needed to start. Pick a display name and enter immediately. Login and signup stay below for people who want an account later.</p>
+          <p>No account required to start. Pick a display name and enter immediately. Login and signup stay below for people who want an account later.</p>
 
           <div class="field">
             <label for="guest-name">Continue as guest</label>
             <input id="guest-name" type="text" maxlength="24" placeholder="Pick a display name for this session" autocomplete="off">
             <div class="help-row">
-              <span>No account needed</span>
-              <span>Guests don't earn a Magnet Score</span>
+              <span>No account required</span>
+              <span>Guests don't earn a Buddh Score</span>
             </div>
           </div>
           <button class="btn btn-primary btn-wide" id="btn-continue-guest">Continue as guest</button>
           <div class="auth-secondary-note">Fastest path: guest mode keeps the flow light and avoids the extra signup step.</div>
+          <div class="notice" style="margin-top:14px;">By creating an account, you agree to Mortalive's Terms and Conditions.</div>
         </div>
 
         <div class="auth-divider">or use an account</div>
 
         <div class="auth-tabs">
           <button class="btn btn-ghost auth-tab active" id="tab-login" type="button">Log in</button>
-          <button class="btn btn-ghost auth-tab" id="tab-signup" type="button">Sign up</button>
+          <button class="btn btn-ghost auth-tab" id="tab-signup" type="button">Create account</button>
         </div>
 
         <!-- Login form -->
@@ -1916,6 +2011,9 @@ body{
 <section id="pg-perm" class="page">
   <div class="wrap">
     <div class="card perm-card">
+      <div class="perm-card-top">
+        <a class="btn btn-ghost page-back" href="#pg-auth">← Back</a>
+      </div>
       <div class="perm-inner">
         <div class="perm-video-card">
           <video id="perm-video" autoplay playsinline muted></video>
@@ -1960,6 +2058,9 @@ body{
 <section id="pg-lobby" class="page">
   <div class="wrap">
     <div class="card lobby-card">
+      <div class="lobby-card-top">
+        <a class="btn btn-ghost page-back" href="#pg-land">← Back</a>
+      </div>
       <div class="lobby-head">
         <div>
           <div class="brand">
@@ -1979,7 +2080,7 @@ body{
 
       <div class="identity-row" id="identity-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0;padding:10px 14px;background:var(--panel-2,#f6f7fb);border:1px solid var(--border);border-radius:10px;font-size:13px;">
         <span id="identity-label">Browsing as guest</span>
-        <button class="btn btn-ghost" id="btn-switch-account" type="button" style="padding:4px 10px;font-size:12px;">Log in / Sign up</button>
+        <button class="btn btn-ghost" id="btn-switch-account" type="button" style="padding:4px 10px;font-size:12px;">Log in / Create account</button>
         <button class="btn btn-ghost" id="btn-logout" type="button" style="padding:4px 10px;font-size:12px;display:none;">Log out</button>
       </div>
 
@@ -2011,6 +2112,9 @@ body{
 <section id="pg-match" class="page">
   <div class="wrap">
     <div class="card match-card">
+      <div class="match-card-top" style="display:flex;justify-content:flex-start;margin-bottom:10px;">
+        <a class="btn btn-ghost page-back" href="#pg-lobby">← Back</a>
+      </div>
       <div class="spinner" aria-hidden="true"></div>
       <h2 class="match-title" id="match-title">Finding your match</h2>
       <p class="match-sub" id="match-sub">Scanning <strong id="match-count">2,847</strong> people online right now.</p>
@@ -2034,10 +2138,11 @@ body{
         <div class="peer-ava" id="peer-ava">👤</div>
         <div class="peer-meta">
           <div class="peer-name" id="peer-name">Stranger</div>
-          <div class="peer-sub" id="peer-score">Anonymous chat · connected</div>
+          <div class="peer-sub" id="peer-score">Private chat · connected</div>
         </div>
       </div>
 
+      <a class="btn btn-ghost page-back" href="#pg-lobby">← Back</a>
       <div class="top-actions">
         <div class="conn-badge">
           <span class="conn-dot" id="call-dot"></span>
@@ -2126,7 +2231,7 @@ body{
 <div class="sheet-overlay" id="sheet-overlay">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h3 style="margin:0 0 8px;letter-spacing:-.04em;">Mortalive score</h3>
+    <h3 style="margin:0 0 8px;letter-spacing:-.04em;">Buddh score</h3>
     <p style="margin:0;color:var(--muted);line-height:1.6;">Hidden by default in the redesigned UI.</p>
   </div>
 </div>
