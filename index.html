@@ -2141,6 +2141,394 @@ input::placeholder{
 }
 
 </style>
+<style id="liquid-glass-overrides">
+:root{
+  --bg:#050816;
+  --bg2:#091224;
+  --panel:rgba(255,255,255,.08);
+  --panel-soft:rgba(255,255,255,.06);
+  --border:rgba(255,255,255,.16);
+  --border-strong:rgba(255,255,255,.26);
+  --text:#f4f7ff;
+  --muted:rgba(229,236,255,.76);
+  --muted-2:rgba(229,236,255,.58);
+  --primary:#74c8ff;
+  --primary-2:#8b7bff;
+  --primary-soft:rgba(116,200,255,.14);
+  --primary-soft-2:rgba(139,123,255,.14);
+  --shadow:0 24px 80px rgba(0,0,0,.34);
+  --shadow-soft:0 12px 36px rgba(0,0,0,.22);
+}
+
+html,body{
+  background:radial-gradient(circle at 18% 18%, rgba(116,200,255,.10), transparent 18%),
+             radial-gradient(circle at 82% 20%, rgba(139,123,255,.14), transparent 20%),
+             radial-gradient(circle at 72% 78%, rgba(255,111,189,.10), transparent 22%),
+             linear-gradient(180deg, #060916 0%, #091324 48%, #050816 100%) !important;
+  color:var(--text) !important;
+}
+
+body{
+  position:relative;
+  isolation:isolate;
+}
+
+.bg{
+  background:
+    radial-gradient(circle at 18% 18%, rgba(116,200,255,.70), transparent 24%),
+    radial-gradient(circle at 84% 16%, rgba(139,123,255,.70), transparent 24%),
+    radial-gradient(circle at 72% 80%, rgba(255,111,189,.45), transparent 26%),
+    radial-gradient(circle at 30% 72%, rgba(65,255,221,.28), transparent 22%),
+    linear-gradient(135deg, #050816 0%, #071021 40%, #050816 100%) !important;
+  filter: blur(72px) saturate(135%);
+  opacity:.95;
+}
+.bg::before,
+.bg::after{
+  opacity:.95;
+  animation-duration:28s;
+}
+
+.page{
+  color:var(--text);
+}
+
+.card,
+.auth-card,
+.perm-card,
+.lobby-card,
+.match-card,
+.modal,
+.sheet,
+.chat-topbar,
+.chat-messages,
+.video-feeds,
+.preview-box,
+.permission-item,
+.rule-item,
+.notice,
+.toggle,
+.auth-guest-hero{
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.13), rgba(255,255,255,.06)) !important;
+  backdrop-filter: blur(26px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(26px) saturate(180%) !important;
+  border:1px solid rgba(255,255,255,.16) !important;
+  box-shadow:
+    0 24px 80px rgba(0,0,0,.30),
+    inset 0 1px 1px rgba(255,255,255,.20) !important;
+  color:var(--text) !important;
+}
+
+.card:hover,
+.auth-card:hover,
+.perm-card:hover,
+.lobby-card:hover,
+.match-card:hover{
+  transform:translateY(-3px);
+  box-shadow:
+    0 30px 90px rgba(0,0,0,.36),
+    inset 0 1px 1px rgba(255,255,255,.22) !important;
+}
+
+.hero-card,
+.consent-card,
+.auth-card,
+.perm-card,
+.lobby-card,
+.match-card{
+  position:relative;
+  overflow:hidden;
+}
+
+.hero-card::before,
+.consent-card::before,
+.auth-card::before,
+.perm-card::before,
+.lobby-card::before,
+.match-card::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.16), transparent 38%),
+    radial-gradient(circle at 22% 18%, rgba(116,200,255,.13), transparent 24%),
+    radial-gradient(circle at 82% 18%, rgba(139,123,255,.11), transparent 22%);
+  border-radius:inherit;
+  opacity:.9;
+}
+
+.brand-name,
+.consent-title,
+.hero-title,
+.match-title,
+.modal-title,
+.peer-name,
+strong,
+label,
+h1,h2,h3{
+  color:#f7f9ff !important;
+  text-shadow:0 1px 10px rgba(0,0,0,.20);
+}
+
+.brand-sub,
+.hero-text,
+.consent-sub,
+.mini-copy,
+.small-links,
+.help-row,
+.notice,
+.toggle-text,
+.permission-item span,
+.rule-item span,
+.field label,
+.live-line,
+.sys-line,
+.msg-time,
+.peer-sub,
+.conn-badge{
+  color:var(--muted) !important;
+}
+
+.field input,
+.chat-input input{
+  background:rgba(5,10,18,.34) !important;
+  border:1px solid rgba(255,255,255,.16) !important;
+  color:#fbfdff !important;
+  backdrop-filter: blur(18px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(160%) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+}
+.field input::placeholder,
+.chat-input input::placeholder{
+  color:rgba(244,247,255,.55);
+}
+
+.btn,
+.btn-primary,
+.btn-ghost,
+.icon-btn,
+.vc-btn,
+.mode-btn,
+.auth-tab,
+.page-back{
+  border-radius:999px !important;
+  border:1px solid rgba(255,255,255,.18) !important;
+  backdrop-filter: blur(18px) saturate(175%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(175%) !important;
+  transition:transform .22s ease, box-shadow .22s ease, background .22s ease, border-color .22s ease, color .22s ease, opacity .22s ease !important;
+}
+
+.btn-primary{
+  background:linear-gradient(135deg, rgba(116,200,255,.95), rgba(139,123,255,.92)) !important;
+  color:#fff !important;
+  box-shadow:0 16px 36px rgba(116,200,255,.24), 0 10px 22px rgba(139,123,255,.16) !important;
+}
+.btn-primary:hover{
+  transform:translateY(-2px) scale(1.01);
+  box-shadow:0 20px 44px rgba(116,200,255,.30), 0 14px 28px rgba(139,123,255,.20) !important;
+}
+
+.btn-ghost,
+.icon-btn,
+.vc-btn,
+.page-back{
+  background:rgba(255,255,255,.08) !important;
+  color:#f5f8ff !important;
+  box-shadow:0 12px 28px rgba(0,0,0,.16) !important;
+}
+.btn-ghost:hover,
+.icon-btn:hover,
+.vc-btn:hover,
+.page-back:hover{
+  background:rgba(255,255,255,.14) !important;
+  color:#ffffff !important;
+  border-color:rgba(255,255,255,.26) !important;
+  transform:translateY(-1px);
+}
+
+.auth-tab,
+.mode-btn{
+  background:rgba(255,255,255,.07) !important;
+  color:rgba(247,249,255,.82) !important;
+}
+.auth-tab.active,
+.mode-btn.active{
+  background:linear-gradient(135deg, rgba(116,200,255,.92), rgba(139,123,255,.90)) !important;
+  color:#fff !important;
+  border-color:rgba(255,255,255,.20) !important;
+  box-shadow:0 14px 34px rgba(116,200,255,.20), 0 10px 20px rgba(139,123,255,.14) !important;
+  text-shadow:0 1px 2px rgba(0,0,0,.28);
+}
+
+.auth-secondary-note,
+.small-links{
+  color:rgba(232,238,255,.64) !important;
+}
+
+.auth-guest-hero .notice,
+.notice{
+  background:rgba(255,255,255,.08) !important;
+}
+
+.mode-switch{
+  background:rgba(255,255,255,.07) !important;
+}
+.mode-btn.active{
+  color:#fff !important;
+}
+
+.page-back{
+  position:absolute !important;
+  top:12px !important;
+  right:12px !important;
+  padding:8px 12px !important;
+  font-size:12px !important;
+  z-index:5 !important;
+}
+
+.lobby-card-top,
+.perm-card-top{
+  position:relative;
+  min-height:44px;
+  margin-bottom:4px;
+}
+
+.chat-topbar{
+  position:relative !important;
+  padding-right:184px !important;
+  min-height:74px;
+}
+.chat-topbar .page-back{
+  top:13px !important;
+  right:12px !important;
+}
+
+.top-actions{
+  margin-left:auto;
+}
+
+.chat-panel,
+.video-panel{
+  min-width:0;
+}
+
+.video-feeds{
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03)) !important;
+}
+.video-wrapper.remote,
+.video-wrapper.local{
+  background:
+    radial-gradient(circle at top, rgba(255,255,255,.10), transparent 44%),
+    linear-gradient(180deg, rgba(6,10,18,.90), rgba(12,18,34,.90)) !important;
+  border:1px solid rgba(255,255,255,.12);
+}
+
+#vid-remote,
+#vid-local{
+  object-fit:cover;
+}
+
+.chat-messages{
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.04)) !important;
+}
+.msg-bubble{
+  background:rgba(255,255,255,.08) !important;
+  color:#f7f9ff !important;
+  border:1px solid rgba(255,255,255,.14) !important;
+}
+.msg.me .msg-bubble{
+  background:linear-gradient(135deg, rgba(116,200,255,.24), rgba(139,123,255,.22)) !important;
+  border-color:rgba(255,255,255,.18) !important;
+}
+.sys-line::before,
+.sys-line::after{
+  background:rgba(255,255,255,.12) !important;
+}
+.peer-ava{
+  box-shadow:0 10px 24px rgba(116,200,255,.18), 0 6px 18px rgba(139,123,255,.12) !important;
+}
+
+.conn-badge,
+.status-chip{
+  background:rgba(255,255,255,.09) !important;
+  color:rgba(246,248,255,.80) !important;
+  border:1px solid rgba(255,255,255,.16) !important;
+}
+
+@media (max-width: 720px){
+  .wrap{
+    width:min(100% - 14px, 1120px);
+  }
+  .hero-card,
+  .consent-card,
+  .auth-card,
+  .perm-card,
+  .lobby-card,
+  .match-card{
+    padding:16px !important;
+  }
+  .page-back{
+    top:10px !important;
+    right:10px !important;
+    padding:7px 10px !important;
+    font-size:11px !important;
+  }
+  .chat-topbar{
+    padding:10px 84px 10px 12px !important;
+    min-height:66px;
+  }
+  .chat-body{
+    grid-template-rows:minmax(41svh, 47svh) minmax(0,1fr) !important;
+    gap:6px !important;
+  }
+  #pg-chat{
+    padding:4px !important;
+    gap:4px !important;
+  }
+  .chat-shell{
+    gap:6px !important;
+  }
+  .video-panel{
+    min-height:0 !important;
+  }
+  .chat-messages{
+    padding:12px !important;
+  }
+  .chat-input{
+    margin-top:10px !important;
+  }
+  .top-actions{
+    gap:6px !important;
+    flex-wrap:wrap;
+  }
+  .icon-btn,
+  .vc-btn{
+    height:38px !important;
+    padding:0 12px !important;
+  }
+  .mode-switch{
+    gap:6px !important;
+    padding:5px !important;
+  }
+  .mode-btn,
+  .auth-tab{
+    padding:12px 12px !important;
+  }
+  .btn-primary{
+    box-shadow:0 14px 28px rgba(116,200,255,.18), 0 10px 18px rgba(139,123,255,.12) !important;
+  }
+  .perm-copy h2,
+  .match-title,
+  .consent-title,
+  .hero-title{
+    letter-spacing:-.06em;
+  }
+}
+</style>
 </head>
 <body>
 <div class="bg"></div>
