@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-06-22-2'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-07-02-1'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -48,6 +48,13 @@ const S = {
   magnetScore: null,
   isGuest: true,
   guestName: localStorage.getItem('mortalive_guest_name') || '',
+  chatCount: Number(localStorage.getItem('mortalive_chat_count') || '0'),
+  avatarEmoji: localStorage.getItem('mortalive_avatar_emoji') || '👤',
+  bio: localStorage.getItem('mortalive_bio') || '',
+  featuredLine: localStorage.getItem('mortalive_featured_line') || '',
+  friends: [],
+  pendingRequests: [],
+  profileLoading: false,
   videoLayout: 'horizontal'
 };
 
@@ -102,6 +109,8 @@ function showPage(id) {
   const page = $(id);
   if (page) page.classList.add('active');
   window.scrollTo(0, 0);
+  if (id === 'pg-profile') loadProfileData().catch(() => {});
+  if (id === 'pg-lobby') updateIdentityDisplay();
 }
 
 function toast(msg, icon = '✅') {
@@ -295,6 +304,396 @@ function updateIdentityDisplay() {
     if (logoutBtn) logoutBtn.style.display = 'none';
     if (scorePill) scorePill.style.display = 'none';
   }
+}
+
+const PROFILE_EMOJIS = ['👤','🌟','🦊','🎭','🌸','⚡','🌙','🔮','☀️','🖤','🧠','🎧'];
+
+function normalizeText(value, max = 160) {
+  return String(value || '').trim().slice(0, max);
+}
+
+function openSheet(title, bodyHtml) {
+  const overlay = $('sheet-overlay');
+  const titleEl = $('sheet-title');
+  const bodyEl = $('sheet-body');
+  if (titleEl) titleEl.textContent = title;
+  if (bodyEl) bodyEl.innerHTML = bodyHtml;
+  if (overlay) overlay.classList.add('open');
+}
+
+function closeSheet() {
+  const overlay = $('sheet-overlay');
+  if (overlay) overlay.classList.remove('open');
+}
+
+function buildProfileFallback() {
+  return {
+    username: S.username || S.guestName || 'Guest',
+    magnetScore: S.magnetScore ?? '—',
+    bio: S.bio || '',
+    avatarEmoji: S.avatarEmoji || '👤',
+    createdAt: null
+  };
+}
+
+function renderAvatarChoices(selected) {
+  const grid = $('avatar-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  PROFILE_EMOJIS.forEach((emoji) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `avatar-chip${emoji === selected ? ' active' : ''}`;
+    btn.textContent = emoji;
+    btn.addEventListener('click', () => {
+      localStorage.setItem('mortalive_avatar_emoji', emoji);
+      S.avatarEmoji = emoji;
+      renderProfilePage();
+      renderAvatarChoices(emoji);
+    });
+    grid.appendChild(btn);
+  });
+}
+
+function renderFriendsList(list) {
+  const wrap = $('profile-friends');
+  const count = $('profile-friends-count');
+  if (!wrap) return;
+  const friends = Array.isArray(list) ? list : [];
+  if (count) count.textContent = String(friends.length);
+  if (!friends.length) {
+    wrap.innerHTML = '<div class="notice" style="margin-top:0;">No friends yet. Your accepted friends will appear here.</div>';
+    return;
+  }
+  wrap.innerHTML = '';
+  friends.forEach((friend) => {
+    const row = document.createElement('div');
+    row.className = 'profile-row';
+    const ava = document.createElement('div');
+    ava.className = 'mini-ava';
+    ava.textContent = friend.avatarEmoji || '👤';
+    const grow = document.createElement('div');
+    grow.className = 'grow';
+    const name = document.createElement('strong');
+    name.textContent = friend.username || 'Unknown';
+    const sub = document.createElement('span');
+    sub.textContent = `🧲 ${friend.magnetScore ?? '—'} Magnet Score`;
+    grow.append(name, sub);
+    const btns = document.createElement('div');
+    btns.className = 'profile-mini-btns';
+    const msgBtn = document.createElement('button');
+    msgBtn.className = 'btn btn-ghost';
+    msgBtn.type = 'button';
+    msgBtn.textContent = 'Copy name';
+    msgBtn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(friend.username || ''); toast(`Copied ${friend.username}`, '📋'); } catch (e) { toast('Copy failed', '⚠️'); }
+    });
+    btns.appendChild(msgBtn);
+    row.append(ava, grow, btns);
+    wrap.appendChild(row);
+  });
+}
+
+function renderPendingList(list) {
+  const wrap = $('profile-pending');
+  if (!wrap) return;
+  const pending = Array.isArray(list) ? list : [];
+  if (!pending.length) {
+    wrap.innerHTML = '<div class="notice" style="margin-top:0;">No pending requests.</div>';
+    return;
+  }
+  wrap.innerHTML = '';
+  pending.forEach((req) => {
+    const from = req.fromUsername || req.username || req.from_username || 'Unknown';
+    const row = document.createElement('div');
+    row.className = 'profile-row';
+    const ava = document.createElement('div');
+    ava.className = 'mini-ava';
+    ava.textContent = req.avatarEmoji || '👤';
+    const grow = document.createElement('div');
+    grow.className = 'grow';
+    const name = document.createElement('strong');
+    name.textContent = from;
+    const sub = document.createElement('span');
+    sub.textContent = `🧲 ${req.magnetScore ?? req.magnet_score ?? '—'} Magnet Score`;
+    grow.append(name, sub);
+    const btns = document.createElement('div');
+    btns.className = 'profile-mini-btns';
+    const accept = document.createElement('button');
+    accept.className = 'btn btn-primary';
+    accept.type = 'button';
+    accept.textContent = 'Accept';
+    accept.addEventListener('click', () => respondFriendRequest(req.id, 'accepted'));
+    const decline = document.createElement('button');
+    decline.className = 'btn btn-ghost';
+    decline.type = 'button';
+    decline.textContent = 'Decline';
+    decline.addEventListener('click', () => respondFriendRequest(req.id, 'declined'));
+    btns.append(accept, decline);
+    row.append(ava, grow, btns);
+    wrap.appendChild(row);
+  });
+}
+
+function renderProfilePage() {
+  const usernameEl = $('profile-username');
+  const avatarEl = $('profile-avatar');
+  const scoreEl = $('profile-score');
+  const bioPrev = $('profile-bio-preview');
+  const bioInput = $('profile-bio');
+  const quoteInput = $('profile-quote');
+  const chatsEl = $('profile-chats');
+  if (usernameEl) usernameEl.textContent = S.username || S.guestName || 'Guest';
+  if (avatarEl) avatarEl.textContent = S.avatarEmoji || '👤';
+  if (scoreEl) scoreEl.textContent = S.magnetScore ?? '—';
+  if (bioPrev) bioPrev.textContent = S.bio || 'Add a short bio to tell people what you are about.';
+  if (bioInput) bioInput.value = S.bio || '';
+  if (quoteInput) quoteInput.value = S.featuredLine || '';
+  if (chatsEl) chatsEl.textContent = String(S.chatCount || 0);
+  renderAvatarChoices(S.avatarEmoji || '👤');
+}
+
+async function loadProfileData() {
+  const status = $('profile-status');
+  const onlinePill = $('profile-online-pill');
+  renderProfilePage();
+
+  if (!S.authToken) {
+    renderFriendsList([]);
+    renderPendingList([]);
+    if (status) status.textContent = 'Guest mode does not sync profile data to the server.';
+    if (onlinePill) onlinePill.textContent = `${S.onlineCount.toLocaleString()} online`;
+    return;
+  }
+
+  if (S.profileLoading) return;
+  S.profileLoading = true;
+
+  try {
+    const [profileRes, friendsRes, pendingRes] = await Promise.allSettled([
+      fetch(`${SERVER_URL}/api/profile`, { headers: { Authorization: `Bearer ${S.authToken}` } }),
+      fetch(`${SERVER_URL}/api/friends`, { headers: { Authorization: `Bearer ${S.authToken}` } }),
+      fetch(`${SERVER_URL}/api/friends/pending`, { headers: { Authorization: `Bearer ${S.authToken}` } }),
+    ]);
+
+    let profileData = buildProfileFallback();
+    if (profileRes.status === 'fulfilled' && profileRes.value.ok) {
+      profileData = await profileRes.value.json();
+      S.username = profileData.username || S.username;
+      S.magnetScore = profileData.magnetScore ?? S.magnetScore;
+      S.bio = profileData.bio || '';
+      S.avatarEmoji = profileData.avatarEmoji || '👤';
+      localStorage.setItem('mortalive_avatar_emoji', S.avatarEmoji);
+      localStorage.setItem('mortalive_bio', S.bio);
+    }
+
+    if (profileData.createdAt && status) {
+      const d = new Date(profileData.createdAt);
+      if (!Number.isNaN(d.getTime())) {
+        status.textContent = `Joined ${d.toLocaleDateString()} · Keep building your profile and Magnet Score.`;
+      }
+    } else if (status) {
+      status.textContent = 'Profile loaded locally. Server sync will update when endpoints are ready.';
+    }
+
+    if (friendsRes.status === 'fulfilled' && friendsRes.value.ok) {
+      const data = await friendsRes.value.json();
+      S.friends = data.friends || [];
+      renderFriendsList(S.friends);
+    } else {
+      S.friends = [];
+      renderFriendsList([]);
+    }
+
+    if (pendingRes.status === 'fulfilled' && pendingRes.value.ok) {
+      const data = await pendingRes.value.json();
+      S.pendingRequests = data.requests || [];
+      renderPendingList(S.pendingRequests.map((r) => ({
+        id: r.id,
+        fromUsername: r.accounts?.username || r.from_username || r.username || 'Unknown',
+        avatarEmoji: r.accounts?.avatar_emoji || r.avatar_emoji || '👤',
+        magnetScore: r.accounts?.magnet_score || r.magnet_score || '—'
+      })));
+    } else {
+      S.pendingRequests = [];
+      renderPendingList([]);
+    }
+
+    if (onlinePill) onlinePill.textContent = `${S.onlineCount.toLocaleString()} online`;
+  } catch (e) {
+    console.warn('[Profile]', e);
+    renderFriendsList([]);
+    renderPendingList([]);
+    if (status) status.textContent = 'Could not load profile data right now. Local edits still work.';
+  } finally {
+    S.profileLoading = false;
+    renderProfilePage();
+  }
+}
+
+async function saveProfile() {
+  const bio = normalizeText($('profile-bio')?.value, 160);
+  const avatarEmoji = $('profile-avatar')?.textContent?.trim() || S.avatarEmoji || '👤';
+  const featuredLine = normalizeText($('profile-quote')?.value, 80);
+  S.bio = bio;
+  S.avatarEmoji = avatarEmoji;
+  S.featuredLine = featuredLine;
+  localStorage.setItem('mortalive_bio', bio);
+  localStorage.setItem('mortalive_avatar_emoji', avatarEmoji);
+  localStorage.setItem('mortalive_featured_line', featuredLine);
+
+  const status = $('profile-status');
+  renderProfilePage();
+
+  if (!S.authToken) {
+    if (status) status.textContent = 'Saved locally. Sign in later to sync the profile.';
+    toast('Profile saved locally', '💾');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${SERVER_URL}/api/profile`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${S.authToken}`
+      },
+      body: JSON.stringify({ bio, avatarEmoji })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (status) status.textContent = data.error || 'Profile save failed.';
+      toast(data.error || 'Profile save failed', '⚠️');
+      return;
+    }
+    if (status) status.textContent = 'Profile saved successfully.';
+    toast('Profile updated', '✅');
+    if (S.socket && S.socket.connected) {
+      S.socket.emit('profile-updated', { bio, avatarEmoji });
+    }
+  } catch (e) {
+    if (status) status.textContent = 'Could not reach the server. Saved locally for now.';
+    toast('Saved locally', '💾');
+  }
+}
+
+async function sendFriendRequest(username, button) {
+  if (!S.authToken) {
+    toast('Sign in to send friend requests', '👤');
+    return;
+  }
+  if (!username) return;
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Sending…';
+  }
+  try {
+    const res = await fetch(`${SERVER_URL}/api/friends/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${S.authToken}`
+      },
+      body: JSON.stringify({ toUsername: username })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast(data.error || 'Friend request failed', '⚠️');
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'Add';
+      }
+      return;
+    }
+    if (button) button.textContent = 'Sent ✓';
+    toast(`Friend request sent to ${username}`, '👋');
+  } catch (e) {
+    toast('Could not send friend request', '⚠️');
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Add';
+    }
+  }
+}
+
+async function respondFriendRequest(requestId, action) {
+  if (!S.authToken) return;
+  try {
+    const res = await fetch(`${SERVER_URL}/api/friends/respond`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${S.authToken}`
+      },
+      body: JSON.stringify({ requestId, action })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast(data.error || 'Could not update request', '⚠️');
+      return;
+    }
+    toast(`Request ${action}`, action === 'accepted' ? '✅' : '❌');
+    await loadProfileData();
+  } catch (e) {
+    toast('Could not update request', '⚠️');
+  }
+}
+
+function offerFriendRequest() {
+  if (!S.authToken || S.isGuest) return;
+  if (!S.stranger || S.stranger.isGuest || !S.stranger.name) return;
+  const root = $('toast-root');
+  if (!root) return;
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.style.pointerEvents = 'auto';
+  t.innerHTML = `Add <strong>${S.stranger.name}</strong> as a friend? <button class="btn btn-primary" style="margin-left:10px;padding:6px 10px;border-radius:999px;font-size:12px;">Add</button>`;
+  const btn = t.querySelector('button');
+  btn?.addEventListener('click', () => sendFriendRequest(S.stranger.name, btn));
+  root.appendChild(t);
+  setTimeout(() => t.remove(), 10000);
+}
+
+function openTermsSheet() {
+  openSheet(
+    'Terms',
+    '<strong>Be kind.</strong> Keep it anonymous, use the service responsibly, and follow local laws and community safety expectations. Account features and profile data are used to improve matching and identity inside Mortalive.'
+  );
+}
+
+function openAboutSheet() {
+  openSheet(
+    'About',
+    'Mortalive is designed as a compact chat journey: guest, sign in, profile, discovery, and live chat. The member hub keeps the app feeling clear and professional instead of crowded.'
+  );
+}
+
+function openAchievementsSheet() {
+  const chats = Number(S.chatCount || 0);
+  const magnet = S.magnetScore ?? '—';
+  const body = `
+    <div><strong>Magnet Score:</strong> ${magnet}</div>
+    <div><strong>Chats completed:</strong> ${chats}</div>
+    <div><strong>Profile frame:</strong> ${S.avatarEmoji || '👤'}</div>
+    <div style="margin-top:10px;">Add more chats, keep your profile updated, and build a stronger identity over time.</div>
+  `;
+  openSheet('Achievements', body);
+}
+
+function initHeaderControls() {
+  $('btn-header-terms')?.addEventListener('click', openTermsSheet);
+  $('btn-header-about')?.addEventListener('click', openAboutSheet);
+  $('btn-header-ratings')?.addEventListener('click', () => $('rating-overlay')?.classList.add('open'));
+  $('btn-header-achievements')?.addEventListener('click', openAchievementsSheet);
+  $('btn-header-profile')?.addEventListener('click', () => {
+    showPage('pg-profile');
+    loadProfileData();
+  });
+  $('btn-profile-back')?.addEventListener('click', () => showPage('pg-lobby'));
+  $('btn-profile-save')?.addEventListener('click', saveProfile);
+  $('btn-profile-save-top')?.addEventListener('click', saveProfile);
+  $('btn-profile-refresh')?.addEventListener('click', loadProfileData);
+  $('btn-sheet-close')?.addEventListener('click', closeSheet);
 }
 
 function requestCameraPermission() {
@@ -697,6 +1096,7 @@ function initChatControls() {
   $('btn-end')?.addEventListener('click', () => {
     clearTimeout(S.replyTimer);
     logSession('end', { reason: 'ended', roomId: S.roomId });
+    offerFriendRequest();
     disconnectPeer();
     showPage('pg-lobby');
   });
@@ -874,6 +1274,10 @@ function initSocket() {
   });
 
   S.socket.on('peer-chat', ({ text }) => appendMsg(text, 'them'));
+
+  S.socket.on('friend_request', ({ fromUsername }) => {
+    toast(`${fromUsername} sent you a friend request`, '👋');
+  });
 
   S.socket.on('peer-disconnected', () => {
     addSysLine('👋 Stranger disconnected');
@@ -1210,6 +1614,8 @@ function beginChat() {
   setCallStatus('connecting', 'connecting');
   addSysLine(`✨ Connected to ${s.name}`);
   logSession('start', { stranger: s.name, mode: S.mode, roomId: S.roomId });
+  S.chatCount = Number(S.chatCount || 0) + 1;
+  localStorage.setItem('mortalive_chat_count', String(S.chatCount));
   startSnapshotCapture();
 
   setTimeout(() => {
@@ -1455,6 +1861,7 @@ ready(() => {
   initConsentGate();
   initLandingActions();
   initAuthControls();
+  initHeaderControls();
   initSetupBackButtons();
   initPermissionControls();
   initLobbyControls();
