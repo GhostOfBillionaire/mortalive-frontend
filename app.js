@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-07-02-1'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-07-01-3'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -48,14 +48,12 @@ const S = {
   magnetScore: null,
   isGuest: true,
   guestName: localStorage.getItem('mortalive_guest_name') || '',
-  chatCount: Number(localStorage.getItem('mortalive_chat_count') || '0'),
-  avatarEmoji: localStorage.getItem('mortalive_avatar_emoji') || '👤',
-  bio: localStorage.getItem('mortalive_bio') || '',
-  featuredLine: localStorage.getItem('mortalive_featured_line') || '',
-  friends: [],
-  pendingRequests: [],
-  profileLoading: false,
-  videoLayout: 'horizontal'
+  videoLayout: 'horizontal',
+  demoVideoIndex: 0,
+  chatStartedAt: null,
+  chatCounted: false,
+  progress: null,
+  profile: null
 };
 
 const strangerPool = [
@@ -90,7 +88,544 @@ const autoReplies = [
   'that’s actually kinda scary',
   'based',
   'wait are you serious?'
+];const PROGRESS_KEY = 'mortalive_progress_v3';
+const PROFILE_KEY = 'mortalive_profile_v3';
+
+const PROGRESS_BADGES = [
+  { id: 'rookie', label: 'Rookie', minScore: 0, minCompletions: 0, minStreak: 0 },
+  { id: 'momentum', label: 'Momentum', minScore: 120, minCompletions: 3, minStreak: 1 },
+  { id: 'streak-3', label: '3-Day Streak', minScore: 160, minCompletions: 5, minStreak: 3 },
+  { id: 'bronze', label: 'Bronze', minScore: 220, minCompletions: 8, minStreak: 2 },
+  { id: 'silver', label: 'Silver', minScore: 420, minCompletions: 15, minStreak: 4 },
+  { id: 'gold', label: 'Gold', minScore: 700, minCompletions: 28, minStreak: 6 },
+  { id: 'top10', label: 'Top 10%', minScore: 980, minCompletions: 40, minStreak: 7 }
 ];
+
+const PROFILE_THEMES = {
+  aurora: {
+    name: 'Aurora',
+    accent: 'rgba(90, 177, 255, .95)',
+    glow: 'rgba(90, 177, 255, .22)',
+    frame: 'Liquid Glass'
+  },
+  dusk: {
+    name: 'Dusk',
+    accent: 'rgba(168, 120, 255, .96)',
+    glow: 'rgba(168, 120, 255, .24)',
+    frame: 'Mirror Halo'
+  },
+  ember: {
+    name: 'Ember',
+    accent: 'rgba(255, 146, 86, .95)',
+    glow: 'rgba(255, 146, 86, .22)',
+    frame: 'Signal Flame'
+  }
+};
+
+function loadJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function saveJson(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {}
+}
+
+function clampNum(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function dayKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+function weekKey(date = new Date()) {
+  const d = new Date(date.getTime());
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+function defaultProgress() {
+  return {
+    baseScore: 0,
+    bonusScore: 0,
+    completions: 0,
+    streak: 0,
+    bestStreak: 0,
+    weeklyPoints: 0,
+    weeklyCompletions: 0,
+    lastActiveDay: '',
+    lastCompletionDay: '',
+    lastWeekKey: '',
+    badges: ['rookie'],
+    shareCount: 0,
+    totalMessages: 0,
+    profileTheme: 'aurora',
+    profileFrame: 'Liquid Glass',
+    featuredQuote: 'Building momentum one connection at a time.',
+    pinnedNote: 'Go live, build your score, unlock your profile.',
+    avatarFrame: 'halo',
+    lastSyncedAt: 0
+  };
+}
+
+function defaultProfile() {
+  return {
+    theme: 'aurora',
+    frame: 'Liquid Glass',
+    quote: 'Building momentum one connection at a time.',
+    pinned: 'Go live, build your score, unlock your profile.',
+    accent: 'rgba(90, 177, 255, .95)',
+    pattern: 'mesh'
+  };
+}
+
+function loadProgress() {
+  const stored = loadJson(PROGRESS_KEY, null);
+  const progress = { ...defaultProgress(), ...(stored || {}) };
+  progress.baseScore = Number.isFinite(Number(progress.baseScore)) ? Number(progress.baseScore) : 0;
+  progress.bonusScore = Number.isFinite(Number(progress.bonusScore)) ? Number(progress.bonusScore) : 0;
+  progress.completions = Number.isFinite(Number(progress.completions)) ? Number(progress.completions) : 0;
+  progress.streak = Number.isFinite(Number(progress.streak)) ? Number(progress.streak) : 0;
+  progress.bestStreak = Number.isFinite(Number(progress.bestStreak)) ? Number(progress.bestStreak) : 0;
+  progress.weeklyPoints = Number.isFinite(Number(progress.weeklyPoints)) ? Number(progress.weeklyPoints) : 0;
+  progress.weeklyCompletions = Number.isFinite(Number(progress.weeklyCompletions)) ? Number(progress.weeklyCompletions) : 0;
+  progress.totalMessages = Number.isFinite(Number(progress.totalMessages)) ? Number(progress.totalMessages) : 0;
+  progress.shareCount = Number.isFinite(Number(progress.shareCount)) ? Number(progress.shareCount) : 0;
+  progress.badges = Array.isArray(progress.badges) && progress.badges.length ? progress.badges : ['rookie'];
+  progress.profileTheme = typeof progress.profileTheme === 'string' ? progress.profileTheme : 'aurora';
+  progress.profileFrame = typeof progress.profileFrame === 'string' ? progress.profileFrame : 'Liquid Glass';
+  progress.featuredQuote = typeof progress.featuredQuote === 'string' ? progress.featuredQuote : defaultProgress().featuredQuote;
+  progress.pinnedNote = typeof progress.pinnedNote === 'string' ? progress.pinnedNote : defaultProgress().pinnedNote;
+  progress.avatarFrame = typeof progress.avatarFrame === 'string' ? progress.avatarFrame : 'halo';
+  return progress;
+}
+
+function loadProfile() {
+  const stored = loadJson(PROFILE_KEY, null);
+  const profile = { ...defaultProfile(), ...(stored || {}) };
+  if (!PROFILE_THEMES[profile.theme]) profile.theme = 'aurora';
+  if (typeof profile.frame !== 'string') profile.frame = defaultProfile().frame;
+  if (typeof profile.quote !== 'string') profile.quote = defaultProfile().quote;
+  if (typeof profile.pinned !== 'string') profile.pinned = defaultProfile().pinned;
+  if (typeof profile.accent !== 'string') profile.accent = defaultProfile().accent;
+  if (typeof profile.pattern !== 'string') profile.pattern = 'mesh';
+  return profile;
+}
+
+function getProgressScore(progress = S.progress || defaultProgress()) {
+  return (Number(progress.baseScore) || 0) + (Number(progress.bonusScore) || 0);
+}
+
+function getCurrentProgress() {
+  if (!S.progress) S.progress = loadProgress();
+  return S.progress;
+}
+
+function getCurrentProfile() {
+  if (!S.profile) S.profile = loadProfile();
+  return S.profile;
+}
+
+function persistProgress() {
+  saveJson(PROGRESS_KEY, getCurrentProgress());
+}
+
+function persistProfile() {
+  saveJson(PROFILE_KEY, getCurrentProfile());
+}
+
+function computeWeeklyRank(progress) {
+  const score = getProgressScore(progress);
+  const completions = Number(progress.completions) || 0;
+  const streak = Number(progress.streak) || 0;
+  const weeklyPoints = Number(progress.weeklyPoints) || 0;
+  const power = score * 1.1 + completions * 18 + streak * 22 + weeklyPoints * 0.8;
+  return clampNum(Math.round(6200 / Math.max(42, power / 5)), 1, 9999);
+}
+
+function computeTopPercentile(progress) {
+  const score = getProgressScore(progress);
+  const completions = Number(progress.completions) || 0;
+  const streak = Number(progress.streak) || 0;
+  const weeklyPoints = Number(progress.weeklyPoints) || 0;
+  const power = score + completions * 12 + streak * 20 + weeklyPoints * 0.9;
+  return clampNum(Math.round(100 - power / 18), 1, 99);
+}
+
+function computeGoalText(progress) {
+  const score = getProgressScore(progress);
+  const completions = Number(progress.completions) || 0;
+  const streak = Number(progress.streak) || 0;
+  const percentile = computeTopPercentile(progress);
+
+  if (score < 220) return `${220 - score} more points to unlock Bronze`;
+  if (completions < 8) return `${8 - completions} more chats to unlock Bronze`;
+  if (streak < 3) return `${3 - streak} more days to unlock a streak badge`;
+  if (percentile > 10) return `Push for Top ${percentile > 25 ? '25' : '10'}%`;
+  return 'You are close to a highlight card unlock';
+}
+
+function computeUnlockedBadges(progress) {
+  const score = getProgressScore(progress);
+  const completions = Number(progress.completions) || 0;
+  const streak = Number(progress.streak) || 0;
+  return PROGRESS_BADGES.filter((badge) => {
+    return score >= badge.minScore && completions >= badge.minCompletions && streak >= badge.minStreak;
+  }).map((badge) => badge.label);
+}
+
+function updateDerivedProgress() {
+  const progress = getCurrentProgress();
+  const nowWeek = weekKey();
+  if (progress.lastWeekKey !== nowWeek) {
+    progress.lastWeekKey = nowWeek;
+    progress.weeklyPoints = 0;
+    progress.weeklyCompletions = 0;
+  }
+  progress.badges = computeUnlockedBadges(progress);
+  progress.topPercentile = computeTopPercentile(progress);
+  progress.weeklyRank = computeWeeklyRank(progress);
+
+  const score = getProgressScore(progress);
+  const profile = getCurrentProfile();
+  if (score >= 700) {
+    progress.profileTheme = 'dusk';
+    progress.profileFrame = 'Gold Halo';
+    profile.theme = 'dusk';
+    profile.frame = 'Gold Halo';
+    profile.accent = PROFILE_THEMES.dusk.accent;
+  } else if (score >= 420) {
+    progress.profileTheme = 'aurora';
+    progress.profileFrame = 'Silver Glow';
+    profile.theme = 'aurora';
+    profile.frame = 'Silver Glow';
+    profile.accent = PROFILE_THEMES.aurora.accent;
+  } else {
+    progress.profileTheme = 'ember';
+    progress.profileFrame = 'Glass Spark';
+    profile.theme = 'ember';
+    profile.frame = 'Glass Spark';
+    profile.accent = PROFILE_THEMES.ember.accent;
+  }
+  progress.lastSyncedAt = Date.now();
+  persistProgress();
+  persistProfile();
+}
+
+function streakAdvanceOnCompletion(progress) {
+  const today = dayKey();
+  if (progress.lastCompletionDay === today) return false;
+  if (progress.lastCompletionDay) {
+    const prev = new Date(`${progress.lastCompletionDay}T00:00:00Z`);
+    const cur = new Date(`${today}T00:00:00Z`);
+    const diff = Math.round((cur - prev) / 86400000);
+    progress.streak = diff === 1 ? (progress.streak || 0) + 1 : 1;
+  } else {
+    progress.streak = 1;
+  }
+  progress.bestStreak = Math.max(progress.bestStreak || 0, progress.streak);
+  progress.lastCompletionDay = today;
+  progress.lastActiveDay = today;
+  return true;
+}
+
+function syncThemeHints() {
+  const progress = getCurrentProgress();
+  const profile = getCurrentProfile();
+  const theme = PROFILE_THEMES[profile.theme] || PROFILE_THEMES.aurora;
+  document.documentElement.style.setProperty('--reward-accent', theme.accent);
+  document.documentElement.style.setProperty('--reward-glow', theme.glow);
+  document.documentElement.style.setProperty('--reward-frame', theme.frame);
+  document.body.dataset.progressTheme = progress.profileTheme || profile.theme || 'aurora';
+  document.body.dataset.progressTier = getProgressScore(progress) >= 700 ? 'gold' : getProgressScore(progress) >= 420 ? 'silver' : 'starter';
+}
+
+function formatProgressLine(progress = getCurrentProgress()) {
+  const score = getProgressScore(progress);
+  const completions = Number(progress.completions) || 0;
+  const streak = Number(progress.streak) || 0;
+  const badges = Array.isArray(progress.badges) ? progress.badges.length : 0;
+  const percentile = progress.topPercentile || computeTopPercentile(progress);
+  const rank = progress.weeklyRank || computeWeeklyRank(progress);
+  return {
+    score,
+    completions,
+    streak,
+    badges,
+    percentile,
+    rank,
+    goal: computeGoalText(progress)
+  };
+}
+
+function updateProgressText() {
+  const progress = getCurrentProgress();
+  const profile = getCurrentProfile();
+  const summary = formatProgressLine(progress);
+
+  const stats = {
+    'progress-score': `${summary.score}`,
+    'progress-streak': `${summary.streak} day${summary.streak === 1 ? '' : 's'}`,
+    'progress-completions': `${summary.completions}`,
+    'progress-percentile': `Top ${summary.percentile}%`,
+    'progress-rank': `#${summary.rank}`,
+    'progress-goal': summary.goal,
+    'progress-badges': summary.badges ? progress.badges.join(' · ') : 'Rookie',
+    'progress-frame': progress.profileFrame || profile.frame,
+    'progress-quote': profile.quote || progress.featuredQuote || '',
+    'progress-pinned': profile.pinned || progress.pinnedNote || ''
+  };
+
+  Object.entries(stats).forEach(([id, value]) => {
+    const el = $(id);
+    if (el && value !== undefined && value !== null) el.textContent = value;
+  });
+
+  const scorePill = $('score-pill-btn');
+  if (scorePill) {
+    scorePill.textContent = S.isGuest ? 'Guest mode' : `🪷 ${summary.score} Buddh Score · ${summary.badges} badges`;
+    scorePill.title = S.isGuest
+      ? 'Guest sessions do not earn status'
+      : `Top ${summary.percentile}% · #${summary.rank} weekly rank`;
+  }
+
+  syncThemeHints();
+}
+
+function syncAuthProgress(baseScore) {
+  const progress = getCurrentProgress();
+  const incoming = Number(baseScore);
+  if (Number.isFinite(incoming) && incoming >= 0) {
+    progress.baseScore = Math.max(Number(progress.baseScore) || 0, incoming);
+  }
+  updateDerivedProgress();
+  updateProgressText();
+}
+
+function bootProgressState() {
+  S.progress = loadProgress();
+  S.profile = loadProfile();
+  updateDerivedProgress();
+  updateProgressText();
+}
+
+function awardProgress(kind, amount = 1, meta = {}) {
+  const progress = getCurrentProgress();
+  if (S.isGuest) return progress;
+
+  const delta = Number.isFinite(Number(amount)) ? Number(amount) : 1;
+  const source = kind || 'activity';
+  progress.bonusScore = Math.max(0, (Number(progress.bonusScore) || 0) + delta);
+  progress.weeklyPoints = Math.max(0, (Number(progress.weeklyPoints) || 0) + delta);
+  progress.totalMessages = Math.max(0, (Number(progress.totalMessages) || 0) + (meta.message ? 1 : 0));
+  progress.lastActiveDay = dayKey();
+
+  if (meta.completion) {
+    progress.completions = Math.max(0, (Number(progress.completions) || 0) + 1);
+    progress.weeklyCompletions = Math.max(0, (Number(progress.weeklyCompletions) || 0) + 1);
+    streakAdvanceOnCompletion(progress);
+    const bonus = clampNum(10 + Math.floor((meta.durationMs || 0) / 20000), 10, 24);
+    progress.bonusScore = Math.max(0, (Number(progress.bonusScore) || 0) + bonus);
+    progress.weeklyPoints = Math.max(0, (Number(progress.weeklyPoints) || 0) + bonus);
+  }
+
+  if (meta.streakReset) {
+    progress.streak = 0;
+  }
+
+  progress.badges = computeUnlockedBadges(progress);
+  progress.topPercentile = computeTopPercentile(progress);
+  progress.weeklyRank = computeWeeklyRank(progress);
+  progress.lastSyncedAt = Date.now();
+
+  persistProgress();
+  updateProgressText();
+
+  if (meta.completion) {
+    const goal = computeGoalText(progress);
+    if (source === 'chat_complete') {
+      toast(`+${delta} Buddh Score · ${goal}`, '🪷');
+    } else {
+      toast(`Milestone reached · ${goal}`, '🏁');
+    }
+  } else if (source === 'message' && (Number(progress.totalMessages) || 0) % 5 === 0) {
+    toast(`+${delta} progress`, '✨');
+  }
+
+  return progress;
+}
+
+function finalizeChatProgress(reason = 'completed') {
+  if (S.chatCounted) return;
+  const started = S.chatStartedAt || Date.now();
+  const durationMs = Math.max(0, Date.now() - started);
+  S.chatStartedAt = null;
+  S.chatCounted = true;
+
+  if (S.isGuest) return;
+  if (reason !== 'completed' && reason !== 'peer-disconnected') return;
+  if (durationMs < 6000) return;
+
+  awardProgress('chat_complete', 1, { completion: true, durationMs });
+}
+
+function resetChatProgress() {
+  S.chatStartedAt = null;
+  S.chatCounted = false;
+}
+
+function copyProgressShareCard() {
+  const progress = getCurrentProgress();
+  const summary = formatProgressLine(progress);
+  const profile = getCurrentProfile();
+  const text = [
+    `Mortalive status`,
+    `${S.username || S.guestName || 'Guest'} · ${summary.score} Buddh Score`,
+    `${summary.streak} day streak · ${summary.completions} completions`,
+    `Top ${summary.percentile}% · #${summary.rank} weekly`,
+    `Frame: ${profile.frame || 'Liquid Glass'}`
+  ].join('\n');
+
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      progress.shareCount = (Number(progress.shareCount) || 0) + 1;
+      persistProgress();
+      updateProgressText();
+      toast('Share card copied', '📋');
+    }).catch(() => toast('Could not copy share card', '⚠️'));
+  } else {
+    toast('Clipboard is not supported here', '⚠️');
+  }
+  return text;
+}
+
+function ensureProgressSheet() {
+  let overlay = $('progress-overlay');
+  if (overlay) return overlay;
+
+  overlay = document.createElement('div');
+  overlay.id = 'progress-overlay';
+  overlay.style.cssText = [
+    'display:none',
+    'position:fixed',
+    'inset:0',
+    'z-index:999',
+    'align-items:center',
+    'justify-content:center',
+    'padding:18px',
+    'background:rgba(8,14,28,.58)',
+    'backdrop-filter:blur(16px) saturate(130%)'
+  ].join(';');
+
+  const panel = document.createElement('div');
+  panel.style.cssText = [
+    'width:min(720px,100%)',
+    'max-height:min(84vh,880px)',
+    'overflow:auto',
+    'border-radius:28px',
+    'padding:20px',
+    'background:linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.08))',
+    'border:1px solid rgba(255,255,255,.20)',
+    'box-shadow:0 30px 80px rgba(0,0,0,.38)',
+    'color:#fff'
+  ].join(';');
+
+  panel.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px;">
+      <div style="min-width:0;">
+        <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.7;font-weight:800;">Progress identity</div>
+        <div style="font-size:28px;line-height:1.05;letter-spacing:-.04em;font-weight:800;margin-top:6px;">Your status, live</div>
+        <div id="progress-goal" style="margin-top:10px;color:rgba(255,255,255,.78);font-size:14px;line-height:1.6;">Loading progress…</div>
+      </div>
+      <button id="progress-close" type="button" style="width:42px;height:42px;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.10);color:#fff;font-size:22px;line-height:1;">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
+      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);">
+        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Buddh Score</div>
+        <div id="progress-score" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">0</div>
+      </div>
+      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);">
+        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Weekly rank</div>
+        <div id="progress-rank" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">#—</div>
+      </div>
+      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);">
+        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Completion count</div>
+        <div id="progress-completions" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">0</div>
+      </div>
+      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);">
+        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Top percentile</div>
+        <div id="progress-percentile" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">Top —%</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);">
+      <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Streak</div>
+      <div id="progress-streak" style="font-size:22px;font-weight:800;line-height:1.2;margin-top:6px;">0 days</div>
+    </div>
+    <div style="margin-top:12px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);">
+      <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Badges</div>
+      <div id="progress-badges" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;line-height:1.4;"></div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button id="progress-share" type="button" style="flex:1;min-width:180px;height:48px;border:0;border-radius:16px;background:linear-gradient(135deg, rgba(90,177,255,.96), rgba(168,120,255,.96));color:#fff;font-weight:800;">Copy share card</button>
+      <button id="progress-refresh" type="button" style="flex:1;min-width:180px;height:48px;border:1px solid rgba(255,255,255,.20);border-radius:16px;background:rgba(255,255,255,.08);color:#fff;font-weight:800;">Refresh stats</button>
+    </div>
+    <div id="progress-frame" style="display:none;"></div>
+    <div id="progress-quote" style="display:none;"></div>
+    <div id="progress-pinned" style="display:none;"></div>
+  `;
+
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    overlay.style.display = 'none';
+  };
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+
+  panel.querySelector('#progress-close')?.addEventListener('click', close);
+  panel.querySelector('#progress-share')?.addEventListener('click', copyProgressShareCard);
+  panel.querySelector('#progress-refresh')?.addEventListener('click', () => {
+    updateDerivedProgress();
+    updateProgressText();
+    toast('Progress refreshed', '🪷');
+  });
+
+  return overlay;
+}
+
+function openProgressSheet() {
+  if (S.isGuest) {
+    toast('Guests do not earn status yet', '👤');
+    return;
+  }
+  const overlay = ensureProgressSheet();
+  updateDerivedProgress();
+  updateProgressText();
+
+  const badgesWrap = overlay.querySelector('#progress-badges');
+  if (badgesWrap) {
+    const badges = getCurrentProgress().badges || [];
+    badgesWrap.innerHTML = badges.length
+      ? badges.map((badge) => `<span style="display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.15);font-size:13px;font-weight:700;">${badge}</span>`).join('')
+      : '<span style="opacity:.75;">No badges yet</span>';
+  }
+
+  overlay.style.display = 'flex';
+}
+
 
 function $(id) {
   return document.getElementById(id);
@@ -109,8 +644,6 @@ function showPage(id) {
   const page = $(id);
   if (page) page.classList.add('active');
   window.scrollTo(0, 0);
-  if (id === 'pg-profile') loadProfileData().catch(() => {});
-  if (id === 'pg-lobby') updateIdentityDisplay();
 }
 
 function toast(msg, icon = '✅') {
@@ -284,6 +817,8 @@ function enterLobby() {
   setActiveMode(S.mode);
   showPage('pg-lobby');
   ensureLobbyCameraPreview();
+  updateDerivedProgress();
+  updateProgressText();
   updateIdentityDisplay();
 }
 
@@ -292,443 +827,47 @@ function updateIdentityDisplay() {
   const switchBtn = $('btn-switch-account');
   const logoutBtn = $('btn-logout');
   const scorePill = $('score-pill-btn');
-  const headerRatings = $('btn-header-ratings');
+  const progress = getCurrentProgress();
+  const summary = formatProgressLine(progress);
 
   if (!S.isGuest && S.username) {
-    if (label) label.textContent = `Logged in as ${S.username} · 🧲 ${S.magnetScore ?? '—'} Magnet Score`;
+    if (label) label.textContent = `Logged in as ${S.username} · 🪷 ${summary.score} Buddh Score · ${summary.streak} streak · #${summary.rank}`;
     if (switchBtn) switchBtn.style.display = 'none';
     if (logoutBtn) logoutBtn.style.display = '';
     if (scorePill) scorePill.style.display = '';
-    if (headerRatings) headerRatings.style.display = '';
   } else {
-    if (label) label.textContent = `Browsing as guest "${S.guestName || 'Guest'}" — no Magnet Score`;
+    if (label) label.textContent = `Browsing as guest "${S.guestName || 'Guest'}" — status is locked until sign-in`;
     if (switchBtn) switchBtn.style.display = '';
     if (logoutBtn) logoutBtn.style.display = 'none';
     if (scorePill) scorePill.style.display = 'none';
-    if (headerRatings) headerRatings.style.display = 'none';
   }
+
+  updateProgressText();
 }
 
-function updateRatingVisibility() {
-  const rateBtn = $('btn-rate-top');
-  const allowed = !!S.authToken && !S.isGuest && !(S.stranger && S.stranger.isGuest);
-  if (rateBtn) rateBtn.style.display = allowed ? '' : 'none';
-  const overlay = $('rating-overlay');
-  if (!allowed && overlay) overlay.classList.remove('open');
-}
 
-const PROFILE_EMOJIS = ['👤','🌟','🦊','🎭','🌸','⚡','🌙','🔮','☀️','🖤','🧠','🎧'];
-
-function normalizeText(value, max = 160) {
-  return String(value || '').trim().slice(0, max);
-}
-
-function openSheet(title, bodyHtml) {
-  const overlay = $('sheet-overlay');
-  const titleEl = $('sheet-title');
-  const bodyEl = $('sheet-body');
-  if (titleEl) titleEl.textContent = title;
-  if (bodyEl) bodyEl.innerHTML = bodyHtml;
-  if (overlay) overlay.classList.add('open');
-}
-
-function closeSheet() {
-  const overlay = $('sheet-overlay');
-  if (overlay) overlay.classList.remove('open');
-}
-
-function buildProfileFallback() {
-  return {
-    username: S.username || S.guestName || 'Guest',
-    magnetScore: S.magnetScore ?? '—',
-    bio: S.bio || '',
-    avatarEmoji: S.avatarEmoji || '👤',
-    createdAt: null
+function refreshLaunchpadCopy() {
+  const set = (id, value) => {
+    const el = $(id);
+    if (el) el.textContent = value;
   };
-}
 
-function renderAvatarChoices(selected) {
-  const grid = $('avatar-grid');
-  if (!grid) return;
-  grid.innerHTML = '';
-  PROFILE_EMOJIS.forEach((emoji) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = `avatar-chip${emoji === selected ? ' active' : ''}`;
-    btn.textContent = emoji;
-    btn.addEventListener('click', () => {
-      localStorage.setItem('mortalive_avatar_emoji', emoji);
-      S.avatarEmoji = emoji;
-      renderProfilePage();
-      renderAvatarChoices(emoji);
-    });
-    grid.appendChild(btn);
-  });
-}
+  set('hero-kicker', 'Live rank · badges · streaks');
+  set('hero-title', 'Start your next connection');
+  set('hero-text', 'Go live, build your Buddh Score, and unlock your profile as you connect.');
+  set('btn-enter', 'Go Live');
+  set('btn-start', 'Go Live');
+  set('btn-start-text', 'Go Live · Text');
+  set('btn-start-video', 'Go Live · Video');
+  set('btn-continue-guest', 'Continue as guest');
+  set('btn-login', 'Log in & continue');
+  set('btn-signup', 'Create account');
+  set('btn-find', 'Find match');
+  set('btn-allow', 'Allow camera & mic');
+  set('btn-skip-cam', 'Skip to text chat');
 
-function renderFriendsList(list) {
-  const wrap = $('profile-friends');
-  const count = $('profile-friends-count');
-  if (!wrap) return;
-  const friends = Array.isArray(list) ? list : [];
-  if (count) count.textContent = String(friends.length);
-  if (!friends.length) {
-    wrap.innerHTML = '<div class="notice" style="margin-top:0;">No friends yet. Your accepted friends will appear here.</div>';
-    return;
-  }
-  wrap.innerHTML = '';
-  friends.forEach((friend) => {
-    const row = document.createElement('div');
-    row.className = 'profile-row';
-    const ava = document.createElement('div');
-    ava.className = 'mini-ava';
-    ava.textContent = friend.avatarEmoji || '👤';
-    const grow = document.createElement('div');
-    grow.className = 'grow';
-    const name = document.createElement('strong');
-    name.textContent = friend.username || 'Unknown';
-    const sub = document.createElement('span');
-    sub.textContent = `🧲 ${friend.magnetScore ?? '—'} Magnet Score`;
-    grow.append(name, sub);
-    const btns = document.createElement('div');
-    btns.className = 'profile-mini-btns';
-    const msgBtn = document.createElement('button');
-    msgBtn.className = 'btn btn-ghost';
-    msgBtn.type = 'button';
-    msgBtn.textContent = 'Copy name';
-    msgBtn.addEventListener('click', async () => {
-      try { await navigator.clipboard.writeText(friend.username || ''); toast(`Copied ${friend.username}`, '📋'); } catch (e) { toast('Copy failed', '⚠️'); }
-    });
-    btns.appendChild(msgBtn);
-    row.append(ava, grow, btns);
-    wrap.appendChild(row);
-  });
-}
-
-function renderPendingList(list) {
-  const wrap = $('profile-pending');
-  if (!wrap) return;
-  const pending = Array.isArray(list) ? list : [];
-  if (!pending.length) {
-    wrap.innerHTML = '<div class="notice" style="margin-top:0;">No pending requests.</div>';
-    return;
-  }
-  wrap.innerHTML = '';
-  pending.forEach((req) => {
-    const from = req.fromUsername || req.username || req.from_username || 'Unknown';
-    const row = document.createElement('div');
-    row.className = 'profile-row';
-    const ava = document.createElement('div');
-    ava.className = 'mini-ava';
-    ava.textContent = req.avatarEmoji || '👤';
-    const grow = document.createElement('div');
-    grow.className = 'grow';
-    const name = document.createElement('strong');
-    name.textContent = from;
-    const sub = document.createElement('span');
-    sub.textContent = `🧲 ${req.magnetScore ?? req.magnet_score ?? '—'} Magnet Score`;
-    grow.append(name, sub);
-    const btns = document.createElement('div');
-    btns.className = 'profile-mini-btns';
-    const accept = document.createElement('button');
-    accept.className = 'btn btn-primary';
-    accept.type = 'button';
-    accept.textContent = 'Accept';
-    accept.addEventListener('click', () => respondFriendRequest(req.id, 'accepted'));
-    const decline = document.createElement('button');
-    decline.className = 'btn btn-ghost';
-    decline.type = 'button';
-    decline.textContent = 'Decline';
-    decline.addEventListener('click', () => respondFriendRequest(req.id, 'declined'));
-    btns.append(accept, decline);
-    row.append(ava, grow, btns);
-    wrap.appendChild(row);
-  });
-}
-
-function renderProfilePage() {
-  const usernameEl = $('profile-username');
-  const avatarEl = $('profile-avatar');
-  const scoreEl = $('profile-score');
-  const bioPrev = $('profile-bio-preview');
-  const bioInput = $('profile-bio');
-  const quoteInput = $('profile-quote');
-  const chatsEl = $('profile-chats');
-  const guestNote = $('profile-guest-note');
-  const scoreCard = $('profile-score-card');
-  const friendsSection = $('profile-friends-section');
-  const pendingSection = $('profile-pending-section');
-  const profileStatus = $('profile-status');
-
-  const isGuestUser = !S.authToken || S.isGuest;
-
-  if (usernameEl) usernameEl.textContent = isGuestUser ? (S.guestName || 'Guest') : (S.username || 'Guest');
-  if (avatarEl) avatarEl.textContent = S.avatarEmoji || '👤';
-  if (scoreEl) scoreEl.textContent = isGuestUser ? 'Login required' : (S.magnetScore ?? '—');
-  if (bioPrev) bioPrev.textContent = S.bio || 'Add a short bio to tell people what you are about.';
-  if (bioInput) bioInput.value = S.bio || '';
-  if (quoteInput) quoteInput.value = S.featuredLine || '';
-  if (chatsEl) chatsEl.textContent = String(S.chatCount || 0);
-  if (guestNote) guestNote.style.display = isGuestUser ? 'block' : 'none';
-  if (scoreCard) scoreCard.style.display = isGuestUser ? 'none' : '';
-  if (friendsSection) friendsSection.style.display = isGuestUser ? 'none' : '';
-  if (pendingSection) pendingSection.style.display = isGuestUser ? 'none' : '';
-  if (profileStatus && isGuestUser) {
-    profileStatus.textContent = 'Guest mode is local-only. Sign in or sign up to unlock Magnet Score, ratings, friends, and sync.';
-  }
-  renderAvatarChoices(S.avatarEmoji || '👤');
-}
-
-async function loadProfileData() {
-  const status = $('profile-status');
-  const onlinePill = $('profile-online-pill');
-  renderProfilePage();
-
-  if (!S.authToken) {
-    renderFriendsList([]);
-    renderPendingList([]);
-    if (status) status.textContent = 'Guest mode does not sync profile data to the server.';
-    if (onlinePill) onlinePill.textContent = `${S.onlineCount.toLocaleString()} online`;
-    return;
-  }
-
-  if (S.profileLoading) return;
-  S.profileLoading = true;
-
-  try {
-    const [profileRes, friendsRes, pendingRes] = await Promise.allSettled([
-      fetch(`${SERVER_URL}/api/profile`, { headers: { Authorization: `Bearer ${S.authToken}` } }),
-      fetch(`${SERVER_URL}/api/friends`, { headers: { Authorization: `Bearer ${S.authToken}` } }),
-      fetch(`${SERVER_URL}/api/friends/pending`, { headers: { Authorization: `Bearer ${S.authToken}` } }),
-    ]);
-
-    let profileData = buildProfileFallback();
-    if (profileRes.status === 'fulfilled' && profileRes.value.ok) {
-      profileData = await profileRes.value.json();
-      S.username = profileData.username || S.username;
-      S.magnetScore = profileData.magnetScore ?? S.magnetScore;
-      S.bio = profileData.bio || '';
-      S.avatarEmoji = profileData.avatarEmoji || '👤';
-      localStorage.setItem('mortalive_avatar_emoji', S.avatarEmoji);
-      localStorage.setItem('mortalive_bio', S.bio);
-    }
-
-    if (profileData.createdAt && status) {
-      const d = new Date(profileData.createdAt);
-      if (!Number.isNaN(d.getTime())) {
-        status.textContent = `Joined ${d.toLocaleDateString()} · Keep building your profile and Magnet Score.`;
-      }
-    } else if (status) {
-      status.textContent = 'Profile loaded locally. Server sync will update when endpoints are ready.';
-    }
-
-    if (friendsRes.status === 'fulfilled' && friendsRes.value.ok) {
-      const data = await friendsRes.value.json();
-      S.friends = data.friends || [];
-      renderFriendsList(S.friends);
-    } else {
-      S.friends = [];
-      renderFriendsList([]);
-    }
-
-    if (pendingRes.status === 'fulfilled' && pendingRes.value.ok) {
-      const data = await pendingRes.value.json();
-      S.pendingRequests = data.requests || [];
-      renderPendingList(S.pendingRequests.map((r) => ({
-        id: r.id,
-        fromUsername: r.accounts?.username || r.from_username || r.username || 'Unknown',
-        avatarEmoji: r.accounts?.avatar_emoji || r.avatar_emoji || '👤',
-        magnetScore: r.accounts?.magnet_score || r.magnet_score || '—'
-      })));
-    } else {
-      S.pendingRequests = [];
-      renderPendingList([]);
-    }
-
-    if (onlinePill) onlinePill.textContent = `${S.onlineCount.toLocaleString()} online`;
-  } catch (e) {
-    console.warn('[Profile]', e);
-    renderFriendsList([]);
-    renderPendingList([]);
-    if (status) status.textContent = 'Could not load profile data right now. Local edits still work.';
-  } finally {
-    S.profileLoading = false;
-    renderProfilePage();
-  }
-}
-
-async function saveProfile() {
-  const bio = normalizeText($('profile-bio')?.value, 160);
-  const avatarEmoji = $('profile-avatar')?.textContent?.trim() || S.avatarEmoji || '👤';
-  const featuredLine = normalizeText($('profile-quote')?.value, 80);
-  S.bio = bio;
-  S.avatarEmoji = avatarEmoji;
-  S.featuredLine = featuredLine;
-  localStorage.setItem('mortalive_bio', bio);
-  localStorage.setItem('mortalive_avatar_emoji', avatarEmoji);
-  localStorage.setItem('mortalive_featured_line', featuredLine);
-
-  const status = $('profile-status');
-  renderProfilePage();
-
-  if (!S.authToken) {
-    if (status) status.textContent = 'Saved locally. Sign in later to sync the profile.';
-    toast('Profile saved locally', '💾');
-    return;
-  }
-
-  try {
-    const res = await fetch(`${SERVER_URL}/api/profile`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${S.authToken}`
-      },
-      body: JSON.stringify({ bio, avatarEmoji })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      if (status) status.textContent = data.error || 'Profile save failed.';
-      toast(data.error || 'Profile save failed', '⚠️');
-      return;
-    }
-    if (status) status.textContent = 'Profile saved successfully.';
-    toast('Profile updated', '✅');
-    if (S.socket && S.socket.connected) {
-      S.socket.emit('profile-updated', { bio, avatarEmoji });
-    }
-  } catch (e) {
-    if (status) status.textContent = 'Could not reach the server. Saved locally for now.';
-    toast('Saved locally', '💾');
-  }
-}
-
-async function sendFriendRequest(username, button) {
-  if (!S.authToken) {
-    toast('Sign in to send friend requests', '👤');
-    return;
-  }
-  if (!username) return;
-  if (button) {
-    button.disabled = true;
-    button.textContent = 'Sending…';
-  }
-  try {
-    const res = await fetch(`${SERVER_URL}/api/friends/request`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${S.authToken}`
-      },
-      body: JSON.stringify({ toUsername: username })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      toast(data.error || 'Friend request failed', '⚠️');
-      if (button) {
-        button.disabled = false;
-        button.textContent = 'Add';
-      }
-      return;
-    }
-    if (button) button.textContent = 'Sent ✓';
-    toast(`Friend request sent to ${username}`, '👋');
-  } catch (e) {
-    toast('Could not send friend request', '⚠️');
-    if (button) {
-      button.disabled = false;
-      button.textContent = 'Add';
-    }
-  }
-}
-
-async function respondFriendRequest(requestId, action) {
-  if (!S.authToken) return;
-  try {
-    const res = await fetch(`${SERVER_URL}/api/friends/respond`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${S.authToken}`
-      },
-      body: JSON.stringify({ requestId, action })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      toast(data.error || 'Could not update request', '⚠️');
-      return;
-    }
-    toast(`Request ${action}`, action === 'accepted' ? '✅' : '❌');
-    await loadProfileData();
-  } catch (e) {
-    toast('Could not update request', '⚠️');
-  }
-}
-
-function offerFriendRequest() {
-  if (!S.authToken || S.isGuest) return;
-  if (!S.stranger || S.stranger.isGuest || !S.stranger.name) return;
-  const root = $('toast-root');
-  if (!root) return;
-  const t = document.createElement('div');
-  t.className = 'toast';
-  t.style.pointerEvents = 'auto';
-  t.innerHTML = `Add <strong>${S.stranger.name}</strong> as a friend? <button class="btn btn-primary" style="margin-left:10px;padding:6px 10px;border-radius:999px;font-size:12px;">Add</button>`;
-  const btn = t.querySelector('button');
-  btn?.addEventListener('click', () => sendFriendRequest(S.stranger.name, btn));
-  root.appendChild(t);
-  setTimeout(() => t.remove(), 10000);
-}
-
-function openTermsSheet() {
-  openSheet(
-    'Terms',
-    '<strong>Be kind.</strong> Keep it anonymous, use the service responsibly, and follow local laws and community safety expectations. Account features and profile data are used to improve matching and identity inside Mortalive.'
-  );
-}
-
-function openAboutSheet() {
-  openSheet(
-    'About',
-    'Mortalive is designed as a compact chat journey: guest, sign in, profile, discovery, and live chat. The member hub keeps the app feeling clear and professional instead of crowded.'
-  );
-}
-
-function openAchievementsSheet() {
-  if (!S.authToken || S.isGuest) {
-    openSheet(
-      'Achievements',
-      '<div>Sign in or sign up to unlock Magnet Score, streaks, badges, ranking boards, and shareable profile progress.</div>'
-    );
-    return;
-  }
-
-  const chats = Number(S.chatCount || 0);
-  const magnet = S.magnetScore ?? '—';
-  const body = `
-    <div><strong>Magnet Score:</strong> ${magnet}</div>
-    <div><strong>Chats completed:</strong> ${chats}</div>
-    <div><strong>Profile frame:</strong> ${S.avatarEmoji || '👤'}</div>
-    <div style="margin-top:10px;">Add more chats, keep your profile updated, and build a stronger identity over time.</div>
-  `;
-  openSheet('Achievements', body);
-}
-
-function initHeaderControls() {
-  $('btn-header-terms')?.addEventListener('click', openTermsSheet);
-  $('btn-header-about')?.addEventListener('click', openAboutSheet);
-  $('btn-header-ratings')?.addEventListener('click', () => $('rating-overlay')?.classList.add('open'));
-  $('btn-header-achievements')?.addEventListener('click', openAchievementsSheet);
-  $('btn-header-profile')?.addEventListener('click', () => {
-    showPage('pg-profile');
-    loadProfileData();
-  });
-  $('btn-profile-back')?.addEventListener('click', () => showPage('pg-lobby'));
-  $('btn-profile-back-2')?.addEventListener('click', () => showPage('pg-lobby'));
-  $('btn-profile-save')?.addEventListener('click', saveProfile);
-  $('btn-profile-save-top')?.addEventListener('click', saveProfile);
-  $('btn-profile-refresh')?.addEventListener('click', loadProfileData);
-  $('btn-sheet-close')?.addEventListener('click', closeSheet);
+  const note = document.querySelector('.small-links');
+  if (note) note.textContent = 'By continuing, you agree to Mortalive’s terms, privacy rules, and session policies.';
 }
 
 function requestCameraPermission() {
@@ -864,7 +1003,8 @@ function initAuthControls() {
     S.isGuest = false;
     localStorage.setItem('mortalive_token', token);
     localStorage.setItem('mortalive_username', username);
-    toast(`Welcome, ${username}!`, '🧲');
+    syncAuthProgress(magnetScore);
+    toast(`Welcome, ${username}!`, '🪷');
     enterLobby();
   }
 
@@ -949,6 +1089,7 @@ function initAuthControls() {
     S.magnetScore = null;
     S.isGuest = true;
     S.guestName = name.slice(0, 24) || `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
+    updateProgressText();
     localStorage.removeItem('mortalive_token');
     localStorage.removeItem('mortalive_username');
     localStorage.setItem('mortalive_guest_name', S.guestName);
@@ -972,6 +1113,7 @@ async function tryAutoLogin() {
     S.username = data.username;
     S.magnetScore = data.magnetScore;
     S.isGuest = false;
+    syncAuthProgress(data.magnetScore);
     return true;
   } catch (e) {
     S.authToken = null;
@@ -1036,6 +1178,7 @@ function initPermissionControls() {
 
 function initLobbyControls() {
   $('btn-switch-account')?.addEventListener('click', () => showPage('pg-auth'));
+  $('score-pill-btn')?.addEventListener('click', openProgressSheet);
 
   $('btn-logout')?.addEventListener('click', async () => {
     try {
@@ -1052,6 +1195,7 @@ function initLobbyControls() {
     localStorage.removeItem('mortalive_username');
     toast('Logged out', '👋');
     updateIdentityDisplay();
+    updateProgressText();
     showPage('pg-auth');
   });
 
@@ -1122,6 +1266,7 @@ function initChatControls() {
 
   $('btn-skip')?.addEventListener('click', () => {
     clearTimeout(S.replyTimer);
+    finalizeChatProgress('skipped');
     logSession('end', { reason: 'skip', roomId: S.roomId });
     disconnectPeer();
     addSysLine('↩ Skipping — searching next match…');
@@ -1130,10 +1275,11 @@ function initChatControls() {
 
   $('btn-end')?.addEventListener('click', () => {
     clearTimeout(S.replyTimer);
+    finalizeChatProgress('completed');
     logSession('end', { reason: 'ended', roomId: S.roomId });
-    offerFriendRequest();
     disconnectPeer();
     showPage('pg-lobby');
+    updateIdentityDisplay();
   });
 
   $('btn-toggle-video')?.addEventListener('click', () => {
@@ -1206,18 +1352,14 @@ $('vc-fs')?.addEventListener('click', () => {
     showPage('pg-lobby');
   });
 
-  $('btn-try-demo')?.addEventListener('click', () => {
-    clearTimeout(matchTimeout);
-    clearTimeout(S.noMatchTimeout);
-    if (S.socket && S.socket.connected) removeFromQueueSafely();
-    simulateDemoMatch();
-  });
 }
 
 function initGlobalDefaults() {
+  bootProgressState();
   setActiveMode(S.mode);
   updateOnlineCount();
   applyVideoLayout();
+  refreshLaunchpadCopy();
   setPrimaryButtonsEnabled(false);
   if (!$('landing-consent') && !$('terms') && !$('terms-checkbox') && !$('c1') && !$('c2') && !$('c3')) {
     setPrimaryButtonsEnabled(true);
@@ -1310,11 +1452,8 @@ function initSocket() {
 
   S.socket.on('peer-chat', ({ text }) => appendMsg(text, 'them'));
 
-  S.socket.on('friend_request', ({ fromUsername }) => {
-    toast(`${fromUsername} sent you a friend request`, '👋');
-  });
-
   S.socket.on('peer-disconnected', () => {
+    finalizeChatProgress('peer-disconnected');
     addSysLine('👋 Stranger disconnected');
     setCallStatus('failed', 'disconnected');
     hideRemoteVideo('Stranger disconnected');
@@ -1334,12 +1473,10 @@ function startMatching() {
   setText('match-title', 'Finding your match');
   const subReset = $('match-sub');
   if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
-  const tryDemoReset = $('btn-try-demo');
-  if (tryDemoReset) tryDemoReset.style.display = 'none';
-
   initSocket();
 
   S.matched = false; // reset; set to true inside the 'matched' socket handler
+  S.demoActive = false;
 
   clearTimeout(matchTimeout);
   clearTimeout(S.noMatchTimeout);
@@ -1385,24 +1522,12 @@ function startMatching() {
     }
   }, 20000);
 
-  // Once we ARE connected to the real server, if nobody else is in the
-  // queue yet, the wait can be genuinely indefinite. After a reasonable
-  // amount of time, let the user know instead of an endless spinner —
-  // demo is offered as an explicit opt-in button here, never automatic,
-  // since the server connection itself is known-good at this point.
+  // If no live match arrives quickly, fall back to demo video without
+  // showing an empty-room message first.
   S.noMatchTimeout = setTimeout(() => {
-    if (S.matched || S.connectFailed) return;
-    if (S.socket && S.socket.connected) {
-      setText('match-title', "No one's online right now");
-      const sub = $('match-sub');
-      if (sub) sub.innerHTML = 'Nobody else is in the queue yet. You can keep waiting, or try a one-off demo chat while the site grows.';
-      const tryDemo = $('btn-try-demo');
-      if (tryDemo) tryDemo.style.display = 'inline-flex';
-    }
-    // If still not connected at this point, the connect_error / ceiling
-    // timer above will already be handling the demo fallback — no need
-    // to duplicate that decision here.
-  }, 20000);
+    if (S.matched || S.connectFailed || S.demoActive) return;
+    simulateDemoMatch();
+  }, 5000);
 }
 
 function removeFromQueueSafely() {
@@ -1551,21 +1676,25 @@ function monitorQuality() {
   }, 4000);
 }
 
-function simulateDemoMatch() {
-  if (S.demoActive) return;
+function simulateDemoMatch(force = false) {
+  if (S.demoActive && !force) return;
   S.demoActive = true;
 
-  let pool = [...strangerPool];
-  if (S.interest && S.interest.toLowerCase().includes('high')) {
-    pool = pool.filter((s) => s.score > 300);
-  }
+  const suffix = Math.floor(100 + Math.random() * 900);
+  const prefixes = ['Nova', 'Pixel', 'Echo', 'Luna', 'Cipher', 'Flux', 'Vega', 'Mira', 'Pulse', 'Astra'];
+  const moods = ['Wave', 'Spark', 'Bloom', 'Drift', 'Halo', 'Glow', 'Shift', 'Quill', 'Orbit', 'Vibe'];
+  const emojis = ['🦊', '🎭', '🌸', '⚡', '🌙', '🔮', '☀️', '🖤', '🎧', '🧠'];
 
-  S.stranger = pool[Math.floor(Math.random() * pool.length)];
+  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+  const mood = moods[Math.floor(Math.random() * moods.length)];
+  const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+
+  S.stranger = {
+    name: `${prefix}_${mood}_${suffix}`,
+    score: Math.floor(40 + Math.random() * 900),
+    emoji
+  };
   S.roomId = `demo-${Date.now()}`;
-
-  // Decide once per match whether the "stranger" has their camera on.
-  // Roughly 6 in 10 strangers have video on, matching typical real usage.
-  S.demoStrangerCamOn = Math.random() < 0.6;
 
   beginChat();
 
@@ -1577,7 +1706,6 @@ function simulateDemoMatch() {
 }
 
 async function setupDemoVideo() {
-  // Bring up the user's own camera exactly like a real call would.
   try {
     if (!S.localStream || !S.localStream.active) {
       S.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -1589,50 +1717,82 @@ async function setupDemoVideo() {
       localVid.style.display = 'block';
     }
   } catch (e) {
-    // No camera available locally — that's fine, the demo can still show
-    // the "stranger" side; just keep the waiting placeholder for our own feed.
+    // Local camera is optional for demo playback.
   }
 
-  // Believable connecting delay before the stranger's feed "arrives",
-  // same pacing a real WebRTC handshake would have.
-  setText('ph-txt', 'Waiting for video…');
   const noVideoPh = $('no-video-ph');
   const remoteVid = $('vid-remote');
+  const qbar = $('quality-bar');
+  const txt = $('ph-txt');
+  const demoVideos = ['demo1.mp4', 'demo2.mp4', 'demo3.mp4'];
 
-  setTimeout(() => {
-    if (!S.demoActive) return; // user already left before this fired
-
-    // IMPORTANT: never assign S.localStream to the remote video element.
-    // That was previously done as a "stand-in" for a second person's feed,
-    // but it just shows the user their own face mirrored back labeled as
-    // the stranger — an obvious, confusing tell, not a believable demo.
-    // There is no real second video source available in demo mode, so the
-    // honest behavior is the same placeholder a real camera-off peer would
-    // produce, whether or not S.demoStrangerCamOn is true.
-    if (remoteVid) {
-      remoteVid.srcObject = null;
-      remoteVid.style.display = 'none';
-    }
-    const qbar = $('quality-bar');
-    if (qbar) qbar.style.display = 'none';
-
-    if (S.demoStrangerCamOn) {
-      setText('ph-txt', `${S.stranger?.name || 'Stranger'} is connecting their camera…`);
-    } else {
-      setText('ph-txt', `${S.stranger?.name || 'Stranger'}'s camera is off`);
-    }
+  if (!remoteVid || !demoVideos.length) {
     if (noVideoPh) noVideoPh.style.display = 'flex';
-  }, 900 + Math.random() * 900);
+    if (txt) txt.textContent = '';
+    return;
+  }
+
+  const src = demoVideos[S.demoVideoIndex % demoVideos.length];
+  S.demoVideoIndex = (S.demoVideoIndex + 1) % demoVideos.length;
+
+  let rotated = false;
+  const rotateToNext = () => {
+    if (rotated || !S.demoActive) return;
+    rotated = true;
+    remoteVid.ontimeupdate = null;
+    remoteVid.onended = null;
+    setTimeout(() => simulateDemoMatch(true), 0);
+  };
+
+  remoteVid.pause?.();
+  remoteVid.srcObject = null;
+  remoteVid.src = src;
+  remoteVid.loop = false;
+  remoteVid.muted = true;
+  remoteVid.playsInline = true;
+  remoteVid.autoplay = true;
+  remoteVid.style.objectFit = 'cover';
+  remoteVid.style.objectPosition = 'center center';
+  remoteVid.style.display = 'block';
+
+  if (qbar) qbar.style.display = 'none';
+  if (txt) txt.textContent = '';
+  if (noVideoPh) noVideoPh.style.display = 'none';
+
+  remoteVid.onended = rotateToNext;
+  remoteVid.ontimeupdate = () => {
+    if (!remoteVid.duration || !Number.isFinite(remoteVid.duration)) return;
+    const remaining = remoteVid.duration - remoteVid.currentTime;
+    if (remaining <= 10) rotateToNext();
+  };
+  remoteVid.onerror = () => {
+    remoteVid.style.display = 'none';
+    if (noVideoPh) noVideoPh.style.display = 'flex';
+    if (txt) txt.textContent = '';
+  };
+
+  remoteVid.play?.().then(() => {
+    if (noVideoPh) noVideoPh.style.display = 'none';
+    if (txt) txt.textContent = '';
+  }).catch(() => {
+    remoteVid.style.display = 'none';
+    if (noVideoPh) noVideoPh.style.display = 'flex';
+    if (txt) txt.textContent = '';
+  });
 }
 
 function beginChat() {
+  resetChatProgress();
   const msgs = $('chat-msgs');
   if (msgs) msgs.innerHTML = '';
 
   const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
   setText('peer-ava', s.emoji);
   setText('peer-name', s.name);
-  setText('peer-score', s.isGuest || s.score === null ? 'Guest · no ratings' : `🧲 ${s.score} Magnet Score · connected`);
+  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} Buddh Score · connected`);
+
+  const rateBtn = $('btn-rate-top');
+  if (rateBtn) rateBtn.style.display = (!S.isGuest && !s.isGuest) ? '' : 'none';
 
   const panel = $('video-panel');
   applyVideoLayout();
@@ -1646,12 +1806,9 @@ function beginChat() {
 
   showPage('pg-chat');
   applyVideoLayout();
-  updateRatingVisibility();
   setCallStatus('connecting', 'connecting');
   addSysLine(`✨ Connected to ${s.name}`);
   logSession('start', { stranger: s.name, mode: S.mode, roomId: S.roomId });
-  S.chatCount = Number(S.chatCount || 0) + 1;
-  localStorage.setItem('mortalive_chat_count', String(S.chatCount));
   startSnapshotCapture();
 
   setTimeout(() => {
@@ -1723,6 +1880,7 @@ function sendMsg() {
 
   inp.value = '';
   appendMsg(text, 'me');
+  awardProgress('message', 1, { message: true });
 
   if (S.socket && S.socket.connected) {
     S.socket.emit('chat', { roomId: S.roomId, text });
@@ -1748,15 +1906,16 @@ function disconnectPeer() {
   const remoteVid = $('vid-remote');
   if (remoteVid) {
     try {
-      // In demo mode, vid-remote.srcObject is the SAME MediaStream object as
-      // our own local camera (reused as a stand-in "stranger" feed). Stopping
-      // its tracks here would kill our own camera. Only stop tracks that
-      // belong to a genuinely separate (real peer) stream.
       if (remoteVid.srcObject && remoteVid.srcObject !== S.localStream) {
         remoteVid.srcObject.getTracks().forEach((t) => t.stop());
       }
     } catch (e) {}
     remoteVid.srcObject = null;
+    remoteVid.pause?.();
+    remoteVid.src = '';
+    remoteVid.ontimeupdate = null;
+    remoteVid.onended = null;
+    remoteVid.onerror = null;
     remoteVid.style.display = 'none';
   }
 
@@ -1848,16 +2007,13 @@ function stopSnapshotCapture() {
 
 function initRatingControls() {
   const overlay = $('rating-overlay');
-  const rateBtn = $('btn-rate-top');
   if (!overlay) return;
 
   let stars = 0;
 
-  const canRate = () => !!S.authToken && !S.isGuest && !(S.stranger && S.stranger.isGuest);
-
   const openModal = () => {
-    if (!canRate()) {
-      toast('Ratings require two signed-in users', '⚠️');
+    if (S.isGuest || (S.stranger && S.stranger.isGuest)) {
+      toast('Ratings are for signed-in users only', '🔒');
       return;
     }
     stars = 0;
@@ -1867,10 +2023,7 @@ function initRatingControls() {
   };
   const closeModal = () => overlay.classList.remove('open');
 
-  if (rateBtn) {
-    rateBtn.addEventListener('click', openModal);
-    rateBtn.style.display = canRate() ? '' : 'none';
-  }
+  $('btn-rate-top')?.addEventListener('click', openModal);
 
   $('stars')?.addEventListener('click', (e) => {
     const star = e.target.closest('.star');
@@ -1890,11 +2043,6 @@ function initRatingControls() {
   $('btn-skip-rating')?.addEventListener('click', closeModal);
 
   $('btn-submit-rating')?.addEventListener('click', () => {
-    if (!canRate()) {
-      closeModal();
-      toast('Ratings are not available for guest matches', '⚠️');
-      return;
-    }
     if (!stars) {
       toast('Pick a star rating first', '⭐');
       return;
@@ -1904,8 +2052,6 @@ function initRatingControls() {
     closeModal();
     toast(stars >= 4 ? 'Thanks for the rating!' : 'Rating submitted', '⭐');
   });
-
-  updateRatingVisibility();
 }
 
 ready(() => {
@@ -1914,7 +2060,6 @@ ready(() => {
   initConsentGate();
   initLandingActions();
   initAuthControls();
-  initHeaderControls();
   initSetupBackButtons();
   initPermissionControls();
   initLobbyControls();
