@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Mortalive — Anonymous chat, simplified</title>
+<title>Mortalive — Progress identity, live</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -53,42 +53,44 @@ a{color:inherit}
   position:fixed;
   inset:0;
   pointer-events:none;
-  background:
-    linear-gradient(180deg, rgba(7,12,28,.18) 0%, rgba(7,12,28,.52) 100%),
-    radial-gradient(circle at 20% 12%, rgba(255,192,213,.20), transparent 26%),
-    radial-gradient(circle at 78% 18%, rgba(255,214,228,.16), transparent 18%),
-    radial-gradient(circle at 85% 80%, rgba(109,94,252,.18), transparent 30%),
-    background-image: url('https://raw.githubusercontent.com/GhostOfBillionaire/mortalive-frontend/main/sakura_bg.webp') center center / cover no-repeat fixed;   
   z-index:0;
-  filter:saturate(1.02) contrast(.98);
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(0,212,255,.28), transparent 20%),
+    radial-gradient(circle at 80% 16%, rgba(124,77,255,.24), transparent 22%),
+    radial-gradient(circle at 72% 84%, rgba(255,77,166,.18), transparent 24%),
+    radial-gradient(circle at 28% 78%, rgba(52,211,153,.14), transparent 22%),
+    linear-gradient(180deg, #07101f 0%, #050916 100%);
+  filter:saturate(1.08) contrast(.98);
 }
 .bg::before,
 .bg::after{
   content:'';
   position:absolute;
-  inset:-10%;
+  inset:-18%;
   background:
-    radial-gradient(circle at 8% 24%, rgba(255,255,255,.10), transparent 10%),
-    radial-gradient(circle at 18% 40%, rgba(255,185,210,.22), transparent 6%),
-    radial-gradient(circle at 26% 18%, rgba(255,185,210,.18), transparent 5%),
-    radial-gradient(circle at 68% 14%, rgba(255,185,210,.18), transparent 7%),
-    radial-gradient(circle at 82% 28%, rgba(255,185,210,.16), transparent 8%),
-    radial-gradient(circle at 90% 68%, rgba(255,185,210,.18), transparent 6%),
-    radial-gradient(circle at 56% 62%, rgba(255,255,255,.06), transparent 12%);
-  opacity:.72;
-  animation:sakuraFloat 32s linear infinite;
+    radial-gradient(circle at 10% 24%, rgba(255,255,255,.08), transparent 10%),
+    radial-gradient(circle at 18% 42%, rgba(255,184,210,.18), transparent 7%),
+    radial-gradient(circle at 28% 18%, rgba(0,212,255,.16), transparent 8%),
+    radial-gradient(circle at 70% 18%, rgba(124,77,255,.16), transparent 8%),
+    radial-gradient(circle at 84% 32%, rgba(255,77,166,.12), transparent 10%),
+    radial-gradient(circle at 86% 74%, rgba(52,211,153,.10), transparent 10%),
+    radial-gradient(circle at 56% 64%, rgba(255,255,255,.06), transparent 14%);
+  opacity:.84;
+  animation:liquidFloat 34s ease-in-out infinite alternate;
+  pointer-events:none;
 }
 .bg::after{
-  inset:-15%;
-  opacity:.45;
-  filter:blur(8px);
-  animation-duration:46s;
+  inset:-24%;
+  opacity:.42;
+  filter:blur(14px);
+  animation-duration:48s;
   animation-direction:reverse;
 }
-@keyframes sakuraFloat{
+@keyframes liquidFloat{
   0%{transform:translate3d(0,0,0) scale(1)}
-  50%{transform:translate3d(-1.5%,1.2%,0) scale(1.03)}
-  100%{transform:translate3d(0,0,0) scale(1)}
+  50%{transform:translate3d(-1.6%,1.2%,0) scale(1.04)}
+  100%{transform:translate3d(1%, -0.8%,0) scale(1.08)}
 }
 
 .wrap{
@@ -1390,279 +1392,316 @@ a{color:inherit}
 }
 
 
-/* Sakura theme overrides */
+/* Liquid glass overrides */
 body{
-  background:#08101f;
+  background:#050916;
+  color:#f5f7fb;
 }
 .page{
   overflow:hidden;
 }
-.card{
-  backdrop-filter:blur(18px) saturate(115%);
+.bg{
+  z-index:-2;
 }
 
-#pg-land{
-  align-items:center;
-  justify-content:center;
-  min-height:100dvh;
-  padding:16px 0 18px;
+.card{
+  background:rgba(255,255,255,.08);
+  backdrop-filter:blur(24px) saturate(170%);
+  -webkit-backdrop-filter:blur(24px) saturate(170%);
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 22px 70px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.10);
 }
-#pg-land .wrap{
-  width:min(1260px, calc(100% - 28px));
-  padding:0;
+.card:hover{
+  transform:translateY(-2px);
 }
-.sakura-topbar{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:18px;
-  padding:14px 18px;
-  margin-bottom:14px;
-  background:rgba(7,14,32,.56);
+
+.btn{
+  border-radius:16px;
+}
+.btn-primary{
+  background:linear-gradient(135deg, rgba(56,189,248,.96), rgba(139,92,246,.96));
+  color:#fff;
+  box-shadow:0 16px 40px rgba(56,189,248,.18);
+}
+.btn-primary:hover{
+  box-shadow:0 18px 44px rgba(139,92,246,.24);
+}
+.btn-ghost{
+  background:rgba(255,255,255,.08);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.14);
+}
+.btn-ghost:hover{
+  border-color:rgba(255,255,255,.28);
+  background:rgba(255,255,255,.12);
+  color:#fff;
+}
+.pill{
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.14);
+  color:rgba(255,255,255,.84);
+}
+.feature{
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.12);
+  color:#fff;
+}
+.hero-title,
+.consent-title,
+.match-title,
+.modal-title,
+.peer-name,
+.brand-name,
+h2,h3{
+  color:#fff;
+}
+.hero-text,
+.consent-sub,
+.mini-copy,
+.help-row,
+.small-links,
+.permission-item,
+.rule-item span,
+.notice,
+.modal-sub,
+.peer-sub,
+.field label,
+.auth-secondary-note{
+  color:rgba(235,240,255,.74);
+}
+.brand-sub{
+  color:rgba(235,240,255,.66);
+}
+
+.hero-card,
+.consent-card,
+.auth-card,
+.perm-card,
+.lobby-card,
+.match-card,
+.chat-messages,
+.modal,
+.sheet{
+  background:rgba(8,14,28,.62);
+  border-color:rgba(255,255,255,.12);
+}
+.hero-card::before,
+.consent-card::before{
+  opacity:.5;
+}
+.hero-visual{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+.preview-box{
+  background:rgba(255,255,255,.06);
   border:1px solid rgba(255,255,255,.10);
-  border-radius:24px;
-  box-shadow:0 24px 70px rgba(3,10,24,.34);
-  backdrop-filter:blur(18px);
 }
-.sakura-topbar .brand-mark{
-  background:linear-gradient(135deg,#6d5efc,#1877f2);
+.preview-box strong{
+  color:#fff;
 }
-.sakura-nav{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:18px;
-  flex-wrap:wrap;
+.preview-box span{
+  color:rgba(235,240,255,.70);
+}
+
+.auth-card{
+  max-width:640px;
+}
+.auth-guest-hero{
+  background:linear-gradient(180deg, rgba(56,189,248,.10), rgba(255,255,255,.04));
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:18px;
+}
+.auth-divider{
+  color:rgba(235,240,255,.58);
+}
+.auth-divider::before,
+.auth-divider::after{
+  background:rgba(255,255,255,.12);
+}
+.auth-tab{
+  background:rgba(255,255,255,.06);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.12);
+}
+.auth-tab.active{
+  background:linear-gradient(135deg, rgba(56,189,248,.96), rgba(139,92,246,.96));
+  color:#fff;
+  border-color:transparent;
+}
+.field input{
+  background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.12);
+  color:#fff;
+}
+.field input::placeholder{
+  color:rgba(235,240,255,.40);
+}
+.field input:focus{
+  border-color:rgba(56,189,248,.48);
+  box-shadow:0 0 0 4px rgba(56,189,248,.10);
+}
+.notice{
+  background:rgba(255,255,255,.06);
+  border-color:rgba(255,255,255,.10);
+}
+.toggle{
+  background:rgba(255,255,255,.06);
+  border-color:rgba(255,255,255,.10);
+}
+.toggle-text{
+  color:rgba(235,240,255,.74);
+}
+.toggle input:checked + .toggle-ui{
+  background:linear-gradient(135deg, rgba(56,189,248,.96), rgba(139,92,246,.96));
+}
+.toggle input:checked + .toggle-ui::after{
+  color:#fff;
+}
+
+.consent-card .rule-item,
+.permission-item{
+  background:rgba(255,255,255,.06);
+  border-color:rgba(255,255,255,.10);
+}
+.rule-item strong,
+.permission-item strong{
+  color:#fff;
+}
+.rule-ico{
+  color:#7dd3fc;
+  background:linear-gradient(135deg, rgba(56,189,248,.14), rgba(139,92,246,.18));
+}
+.badge.ok{color:#6ee7b7}
+.badge.warn{color:#93c5fd}
+
+.sakura-topbar,
+.lobby-card,
+.perm-card,
+.match-card{
+  background:rgba(8,14,28,.58);
+  border:1px solid rgba(255,255,255,.12);
 }
 .sakura-nav a{
-  color:rgba(255,255,255,.86);
-  text-decoration:none;
-  font-size:14px;
-  font-weight:600;
-  letter-spacing:.01em;
+  color:rgba(255,255,255,.82);
 }
 .sakura-nav a:hover{
   color:#fff;
 }
 .sakura-status{
-  background:rgba(255,255,255,.88);
-  color:#182033;
-  border:1px solid rgba(255,255,255,.75);
-  box-shadow:0 10px 24px rgba(0,0,0,.12);
+  background:rgba(255,255,255,.10);
+  color:#fff;
+  border-color:rgba(255,255,255,.14);
 }
-
-.landing-grid{
-  gap:18px;
-  align-items:stretch;
-}
-.hero-card{
-  position:relative;
-  overflow:hidden;
-  min-height:650px;
-  padding:26px;
-  background:
-    linear-gradient(180deg, rgba(255,248,252,.78), rgba(246,248,255,.78));
-  border:1px solid rgba(255,255,255,.50);
-}
-.hero-card::before{
-  content:'';
-  position:absolute;
-  inset:0;
-  background:
-    radial-gradient(circle at 18% 18%, rgba(255,183,205,.30), transparent 20%),
-    radial-gradient(circle at 82% 22%, rgba(255,210,226,.22), transparent 18%),
-    radial-gradient(circle at 75% 72%, rgba(109,94,252,.12), transparent 26%);
-  pointer-events:none;
-}
-.hero-card > *{
-  position:relative;
-  z-index:1;
-}
-.hero-top{
-  align-items:center;
-}
-.hero-copy{
-  max-width:640px;
-  padding-top:10px;
-}
-.hero-kicker{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding:8px 14px;
-  margin:4px 0 14px;
-  border-radius:999px;
-  background:rgba(255,255,255,.82);
-  border:1px solid rgba(24,119,242,.16);
-  color:var(--muted);
-  font-size:12px;
-  font-weight:700;
-}
-.hero-title{
-  font-size:clamp(38px, 5vw, 66px);
-  line-height:1.0;
-  letter-spacing:-.08em;
-  color:#0f1730;
-}
-.hero-title em{
-  color:#1877f2;
-  font-style:normal;
-}
-.hero-text{
-  max-width:54ch;
-  font-size:16px;
-  line-height:1.72;
-  color:#334055;
-  margin-top:16px;
-}
-.feature-row{
-  margin-top:20px;
-}
-.feature{
-  border-radius:999px;
-  background:rgba(255,255,255,.80);
-  border-color:rgba(24,119,242,.12);
-  box-shadow:0 12px 24px rgba(14,22,44,.06);
-}
-.hero-visual{
-  margin-top:24px;
-  display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:12px;
-}
-.preview-box{
-  min-height:128px;
-  border-radius:20px;
-  background:rgba(255,255,255,.86);
-  border:1px solid rgba(24,119,242,.12);
-  box-shadow:0 18px 40px rgba(18,28,45,.07);
-}
-.preview-box.blue{
-  background:linear-gradient(180deg, rgba(24,119,242,.10), rgba(255,255,255,.92));
-}
-.preview-box.lav{
-  background:linear-gradient(180deg, rgba(109,94,252,.10), rgba(255,255,255,.92));
-}
-.preview-box.rose{
-  background:linear-gradient(180deg, rgba(255,182,203,.18), rgba(255,255,255,.92));
-}
-.preview-box strong{
-  font-size:15px;
-  letter-spacing:-.02em;
-}
-.preview-box span{
-  font-size:13px;
-  line-height:1.55;
-}
-
-.consent-card{
-  position:relative;
-  overflow:hidden;
-  min-height:650px;
-  padding:24px;
-  background:rgba(255,255,255,.80);
-  border:1px solid rgba(255,255,255,.62);
-}
-.consent-card::before{
-  content:'';
-  position:absolute;
-  inset:-20%;
-  background:
-    radial-gradient(circle at 20% 18%, rgba(255,180,206,.18), transparent 16%),
-    radial-gradient(circle at 76% 30%, rgba(255,180,206,.14), transparent 12%),
-    radial-gradient(circle at 72% 72%, rgba(109,94,252,.08), transparent 24%);
-  pointer-events:none;
-}
-.consent-card > *{
-  position:relative;
-  z-index:1;
-}
-.consent-head{
-  margin-bottom:18px;
-}
-.consent-title{
-  font-size:28px;
-}
-.consent-sub{
-  max-width:34ch;
-}
-.rule-stack{
-  display:grid;
-  gap:10px;
-  margin-top:16px;
-}
-.rule-item{
-  display:flex;
-  gap:12px;
-  align-items:flex-start;
-  padding:12px 14px;
-  border-radius:16px;
-  background:rgba(255,255,255,.88);
-  border:1px solid rgba(24,119,242,.11);
-  box-shadow:0 12px 24px rgba(15,25,42,.05);
-}
-.rule-ico{
-  width:28px;height:28px;border-radius:50%;
-  display:grid;place-items:center;
-  background:linear-gradient(135deg, rgba(24,119,242,.10), rgba(109,94,252,.12));
-  color:#1877f2;
-  flex:none;
-}
-.rule-item strong{
-  display:block;
-  font-size:14px;
-  color:#0f1730;
-}
-.rule-item span{
-  display:block;
-  font-size:12px;
-  color:var(--muted);
-  line-height:1.4;
-  margin-top:2px;
-}
-.notice{
-  background:rgba(255,255,255,.80);
-}
-.enter-row{
-  margin-top:16px;
-}
-.btn-primary{
-  background:linear-gradient(135deg,#1877f2,#6d5efc);
-}
-.btn-ghost{
-  background:rgba(255,255,255,.84);
-}
-
-.auth-card,
-.perm-card,
-.lobby-card,
-.match-card{
-  background:rgba(255,255,255,.82);
-  border-color:rgba(255,255,255,.55);
-  box-shadow:0 22px 60px rgba(6,12,24,.16);
-}
-.auth-card{
-  max-width:560px;
-}
-.auth-guest-hero{
-  background:linear-gradient(180deg, rgba(24,119,242,.08), rgba(255,255,255,.92));
+.identity-row{
+  background:rgba(255,255,255,.06) !important;
+  color:#fff;
+  border-color:rgba(255,255,255,.12) !important;
 }
 .mode-switch{
-  background:rgba(232,237,245,.78);
+  background:rgba(255,255,255,.06);
+  border-color:rgba(255,255,255,.10);
+}
+.mode-btn{
+  color:rgba(235,240,255,.70);
+}
+.mode-btn.active{
+  background:rgba(255,255,255,.12);
+  color:#fff;
+}
+.live-dot{
+  box-shadow:0 0 0 6px rgba(34,197,94,.10);
+}
+.conn-badge,
+.status-chip,
+.icon-btn,
+.vc-btn,
+.chat-input input,
+.sheet,
+.modal{
+  background:rgba(255,255,255,.06);
+  color:#fff;
+  border-color:rgba(255,255,255,.12);
+}
+.chat-messages{
+  border:1px solid rgba(255,255,255,.10);
+}
+.msg-bubble{
+  background:rgba(255,255,255,.08);
+  color:#fff;
+  border-color:rgba(255,255,255,.10);
+}
+.msg.me .msg-bubble{
+  background:rgba(56,189,248,.16);
+  border-color:rgba(56,189,248,.18);
+}
+.msg-time,
+.sys-line,
+.help-row,
+.small-links,
+.peer-sub,
+.match-sub,
+.modal-sub,
+.notice{
+  color:rgba(235,240,255,.68);
+}
+.chat-topbar{
+  background:rgba(8,14,28,.58);
+  border:1px solid rgba(255,255,255,.12);
+}
+.peer-ava{
+  box-shadow:0 14px 30px rgba(56,189,248,.18);
 }
 .video-feeds{
-  background:#101829;
+  background:#060b17;
+  border-color:rgba(255,255,255,.12);
 }
-#pg-auth .wrap,
-#pg-perm .wrap,
-#pg-lobby .wrap,
-#pg-match .wrap{
-  width:min(1120px, calc(100% - 28px));
+.video-wrapper.remote,
+.video-wrapper.local{
+  border-color:rgba(255,255,255,.08);
+}
+.no-video,
+.quality{
+  color:#fff;
+}
+.vc-btn.active,
+.vc-btn:hover{
+  color:#fff;
+  border-color:rgba(125,211,252,.34);
+}
+.vc-btn.off{
+  background:rgba(239,68,68,.12);
+  color:#fca5a5;
 }
 
+.progress-overlay, #progress-overlay{
+  backdrop-filter:blur(16px) saturate(140%);
+}
+#progress-overlay .modal{
+  box-shadow:0 30px 90px rgba(0,0,0,.42);
+}
+#progress-overlay #progress-close{
+  background:rgba(255,255,255,.10);
+}
+#progress-overlay #progress-share{
+  box-shadow:0 18px 40px rgba(56,189,248,.18);
+}
+
+.toast{
+  background:rgba(8,14,28,.90);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.10);
+}
+
+/* Responsive */
 @media (max-width: 980px){
-  #pg-land .wrap{
-    width:min(100% - 20px, 1260px);
+  .landing-grid,.perm-inner,.chat-body{
+    grid-template-columns:1fr;
+  }
+  .hero-card,.consent-card{
+    min-height:auto;
+  }
+  .hero-visual{
+    grid-template-columns:1fr;
   }
   .sakura-topbar{
     flex-direction:column;
@@ -1672,226 +1711,247 @@ body{
     justify-content:flex-start;
     gap:14px;
   }
-  .hero-card,
-  .consent-card{
-    min-height:auto;
-  }
-  .hero-visual{
-    grid-template-columns:1fr;
-  }
 }
 @media (max-width: 720px){
-  #pg-land{
-    padding:10px 0 14px;
-  }
-  .sakura-topbar{
-    padding:12px 14px;
-    border-radius:18px;
-  }
-  .hero-card,
-  .consent-card{
+  .wrap{width:min(100% - 16px, 1120px)}
+  .hero-card,.consent-card,.lobby-card,.perm-card,.match-card{
     padding:18px;
   }
-  .hero-title{
-    font-size:clamp(34px, 10vw, 44px);
+  .hero-top,.lobby-head,.chat-topbar{
+    flex-direction:column;
+    align-items:flex-start;
   }
-  .hero-text{
-    font-size:15px;
+  .hero-foot,.start-row,.modal-row,.perm-actions{
+    flex-direction:column;
   }
-  .rule-item{
-    padding:11px 12px;
+  .hero-foot .btn,
+  .start-row .btn,
+  .perm-actions .btn,
+  .modal-row .btn{
+    width:100%;
+  }
+  .mode-switch{
+    grid-template-columns:1fr;
+  }
+  .chat-topbar{
+    position:sticky;
+    top:0;
+    z-index:5;
+  }
+  #pg-chat{
+    padding:6px;
+  }
+  .chat-body{
+    grid-template-columns:1fr;
+    grid-template-rows:minmax(300px, 56vh) minmax(0,1fr);
+    gap:8px;
+  }
+  .video-panel{
+    min-height:300px;
+  }
+  .video-feeds.layout-horizontal{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .video-wrapper.remote,
+  .video-wrapper.local{
+    aspect-ratio:9 / 16;
+    border-radius:20px;
+  }
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds{
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    grid-template-rows:repeat(2,minmax(0,1fr)) !important;
+  }
+  #video-panel:fullscreen .video-wrapper.remote,
+  #video-panel:fullscreen .video-wrapper.local,
+  #video-panel:-webkit-full-screen .video-wrapper.remote,
+  #video-panel:-webkit-full-screen .video-wrapper.local,
+  #video-panel:-moz-full-screen .video-wrapper.remote,
+  #video-panel:-moz-full-screen .video-wrapper.local{
+    aspect-ratio:1 / 1 !important;
+  }
+  .conn-badge,.icon-btn,.vc-btn{
+    min-height:40px;
   }
 }
 
-
-/* ===== Profile + header upgrade ===== */
-.app-toolbar{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  margin-bottom:14px;
-  padding:12px 14px;
-  border-radius:18px;
-  background:rgba(255,255,255,.88);
-  border:1px solid rgba(216,222,233,.92);
-  box-shadow:0 12px 30px rgba(18,28,45,.06);
-  backdrop-filter:blur(14px);
-}
-.app-toolbar .brand-sub{
-  letter-spacing:.12em;
-}
-.nav-pills{
+/* Profile + member header */
+.member-toolbar{
   display:flex;
   flex-wrap:wrap;
   gap:8px;
-  justify-content:flex-end;
+  margin:14px 0 2px;
+  padding:10px;
+  border:1px solid rgba(216,222,233,.85);
+  border-radius:16px;
+  background:rgba(255,255,255,.62);
+  backdrop-filter:blur(10px);
 }
-.nav-pill{
-  border:1px solid var(--border);
-  background:#fff;
-  color:var(--muted);
-  border-radius:999px;
-  padding:8px 12px;
+.member-toolbar .btn{
+  padding:10px 12px;
   font-size:12px;
-  font-weight:700;
-  transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease, color .18s ease, background .18s ease;
-}
-.nav-pill:hover{
-  transform:translateY(-1px);
-  border-color:rgba(24,119,242,.28);
-  color:var(--primary);
-  box-shadow:0 8px 18px rgba(24,119,242,.08);
-}
-.nav-pill.primary{
-  background:linear-gradient(135deg,var(--primary),var(--primary-2));
-  color:#fff;
-  border-color:transparent;
-  box-shadow:0 10px 24px rgba(24,119,242,.18);
-}
-.nav-pill.primary:hover{
-  color:#fff;
-  box-shadow:0 14px 30px rgba(24,119,242,.26);
 }
 .profile-card{
-  padding:22px;
+  padding:20px;
 }
 .profile-layout{
   display:grid;
-  grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);
+  grid-template-columns:minmax(0,.88fr) minmax(0,1.12fr);
   gap:14px;
   align-items:start;
 }
-.profile-panel{
-  background:var(--panel-soft);
-  border:1px solid var(--border);
-  border-radius:18px;
-  padding:16px;
+.profile-summary,
+.profile-editor{
+  padding:18px;
+  border-radius:20px;
+  border:1px solid rgba(216,222,233,.85);
+  background:rgba(255,255,255,.76);
+  backdrop-filter:blur(10px);
 }
-.profile-hero{
+.profile-head{
   display:flex;
-  align-items:flex-start;
+  align-items:center;
   gap:14px;
 }
 .profile-avatar{
   width:72px;
   height:72px;
-  border-radius:22px;
+  border-radius:20px;
   display:grid;
   place-items:center;
-  background:linear-gradient(135deg, rgba(24,119,242,.12), rgba(109,94,252,.12));
-  border:1px solid rgba(24,119,242,.14);
   font-size:34px;
-  flex:none;
+  background:linear-gradient(135deg, rgba(24,119,242,.15), rgba(109,94,252,.14));
+  border:1px solid rgba(24,119,242,.14);
+  box-shadow:0 14px 30px rgba(18,28,45,.08);
 }
-.profile-meta h2{
-  margin:0;
-  font-size:24px;
+.profile-username{
+  font-size:26px;
+  line-height:1.05;
   letter-spacing:-.05em;
+  font-weight:800;
 }
-.profile-meta p{
-  margin:6px 0 0;
+.profile-score-line{
+  margin-top:6px;
   color:var(--muted);
-  line-height:1.55;
+  font-size:14px;
 }
-.profile-stats{
+.profile-guest-note{
+  display:none;
+  margin-top:14px;
+  padding:12px 14px;
+  border-radius:14px;
+  background:rgba(24,119,242,.08);
+  border:1px solid rgba(24,119,242,.14);
+  color:var(--text);
+  line-height:1.6;
+  font-size:13px;
+}
+.profile-quick-stats{
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:8px;
+  gap:10px;
   margin-top:14px;
 }
 .profile-stat{
-  background:#fff;
-  border:1px solid var(--border);
+  padding:12px 14px;
   border-radius:14px;
-  padding:12px;
-}
-.profile-stat span{
-  display:block;
-  font-size:11px;
-  color:var(--muted-2);
-  text-transform:uppercase;
-  letter-spacing:.08em;
-  font-weight:700;
+  border:1px solid var(--border);
+  background:rgba(255,255,255,.72);
 }
 .profile-stat strong{
   display:block;
-  margin-top:4px;
   font-size:18px;
-  color:var(--text);
+  line-height:1.05;
+  letter-spacing:-.04em;
 }
-.profile-form{
-  display:grid;
-  gap:12px;
+.profile-stat span{
+  display:block;
+  font-size:12px;
+  color:var(--muted);
+  line-height:1.4;
+  margin-top:4px;
+}
+.profile-section-title{
+  margin:16px 0 10px;
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  font-weight:800;
+  color:var(--muted);
 }
 .avatar-grid{
-  display:flex;
-  flex-wrap:wrap;
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
   gap:8px;
 }
 .avatar-chip{
-  width:42px;
-  height:42px;
-  border-radius:14px;
   border:1px solid var(--border);
   background:#fff;
+  border-radius:14px;
+  min-height:44px;
   display:grid;
   place-items:center;
   font-size:20px;
-  cursor:pointer;
-  transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  padding:8px;
+  transition:transform .18s ease, border-color .18s ease, background .18s ease;
 }
-.avatar-chip:hover{
-  transform:translateY(-1px);
-  border-color:rgba(24,119,242,.28);
-  box-shadow:0 8px 20px rgba(24,119,242,.08);
-}
+.avatar-chip:hover{transform:translateY(-1px)}
 .avatar-chip.active{
-  background:linear-gradient(135deg, rgba(24,119,242,.12), rgba(109,94,252,.12));
-  border-color:rgba(24,119,242,.32);
+  border-color:rgba(24,119,242,.35);
+  background:rgba(24,119,242,.10);
 }
-.profile-list{
-  display:grid;
+.profile-board{
+  margin-top:10px;
+  padding:12px;
+  border-radius:16px;
+  border:1px solid var(--border);
+  background:rgba(255,255,255,.72);
+}
+.profile-board-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
   gap:10px;
+  margin-bottom:10px;
+  font-size:13px;
+}
+.profile-board-head strong{
+  font-size:14px;
 }
 .profile-row{
   display:flex;
   align-items:center;
   gap:12px;
-  padding:12px 14px;
+  padding:12px;
   border-radius:14px;
+  border:1px solid rgba(216,222,233,.8);
   background:#fff;
-  border:1px solid var(--border);
 }
-.profile-row .mini-ava{
-  width:36px;
-  height:36px;
-  border-radius:12px;
+.profile-row + .profile-row{margin-top:10px}
+.mini-ava{
+  width:40px;
+  height:40px;
+  border-radius:50%;
   display:grid;
   place-items:center;
-  background:linear-gradient(135deg, rgba(24,119,242,.12), rgba(109,94,252,.12));
   font-size:18px;
+  background:linear-gradient(135deg, rgba(24,119,242,.10), rgba(109,94,252,.10));
   flex:none;
 }
-.profile-row .grow{
-  min-width:0;
-  flex:1;
-}
-.profile-row .grow strong{
+.grow{min-width:0;flex:1}
+.grow strong{
   display:block;
-  color:var(--text);
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  font-size:14px;
+  line-height:1.2;
 }
-.profile-row .grow span{
+.grow span{
   display:block;
+  margin-top:3px;
   color:var(--muted);
   font-size:12px;
-  margin-top:2px;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  line-height:1.4;
 }
 .profile-mini-btns{
   display:flex;
@@ -1900,36 +1960,117 @@ body{
 }
 .profile-mini-btns .btn{
   padding:8px 10px;
-  border-radius:12px;
   font-size:12px;
 }
-.info-sheet-body{
+.profile-form{
+  display:grid;
+  gap:12px;
+}
+.profile-form textarea,
+.profile-form input{
+  width:100%;
+  border:1px solid var(--border);
+  background:#fff;
+  border-radius:14px;
+  padding:14px 15px;
+  color:var(--text);
+  outline:none;
+}
+.profile-form textarea{
+  min-height:110px;
+  resize:vertical;
+}
+.profile-actions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:10px;
+}
+.profile-actions .btn{
+  flex:1;
+}
+.sheet-overlay{
+  display:none;
+  position:fixed;
+  inset:0;
+  z-index:110;
+  background:rgba(9,14,22,.55);
+  backdrop-filter:blur(10px);
+  padding:18px;
+  align-items:center;
+  justify-content:center;
+}
+.sheet-overlay.open{display:flex}
+.sheet{
+  width:min(540px,100%);
+  border-radius:22px;
+  border:1px solid var(--border);
+  background:#fff;
+  box-shadow:var(--shadow);
+  padding:18px;
+}
+.sheet-handle{
+  width:40px;
+  height:4px;
+  border-radius:999px;
+  background:#d9e0ea;
+  margin:0 auto 14px;
+}
+.sheet-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:12px;
+}
+.sheet-title{
+  margin:0;
+  font-size:22px;
+  letter-spacing:-.05em;
+}
+.sheet-close{
+  width:38px;
+  height:38px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:#fff;
+  font-size:18px;
+  line-height:1;
+}
+.sheet-body{
   color:var(--muted);
   line-height:1.65;
   font-size:14px;
-}
-.info-sheet-body strong{color:var(--text)}
-.profile-note{
-  margin-top:10px;
-  color:var(--muted-2);
-  font-size:12px;
-  line-height:1.6;
 }
 @media (max-width: 980px){
   .profile-layout{
     grid-template-columns:1fr;
   }
+  .profile-quick-stats{
+    grid-template-columns:1fr;
+  }
+  .avatar-grid{
+    grid-template-columns:repeat(4,minmax(0,1fr));
+  }
 }
 @media (max-width: 720px){
-  .app-toolbar{
-    flex-direction:column;
-    align-items:flex-start;
+  .member-toolbar{
+    gap:6px;
   }
-  .nav-pills{
-    justify-content:flex-start;
+  .member-toolbar .btn{
+    flex:1 1 calc(50% - 6px);
   }
-  .profile-stats{
-    grid-template-columns:1fr;
+  .profile-avatar{
+    width:62px;
+    height:62px;
+    border-radius:18px;
+    font-size:30px;
+  }
+  .profile-username{
+    font-size:22px;
+  }
+  .avatar-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr));
   }
 }
 
@@ -1946,13 +2087,13 @@ body{
         <div class="brand-mark" aria-hidden="true"></div>
         <div>
           <div class="brand-name">Mortalive</div>
-          <div class="brand-sub">Anonymous chat, simplified</div>
+          <div class="brand-sub">Progress identity, live</div>
         </div>
       </div>
       <nav class="sakura-nav" aria-label="Primary">
         <a href="#pg-land">About</a>
         <a href="#pg-land">Safety</a>
-        <a href="#pg-lobby">Magnet™</a>
+        <a href="#pg-lobby">Rankings</a>
         <a href="#pg-auth">Blog</a>
         <a href="#pg-chat">Support</a>
       </nav>
@@ -1967,38 +2108,43 @@ body{
                 <div class="brand-mark" aria-hidden="true"></div>
                 <div>
                   <div class="brand-name">Mortalive</div>
-                  <div class="brand-sub">Anonymous chat</div>
+                  <div class="brand-sub">Progress identity</div>
                 </div>
               </div>
             </div>
-            <span class="pill">18+ only · consent required</span>
+            <span class="pill">Terms apply · consent required</span>
           </div>
 
           <div class="hero-copy">
-            <div class="hero-kicker">100% Anonymous · No Sign-up</div>
-            <h1 class="hero-title">Meet. Chat.<br><em>Connect</em>.</h1>
-            <p class="hero-text">Randomly connect with real people. Text or video chat. No names, no pressure.</p>
+            <div class="hero-kicker" id="hero-kicker">Live rank · badges · streaks</div>
+            <h1 class="hero-title" id="hero-title">Start your next connection</h1>
+            <p class="hero-text" id="hero-text">Go live, build your Buddh Score, and unlock your profile as you connect.</p>
 
             <div class="feature-row">
               <span class="feature">Text or video</span>
-              <span class="feature">Fast matching</span>
-              <span class="feature">Anonymous by default</span>
-              <span class="feature">No account needed</span>
+              <span class="feature">Buddh Score</span>
+              <span class="feature">Weekly rank</span>
+              <span class="feature">Badges</span>
+            </div>
+
+            <div class="hero-foot">
+              <button class="btn btn-primary btn-wide" id="btn-start-text" type="button">Go Live · Text</button>
+              <button class="btn btn-ghost btn-wide" id="btn-start-video" type="button">Go Live · Video</button>
             </div>
           </div>
 
           <div class="hero-visual">
             <div class="preview-box blue">
-              <strong>100% Anonymous</strong>
-              <span>Your privacy is always protected.</span>
+              <strong>Buddh Score</strong>
+              <span>Progress that follows every connection.</span>
             </div>
             <div class="preview-box lav">
-              <strong>Instant Connect</strong>
-              <span>Find someone new in seconds.</span>
+              <strong>Weekly Rank</strong>
+              <span>See how you compare this week.</span>
             </div>
             <div class="preview-box rose">
-              <strong>Be Yourself</strong>
-              <span>Real conversations that matter.</span>
+              <strong>Unlocks</strong>
+              <span>Badges, streaks, and profile glow.</span>
             </div>
           </div>
         </div>
@@ -2013,8 +2159,8 @@ body{
               <div class="brand-sub">Your rules</div>
             </div>
           </div>
-          <h2 class="consent-title">Your Space, Your Rules</h2>
-          <p class="consent-sub">Be kind, keep it anonymous, and start chatting when you're ready.</p>
+          <h2 class="consent-title">Build status. Then jump in.</h2>
+          <p class="consent-sub">Keep it kind, keep it real, and start when you're ready.</p>
         </div>
 
         <div class="rule-stack" aria-label="Community reminders">
@@ -2024,11 +2170,11 @@ body{
           </div>
           <div class="rule-item">
             <div class="rule-ico">◎</div>
-            <div><strong>No personal info</strong><span>Keep it anonymous.</span></div>
+            <div><strong>No personal info</strong><span>Protect your privacy.</span></div>
           </div>
           <div class="rule-item">
-            <div class="rule-ico">18+</div>
-            <div><strong>18+ only</strong><span>Adults only platform.</span></div>
+            <div class="rule-ico">◎</div>
+            <div><strong>Community guidelines</strong><span>Clear rules, calmer conversations.</span></div>
           </div>
           <div class="rule-item">
             <div class="rule-ico">!</div>
@@ -2043,7 +2189,7 @@ body{
         <label class="toggle" for="landing-consent">
           <input id="landing-consent" type="checkbox">
           <span class="toggle-ui" aria-hidden="true"></span>
-          <span class="toggle-text"><b>I confirm I am 18+</b> and agree to Mortalive's Terms, privacy rules, and session policies.</span>
+          <span class="toggle-text"><b>I agree to Mortalive's Terms</b>, privacy rules, and session policies.</span>
         </label>
 
         <div class="enter-row">
@@ -2051,7 +2197,7 @@ body{
         </div>
 
         <div class="small-links">
-          By continuing, you agree to use the service responsibly and follow the community rules.
+          By continuing, you agree to Mortalive's terms, privacy rules, and session policies.
         </div>
       </div>
     </div>
@@ -2067,19 +2213,19 @@ body{
           <div class="brand">
             <div class="brand-mark" aria-hidden="true"></div>
             <div>
-              <div class="brand-name">Fast entry</div>
-              <div class="brand-sub">Guest mode first</div>
+              <div class="brand-name">Launchpad</div>
+              <div class="brand-sub">Status first</div>
             </div>
           </div>
-          <h2>Jump in as a guest.</h2>
-          <p>No account needed to start. Pick a display name and enter immediately. Login and signup stay below for people who want an account later.</p>
+          <h2>Choose a path.</h2>
+          <p>Go live fast as a guest or log in to keep your Buddh Score, streaks, badges, and weekly rank.</p>
 
           <div class="field">
             <label for="guest-name">Continue as guest</label>
             <input id="guest-name" type="text" maxlength="24" placeholder="Pick a display name for this session" autocomplete="off">
             <div class="help-row">
               <span>No account needed</span>
-              <span>Guests don't earn a Magnet Score</span>
+              <span>Guests don't earn Buddh Score</span>
             </div>
           </div>
           <button class="btn btn-primary btn-wide" id="btn-continue-guest">Continue as guest</button>
@@ -2190,43 +2336,42 @@ body{
 <section id="pg-lobby" class="page">
   <div class="wrap">
     <div class="card lobby-card">
-      
-<div class="app-toolbar">
-  <div class="brand">
-    <div class="brand-mark" aria-hidden="true"></div>
-    <div>
-      <div class="brand-name">Mortalive</div>
-      <div class="brand-sub">Member hub</div>
-    </div>
-  </div>
-  <div class="nav-pills" aria-label="Member navigation">
-    <button class="nav-pill" type="button" id="btn-header-terms">Terms</button>
-    <button class="nav-pill" type="button" id="btn-header-about">About</button>
-    <button class="nav-pill" type="button" id="btn-header-ratings">Ratings</button>
-    <button class="nav-pill" type="button" id="btn-header-achievements">Achievements</button>
-    <button class="nav-pill primary" type="button" id="btn-header-profile">Profile</button>
-  </div>
-</div>
-
       <div class="lobby-head">
         <div>
           <div class="brand">
             <div class="brand-mark" aria-hidden="true"></div>
             <div>
               <div class="brand-name">Mortalive</div>
-              <div class="brand-sub">Lobby</div>
+              <div class="brand-sub">Lobby · live status</div>
             </div>
           </div>
-          <div class="mini-copy">Pick text or video, add an interest, then start matching. This keeps the flow close to the old random-chat experience without the heavy dashboard look.</div>
+          <div class="mini-copy">Pick a mode, add an interest, and start matching. The lobby keeps the flow quick while your status keeps building.</div>
         </div>
         <div class="live-line">
           <span class="live-dot"></span>
           <span><strong id="online-n">2,847</strong> online now</span>
+          <span class="pill" id="mode-label" style="margin-left:auto;">Video</span>
+        </div>
+      </div>
+
+
+      <div class="member-toolbar" aria-label="Member actions">
+        <button class="btn btn-ghost" id="btn-header-terms" type="button">Terms</button>
+        <button class="btn btn-ghost" id="btn-header-about" type="button">About</button>
+        <button class="btn btn-ghost" id="btn-header-ratings" type="button">Ratings</button>
+        <button class="btn btn-ghost" id="btn-header-achievements" type="button">Achievements</button>
+        <button class="btn btn-primary" id="btn-header-profile" type="button">Profile</button>
+      </div>
+      <div class="cam-strip" id="cam-strip" style="display:none;align-items:center;gap:12px;margin:14px 0;padding:12px;border-radius:16px;border:1px solid var(--border);background:rgba(255,255,255,.06);">
+        <video id="lobby-cam-preview" autoplay playsinline muted style="width:92px;height:66px;object-fit:cover;border-radius:12px;background:#000;"></video>
+        <div style="min-width:0;">
+          <div style="font-weight:800;letter-spacing:-.02em;">Camera preview</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.5;">Your video is ready for the lobby and calls.</div>
         </div>
       </div>
 
       <div class="identity-row" id="identity-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0;padding:10px 14px;background:var(--panel-2,#f6f7fb);border:1px solid var(--border);border-radius:10px;font-size:13px;">
-        <span id="identity-label">Guest mode — sign in to unlock Magnet Score</span>
+        <span id="identity-label">Browsing as guest</span>
         <button class="btn btn-ghost" id="btn-switch-account" type="button" style="padding:4px 10px;font-size:12px;">Log in / Sign up</button>
         <button class="btn btn-ghost" id="btn-logout" type="button" style="padding:4px 10px;font-size:12px;display:none;">Log out</button>
       </div>
@@ -2249,98 +2394,121 @@ body{
       </div>
 
       <div class="start-row">
-        <button class="btn btn-ghost" id="score-pill-btn" type="button" style="display:none;">Open score sheet</button>
+        <button class="btn btn-ghost" id="score-pill-btn" type="button" style="display:none;">Open status sheet</button>
       </div>
     </div>
   </div>
 </section>
+
 
 <!-- Profile -->
 <section id="pg-profile" class="page">
   <div class="wrap">
     <div class="card profile-card">
-      <div class="lobby-head" style="margin-bottom:14px;">
+      <div class="lobby-head">
         <div>
           <div class="brand">
             <div class="brand-mark" aria-hidden="true"></div>
             <div>
               <div class="brand-name">Profile</div>
-              <div class="brand-sub">Build your identity</div>
+              <div class="brand-sub">Identity · friends · progress</div>
             </div>
           </div>
-          <div class="mini-copy">Update your avatar, bio, and profile identity. Guests can browse, but Magnet Score, friends, and ratings unlock after login.</div>
+          <div class="mini-copy">Keep your identity built, not guessed. Guests stay local only; logged-in users unlock scores, ratings, friends, and sync.</div>
         </div>
-        <div class="profile-mini-btns">
-          <button class="btn btn-ghost" type="button" id="btn-profile-back">Back</button>
-          <button class="btn btn-primary" type="button" id="btn-profile-save-top">Save</button>
+        <div class="live-line">
+          <span class="live-dot"></span>
+          <span id="profile-online-pill"><strong>2,847</strong> online</span>
         </div>
       </div>
 
-      <div class="profile-layout">
-        <div class="profile-panel">
-          <div class="profile-hero">
+      <div id="profile-status" class="notice" style="margin-top:12px;">Loading profile…</div>
+
+      <div class="profile-layout" style="margin-top:14px;">
+        <div class="profile-summary">
+          <div class="profile-head">
             <div class="profile-avatar" id="profile-avatar">👤</div>
-            <div class="profile-meta">
-              <h2 id="profile-username">Guest</h2>
-              <p id="profile-bio-preview">Add a short bio to tell people what you are about.</p>
-              <div class="profile-stats">
-                <div class="profile-stat"><span>Magnet Score</span><strong id="profile-score">—</strong></div>
-                <div class="profile-stat"><span>Chats</span><strong id="profile-chats">0</strong></div>
-                <div class="profile-stat"><span>Friends</span><strong id="profile-friends-count">0</strong></div>
-              </div>
+            <div style="min-width:0;">
+              <div class="profile-username" id="profile-username">Guest</div>
+              <div class="profile-score-line">Magnet Score · <span id="profile-score">—</span></div>
             </div>
           </div>
 
-          <div style="margin-top:16px;">
-            <label class="field" style="display:block;">
-              <span style="display:block;font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">Avatar</span>
-              <div class="avatar-grid" id="avatar-grid"></div>
-            </label>
+          <div class="profile-guest-note" id="profile-guest-note">
+            Guests do not receive ratings, scorecards, or ranking boards. Create an account or sign in to unlock Magnet Score, streaks, badges, and friends.
           </div>
 
-          <div class="field" style="margin-top:14px;">
-            <label for="profile-bio">Bio</label>
-            <input id="profile-bio" type="text" maxlength="160" placeholder="Write a short bio">
-            <div class="help-row"><span>Visible on your profile</span><span>160 characters max</span></div>
+          <div class="profile-quick-stats" id="profile-score-card">
+            <div class="profile-stat">
+              <strong id="profile-chats">0</strong>
+              <span>Chats completed</span>
+            </div>
+            <div class="profile-stat">
+              <strong id="profile-friends-count">0</strong>
+              <span>Friends</span>
+            </div>
+            <div class="profile-stat">
+              <strong id="profile-online-count">2,847</strong>
+              <span>Live online</span>
+            </div>
           </div>
 
-          <div class="field" style="margin-top:14px;">
-            <label for="profile-quote">Featured line</label>
-            <input id="profile-quote" type="text" maxlength="80" placeholder="A short line people will remember">
-          </div>
+          <div class="profile-section-title">Bio preview</div>
+          <div class="notice" id="profile-bio-preview" style="margin-top:0;">Add a short bio to tell people what you are about.</div>
 
-          <div class="profile-mini-btns" style="margin-top:14px;">
-            <button class="btn btn-primary" type="button" id="btn-profile-save">Save profile</button>
-            <button class="btn btn-ghost" type="button" id="btn-profile-refresh">Refresh</button>
+          <div class="profile-actions">
+            <button class="btn btn-ghost" id="btn-profile-back" type="button">Back</button>
+            <button class="btn btn-ghost" id="btn-profile-refresh" type="button">Refresh</button>
+            <button class="btn btn-primary" id="btn-profile-save-top" type="button">Save</button>
           </div>
-
-          <div class="profile-note" id="profile-status">Sign in to unlock Magnet Score, friends, ratings, and profile sync.</div>
         </div>
 
-        <div class="profile-panel">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
-            <div>
-              <div class="brand-sub">Friends</div>
-              <div class="mini-copy" style="margin-top:4px;">Accepted friends appear here.</div>
+        <div class="profile-editor" id="profile-editor">
+          <div class="profile-form">
+            <div class="field">
+              <label>Choose an avatar</label>
+              <div class="avatar-grid" id="avatar-grid"></div>
             </div>
-            <span class="pill" id="profile-online-pill">0 online</span>
-          </div>
-          <div class="profile-list" id="profile-friends"></div>
 
-          <div style="height:14px;"></div>
+            <div class="field">
+              <label for="profile-bio">Bio</label>
+              <textarea id="profile-bio" maxlength="160" placeholder="Write a short bio…"></textarea>
+            </div>
 
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
-            <div>
-              <div class="brand-sub">Pending requests</div>
-              <div class="mini-copy" style="margin-top:4px;">Accept or decline new requests here.</div>
+            <div class="field">
+              <label for="profile-quote">Featured line</label>
+              <input id="profile-quote" maxlength="80" type="text" placeholder="A short line people will remember">
             </div>
           </div>
-          <div class="profile-list" id="profile-pending"></div>
+
+          <div class="profile-section-title">Friends</div>
+          <div class="profile-board" id="profile-friends-section">
+            <div class="profile-board-head">
+              <strong>Friends</strong>
+              <span id="profile-friends-count">0</span>
+            </div>
+            <div id="profile-friends"></div>
+          </div>
+
+          <div class="profile-section-title">Pending requests</div>
+          <div class="profile-board" id="profile-pending-section">
+            <div class="profile-board-head">
+              <strong>Incoming</strong>
+              <span>Respond from here</span>
+            </div>
+            <div id="profile-pending"></div>
+          </div>
+
+          <div class="profile-actions" style="margin-top:14px;">
+            <button class="btn btn-ghost" id="btn-profile-back-2" type="button">Back</button>
+            <button class="btn btn-primary" id="btn-profile-save" type="button">Save profile</button>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </section>
+
 
 <!-- Matching -->
 <section id="pg-match" class="page">
@@ -2369,7 +2537,7 @@ body{
         <div class="peer-ava" id="peer-ava">👤</div>
         <div class="peer-meta">
           <div class="peer-name" id="peer-name">Stranger</div>
-          <div class="peer-sub" id="peer-score">Connected · ratings unlock with login</div>
+          <div class="peer-sub" id="peer-score">Glass chat · connected</div>
         </div>
       </div>
 
@@ -2425,12 +2593,25 @@ body{
   </div>
 </section>
 
+
+<!-- Sheet -->
+<div class="sheet-overlay" id="sheet-overlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-top">
+      <h3 class="sheet-title" id="sheet-title">Sheet</h3>
+      <button class="sheet-close" id="btn-sheet-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="sheet-body" id="sheet-body"></div>
+  </div>
+</div>
+
 <!-- Rating -->
 <div class="overlay" id="rating-overlay">
   <div class="modal">
     <div class="modal-ico">⭐</div>
     <div class="modal-title">Rate this chat</div>
-    <div class="modal-sub">Signed-in users can rate matched chats. Guests can browse, but ratings only unlock after login.</div>
+    <div class="modal-sub">A simple rating keeps the chat quality better without turning the UI into a dashboard.</div>
     <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:10px;">Overall experience</div>
     <div class="stars" id="stars">
       <span class="star" data-v="1">1</span>
@@ -2457,15 +2638,50 @@ body{
   </div>
 </div>
 
-<!-- Info sheet / achievements -->
-<div class="sheet-overlay" id="sheet-overlay">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <h3 id="sheet-title" style="margin:0 0 8px;letter-spacing:-.04em;">Mortalive</h3>
-    <div id="sheet-body" class="info-sheet-body">Use the header to open terms, about, ratings, and achievements.</div>
-    <div class="profile-mini-btns" style="margin-top:16px;justify-content:flex-end;">
-      <button class="btn btn-ghost" type="button" id="btn-sheet-close">Close</button>
+<!-- Progress identity sheet -->
+<div class="overlay" id="progress-overlay" style="display:none;">
+  <div class="modal" style="width:min(760px,100%);text-align:left;background:rgba(10,16,32,.72);border:1px solid rgba(255,255,255,.14);color:#fff;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px;">
+      <div style="min-width:0;">
+        <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.7;font-weight:800;">Progress identity</div>
+        <div style="font-size:28px;line-height:1.05;letter-spacing:-.04em;font-weight:800;margin-top:6px;">Your status, live</div>
+        <div id="progress-goal" style="margin-top:10px;color:rgba(255,255,255,.78);font-size:14px;line-height:1.6;">Loading progress…</div>
+      </div>
+      <button id="progress-close" type="button" style="width:42px;height:42px;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.10);color:#fff;font-size:22px;line-height:1;">×</button>
     </div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
+      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);">
+        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Buddh Score</div>
+        <div id="progress-score" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">0</div>
+      </div>
+      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);">
+        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Weekly rank</div>
+        <div id="progress-rank" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">#—</div>
+      </div>
+      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);">
+        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Completion count</div>
+        <div id="progress-completions" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">0</div>
+      </div>
+      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);">
+        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Top percentile</div>
+        <div id="progress-percentile" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">Top —%</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);">
+      <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Streak</div>
+      <div id="progress-streak" style="font-size:22px;font-weight:800;line-height:1.2;margin-top:6px;">0 days</div>
+    </div>
+    <div style="margin-top:12px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);">
+      <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Badges</div>
+      <div id="progress-badges" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;line-height:1.4;"></div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button id="progress-share" type="button" style="flex:1;min-width:180px;height:48px;border:0;border-radius:16px;background:linear-gradient(135deg, rgba(90,177,255,.96), rgba(168,120,255,.96));color:#fff;font-weight:800;">Copy share card</button>
+      <button id="progress-refresh" type="button" style="flex:1;min-width:180px;height:48px;border:1px solid rgba(255,255,255,.20);border-radius:16px;background:rgba(255,255,255,.08);color:#fff;font-weight:800;">Refresh stats</button>
+    </div>
+    <div id="progress-frame" style="display:none;"></div>
+    <div id="progress-quote" style="display:none;"></div>
+    <div id="progress-pinned" style="display:none;"></div>
   </div>
 </div>
 
