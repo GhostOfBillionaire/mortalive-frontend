@@ -49,7 +49,6 @@ const S = {
   isGuest: true,
   guestName: localStorage.getItem('mortalive_guest_name') || '',
   videoLayout: 'horizontal',
-  demoVideoIndex: 0,
   chatStartedAt: null,
   chatCounted: false,
   progress: null,
@@ -172,7 +171,7 @@ function defaultProgress() {
     profileTheme: 'aurora',
     profileFrame: 'Liquid Glass',
     featuredQuote: 'Building momentum one connection at a time.',
-    pinnedNote: 'Go live, build your score, unlock your profile.',
+    pinnedNote: 'Connect with the world, build your Magnet Score, and unlock your profile.',
     avatarFrame: 'halo',
     lastSyncedAt: 0
   };
@@ -183,7 +182,7 @@ function defaultProfile() {
     theme: 'aurora',
     frame: 'Liquid Glass',
     quote: 'Building momentum one connection at a time.',
-    pinned: 'Go live, build your score, unlock your profile.',
+    pinned: 'Connect with the world, build your Magnet Score, and unlock your profile.',
     accent: 'rgba(90, 177, 255, .95)',
     pattern: 'mesh'
   };
@@ -393,7 +392,7 @@ function updateProgressText() {
 
   const scorePill = $('score-pill-btn');
   if (scorePill) {
-    scorePill.textContent = S.isGuest ? 'Guest mode' : `🪷 ${summary.score} Buddh Score · ${summary.badges} badges`;
+    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} Magnet Score · ${summary.badges} badges`;
     scorePill.title = S.isGuest
       ? 'Guest sessions do not earn status'
       : `Top ${summary.percentile}% · #${summary.rank} weekly rank`;
@@ -454,7 +453,7 @@ function awardProgress(kind, amount = 1, meta = {}) {
   if (meta.completion) {
     const goal = computeGoalText(progress);
     if (source === 'chat_complete') {
-      toast(`+${delta} Buddh Score · ${goal}`, '🪷');
+      toast(`+${delta} Magnet Score · ${goal}`, '🧲');
     } else {
       toast(`Milestone reached · ${goal}`, '🏁');
     }
@@ -490,7 +489,7 @@ function copyProgressShareCard() {
   const profile = getCurrentProfile();
   const text = [
     `Mortalive status`,
-    `${S.username || S.guestName || 'Guest'} · ${summary.score} Buddh Score`,
+    `${S.username || S.guestName || 'Guest'} · ${summary.score} Magnet Score`,
     `${summary.streak} day streak · ${summary.completions} completions`,
     `Top ${summary.percentile}% · #${summary.rank} weekly`,
     `Frame: ${profile.frame || 'Liquid Glass'}`
@@ -551,7 +550,7 @@ function ensureProgressSheet() {
     </div>
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
       <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);">
-        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Buddh Score</div>
+        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Magnet Score</div>
         <div id="progress-score" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">0</div>
       </div>
       <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);">
@@ -600,7 +599,7 @@ function ensureProgressSheet() {
   panel.querySelector('#progress-refresh')?.addEventListener('click', () => {
     updateDerivedProgress();
     updateProgressText();
-    toast('Progress refreshed', '🪷');
+    toast('Progress refreshed', '🧲');
   });
 
   return overlay;
@@ -608,7 +607,7 @@ function ensureProgressSheet() {
 
 function openProgressSheet() {
   if (S.isGuest) {
-    toast('Guests do not earn status yet', '👤');
+    toast('Sign in to view your status', '👤');
     return;
   }
   const overlay = ensureProgressSheet();
@@ -831,7 +830,7 @@ function updateIdentityDisplay() {
   const summary = formatProgressLine(progress);
 
   if (!S.isGuest && S.username) {
-    if (label) label.textContent = `Logged in as ${S.username} · 🪷 ${summary.score} Buddh Score · ${summary.streak} streak · #${summary.rank}`;
+    if (label) label.textContent = `Logged in as ${S.username} · 🧲 ${summary.score} Magnet Score · ${summary.streak} streak · #${summary.rank}`;
     if (switchBtn) switchBtn.style.display = 'none';
     if (logoutBtn) logoutBtn.style.display = '';
     if (scorePill) scorePill.style.display = '';
@@ -852,13 +851,11 @@ function refreshLaunchpadCopy() {
     if (el) el.textContent = value;
   };
 
-  set('hero-kicker', 'Live rank · badges · streaks');
-  set('hero-title', 'Start your next connection');
-  set('hero-text', 'Go live, build your Buddh Score, and unlock your profile as you connect.');
-  set('btn-enter', 'Go Live');
-  set('btn-start', 'Go Live');
-  set('btn-start-text', 'Go Live · Text');
-  set('btn-start-video', 'Go Live · Video');
+  set('hero-kicker', 'Rank · badges · streaks');
+  set('hero-title', 'Connect with the world');
+  set('hero-text', 'A new way to connect, share, and build your Magnet Score as you talk.');
+  set('btn-enter', 'Continue');
+  set('btn-start', 'Continue');
   set('btn-continue-guest', 'Continue as guest');
   set('btn-login', 'Log in & continue');
   set('btn-signup', 'Create account');
@@ -1004,7 +1001,7 @@ function initAuthControls() {
     localStorage.setItem('mortalive_token', token);
     localStorage.setItem('mortalive_username', username);
     syncAuthProgress(magnetScore);
-    toast(`Welcome, ${username}!`, '🪷');
+    toast(`Welcome, ${username}!`, '🧲');
     enterLobby();
   }
 
@@ -1124,11 +1121,9 @@ async function tryAutoLogin() {
 }
 
 function initLandingActions() {
-  const startText = $('btn-start-text') || $('btn-enter') || $('btn-start');
-  const startVideo = $('btn-start-video');
+  const continueBtn = $('btn-enter') || $('btn-start');
 
-  async function proceedPastLanding(mode) {
-    S.mode = mode;
+  async function proceedPastLanding() {
     S.pendingAction = null;
     // tryAutoLogin() was kicked off in the background at page load; this
     // just waits on that same result if it hasn't resolved yet.
@@ -1140,12 +1135,8 @@ function initLandingActions() {
     }
   }
 
-  if (startText) {
-    startText.addEventListener('click', () => proceedPastLanding('text'));
-  }
-
-  if (startVideo) {
-    startVideo.addEventListener('click', () => proceedPastLanding('video'));
+  if (continueBtn) {
+    continueBtn.addEventListener('click', proceedPastLanding);
   }
 }
 
@@ -1352,6 +1343,12 @@ $('vc-fs')?.addEventListener('click', () => {
     showPage('pg-lobby');
   });
 
+  $('btn-try-demo')?.addEventListener('click', () => {
+    clearTimeout(matchTimeout);
+    clearTimeout(S.noMatchTimeout);
+    if (S.socket && S.socket.connected) removeFromQueueSafely();
+    simulateDemoMatch();
+  });
 }
 
 function initGlobalDefaults() {
@@ -1473,10 +1470,12 @@ function startMatching() {
   setText('match-title', 'Finding your match');
   const subReset = $('match-sub');
   if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
+  const tryDemoReset = $('btn-try-demo');
+  if (tryDemoReset) tryDemoReset.style.display = 'none';
+
   initSocket();
 
   S.matched = false; // reset; set to true inside the 'matched' socket handler
-  S.demoActive = false;
 
   clearTimeout(matchTimeout);
   clearTimeout(S.noMatchTimeout);
@@ -1522,12 +1521,24 @@ function startMatching() {
     }
   }, 20000);
 
-  // If no live match arrives quickly, fall back to demo video without
-  // showing an empty-room message first.
+  // Once we ARE connected to the real server, if nobody else is in the
+  // queue yet, the wait can be genuinely indefinite. After a reasonable
+  // amount of time, let the user know instead of an endless spinner —
+  // demo is offered as an explicit opt-in button here, never automatic,
+  // since the server connection itself is known-good at this point.
   S.noMatchTimeout = setTimeout(() => {
-    if (S.matched || S.connectFailed || S.demoActive) return;
-    simulateDemoMatch();
-  }, 5000);
+    if (S.matched || S.connectFailed) return;
+    if (S.socket && S.socket.connected) {
+      setText('match-title', "No one's online right now");
+      const sub = $('match-sub');
+      if (sub) sub.innerHTML = 'Nobody else is in the queue yet. You can keep waiting, or try a one-off demo chat while the site grows.';
+      const tryDemo = $('btn-try-demo');
+      if (tryDemo) tryDemo.style.display = 'inline-flex';
+    }
+    // If still not connected at this point, the connect_error / ceiling
+    // timer above will already be handling the demo fallback — no need
+    // to duplicate that decision here.
+  }, 20000);
 }
 
 function removeFromQueueSafely() {
@@ -1676,25 +1687,21 @@ function monitorQuality() {
   }, 4000);
 }
 
-function simulateDemoMatch(force = false) {
-  if (S.demoActive && !force) return;
+function simulateDemoMatch() {
+  if (S.demoActive) return;
   S.demoActive = true;
 
-  const suffix = Math.floor(100 + Math.random() * 900);
-  const prefixes = ['Nova', 'Pixel', 'Echo', 'Luna', 'Cipher', 'Flux', 'Vega', 'Mira', 'Pulse', 'Astra'];
-  const moods = ['Wave', 'Spark', 'Bloom', 'Drift', 'Halo', 'Glow', 'Shift', 'Quill', 'Orbit', 'Vibe'];
-  const emojis = ['🦊', '🎭', '🌸', '⚡', '🌙', '🔮', '☀️', '🖤', '🎧', '🧠'];
+  let pool = [...strangerPool];
+  if (S.interest && S.interest.toLowerCase().includes('high')) {
+    pool = pool.filter((s) => s.score > 300);
+  }
 
-  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-  const mood = moods[Math.floor(Math.random() * moods.length)];
-  const emoji = emojis[Math.floor(Math.random() * emojis.length)];
-
-  S.stranger = {
-    name: `${prefix}_${mood}_${suffix}`,
-    score: Math.floor(40 + Math.random() * 900),
-    emoji
-  };
+  S.stranger = pool[Math.floor(Math.random() * pool.length)];
   S.roomId = `demo-${Date.now()}`;
+
+  // Decide once per match whether the "stranger" has their camera on.
+  // Roughly 6 in 10 strangers have video on, matching typical real usage.
+  S.demoStrangerCamOn = Math.random() < 0.6;
 
   beginChat();
 
@@ -1706,6 +1713,7 @@ function simulateDemoMatch(force = false) {
 }
 
 async function setupDemoVideo() {
+  // Bring up the user's own camera exactly like a real call would.
   try {
     if (!S.localStream || !S.localStream.active) {
       S.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -1717,68 +1725,40 @@ async function setupDemoVideo() {
       localVid.style.display = 'block';
     }
   } catch (e) {
-    // Local camera is optional for demo playback.
+    // No camera available locally — that's fine, the demo can still show
+    // the "stranger" side; just keep the waiting placeholder for our own feed.
   }
 
+  // Believable connecting delay before the stranger's feed "arrives",
+  // same pacing a real WebRTC handshake would have.
+  setText('ph-txt', 'Waiting for video…');
   const noVideoPh = $('no-video-ph');
   const remoteVid = $('vid-remote');
-  const qbar = $('quality-bar');
-  const txt = $('ph-txt');
-  const demoVideos = ['demo1.mp4', 'demo2.mp4', 'demo3.mp4'];
 
-  if (!remoteVid || !demoVideos.length) {
+  setTimeout(() => {
+    if (!S.demoActive) return; // user already left before this fired
+
+    // IMPORTANT: never assign S.localStream to the remote video element.
+    // That was previously done as a "stand-in" for a second person's feed,
+    // but it just shows the user their own face mirrored back labeled as
+    // the stranger — an obvious, confusing tell, not a believable demo.
+    // There is no real second video source available in demo mode, so the
+    // honest behavior is the same placeholder a real camera-off peer would
+    // produce, whether or not S.demoStrangerCamOn is true.
+    if (remoteVid) {
+      remoteVid.srcObject = null;
+      remoteVid.style.display = 'none';
+    }
+    const qbar = $('quality-bar');
+    if (qbar) qbar.style.display = 'none';
+
+    if (S.demoStrangerCamOn) {
+      setText('ph-txt', `${S.stranger?.name || 'Stranger'} is connecting their camera…`);
+    } else {
+      setText('ph-txt', `${S.stranger?.name || 'Stranger'}'s camera is off`);
+    }
     if (noVideoPh) noVideoPh.style.display = 'flex';
-    if (txt) txt.textContent = '';
-    return;
-  }
-
-  const src = demoVideos[S.demoVideoIndex % demoVideos.length];
-  S.demoVideoIndex = (S.demoVideoIndex + 1) % demoVideos.length;
-
-  let rotated = false;
-  const rotateToNext = () => {
-    if (rotated || !S.demoActive) return;
-    rotated = true;
-    remoteVid.ontimeupdate = null;
-    remoteVid.onended = null;
-    setTimeout(() => simulateDemoMatch(true), 0);
-  };
-
-  remoteVid.pause?.();
-  remoteVid.srcObject = null;
-  remoteVid.src = src;
-  remoteVid.loop = false;
-  remoteVid.muted = true;
-  remoteVid.playsInline = true;
-  remoteVid.autoplay = true;
-  remoteVid.style.objectFit = 'cover';
-  remoteVid.style.objectPosition = 'center center';
-  remoteVid.style.display = 'block';
-
-  if (qbar) qbar.style.display = 'none';
-  if (txt) txt.textContent = '';
-  if (noVideoPh) noVideoPh.style.display = 'none';
-
-  remoteVid.onended = rotateToNext;
-  remoteVid.ontimeupdate = () => {
-    if (!remoteVid.duration || !Number.isFinite(remoteVid.duration)) return;
-    const remaining = remoteVid.duration - remoteVid.currentTime;
-    if (remaining <= 10) rotateToNext();
-  };
-  remoteVid.onerror = () => {
-    remoteVid.style.display = 'none';
-    if (noVideoPh) noVideoPh.style.display = 'flex';
-    if (txt) txt.textContent = '';
-  };
-
-  remoteVid.play?.().then(() => {
-    if (noVideoPh) noVideoPh.style.display = 'none';
-    if (txt) txt.textContent = '';
-  }).catch(() => {
-    remoteVid.style.display = 'none';
-    if (noVideoPh) noVideoPh.style.display = 'flex';
-    if (txt) txt.textContent = '';
-  });
+  }, 900 + Math.random() * 900);
 }
 
 function beginChat() {
@@ -1789,10 +1769,7 @@ function beginChat() {
   const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
   setText('peer-ava', s.emoji);
   setText('peer-name', s.name);
-  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} Buddh Score · connected`);
-
-  const rateBtn = $('btn-rate-top');
-  if (rateBtn) rateBtn.style.display = (!S.isGuest && !s.isGuest) ? '' : 'none';
+  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} Magnet Score · connected`);
 
   const panel = $('video-panel');
   applyVideoLayout();
@@ -1906,16 +1883,15 @@ function disconnectPeer() {
   const remoteVid = $('vid-remote');
   if (remoteVid) {
     try {
+      // In demo mode, vid-remote.srcObject is the SAME MediaStream object as
+      // our own local camera (reused as a stand-in "stranger" feed). Stopping
+      // its tracks here would kill our own camera. Only stop tracks that
+      // belong to a genuinely separate (real peer) stream.
       if (remoteVid.srcObject && remoteVid.srcObject !== S.localStream) {
         remoteVid.srcObject.getTracks().forEach((t) => t.stop());
       }
     } catch (e) {}
     remoteVid.srcObject = null;
-    remoteVid.pause?.();
-    remoteVid.src = '';
-    remoteVid.ontimeupdate = null;
-    remoteVid.onended = null;
-    remoteVid.onerror = null;
     remoteVid.style.display = 'none';
   }
 
@@ -2012,8 +1988,8 @@ function initRatingControls() {
   let stars = 0;
 
   const openModal = () => {
-    if (S.isGuest || (S.stranger && S.stranger.isGuest)) {
-      toast('Ratings are for signed-in users only', '🔒');
+    if (S.isGuest || !S.username) {
+      toast('Sign in to rate chats', '👤');
       return;
     }
     stars = 0;
