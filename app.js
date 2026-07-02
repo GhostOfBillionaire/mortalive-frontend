@@ -292,18 +292,29 @@ function updateIdentityDisplay() {
   const switchBtn = $('btn-switch-account');
   const logoutBtn = $('btn-logout');
   const scorePill = $('score-pill-btn');
+  const headerRatings = $('btn-header-ratings');
 
   if (!S.isGuest && S.username) {
     if (label) label.textContent = `Logged in as ${S.username} · 🧲 ${S.magnetScore ?? '—'} Magnet Score`;
     if (switchBtn) switchBtn.style.display = 'none';
     if (logoutBtn) logoutBtn.style.display = '';
     if (scorePill) scorePill.style.display = '';
+    if (headerRatings) headerRatings.style.display = '';
   } else {
     if (label) label.textContent = `Browsing as guest "${S.guestName || 'Guest'}" — no Magnet Score`;
     if (switchBtn) switchBtn.style.display = '';
     if (logoutBtn) logoutBtn.style.display = 'none';
     if (scorePill) scorePill.style.display = 'none';
+    if (headerRatings) headerRatings.style.display = 'none';
   }
+}
+
+function updateRatingVisibility() {
+  const rateBtn = $('btn-rate-top');
+  const allowed = !!S.authToken && !S.isGuest && !(S.stranger && S.stranger.isGuest);
+  if (rateBtn) rateBtn.style.display = allowed ? '' : 'none';
+  const overlay = $('rating-overlay');
+  if (!allowed && overlay) overlay.classList.remove('open');
 }
 
 const PROFILE_EMOJIS = ['👤','🌟','🦊','🎭','🌸','⚡','🌙','🔮','☀️','🖤','🧠','🎧'];
@@ -443,13 +454,28 @@ function renderProfilePage() {
   const bioInput = $('profile-bio');
   const quoteInput = $('profile-quote');
   const chatsEl = $('profile-chats');
-  if (usernameEl) usernameEl.textContent = S.username || S.guestName || 'Guest';
+  const guestNote = $('profile-guest-note');
+  const scoreCard = $('profile-score-card');
+  const friendsSection = $('profile-friends-section');
+  const pendingSection = $('profile-pending-section');
+  const profileStatus = $('profile-status');
+
+  const isGuestUser = !S.authToken || S.isGuest;
+
+  if (usernameEl) usernameEl.textContent = isGuestUser ? (S.guestName || 'Guest') : (S.username || 'Guest');
   if (avatarEl) avatarEl.textContent = S.avatarEmoji || '👤';
-  if (scoreEl) scoreEl.textContent = S.magnetScore ?? '—';
+  if (scoreEl) scoreEl.textContent = isGuestUser ? 'Login required' : (S.magnetScore ?? '—');
   if (bioPrev) bioPrev.textContent = S.bio || 'Add a short bio to tell people what you are about.';
   if (bioInput) bioInput.value = S.bio || '';
   if (quoteInput) quoteInput.value = S.featuredLine || '';
   if (chatsEl) chatsEl.textContent = String(S.chatCount || 0);
+  if (guestNote) guestNote.style.display = isGuestUser ? 'block' : 'none';
+  if (scoreCard) scoreCard.style.display = isGuestUser ? 'none' : '';
+  if (friendsSection) friendsSection.style.display = isGuestUser ? 'none' : '';
+  if (pendingSection) pendingSection.style.display = isGuestUser ? 'none' : '';
+  if (profileStatus && isGuestUser) {
+    profileStatus.textContent = 'Guest mode is local-only. Sign in or sign up to unlock Magnet Score, ratings, friends, and sync.';
+  }
   renderAvatarChoices(S.avatarEmoji || '👤');
 }
 
@@ -669,6 +695,14 @@ function openAboutSheet() {
 }
 
 function openAchievementsSheet() {
+  if (!S.authToken || S.isGuest) {
+    openSheet(
+      'Achievements',
+      '<div>Sign in or sign up to unlock Magnet Score, streaks, badges, ranking boards, and shareable profile progress.</div>'
+    );
+    return;
+  }
+
   const chats = Number(S.chatCount || 0);
   const magnet = S.magnetScore ?? '—';
   const body = `
@@ -690,6 +724,7 @@ function initHeaderControls() {
     loadProfileData();
   });
   $('btn-profile-back')?.addEventListener('click', () => showPage('pg-lobby'));
+  $('btn-profile-back-2')?.addEventListener('click', () => showPage('pg-lobby'));
   $('btn-profile-save')?.addEventListener('click', saveProfile);
   $('btn-profile-save-top')?.addEventListener('click', saveProfile);
   $('btn-profile-refresh')?.addEventListener('click', loadProfileData);
@@ -1597,7 +1632,7 @@ function beginChat() {
   const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
   setText('peer-ava', s.emoji);
   setText('peer-name', s.name);
-  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} Magnet Score · connected`);
+  setText('peer-score', s.isGuest || s.score === null ? 'Guest · no ratings' : `🧲 ${s.score} Magnet Score · connected`);
 
   const panel = $('video-panel');
   applyVideoLayout();
@@ -1611,6 +1646,7 @@ function beginChat() {
 
   showPage('pg-chat');
   applyVideoLayout();
+  updateRatingVisibility();
   setCallStatus('connecting', 'connecting');
   addSysLine(`✨ Connected to ${s.name}`);
   logSession('start', { stranger: s.name, mode: S.mode, roomId: S.roomId });
@@ -1812,11 +1848,18 @@ function stopSnapshotCapture() {
 
 function initRatingControls() {
   const overlay = $('rating-overlay');
+  const rateBtn = $('btn-rate-top');
   if (!overlay) return;
 
   let stars = 0;
 
+  const canRate = () => !!S.authToken && !S.isGuest && !(S.stranger && S.stranger.isGuest);
+
   const openModal = () => {
+    if (!canRate()) {
+      toast('Ratings require two signed-in users', '⚠️');
+      return;
+    }
     stars = 0;
     document.querySelectorAll('#stars .star').forEach((s) => s.classList.remove('lit'));
     document.querySelectorAll('#vibes .vibe').forEach((v) => v.classList.remove('on'));
@@ -1824,7 +1867,10 @@ function initRatingControls() {
   };
   const closeModal = () => overlay.classList.remove('open');
 
-  $('btn-rate-top')?.addEventListener('click', openModal);
+  if (rateBtn) {
+    rateBtn.addEventListener('click', openModal);
+    rateBtn.style.display = canRate() ? '' : 'none';
+  }
 
   $('stars')?.addEventListener('click', (e) => {
     const star = e.target.closest('.star');
@@ -1844,6 +1890,11 @@ function initRatingControls() {
   $('btn-skip-rating')?.addEventListener('click', closeModal);
 
   $('btn-submit-rating')?.addEventListener('click', () => {
+    if (!canRate()) {
+      closeModal();
+      toast('Ratings are not available for guest matches', '⚠️');
+      return;
+    }
     if (!stars) {
       toast('Pick a star rating first', '⭐');
       return;
@@ -1853,6 +1904,8 @@ function initRatingControls() {
     closeModal();
     toast(stars >= 4 ? 'Thanks for the rating!' : 'Rating submitted', '⭐');
   });
+
+  updateRatingVisibility();
 }
 
 ready(() => {
