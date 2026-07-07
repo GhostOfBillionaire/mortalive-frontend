@@ -3,14 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>About Mortalive — Anonymous Video & Text Chat Platform</title>
-<meta name="description" content="Learn about Mortalive, a modern anonymous random chat platform for safe video and text conversations. Built in 2026 as a better alternative to Omegle.">
-<meta name="keywords" content="anonymous chat, random video chat, omegle alternative, stranger chat, video chat, text chat, safe chat platform">
-
+<title>About Mortalive — Anonymous Video & Text Chat</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
+
 :root{
   --bg:#09090b;
   --bg2:#111113;
@@ -40,12 +38,28 @@ body{
   overflow-x:hidden;
   background-attachment:fixed;
 }
+body::before{
+  content:'';
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+  background-size:72px 72px;
+  mask-image:radial-gradient(circle at center, black 58%, transparent 100%);
+  opacity:.28;
+}
+a{color:inherit;text-decoration:none}
+button,input{font:inherit}
 .wrap{
   width:min(1140px, calc(100% - 32px));
   margin:0 auto;
-  padding:24px 0 100px;
+  padding:24px 0 40px;
   position:relative;
   z-index:1;
+}
+.shell{
+  display:grid;
+  gap:18px;
 }
 .topbar{
   display:flex;
@@ -101,7 +115,7 @@ body{
   border-color:var(--border);
 }
 .hero{
-  padding:48px 32px;
+  padding:26px;
   border-radius:32px;
   border:1px solid var(--border);
   background:
@@ -110,27 +124,62 @@ body{
     rgba(255,255,255,.03);
   backdrop-filter:blur(20px) saturate(140%);
   box-shadow:var(--shadow);
-  text-align:center;
+}
+.kicker{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:rgba(255,255,255,.03);
+  color:var(--muted);
+  font-size:12px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  font-weight:700;
 }
 .title{
-  margin:20px 0 0;
-  font-size:clamp(36px, 5.2vw, 68px);
+  margin:16px 0 0;
+  font-size:clamp(34px, 4.8vw, 64px);
   letter-spacing:-.06em;
   line-height:1;
 }
 .subtitle{
-  margin:18px 0 0;
-  max-width:76ch;
+  margin:14px 0 0;
+  max-width:66ch;
   color:var(--muted);
-  font-size:17px;
-  line-height:1.75;
-  margin:0 auto;
+  font-size:16px;
+  line-height:1.7;
+}
+.hero-actions{
+  margin-top:20px;
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+}
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  height:46px;
+  padding:0 18px;
+  border-radius:14px;
+  border:1px solid var(--border);
+  background:rgba(255,255,255,.04);
+  color:var(--text);
+  font-weight:700;
+}
+.btn-primary{
+  border-color:transparent;
+  background:linear-gradient(135deg, var(--primary), #2563eb);
+  box-shadow:0 14px 30px rgba(59,130,246,.18);
 }
 .grid{
   display:grid;
   grid-template-columns:repeat(12, minmax(0,1fr));
-  gap:20px;
-  margin-top:48px;
+  gap:16px;
 }
 .card{
   border:1px solid var(--border);
@@ -138,34 +187,88 @@ body{
   backdrop-filter:blur(18px) saturate(140%);
   border-radius:24px;
   box-shadow:var(--shadow);
-  padding:36px;
+}
+.section{
+  padding:20px;
+}
+.section-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:14px;
 }
 .section-title{
-  margin:0 0 18px;
-  font-size:23px;
-  line-height:1.3;
+  margin:0;
+  font-size:18px;
+  line-height:1.2;
   letter-spacing:-.03em;
 }
 .section-note{
+  margin:6px 0 0;
   color:var(--muted);
-  font-size:16px;
-  line-height:1.8;
+  font-size:13px;
+  line-height:1.6;
 }
-.footer{
-  margin-top:100px;
-  padding:28px;
-  border-radius:28px;
+.placeholder{
+  min-height:72px;
+  border-radius:18px;
+  border:1px dashed var(--border-strong);
+  background:rgba(255,255,255,.025);
+  padding:16px;
+  color:var(--muted);
+  line-height:1.7;
+}
+.placeholder.tall{min-height:180px}
+.placeholder.xl{min-height:240px}
+.split{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0,1fr));
+  gap:16px;
+}
+.stack{display:grid; gap:16px;}
+.badge-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+}
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px;
+  border-radius:999px;
   border:1px solid var(--border);
   background:rgba(255,255,255,.03);
   color:var(--muted);
-  text-align:center;
-  font-size:14.5px;
+  font-size:12px;
+  font-weight:600;
+}
+.footer{
+  margin-top:8px;
+  padding:16px 20px;
+  border-radius:24px;
+  border:1px solid var(--border);
+  background:rgba(255,255,255,.03);
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.6;
+  display:flex;
+  justify-content:space-between;
+  gap:14px;
+  flex-wrap:wrap;
+}
+.meta-link{
+  color:var(--text);
+  opacity:.86;
 }
 @media (max-width: 860px){
   .topbar{flex-direction:column;align-items:flex-start}
   .nav{justify-content:flex-start}
+  .split{grid-template-columns:1fr}
   .grid{grid-template-columns:1fr}
 }
+
 </style>
 </head>
 <body>
@@ -188,62 +291,99 @@ body{
 
     <main class="shell">
       <section class="hero">
-        <span class="kicker">Our Story • 2026</span>
+        <span class="kicker">Our Story</span>
         <h1 class="title">About Mortalive</h1>
-        <p class="subtitle">Mortalive is a modern anonymous random chat platform designed for genuine human connections. We rebuilt the classic stranger chat experience with better design, stronger safety tools, and a focus on respect and privacy.</p>
+        <p class="subtitle">Mortalive is a modern anonymous random chat platform for video and text conversations. We rebuilt the classic stranger chat experience with better design, stronger safety, and a focus on genuine human connection.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="index.html">Back to app</a>
+          <a class="btn" href="index.html">Start Chatting</a>
+        </div>
       </section>
 
-      <div class="grid">
-        <div class="card">
-          <h2 class="section-title">Our Mission</h2>
-          <p class="section-note">At Mortalive, we believe that talking to strangers should be simple, safe, and enjoyable. In a world full of social media noise and superficial interactions, we created a space where people can have real, unfiltered conversations without pressure or judgment. Our mission is to bring back the magic of random chat while making it safer and more respectful for everyone.</p>
+      <div class="stack">
+        
+      <section class="card section">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Our Mission</h2>
+            <p class="section-note">We believe anonymous chat can be both fun and respectful.</p>
+          </div>
         </div>
-
-        <div class="card">
-          <h2 class="section-title">Why Mortalive?</h2>
-          <p class="section-note">Older platforms like Omegle became unsafe and outdated. We saw the need for a new generation of anonymous chat — one that prioritizes user safety, modern design, fast performance on mobile, and meaningful connections. Mortalive was built from the ground up in 2026 to fill that gap.</p>
+        <div class="placeholder tall">
+          Mortalive was created to bring back the joy of talking to strangers without the toxicity and chaos of older platforms. Our goal is to create a safe space where people can have real conversations, share ideas, practice languages, or simply pass the time with someone new. We prioritize user safety, respectful behavior, and a clean, modern experience.
         </div>
+      </section>
 
-        <div class="card">
-          <h2 class="section-title">How Mortalive Works</h2>
-          <p class="section-note">The experience is intentionally simple:<br><br>
-1. Visit the site and accept our quick consent prompt.<br>
-2. Choose between Text Chat or Video Chat.<br>
-3. Optionally add interests to improve matching.<br>
+      <section class="card section">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Why Mortalive?</h2>
+            <p class="section-note">A better alternative to older random chat sites.</p>
+          </div>
+        </div>
+        <div class="placeholder tall">
+          Unlike outdated platforms, Mortalive offers a fresh interface, fast matching, mobile-first design, and strong moderation tools. You can chat as a guest instantly or create an account to build a Magnet Score based on positive interactions. Video and text modes are both available with easy controls.
+        </div>
+      </section>
+
+      <section class="card section">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">How It Works</h2>
+            <p class="section-note">Simple flow from landing to chat.</p>
+          </div>
+        </div>
+        <div class="placeholder tall">
+          1. Accept the consent prompt on the landing page.<br>
+2. Choose Text or Video mode in the lobby.<br>
+3. Optionally add interests for better matching.<br>
 4. Get paired with a stranger instantly.<br>
-5. Chat freely, rate the conversation when you're done, and move on to the next person.<br><br>
-No complicated accounts required to start. Guests can jump in immediately.</p>
+5. Chat freely and rate the conversation when finished.<br>
+6. Leave or find the next person anytime.
         </div>
+      </section>
 
-        <div class="card">
-          <h2 class="section-title">Safety & Moderation</h2>
-          <p class="section-note">Safety is at the core of everything we do. We use a combination of automated tools (including periodic snapshots during video chats for moderation review), user reports, and human oversight. All chats are anonymous by default. We have a strict 18+ policy and take swift action against harassment, inappropriate content, or abuse. Users can leave any conversation at any time with one click.</p>
+      <section class="card section">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Safety First</h2>
+            <p class="section-note">We take moderation seriously.</p>
+          </div>
         </div>
+        <div class="placeholder tall">
+          We use snapshot monitoring during video chats, user reports, and quick action on violations. All chats are anonymous by default. We have a strict 18+ policy and work hard to keep the platform respectful and safe for everyone.
+        </div>
+      </section>
 
-        <div class="card">
-          <h2 class="section-title">The Technology Stack</h2>
-          <p class="section-note">Mortalive is built with modern, reliable technologies:<br><br>
-• WebRTC for high-quality video calls<br>
-• Socket.io for real-time messaging<br>
-• Supabase for backend services and database<br>
-• A lightweight, single-file frontend for fast loading<br><br>
-Everything is optimized for both desktop and mobile devices, with special attention to performance on phones.</p>
+      <section class="card section">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Technology</h2>
+            <p class="section-note">Modern stack for a smooth experience.</p>
+          </div>
         </div>
+        <div class="placeholder tall">
+          Built with WebRTC for video, Socket.io for real-time chat, Supabase for backend, and a lightweight frontend. The entire experience is optimized for both desktop and mobile devices.
+        </div>
+      </section>
 
-        <div class="card">
-          <h2 class="section-title">Our Vision for the Future</h2>
-          <p class="section-note">We want Mortalive to become the most trusted anonymous chat platform in the world. In the coming months we plan to add features like interest-based smart matching, voice-only mode, improved moderation dashboard, community guidelines shaped by users, and more ways to connect meaningfully. Long-term, our goal is to create a global space where millions of people can discover new friends, ideas, and perspectives every single day — safely and respectfully.</p>
+      <section class="card section">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">Our Vision</h2>
+            <p class="section-note">The future we are building.</p>
+          </div>
         </div>
+        <div class="placeholder tall">
+          We want Mortalive to become the most trusted anonymous chat platform in the world. In the future we plan to add more features like voice mode, better matching algorithms, and community-driven improvements. Our long-term goal is to create a global space for meaningful human connections.
+        </div>
+      </section>
 
-        <div class="card">
-          <h2 class="section-title">The Team Behind Mortalive</h2>
-          <p class="section-note">Mortalive was created by a small, passionate team of developers, designers, and product thinkers who believe in the power of human connection. We keep our team relatively anonymous for now to focus on the product rather than personalities, but we are fully committed to transparency with our users, listening to feedback, and continuously improving the platform based on real needs.</p>
-        </div>
       </div>
 
       <footer class="footer">
-        <span>© 2026 Mortalive. Built for real conversations. All rights reserved.</span>
-        <span><a href="index.html">Return to Mortalive</a></span>
+        <span>This page is ready for your content. © 2026 Mortalive</span>
+        <span><a class="meta-link" href="index.html">Return to Mortalive</a></span>
       </footer>
     </main>
   </div>
