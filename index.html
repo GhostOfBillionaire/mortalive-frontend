@@ -5138,6 +5138,9 @@ body::before{
 <section id="pg-auth" class="page">
   <div class="wrap">
     <div class="card auth-card">
+      <div style="display:flex;justify-content:flex-start;margin-bottom:14px;">
+        <button class="icon-btn setup-back" type="button" data-target="pg-land">← Back</button>
+      </div>
       <div class="auth-card-inner">
         <div class="auth-guest-hero">
           <div class="brand">
@@ -5222,6 +5225,9 @@ body::before{
 <section id="pg-perm" class="page">
   <div class="wrap">
     <div class="card perm-card">
+      <div style="display:flex;justify-content:flex-start;margin-bottom:14px;">
+        <button class="icon-btn setup-back" type="button" data-target="pg-lobby">← Back</button>
+      </div>
       <div class="perm-inner">
         <div class="perm-video-card">
           <video id="perm-video" autoplay playsinline muted></video>
@@ -5266,6 +5272,9 @@ body::before{
 <section id="pg-lobby" class="page">
   <div class="wrap">
     <div class="card lobby-card">
+      <div style="display:flex;justify-content:flex-start;margin-bottom:14px;">
+        <button class="icon-btn setup-back" type="button" data-target="pg-auth">← Back</button>
+      </div>
       <div class="lobby-head">
         <div>
           <div class="brand">
@@ -5326,6 +5335,9 @@ body::before{
 <section id="pg-match" class="page">
   <div class="wrap">
     <div class="card match-card">
+      <div style="display:flex;justify-content:flex-start;margin-bottom:14px;">
+        <button class="icon-btn setup-back" type="button" data-target="pg-lobby">← Back</button>
+      </div>
       <div class="spinner" aria-hidden="true"></div>
       <h2 class="match-title" id="match-title">Finding your match</h2>
       <p class="match-sub" id="match-sub">Scanning <strong id="match-count">2,847</strong> people online right now.</p>
@@ -5354,6 +5366,7 @@ body::before{
       </div>
 
       <div class="top-actions">
+        <button class="icon-btn setup-back" type="button" data-target="pg-lobby">← Back</button>
         <div class="conn-badge">
           <span class="conn-dot" id="call-dot"></span>
           <span id="call-text">connecting</span>
@@ -5434,53 +5447,6 @@ body::before{
       <button class="btn btn-ghost" id="btn-skip-rating">Skip</button>
       <button class="btn btn-primary" id="btn-submit-rating">Submit</button>
     </div>
-  </div>
-</div>
-
-<!-- Progress identity sheet -->
-<div class="overlay" id="progress-overlay" style="display:none;">
-  <div class="modal" style="width:min(760px,100%);text-align:left;background:rgba(10,16,32,.72);border:1px solid rgba(255,255,255,.14);color:#fff;">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px;">
-      <div style="min-width:0;">
-        <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.7;font-weight:800;">Progress identity</div>
-        <div style="font-size:28px;line-height:1.05;letter-spacing:-.04em;font-weight:800;margin-top:6px;">Your status, live</div>
-        <div id="progress-goal" style="margin-top:10px;color:rgba(255,255,255,.78);font-size:14px;line-height:1.6;">Loading progress…</div>
-      </div>
-      <button id="progress-close" type="button" style="width:42px;height:42px;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.10);color:#fff;font-size:22px;line-height:1;">×</button>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
-      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);">
-        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Magnet Score</div>
-        <div id="progress-score" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">0</div>
-      </div>
-      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);">
-        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Weekly rank</div>
-        <div id="progress-rank" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">#—</div>
-      </div>
-      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);">
-        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Completion count</div>
-        <div id="progress-completions" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">0</div>
-      </div>
-      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);">
-        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Top percentile</div>
-        <div id="progress-percentile" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">Top —%</div>
-      </div>
-    </div>
-    <div style="margin-top:12px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);">
-      <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Streak</div>
-      <div id="progress-streak" style="font-size:22px;font-weight:800;line-height:1.2;margin-top:6px;">0 days</div>
-    </div>
-    <div style="margin-top:12px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);">
-      <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Badges</div>
-      <div id="progress-badges" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;line-height:1.4;"></div>
-    </div>
-    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
-      <button id="progress-share" type="button" style="flex:1;min-width:180px;height:48px;border:0;border-radius:16px;background:linear-gradient(135deg, rgba(90,177,255,.96), rgba(168,120,255,.96));color:#fff;font-weight:800;">Copy share card</button>
-      <button id="progress-refresh" type="button" style="flex:1;min-width:180px;height:48px;border:1px solid rgba(255,255,255,.20);border-radius:16px;background:rgba(255,255,255,.08);color:#fff;font-weight:800;">Refresh stats</button>
-    </div>
-    <div id="progress-frame" style="display:none;"></div>
-    <div id="progress-quote" style="display:none;"></div>
-    <div id="progress-pinned" style="display:none;"></div>
   </div>
 </div>
 
