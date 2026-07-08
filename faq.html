@@ -38,18 +38,6 @@ body{
   overflow-x:hidden;
   background-attachment:fixed;
 }
-body::before{
-  content:'';
-  position:fixed;
-  inset:0;
-  pointer-events:none;
-  background-image:linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
-  background-size:72px 72px;
-  mask-image:radial-gradient(circle at center, black 58%, transparent 100%);
-  opacity:.28;
-}
-a{color:inherit;text-decoration:none}
-button,input{font:inherit}
 .wrap{
   width:min(1140px, calc(100% - 32px));
   margin:0 auto;
@@ -216,7 +204,7 @@ button,input{font:inherit}
   border:1px dashed var(--border-strong);
   background:rgba(255,255,255,.025);
   padding:16px;
-  color:var(--muted-2);
+  color:var(--muted);
   line-height:1.7;
 }
 .placeholder.tall{min-height:180px}
@@ -278,7 +266,7 @@ button,input{font:inherit}
         <div class="mark" aria-hidden="true"></div>
         <div class="brand-copy">
           <div class="brand-name">Mortalive</div>
-          <div class="brand-sub">Connect with the world</div>
+          <div class="brand-sub">Anonymous Chat</div>
         </div>
       </a>
       <nav class="nav" aria-label="Primary">
@@ -293,11 +281,7 @@ button,input{font:inherit}
       <section class="hero">
         <span class="kicker">FAQ</span>
         <h1 class="title">Frequently Asked Questions</h1>
-        <p class="subtitle">Use this page for common answers so users can understand the product faster.</p>
-        <div class="hero-actions">
-          <a class="btn btn-primary" href="index.html">Back to app</a>
-          <a class="btn" href="about.html">Explore pages</a>
-        </div>
+        <p class="subtitle">Find quick answers about how Mortalive works, safety, accounts, and more.</p>
       </section>
 
       <div class="stack">
@@ -305,67 +289,77 @@ button,input{font:inherit}
       <section class="card section">
         <div class="section-head">
           <div>
-            <h2 class="section-title">General</h2>
-            <p class="section-note">Add your most common platform questions.</p>
+            <h2 class="section-title">General Questions</h2>
           </div>
         </div>
         <div class="placeholder tall">
-          <!-- Add your text here -->
+          <strong>What is Mortalive?</strong><br>
+          Mortalive is a modern anonymous chat platform where you can talk to strangers through text or video. It is designed to be safer, cleaner, and more enjoyable than older random chat sites.<br><br>
+          <strong>Is Mortalive free?</strong><br>
+          Yes, the core experience is completely free. You can chat as a guest without signing up.
         </div>
       </section>
 
       <section class="card section">
         <div class="section-head">
           <div>
-            <h2 class="section-title">Accounts</h2>
-            <p class="section-note">Add signup, login, guest mode, and recovery answers.</p>
+            <h2 class="section-title">Accounts & Login</h2>
           </div>
         </div>
         <div class="placeholder tall">
-          <!-- Add your text here -->
+          <strong>Do I need an account?</strong><br>
+          No. You can start chatting immediately as a guest. Creating an account is optional and allows you to earn a Magnet Score based on positive interactions.<br><br>
+          <strong>How do I sign up?</strong><br>
+          Click on "Log in / Sign up" and choose the signup option. Choose a username and password — no email verification is required at this time.
         </div>
       </section>
 
       <section class="card section">
         <div class="section-head">
           <div>
-            <h2 class="section-title">Chat</h2>
-            <p class="section-note">Explain video, text, matching, and skips.</p>
+            <h2 class="section-title">Chat & Matching</h2>
           </div>
         </div>
         <div class="placeholder tall">
-          <!-- Add your text here -->
+          <strong>How does matching work?</strong><br>
+          The system finds another user who is also looking to chat. You can add interests to get better matches. If no one is available, you can wait or try again later.<br><br>
+          <strong>Can I skip a chat?</strong><br>
+          Yes. You can end the current chat and find a new person at any time by clicking the "Next" button.
         </div>
       </section>
 
       <section class="card section">
         <div class="section-head">
           <div>
-            <h2 class="section-title">Safety</h2>
-            <p class="section-note">Add privacy, moderation, and reporting answers.</p>
+            <h2 class="section-title">Safety & Privacy</h2>
           </div>
         </div>
         <div class="placeholder tall">
-          <!-- Add your text here -->
+          <strong>Is Mortalive safe?</strong><br>
+          We take safety seriously. We use snapshot monitoring during video chats, quick report handling, and strict rules against harassment. All chats are anonymous by default.<br><br>
+          <strong>Can someone find my identity?</strong><br>
+          No. We do not require personal information. Guests remain completely anonymous.
         </div>
       </section>
 
       <section class="card section">
         <div class="section-head">
           <div>
-            <h2 class="section-title">Contact</h2>
-            <p class="section-note">Add support info, socials, or email later.</p>
+            <h2 class="section-title">Technical & Support</h2>
           </div>
         </div>
         <div class="placeholder tall">
-          <!-- Add your text here -->
+          <strong>Why is my camera not working?</strong><br>
+          Make sure you have granted camera and microphone permissions in your browser. Try refreshing the page or using a different browser.<br><br>
+          <strong>How can I contact support?</strong><br>
+          Use the report button during a chat or email us at support@mortalive.in for any serious issues.
         </div>
       </section>
 
       </div>
 
       <footer class="footer">
-        <span>Add or remove questions as Mortalive grows.</span>
+        <span>Can't find your answer? Feel free to report issues during chat.</span>
         <span><a class="meta-link" href="index.html">Return to Mortalive</a></span>
       </footer>
     </main>
