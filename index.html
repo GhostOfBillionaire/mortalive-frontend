@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Mortalive — Connect with the worlds</title>
+<title>Mortalive — Connect with the world</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -5174,6 +5174,46 @@ body::before{
   transition:transform .16s ease, background .16s ease, border-color .16s ease, box-shadow .16s ease, color .16s ease, opacity .16s ease;
 }
 
+
+/* ===== FINAL PATCH: landing links + desktop split lock ===== */
+#pg-land .landing-links{
+  margin-top:14px;
+  font-size:12px;
+  color:rgba(235,240,255,.60);
+  line-height:1.6;
+}
+#pg-land .landing-links a{
+  color:rgba(235,240,255,.80);
+  text-decoration:underline;
+}
+#pg-land .landing-links a:hover{
+  color:#60a5fa;
+}
+#pg-land .landing-grid{
+  display:grid !important;
+  grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr) !important;
+  gap:0 !important;
+  align-items:stretch !important;
+  width:100% !important;
+  flex:1 !important;
+}
+#pg-land .hero-card{
+  border-right:1px solid rgba(255,255,255,.08) !important;
+  border-bottom:none !important;
+}
+#pg-land .consent-card{
+  border-left:none !important;
+}
+@media (max-width: 980px){
+  #pg-land .landing-grid{
+    grid-template-columns:1fr !important;
+  }
+  #pg-land .hero-card{
+    border-right:none !important;
+    border-bottom:1px solid rgba(255,255,255,.08) !important;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -5250,7 +5290,7 @@ body::before{
           <button class="btn btn-primary btn-wide" id="btn-enter" disabled>Continue</button>
         </div>
 
-        <div class="small-links" id="landing-faq">
+        <div class="landing-links" id="landing-faq">
           By continuing, you agree to Mortalive's <a href="terms.html">terms</a>, <a href="privacy.html">privacy</a> rules, and session policies.
         </div>
       </div>
