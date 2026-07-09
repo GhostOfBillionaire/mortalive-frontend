@@ -5214,6 +5214,40 @@ body::before{
   }
 }
 
+
+/* Guest-only patch: keep landing footer links and desktop split intact */
+#pg-land .landing-grid{
+  display:grid !important;
+  grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr) !important;
+  gap:0 !important;
+  align-items:stretch !important;
+}
+#pg-land .hero-card{
+  border-right:1px solid rgba(255,255,255,.08) !important;
+}
+@media (max-width: 980px){
+  #pg-land .landing-grid{
+    grid-template-columns:1fr !important;
+  }
+  #pg-land .hero-card{
+    border-right:none !important;
+    border-bottom:1px solid rgba(255,255,255,.08) !important;
+  }
+}
+#landing-faq.landing-faq-static{
+  margin-top:14px;
+  font-size:12px;
+  color:rgba(235,240,255,.60);
+  line-height:1.6;
+}
+#landing-faq.landing-faq-static a{
+  color:rgba(235,240,255,.76);
+  text-decoration:underline;
+}
+#landing-faq.landing-faq-static a:hover{
+  color:#60a5fa;
+}
+
 </style>
 </head>
 <body>
@@ -5290,7 +5324,7 @@ body::before{
           <button class="btn btn-primary btn-wide" id="btn-enter" disabled>Continue</button>
         </div>
 
-        <div class="landing-links" id="landing-faq">
+        <div class="landing-links landing-faq-static" id="landing-faq">
           By continuing, you agree to Mortalive's <a href="terms.html">terms</a>, <a href="privacy.html">privacy</a> rules, and session policies.
         </div>
       </div>
@@ -5328,7 +5362,8 @@ body::before{
           <button class="btn btn-primary btn-wide" id="btn-continue-guest">Continue as guest</button>
           <div class="auth-secondary-note">Fastest path: guest mode keeps the flow light and avoids the extra signup step.</div>
         </div>
-<!-- Permission --
+
+        <!-- Guest-only mode: account sign-in/sign-up UI kept for reference but disabled.
         <div class="auth-divider">or use an account</div>
 
         <div class="auth-tabs">
@@ -5336,7 +5371,6 @@ body::before{
           <button class="btn btn-ghost auth-tab" id="tab-signup" type="button">Sign up</button>
         </div>
 
-        <!-- Login form --
         <div id="auth-login-form">
           <div class="field">
             <label for="login-username">Username</label>
@@ -5351,7 +5385,6 @@ body::before{
           <button class="btn btn-ghost btn-wide" id="btn-forgot" type="button" style="margin-top:8px;">Forgot password?</button>
         </div>
 
-        <!-- Signup form --
         <div id="auth-signup-form" style="display:none;">
           <div class="field">
             <label for="signup-username">Username</label>
@@ -5369,7 +5402,6 @@ body::before{
           <button class="btn btn-primary btn-wide" id="btn-signup" style="margin-top:8px;">Create account</button>
         </div>
 
-        <!-- Forgot password form --
         <div id="auth-forgot-form" style="display:none;">
           <div class="field">
             <label for="forgot-email">Email</label>
@@ -5379,6 +5411,7 @@ body::before{
           <button class="btn btn-primary btn-wide" id="btn-forgot-submit" style="margin-top:8px;">Send reset link</button>
           <button class="btn btn-ghost btn-wide" id="btn-forgot-back" type="button" style="margin-top:8px;">Back to log in</button>
         </div>
+        -->
 
       </div>
     </div>
@@ -5467,8 +5500,10 @@ body::before{
 
       <div class="identity-row" id="identity-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0;padding:10px 14px;background:var(--panel-2,#f6f7fb);border:1px solid var(--border);border-radius:10px;font-size:13px;">
         <span id="identity-label">Browsing as guest</span>
+        <!-- Guest-only mode: account switch/logout controls disabled.
         <button class="btn btn-ghost" id="btn-switch-account" type="button" style="padding:4px 10px;font-size:12px;">Log in / Sign up</button>
         <button class="btn btn-ghost" id="btn-logout" type="button" style="padding:4px 10px;font-size:12px;display:none;">Log out</button>
+        -->
       </div>
 
       <div class="mode-switch" id="mode-toggle">
