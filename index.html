@@ -971,6 +971,56 @@ a{color:inherit}
   justify-content: center;
 }
 
+.stream-brand{
+  position:absolute;
+  left:12px;
+  bottom:12px;
+  z-index:3;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  pointer-events:none;
+  padding:6px 8px;
+  border-radius:999px;
+  background:rgba(9,9,11,.34);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+
+.stream-brand-icon{
+  width:20px;
+  height:20px;
+  object-fit:contain;
+  display:block;
+  flex:none;
+}
+
+.stream-brand-wordmark{
+  height:14px;
+  width:auto;
+  max-width:110px;
+  object-fit:contain;
+  display:block;
+  filter:drop-shadow(0 2px 6px rgba(0,0,0,.35));
+}
+
+@media (max-width: 720px){
+  .stream-brand{
+    left:10px;
+    bottom:10px;
+    gap:6px;
+    padding:5px 7px;
+  }
+  .stream-brand-icon{
+    width:18px;
+    height:18px;
+  }
+  .stream-brand-wordmark{
+    height:12px;
+    max-width:96px;
+  }
+}
+
 /* Portrait-friendly wrappers — keep both panes equal, crop desktop webcams into the slot */
 .video-wrapper.remote,
 .video-wrapper.local {
@@ -5149,6 +5199,18 @@ body::before{
   }
 }
 
+
+/* Logo image overrides */
+.brand-mark{
+  object-fit:contain;
+  border-radius:0;
+  background:none !important;
+  box-shadow:none !important;
+}
+.brand-mark::after{
+  content:none !important;
+}
+
 /* subtle motion everywhere */
 .btn,
 .btn-primary,
@@ -5248,6 +5310,52 @@ body::before{
   color:#60a5fa;
 }
 
+
+/* Logo / wordmark treatment */
+.brand-mark,
+.hero-brand-icon,
+.stream-brand-icon{
+  object-fit:contain !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+.brand-mark{
+  border-radius:0 !important;
+}
+.hero-brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:14px;
+}
+.hero-brand-icon{
+  width:42px;
+  height:42px;
+  display:block;
+  flex:none;
+}
+.hero-brand-wordmark{
+  height:20px;
+  width:auto;
+  max-width:min(220px, 55vw);
+  display:block;
+  object-fit:contain;
+}
+.stream-brand{
+  display:inline-flex !important;
+  z-index:6 !important;
+}
+@media (max-width: 720px){
+  .hero-brand-icon{
+    width:36px;
+    height:36px;
+  }
+  .hero-brand-wordmark{
+    height:17px;
+    max-width:min(180px, 60vw);
+  }
+}
+
 </style>
 </head>
 <body>
@@ -5258,7 +5366,7 @@ body::before{
   <div class="wrap">
     <div class="sakura-topbar card" aria-label="Mortalive header">
       <div class="brand sakura-brand">
-        <div class="brand-mark" aria-hidden="true"></div>
+        <img class="brand-mark" src="logo.png" alt="Mortalive logo" aria-hidden="true" loading="eager">
         <div>
           <div class="brand-name">Mortalive</div>
           <div class="brand-sub">Connect with the world</div>
@@ -5276,6 +5384,10 @@ body::before{
       <div class="card hero-card landing-panel" id="landing-about" >
 
         <div class="hero-copy">
+          <div class="hero-brand">
+            <img class="hero-brand-icon" src="logo.png" alt="Mortalive logo" loading="eager">
+            <img class="hero-brand-wordmark" src="mortalive.png" alt="Mortalive" loading="eager">
+          </div>
           <div class="hero-kicker">👥 Talk to strangers</div>
           <h1 class="hero-title">Meet new people <em>instantly.</em></h1>
           <p class="hero-text">Connect with random people around the world. Private, fast and secure conversations. One chat can change everything.</p>
@@ -5294,7 +5406,7 @@ body::before{
       <div class="card consent-card landing-panel" id="landing-safety" >
         <div class="consent-head">
           <div class="brand">
-            <div class="brand-mark" aria-hidden="true"></div>
+            <img class="brand-mark" src="logo.png" alt="Mortalive logo" aria-hidden="true" loading="eager">
             <div>
               <div class="brand-name">Terms</div>
               <div class="brand-sub">Privacy first</div>
@@ -5342,7 +5454,7 @@ body::before{
       <div class="auth-card-inner">
         <div class="auth-guest-hero">
           <div class="brand">
-            <div class="brand-mark" aria-hidden="true"></div>
+            <img class="brand-mark" src="logo.png" alt="Mortalive logo" aria-hidden="true" loading="eager">
             <div>
               <div class="brand-name">Launchpad</div>
               <div class="brand-sub">Private by design</div>
@@ -5475,7 +5587,7 @@ body::before{
       <div class="lobby-head">
         <div>
           <div class="brand">
-            <div class="brand-mark" aria-hidden="true"></div>
+            <img class="brand-mark" src="logo.png" alt="Mortalive logo" aria-hidden="true" loading="eager">
             <div>
               <div class="brand-name">Mortalive</div>
               <div class="brand-sub">Lobby · ready to match</div>
@@ -5587,9 +5699,17 @@ body::before{
           <!-- Square wrappers -->
           <div class="video-wrapper remote">
             <video id="vid-remote" autoplay playsinline></video>
+            <div class="stream-brand" aria-hidden="true">
+              <img class="stream-brand-icon" src="logo.png" alt="" loading="eager">
+              <img class="stream-brand-wordmark" src="mortalive.png" alt="Mortalive" loading="eager">
+            </div>
           </div>
           <div class="video-wrapper local">
             <video id="vid-local" autoplay playsinline muted></video>
+            <div class="stream-brand" aria-hidden="true">
+              <img class="stream-brand-icon" src="logo.png" alt="" loading="eager">
+              <img class="stream-brand-wordmark" src="mortalive.png" alt="Mortalive" loading="eager">
+            </div>
           </div>
           
           <div class="quality" id="quality-bar"><span class="qdot" id="qual-dot"></span><span id="qual-text">HD</span></div>
