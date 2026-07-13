@@ -853,7 +853,8 @@ function refreshLaunchpadCopy() {
   };
 
   set('hero-kicker', 'Rank · badges · streaks');
-  set('hero-title', 'Connect with the world');
+  set('hero-title', '2026's best in conversing and<br>
+Natural social connection webapp');
   set('hero-text', 'A new way to connect, share, and build your Magnet Score as you talk.');
   set('btn-enter', 'Continue');
   set('btn-start', 'Continue');
