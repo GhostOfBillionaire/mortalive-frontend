@@ -739,7 +739,7 @@ function setActiveMode(mode) {
 }
 
 function setPrimaryButtonsEnabled(enabled) {
-  ['continue-btn', 'btn-enter', 'btn-start-text', 'btn-start-video', 'btn-start'].forEach((id) => {
+  ['btn-enter', 'btn-start-text', 'btn-start-video', 'btn-start'].forEach((id) => {
     const btn = $(id);
     if (!btn) return;
     btn.disabled = !enabled;
@@ -853,8 +853,7 @@ function refreshLaunchpadCopy() {
   };
 
   set('hero-kicker', 'Rank · badges · streaks');
-  set('hero-title', '2026's best in conversing and<br>
-Natural social connection webapp');
+  set('hero-title', 'Connect with the world');
   set('hero-text', 'A new way to connect, share, and build your Magnet Score as you talk.');
   set('btn-enter', 'Continue');
   set('btn-start', 'Continue');
@@ -864,6 +863,10 @@ Natural social connection webapp');
   set('btn-find', 'Find match');
   set('btn-allow', 'Allow camera & mic');
   set('btn-skip-cam', 'Skip to text chat');
+
+  const note = document.querySelector('.small-links');
+  if (note) note.textContent = 'By continuing, you agree to Mortalive’s terms, privacy rules, and session policies.';
+}
 
 function requestCameraPermission() {
   const btn = $('btn-allow');
