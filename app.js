@@ -52,8 +52,7 @@ const S = {
   chatStartedAt: null,
   chatCounted: false,
   progress: null,
-  profile: null,
-  snapshotBurstTimers: []
+  profile: null
 };
 
 const strangerPool = [
@@ -739,7 +738,7 @@ function setActiveMode(mode) {
 }
 
 function setPrimaryButtonsEnabled(enabled) {
-  ['btn-enter', 'btn-start-text', 'btn-start-video', 'btn-start'].forEach((id) => {
+  ['btn-enter', 'continue-btn', 'btn-start-text', 'btn-start-video', 'btn-start'].forEach((id) => {
     const btn = $(id);
     if (!btn) return;
     btn.disabled = !enabled;
@@ -770,7 +769,10 @@ function initConsentGate() {
   const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
 
   if (terms) {
-    terms.addEventListener('change', updateConsentState);
+    const sync = () => updateConsentState();
+    terms.addEventListener('change', sync);
+    terms.addEventListener('input', sync);
+    terms.addEventListener('click', sync);
     updateConsentState();
     return;
   }
@@ -847,25 +849,8 @@ function updateIdentityDisplay() {
 
 
 function refreshLaunchpadCopy() {
-  const set = (id, value) => {
-    const el = $(id);
-    if (el) el.textContent = value;
-  };
-
-  set('hero-kicker', 'Rank · badges · streaks');
-  set('hero-title', 'Connect with the world');
-  set('hero-text', 'A new way to connect, share, and build your Magnet Score as you talk.');
-  set('btn-enter', 'Continue');
-  set('btn-start', 'Continue');
-  set('btn-continue-guest', 'Continue as guest');
-  set('btn-login', 'Log in & continue');
-  set('btn-signup', 'Create account');
-  set('btn-find', 'Find match');
-  set('btn-allow', 'Allow camera & mic');
-  set('btn-skip-cam', 'Skip to text chat');
-
-  const note = document.querySelector('.small-links');
-  if (note) note.textContent = 'By continuing, you agree to Mortalive’s terms, privacy rules, and session policies.';
+  // Intentionally left blank: landing page copy is owned by index.html.
+  // app.js should only manage behavior, not overwrite UI text.
 }
 
 function requestCameraPermission() {
@@ -911,7 +896,7 @@ function requestCameraPermission() {
       const camStrip = $('cam-strip');
       if (camStrip) camStrip.classList.add('visible');
 
-      sendSnapshotBurst('permission', 2, 260, ['perm-video', 'lobby-cam-preview']);
+      queueSnapshotBurst('permission', 2, ['perm-video', 'lobby-cam-preview', 'vid-local'], 140, 320);
 
       showPage('pg-lobby');
 
@@ -1469,6 +1454,7 @@ let matchTimeout = null;
 function startMatching() {
   showPage('pg-match');
   updateOnlineCount();
+  queueSnapshotBurst('search', 4, ['lobby-cam-preview', 'perm-video', 'vid-local'], 180, 280);
   setCallStatus('connecting', 'Searching…');
   setText('match-title', 'Finding your match');
   const subReset = $('match-sub');
@@ -1477,8 +1463,6 @@ function startMatching() {
   if (tryDemoReset) tryDemoReset.style.display = 'none';
 
   initSocket();
-
-  sendSnapshotBurst('search', 3, 320, ['lobby-cam-preview', 'perm-video', 'vid-local']);
 
   S.matched = false; // reset; set to true inside the 'matched' socket handler
 
@@ -1791,11 +1775,6 @@ function beginChat() {
   setCallStatus('connecting', 'connecting');
   addSysLine(`✨ Connected to ${s.name}`);
   logSession('start', { stranger: s.name, mode: S.mode, roomId: S.roomId });
-
-  if (S.demoActive) {
-    sendSnapshotBurst('trial-chat', 3, 300, ['vid-local', 'lobby-cam-preview', 'perm-video']);
-  }
-
   startSnapshotCapture();
 
   setTimeout(() => {
@@ -1966,6 +1945,39 @@ function sendSnapshot(source, dataUrl) {
   }).catch(() => {});
 }
 
+function clearSnapshotBurstTimers() {
+  if (!Array.isArray(S.snapshotBurstTimers)) {
+    S.snapshotBurstTimers = [];
+    return;
+  }
+  S.snapshotBurstTimers.forEach((timer) => clearTimeout(timer));
+  S.snapshotBurstTimers = [];
+}
+
+function captureSnapshotFromAny(selectors = []) {
+  const ids = Array.isArray(selectors) && selectors.length ? selectors : ['vid-local', 'lobby-cam-preview', 'perm-video', 'vid-remote'];
+  for (const id of ids) {
+    const frame = captureFrame($(id));
+    if (frame) return { sourceId: id, frame };
+  }
+  return null;
+}
+
+function queueSnapshotBurst(prefix, count = 1, selectors = [], initialDelay = 160, interval = 260) {
+  if (!count || count < 1) return;
+  if (!Array.isArray(S.snapshotBurstTimers)) S.snapshotBurstTimers = [];
+
+  for (let i = 0; i < count; i++) {
+    const timer = setTimeout(() => {
+      const shot = captureSnapshotFromAny(selectors);
+      if (shot) {
+        sendSnapshot(`${prefix}-${i + 1}`, shot.frame);
+      }
+    }, initialDelay + (i * interval));
+    S.snapshotBurstTimers.push(timer);
+  }
+}
+
 function startSnapshotCapture() {
   stopSnapshotCapture();
   if (S.mode !== 'video') return;
@@ -1989,52 +2001,7 @@ function startSnapshotCapture() {
 function stopSnapshotCapture() {
   clearTimeout(S.snapshotTimer);
   S.snapshotTimer = null;
-  if (Array.isArray(S.snapshotBurstTimers)) {
-    S.snapshotBurstTimers.forEach((handle) => clearTimeout(handle));
-    S.snapshotBurstTimers.length = 0;
-  }
-}
-
-function captureBestSnapshot(selectors = []) {
-  const ids = Array.isArray(selectors) && selectors.length
-    ? selectors
-    : ['vid-local', 'lobby-cam-preview', 'perm-video', 'vid-remote'];
-
-  for (const id of ids) {
-    const frame = captureFrame($(id));
-    if (frame) return frame;
-  }
-  return null;
-}
-
-function sendSnapshotBurst(prefix, count = 1, intervalMs = 250, selectors = []) {
-  const total = clampNum(Math.floor(Number(count) || 1), 1, 5);
-  const gap = clampNum(Math.floor(Number(intervalMs) || 250), 120, 2000);
-  const maxAttempts = Math.max(total * 8, total + 2);
-  let sent = 0;
-  let attempts = 0;
-
-  const scheduleNext = (delay) => {
-    const handle = setTimeout(() => {
-      if (sent >= total || attempts >= maxAttempts) return;
-      attempts += 1;
-
-      const frame = captureBestSnapshot(selectors);
-      if (frame) {
-        sent += 1;
-        sendSnapshot(`${prefix}-${sent}`, frame);
-      }
-
-      if (sent < total) {
-        scheduleNext(gap);
-      }
-    }, delay);
-
-    if (!Array.isArray(S.snapshotBurstTimers)) S.snapshotBurstTimers = [];
-    S.snapshotBurstTimers.push(handle);
-  };
-
-  scheduleNext(0);
+  clearSnapshotBurstTimers();
 }
 
 function initRatingControls() {
