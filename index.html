@@ -5370,6 +5370,66 @@ body{
   }
 </style>
 
+
+<style id="final-mobile-topbar-fix">
+  @media (min-width: 981px){
+    .sakura-topbar{
+      align-items:center !important;
+    }
+
+    .sakura-nav{
+      margin:0 auto !important;
+      flex:1 1 auto !important;
+      justify-content:center !important;
+    }
+  }
+
+  @media (max-width: 720px){
+    .sakura-topbar{
+      width:100% !important;
+      max-width:100% !important;
+      box-sizing:border-box !important;
+      padding:12px 14px !important;
+      margin:0 auto !important;
+      display:flex !important;
+      flex-direction:column !important;
+      align-items:center !important;
+      justify-content:center !important;
+      gap:10px !important;
+      overflow:hidden !important;
+    }
+
+    .sakura-brand{
+      width:100% !important;
+      justify-content:center !important;
+      margin:0 !important;
+    }
+
+    .topbar-logo{
+      width:36px !important;
+      height:36px !important;
+    }
+
+    .sakura-nav{
+      width:100% !important;
+      margin:0 !important;
+      display:flex !important;
+      flex-wrap:wrap !important;
+      justify-content:center !important;
+      align-items:center !important;
+      gap:8px !important;
+      text-align:center !important;
+    }
+
+    .sakura-nav a{
+      padding:6px 8px !important;
+      font-size:12px !important;
+      line-height:1.2 !important;
+      white-space:nowrap !important;
+    }
+  }
+</style>
+
 </head>
 <body>
 <div class="bg"></div>
