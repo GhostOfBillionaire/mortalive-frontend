@@ -739,7 +739,7 @@ function setActiveMode(mode) {
 }
 
 function setPrimaryButtonsEnabled(enabled) {
-  ['btn-enter', 'btn-start-text', 'btn-start-video', 'btn-start'].forEach((id) => {
+  ['continue-btn', 'btn-enter', 'btn-start-text', 'btn-start-video', 'btn-start'].forEach((id) => {
     const btn = $(id);
     if (!btn) return;
     btn.disabled = !enabled;
@@ -864,10 +864,6 @@ Natural social connection webapp');
   set('btn-find', 'Find match');
   set('btn-allow', 'Allow camera & mic');
   set('btn-skip-cam', 'Skip to text chat');
-
-  const note = document.querySelector('.small-links');
-  if (note) note.textContent = 'By continuing, you agree to Mortalive’s terms, privacy rules, and session policies.';
-}
 
 function requestCameraPermission() {
   const btn = $('btn-allow');
