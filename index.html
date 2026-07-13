@@ -4105,22 +4105,35 @@ body{
   .bg{
     background:linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%) !important;
   }
-  .bg::after{
-    content:"" !important;
-    position:fixed !important;
-    top:0 !important;
-    left:0 !important;
-    width:min(50vw, 760px) !important;
-    height:100vh !important;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)),
-      url('https://res.cloudinary.com/yvjzeilj/image/upload/mortallive_background_manssu.png') center center / cover no-repeat !important;
-    opacity:.96 !important;
-    pointer-events:none !important;
-    z-index:0 !important;
-    -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0 80%, rgba(0,0,0,.75) 88%, rgba(0,0,0,.25) 96%, rgba(0,0,0,0) 100%) !important;
-    mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0 80%, rgba(0,0,0,.75) 88%, rgba(0,0,0,.25) 96%, rgba(0,0,0,0) 100%) !important;
-  }
+body::before{
+  content:"";
+  position:fixed;
+  top:0;
+  left:0;
+  bottom:0;
+  width:55vw;
+  pointer-events:none;
+  z-index:0;
+  background-image:
+    linear-gradient(
+      to right,
+      rgba(248,249,252,0) 0%,
+      rgba(248,249,252,.12) 78%,
+      rgba(248,249,252,.45) 88%,
+      rgba(248,249,252,.82) 96%,
+      rgba(248,249,252,1) 100%
+    ),
+    url("https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortallive_background_manssu.png");
+  background-size:cover;
+  background-position:center left;
+  background-repeat:no-repeat;
+}
+
+main,.topbar,.wrap{
+  position:relative;
+  z-index:1;
+  background:transparent;
+}
   .phone-photo{
     position:absolute !important;
     inset:0 !important;
