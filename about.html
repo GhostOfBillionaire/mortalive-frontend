@@ -1,379 +1,293 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>About Mortalive — Anonymous Video & Text Chat</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>About Us • Mortalive</title>
+    <meta name="description" content="Learn about Mortalive — a calm, privacy-first social platform built for meaningful human connections in 2026.">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=Playfair+Display:wght@700;800&amp;display=swap" rel="stylesheet">
+    
+    <style>
+        /* =====================================================
+           MORTALIVE — Design system
+           ===================================================== */
+        :root {
+            --surface: #ffffff;
+            --surface-2: #f6f7f9;
+            --surface-3: #eef0f4;
+            --on-surface: #0d1117;
+            --on-surface-2: #3d4451;
+            --on-surface-3: #6b7280;
+            --primary: #1a6ef5;
+            --secondary: #7c3aed;
+            --accent: #06b6d4;
+            --border: rgba(0,0,0,.08);
+            --border-strong: rgba(0,0,0,.14);
+            --elev-2: 0 2px 8px rgba(0,0,0,.07), 0 8px 24px rgba(0,0,0,.05);
+            --elev-3: 0 4px 16px rgba(0,0,0,.08), 0 16px 48px rgba(0,0,0,.06);
+            --elev-4: 0 8px 28px rgba(0,0,0,.10), 0 24px 64px rgba(0,0,0,.08);
+            --r-lg: 28px;
+            --r-xl: 36px;
+        }
 
-:root{
-  --bg:#09090b;
-  --bg2:#111113;
-  --panel:rgba(255,255,255,.04);
-  --panel-2:rgba(255,255,255,.06);
-  --border:rgba(255,255,255,.10);
-  --border-strong:rgba(255,255,255,.16);
-  --text:#f4f4f5;
-  --muted:#a1a1aa;
-  --muted-2:#71717a;
-  --primary:#8b5cf6;
-  --primary-2:#22c55e;
-  --shadow:0 24px 80px rgba(0,0,0,.42);
-  --radius:24px;
-  --radius-sm:18px;
-  --radius-xs:14px;
-}
-*{box-sizing:border-box}
-html,body{margin:0;min-height:100%;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:
-  radial-gradient(circle at top left, rgba(139,92,246,.16), transparent 22%),
-  radial-gradient(circle at top right, rgba(34,197,94,.10), transparent 20%),
-  linear-gradient(180deg, #09090b 0%, #0b0b0d 100%);
-  color:var(--text);
-}
-body{
-  min-height:100dvh;
-  overflow-x:hidden;
-  background-attachment:fixed;
-}
-.wrap{
-  width:min(1140px, calc(100% - 32px));
-  margin:0 auto;
-  padding:24px 0 40px;
-  position:relative;
-  z-index:1;
-}
-.shell{
-  display:grid;
-  gap:18px;
-}
-.topbar{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:16px;
-  padding:18px 20px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.04);
-  backdrop-filter:blur(20px) saturate(140%);
-  border-radius:28px;
-  box-shadow:var(--shadow);
-}
-.brand{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  min-width:0;
-}
-.mark{
-  width:40px;height:40px;border-radius:14px;
-  background:linear-gradient(135deg, var(--primary), #2563eb 45%, var(--primary-2));
-  box-shadow:0 12px 28px rgba(139,92,246,.22);
-  flex:none;
-  position:relative;
-}
-.mark::after{
-  content:'';
-  position:absolute;
-  inset:11px;
-  border-radius:10px;
-  border:1px solid rgba(255,255,255,.65);
-}
-.brand-copy{min-width:0}
-.brand-name{font-size:18px;font-weight:800;letter-spacing:-.04em;line-height:1.1}
-.brand-sub{margin-top:3px;color:var(--muted);font-size:12px;letter-spacing:.12em;text-transform:uppercase}
-.nav{
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:flex-end;
-  gap:10px;
-}
-.nav a{
-  padding:10px 14px;
-  border-radius:999px;
-  border:1px solid transparent;
-  color:var(--muted);
-  transition:all .18s ease;
-}
-.nav a:hover{
-  color:var(--text);
-  background:rgba(255,255,255,.04);
-  border-color:var(--border);
-}
-.hero{
-  padding:26px;
-  border-radius:32px;
-  border:1px solid var(--border);
-  background:
-    radial-gradient(circle at 18% 12%, rgba(139,92,246,.16), transparent 18%),
-    radial-gradient(circle at 80% 20%, rgba(34,197,94,.10), transparent 20%),
-    rgba(255,255,255,.03);
-  backdrop-filter:blur(20px) saturate(140%);
-  box-shadow:var(--shadow);
-}
-.kicker{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding:8px 12px;
-  border-radius:999px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.03);
-  color:var(--muted);
-  font-size:12px;
-  letter-spacing:.12em;
-  text-transform:uppercase;
-  font-weight:700;
-}
-.title{
-  margin:16px 0 0;
-  font-size:clamp(34px, 4.8vw, 64px);
-  letter-spacing:-.06em;
-  line-height:1;
-}
-.subtitle{
-  margin:14px 0 0;
-  max-width:66ch;
-  color:var(--muted);
-  font-size:16px;
-  line-height:1.7;
-}
-.hero-actions{
-  margin-top:20px;
-  display:flex;
-  gap:12px;
-  flex-wrap:wrap;
-}
-.btn{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:8px;
-  height:46px;
-  padding:0 18px;
-  border-radius:14px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.04);
-  color:var(--text);
-  font-weight:700;
-}
-.btn-primary{
-  border-color:transparent;
-  background:linear-gradient(135deg, var(--primary), #2563eb);
-  box-shadow:0 14px 30px rgba(59,130,246,.18);
-}
-.grid{
-  display:grid;
-  grid-template-columns:repeat(12, minmax(0,1fr));
-  gap:16px;
-}
-.card{
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.04);
-  backdrop-filter:blur(18px) saturate(140%);
-  border-radius:24px;
-  box-shadow:var(--shadow);
-}
-.section{
-  padding:20px;
-}
-.section-head{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:16px;
-  margin-bottom:14px;
-}
-.section-title{
-  margin:0;
-  font-size:18px;
-  line-height:1.2;
-  letter-spacing:-.03em;
-}
-.section-note{
-  margin:6px 0 0;
-  color:var(--muted);
-  font-size:13px;
-  line-height:1.6;
-}
-.placeholder{
-  min-height:72px;
-  border-radius:18px;
-  border:1px dashed var(--border-strong);
-  background:rgba(255,255,255,.025);
-  padding:16px;
-  color:var(--muted);
-  line-height:1.7;
-}
-.placeholder.tall{min-height:180px}
-.placeholder.xl{min-height:240px}
-.split{
-  display:grid;
-  grid-template-columns:repeat(2, minmax(0,1fr));
-  gap:16px;
-}
-.stack{display:grid; gap:16px;}
-.badge-row{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-}
-.badge{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding:8px 12px;
-  border-radius:999px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.03);
-  color:var(--muted);
-  font-size:12px;
-  font-weight:600;
-}
-.footer{
-  margin-top:8px;
-  padding:16px 20px;
-  border-radius:24px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.03);
-  color:var(--muted);
-  font-size:13px;
-  line-height:1.6;
-  display:flex;
-  justify-content:space-between;
-  gap:14px;
-  flex-wrap:wrap;
-}
-.meta-link{
-  color:var(--text);
-  opacity:.86;
-}
-@media (max-width: 860px){
-  .topbar{flex-direction:column;align-items:flex-start}
-  .nav{justify-content:flex-start}
-  .split{grid-template-columns:1fr}
-  .grid{grid-template-columns:1fr}
-}
+        *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+        body {
+            font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--surface);
+            color: var(--on-surface);
+            min-height: 100dvh;
+            line-height: 1.65;
+        }
 
-</style>
+        /* Topbar */
+        .sakura-topbar {
+            position: sticky;
+            top: 16px;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 16px;
+            background: rgba(255,255,255,.86);
+            backdrop-filter: blur(20px) saturate(160%);
+            border: 1.5px solid rgba(0,0,0,.10);
+            border-radius: var(--r-xl);
+            box-shadow: var(--elev-2);
+            margin: 0 auto;
+            max-width: min(1280px, calc(100% - 28px));
+        }
+        .sakura-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+        .topbar-logo { width: 36px; height: 36px; border-radius: 10px; object-fit: contain; }
+        .brand-name { font-size: 17px; font-weight: 800; letter-spacing: -.03em; }
+        .brand-sub { font-size: 10px; color: var(--on-surface-3); letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+
+        .sakura-nav {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-inline: auto;
+        }
+        .sakura-nav a {
+            padding: 7px 14px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--on-surface-2);
+        }
+        .sakura-nav a:hover { background: var(--surface-2); color: var(--on-surface); }
+        .sakura-nav a.active { background: var(--primary-alpha); color: var(--primary); font-weight: 700; }
+
+        /* Main Content */
+        .about-container {
+            max-width: min(1280px, calc(100% - 28px));
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        .about-hero {
+            text-align: center;
+            padding: 40px 0 60px;
+        }
+        .about-hero h1 {
+            font-size: clamp(36px, 6vw, 58px);
+            font-weight: 900;
+            letter-spacing: -.07em;
+            line-height: 1.05;
+            max-width: 18ch;
+            margin: 0 auto 20px;
+        }
+        .about-hero p {
+            font-size: 17px;
+            color: var(--on-surface-2);
+            max-width: 680px;
+            margin: 0 auto;
+            line-height: 1.7;
+        }
+
+        .mission-card {
+            background: #fff;
+            border-radius: var(--r-xl);
+            box-shadow: var(--elev-3);
+            border: 1px solid var(--border);
+            padding: 48px 40px;
+            margin: 60px 0;
+            text-align: center;
+        }
+        .mission-card h2 {
+            font-size: 28px;
+            font-weight: 800;
+            margin-bottom: 20px;
+        }
+
+        .values-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 24px;
+            margin: 80px 0;
+        }
+        .value-card {
+            background: var(--surface-2);
+            border-radius: var(--r-lg);
+            padding: 32px 28px;
+            border: 1px solid var(--border);
+        }
+        .value-card h3 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        /* Footer */
+        .footer {
+            background: linear-gradient(170deg, #1a1f2e 0%, #111420 55%, #0e1119 100%);
+            color: #fff;
+            border-radius: var(--r-xl) var(--r-xl) 0 0;
+            padding: 64px 0 72px;
+            margin-top: 100px;
+        }
+        .footer-inner {
+            max-width: min(1280px, calc(100% - 28px));
+            margin: 0 auto;
+            padding: 0 20px;
+            display: grid;
+            grid-template-columns: 1.2fr .7fr .7fr 1fr;
+            gap: 32px;
+        }
+        .footer-logo-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .footer-logo-row img { width: 40px; height: 40px; border-radius: 10px; }
+        .footer h4 {
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,.48);
+            margin-bottom: 16px;
+        }
+        .footer-links { display: grid; gap: 10px; }
+        .footer-links a { 
+            font-size: 14px; 
+            font-weight: 600; 
+            color: rgba(255,255,255,.82); 
+        }
+        .footer-copy {
+            grid-column: 1 / -1;
+            padding-top: 28px;
+            border-top: 1px solid rgba(255,255,255,.08);
+            font-size: 12px;
+            color: rgba(255,255,255,.35);
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        @media (max-width: 980px) {
+            .mission-card { padding: 36px 24px; }
+        }
+    </style>
 </head>
 <body>
-  <div class="wrap">
-    <header class="topbar">
-      <a class="brand" href="index.html" aria-label="Back to home">
-        <div class="mark" aria-hidden="true"></div>
-        <div class="brand-copy">
-          <div class="brand-name">Mortalive</div>
-          <div class="brand-sub">Anonymous Chat</div>
-        </div>
-      </a>
-      <nav class="nav" aria-label="Primary">
-        <a href="index.html">Home</a>
-        <a href="about.html">About</a>
-        <a href="safety.html">Safety</a>
-        <a href="faq.html">FAQ</a>
-      </nav>
+
+    <!-- Topbar -->
+    <header class="sakura-topbar">
+        <a href="index.html" class="sakura-brand">
+            <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png" alt="Mortalive" class="topbar-logo">
+            <div>
+                <div class="brand-name">Mortalive</div>
+                <div class="brand-sub">Connect with the world</div>
+            </div>
+        </a>
+        
+        <nav class="sakura-nav">
+            <a href="index.html">Home</a>
+            <a href="about.html" class="active">About</a>
+            <a href="safety.html">Safety</a>
+            <a href="reviews.html">Reviews</a>
+            <a href="blog.html">Blog</a>
+        </nav>
     </header>
 
-    <main class="shell">
-      <section class="hero">
-        <span class="kicker">Our Story</span>
-        <h1 class="title">About Mortalive</h1>
-        <p class="subtitle">Mortalive is a modern anonymous random chat platform for video and text conversations. We rebuilt the classic stranger chat experience with better design, stronger safety, and a focus on genuine human connection.</p>
-        <div class="hero-actions">
-          <a class="btn btn-primary" href="index.html">Back to app</a>
-          <a class="btn" href="index.html">Start Chatting</a>
+    <div class="about-container">
+        <div class="about-hero">
+            <h1>We believe in calm, authentic connection.</h1>
+            <p>Mortalive was created in 2026 as a response to the overwhelming noise of traditional social media. We wanted a space where people could have real conversations — without pressure, performance, or endless scrolling.</p>
         </div>
-      </section>
 
-      <div class="stack">
+        <div class="mission-card">
+            <h2>Our Mission</h2>
+            <p style="font-size:17px; max-width:720px; margin:0 auto;">
+                To rebuild social connection for the modern world — making it safer, calmer, more private, and genuinely human again.
+            </p>
+        </div>
+
+        <div class="values-grid">
+            <div class="value-card">
+                <h3>Privacy First</h3>
+                <p>We design every feature with privacy as the default. You control what you share and when.</p>
+            </div>
+            <div class="value-card">
+                <h3>Consent Driven</h3>
+                <p>Every interaction requires mutual agreement. No surprises, no pressure.</p>
+            </div>
+            <div class="value-card">
+                <h3>Quality Over Quantity</h3>
+                <p>We optimize for meaningful conversations, not addictive dopamine loops.</p>
+            </div>
+            <div class="value-card">
+                <h3>Human at the Core</h3>
+                <p>Technology should support real relationships, not replace them.</p>
+            </div>
+        </div>
+
+        <div style="text-align:center; margin:80px 0; font-size:15px; color:var(--on-surface-3); max-width:680px; margin-left:auto; margin-right:auto;">
+            Mortalive is built by a small team of designers, engineers, and humans who believe the internet can still be a place for genuine connection.
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <div>
+                <div class="footer-logo-row">
+                    <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png" alt="Mortalive">
+                    <div class="brand-name" style="color:#fff;">Mortalive</div>
+                </div>
+                <p style="color:rgba(255,255,255,.58);">Calm, authentic social connection.</p>
+            </div>
+            
+            <div>
+                <h4>Product</h4>
+                <div class="footer-links">
+                    <a href="index.html">Home</a>
+                    <a href="about.html">About</a>
+                    <a href="safety.html">Safety</a>
+                </div>
+            </div>
+            
+            <div>
+                <h4>Discover</h4>
+                <div class="footer-links">
+                    <a href="reviews.html">Reviews</a>
+                    <a href="blog.html">Blog</a>
+                </div>
+            </div>
+            
+            <div>
+                <h4>Legal</h4>
+                <div class="footer-links">
+                    <a href="terms.html">Terms</a>
+                    <a href="privacy.html">Privacy</a>
+                </div>
+            </div>
+        </div>
         
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">Our Mission</h2>
-            <p class="section-note">We believe anonymous chat can be both fun and respectful.</p>
-          </div>
+        <div class="footer-copy">
+            <span>© 2026 Mortalive. All rights reserved.</span>
+            <span>Made with care for real humans</span>
         </div>
-        <div class="placeholder tall">
-          Mortalive was created to bring back the joy of talking to strangers without the toxicity and chaos of older platforms. Our goal is to create a safe space where people can have real conversations, share ideas, practice languages, or simply pass the time with someone new. We prioritize user safety, respectful behavior, and a clean, modern experience.
-        </div>
-      </section>
+    </footer>
 
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">Why Mortalive?</h2>
-            <p class="section-note">A better alternative to older random chat sites.</p>
-          </div>
-        </div>
-        <div class="placeholder tall">
-          Unlike outdated platforms, Mortalive offers a fresh interface, fast matching, mobile-first design, and strong moderation tools. You can chat as a guest instantly or create an account to build a Magnet Score based on positive interactions. Video and text modes are both available with easy controls.
-        </div>
-      </section>
-
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">How It Works</h2>
-            <p class="section-note">Simple flow from landing to chat.</p>
-          </div>
-        </div>
-        <div class="placeholder tall">
-          1. Accept the consent prompt on the landing page.<br>
-2. Choose Text or Video mode in the lobby.<br>
-3. Optionally add interests for better matching.<br>
-4. Get paired with a stranger instantly.<br>
-5. Chat freely and rate the conversation when finished.<br>
-6. Leave or find the next person anytime.
-        </div>
-      </section>
-
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">Safety First</h2>
-            <p class="section-note">We take moderation seriously.</p>
-          </div>
-        </div>
-        <div class="placeholder tall">
-          We use snapshot monitoring during video chats, user reports, and quick action on violations. All chats are anonymous by default. We have a strict 18+ policy and work hard to keep the platform respectful and safe for everyone.
-        </div>
-      </section>
-
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">The Technology</h2>
-            <p class="section-note">Built with modern web standards for a smooth experience.</p>
-          </div>
-        </div>
-        <div class="placeholder tall">
-          Mortalive is engineered with high-performance real-time communication technologies for video and messaging. The platform is optimized for speed, reliability, and excellent performance across desktop and mobile devices. We focus on clean architecture, fast loading times, and a responsive design that works seamlessly everywhere.
-        </div>
-      </section>
-
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">Our Vision</h2>
-            <p class="section-note">The future we are building.</p>
-          </div>
-        </div>
-        <div class="placeholder tall">
-          We want Mortalive to become the most trusted anonymous chat platform in the world. In the coming months we plan to add more features like improved matching, voice mode, and community-driven improvements. Our long-term goal is to create a global space for meaningful human connections.
-        </div>
-      </section>
-
-      </div>
-
-      <footer class="footer">
-        <span>This page is ready for your content. © 2026 Mortalive</span>
-        <span><a class="meta-link" href="index.html">Return to Mortalive</a></span>
-      </footer>
-    </main>
-  </div>
 </body>
 </html>
