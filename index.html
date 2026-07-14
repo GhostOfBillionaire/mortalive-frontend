@@ -1616,11 +1616,18 @@ img { display: block; max-width: 100%; }
 }
 
 .sakura-topbar{
-  background: transparent;
-  border: 1px solid transparent;
+  background: rgba(255,255,255,.10);
+  border: 1px solid rgba(255,255,255,.10);
   box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  transition: background-color .22s ease, border-color .22s ease, box-shadow .22s ease, transform .22s ease;
+}
+
+.sakura-topbar.scrolled{
+  background: rgba(255,255,255,.98);
+  border-color: rgba(0,0,0,.08);
+  box-shadow: 0 10px 30px rgba(20,34,68,.10);
 }
 
 .landing-shell{
@@ -1659,6 +1666,54 @@ img { display: block; max-width: 100%; }
   .hero-image-band{
     margin-top: -4px;
   }
+}
+
+.hero-image-shell::after{
+  content:'';
+  position:absolute;
+  inset:0;
+  z-index:1;
+  pointer-events:none;
+  background: linear-gradient(180deg, rgba(0,0,0,.02) 0%, rgba(0,0,0,.10) 100%);
+}
+
+.hero-image-shell .hero-image-overlay{
+  z-index:2;
+}
+
+.landing-cta .landing-continue{
+  background: linear-gradient(145deg, #0f4fd8 0%, #5b3df0 100%);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.18);
+  box-shadow: 0 14px 30px rgba(15,79,216,.26), 0 2px 8px rgba(0,0,0,.08);
+}
+.landing-cta .landing-continue:hover{
+  box-shadow: 0 16px 36px rgba(15,79,216,.32), 0 4px 12px rgba(0,0,0,.12);
+}
+
+.consent-text{
+  font-size: 12.8px;
+  font-weight: 500;
+  color: var(--on-surface-3);
+}
+.consent-text .consent-lead{
+  font-weight: 800;
+  color: var(--on-surface);
+}
+
+.scroll-reveal{
+  opacity: 1;
+  transform: none;
+}
+body.reveal-ready .scroll-reveal{
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity .72s ease, transform .72s ease;
+  will-change: opacity, transform;
+}
+body.reveal-ready .scroll-reveal.in-view{
+  opacity: 1;
+  transform: translateY(0);
 }
 
 @media (max-width: 980px){
@@ -1747,7 +1802,7 @@ img { display: block; max-width: 100%; }
         <input id="landing-consent" type="checkbox" aria-label="Agree to terms and privacy policy">
         <span class="consent-box" aria-hidden="true"></span>
         <span class="consent-text">
-          By continuing you agree to Mortalive's
+          <span class="consent-lead">By continuing</span> you agree to Mortalive's
           <a href="terms.html">terms</a> and
           <a href="privacy.html">privacy</a> policy.
         </span>
@@ -1756,7 +1811,7 @@ img { display: block; max-width: 100%; }
   </div><!-- /landing-hero -->
 
   <!-- Landscape hero image -->
-  <section class="hero-image-band" aria-label="Hero visual">
+  <section class="hero-image-band scroll-reveal" aria-label="Hero visual">
     <div class="hero-image-shell">
       <!-- TODO: replace src below with the final hero image URL -->
       <img class="hero-image-bg"
@@ -1770,7 +1825,7 @@ img { display: block; max-width: 100%; }
   </section>
 
   <!-- Feature cards -->
-  <section class="landing-stage" aria-labelledby="features-heading">
+  <section class="landing-stage scroll-reveal" aria-labelledby="features-heading">
     <div class="section-head">
       <div class="section-eyebrow">Why Mortalive</div>
       <h2 class="section-title" id="features-heading">Built for real connection</h2>
@@ -1808,7 +1863,7 @@ img { display: block; max-width: 100%; }
   </section>
 
   <!-- Phone portrait cards -->
-  <section class="phone-band" aria-label="Mobile experience">
+  <section class="phone-band scroll-reveal" aria-label="Mobile experience">
     <div class="section-head">
       <div class="section-eyebrow">Works everywhere</div>
       <h2 class="section-title">Beautiful on any device</h2>
@@ -1843,7 +1898,7 @@ img { display: block; max-width: 100%; }
   </section>
 
   <!-- Consent / Terms section -->
-  <section class="consent-section" id="consent" aria-labelledby="consent-heading">
+  <section class="consent-section scroll-reveal" id="consent" aria-labelledby="consent-heading">
     <div class="consent-panel">
       <div class="consent-layout">
         <div>
@@ -1880,7 +1935,7 @@ img { display: block; max-width: 100%; }
   </section>
 
   <!-- Policy anchor -->
-  <section class="policy-anchor" id="terms-policy" aria-labelledby="policy-heading">
+  <section class="policy-anchor scroll-reveal" id="terms-policy" aria-labelledby="policy-heading">
     <div class="policy-panel">
       <div class="section-eyebrow">Legal</div>
       <h2 class="section-title" id="policy-heading">Terms & Privacy</h2>
@@ -1893,7 +1948,7 @@ img { display: block; max-width: 100%; }
   </section>
 
   <!-- Footer -->
-  <footer class="footer" aria-label="Site footer">
+  <footer class="footer scroll-reveal" aria-label="Site footer">
     <div class="wrap" style="padding:0;">
       <div class="footer-inner">
         <div>
@@ -2278,6 +2333,61 @@ img { display: block; max-width: 100%; }
 <script>
   window.MORTALIVE_SERVER_URL = 'https://mortalive-server-production.up.railway.app';
 </script>
+
+<script>
+(function () {
+  document.body.classList.add('reveal-ready');
+  const topbar = document.querySelector('.sakura-topbar');
+  const revealEls = Array.from(document.querySelectorAll('.scroll-reveal'));
+  let observer = null;
+
+  function syncTopbar() {
+    if (!topbar) return;
+    topbar.classList.toggle('scrolled', window.scrollY > 8);
+  }
+
+  function revealNow(el) {
+    if (!el) return;
+    el.classList.add('in-view');
+  }
+
+  function initReveal() {
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
+
+    if ('IntersectionObserver' in window) {
+      observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('in-view');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.15, rootMargin: '0px 0px -6% 0px' });
+
+      revealEls.forEach((el) => {
+        observer.observe(el);
+      });
+    } else {
+      revealEls.forEach(revealNow);
+    }
+
+    syncTopbar();
+  }
+
+  window.addEventListener('scroll', syncTopbar, { passive: true });
+  window.addEventListener('resize', syncTopbar, { passive: true });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initReveal, { once: true });
+  } else {
+    initReveal();
+  }
+})();
+</script>
+
 <script src="socket.io.min.js"></script>
 <script src="app.js"></script>
 </body>
