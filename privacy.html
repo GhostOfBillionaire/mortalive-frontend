@@ -1,139 +1,339 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Privacy Policy — Mortalive</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
-:root{
-  --bg:#09090b;
-  --bg2:#111113;
-  --panel:rgba(255,255,255,.04);
-  --panel-2:rgba(255,255,255,.06);
-  --border:rgba(255,255,255,.10);
-  --border-strong:rgba(255,255,255,.16);
-  --text:#f4f4f5;
-  --muted:#a1a1aa;
-  --muted-2:#71717a;
-  --primary:#8b5cf6;
-  --primary-2:#22c55e;
-  --shadow:0 24px 80px rgba(0,0,0,.42);
-  --radius:24px;
-}
-*{box-sizing:border-box}
-html,body{margin:0;min-height:100%;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:var(--bg);color:var(--text);}
-.wrap{
-  width:min(1140px, calc(100% - 32px));
-  margin:0 auto;
-  padding:24px 0 80px;
-}
-.topbar{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:16px;
-  padding:18px 20px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.04);
-  backdrop-filter:blur(20px);
-  border-radius:28px;
-  box-shadow:var(--shadow);
-}
-.brand{
-  display:flex;
-  align-items:center;
-  gap:12px;
-}
-.mark{
-  width:40px;height:40px;border-radius:14px;
-  background:linear-gradient(135deg, var(--primary), #2563eb 45%, var(--primary-2));
-  flex:none;
-}
-.brand-name{font-size:18px;font-weight:800;letter-spacing:-.04em;}
-.nav a{
-  padding:10px 14px;
-  border-radius:999px;
-  color:var(--muted);
-}
-.nav a:hover{color:var(--text);}
-.hero{
-  padding:40px 26px;
-  border-radius:32px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.03);
-  text-align:center;
-}
-.title{font-size:clamp(34px, 4.8vw, 64px);letter-spacing:-.06em;line-height:1;}
-.subtitle{max-width:66ch;color:var(--muted);font-size:16px;line-height:1.7;margin:0 auto;}
-.content{
-  max-width:800px;
-  margin:40px auto;
-  line-height:1.75;
-  font-size:15.5px;
-}
-.content h2{
-  margin-top:32px;
-  font-size:20px;
-}
-.footer{
-  margin-top:80px;
-  padding:20px;
-  border-radius:24px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.03);
-  text-align:center;
-  color:var(--muted);
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Privacy Policy • Mortalive</title>
+    <meta name="description" content="Mortalive Privacy Policy - We take your privacy seriously. Learn how we collect, use, and protect your data.">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=Playfair+Display:wght@700;800&amp;display=swap" rel="stylesheet">
+    
+    <style>
+        /* =====================================================
+           MORTALIVE — Design system
+           ===================================================== */
+        :root {
+            --surface: #ffffff;
+            --surface-2: #f6f7f9;
+            --surface-3: #eef0f4;
+            --on-surface: #0d1117;
+            --on-surface-2: #3d4451;
+            --on-surface-3: #6b7280;
+            --primary: #1a6ef5;
+            --secondary: #7c3aed;
+            --accent: #06b6d4;
+            --border: rgba(0,0,0,.08);
+            --border-strong: rgba(0,0,0,.14);
+            --elev-2: 0 2px 8px rgba(0,0,0,.07), 0 8px 24px rgba(0,0,0,.05);
+            --elev-3: 0 4px 16px rgba(0,0,0,.08), 0 16px 48px rgba(0,0,0,.06);
+            --elev-4: 0 8px 28px rgba(0,0,0,.10), 0 24px 64px rgba(0,0,0,.08);
+            --r-lg: 28px;
+            --r-xl: 36px;
+        }
+
+        *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+        body {
+            font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--surface);
+            color: var(--on-surface);
+            min-height: 100dvh;
+            line-height: 1.65;
+        }
+
+        /* Topbar */
+        .sakura-topbar {
+            position: sticky;
+            top: 16px;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 16px;
+            background: rgba(255,255,255,.86);
+            backdrop-filter: blur(20px) saturate(160%);
+            border: 1.5px solid rgba(0,0,0,.10);
+            border-radius: var(--r-xl);
+            box-shadow: var(--elev-2);
+            margin: 0 auto;
+            max-width: min(1280px, calc(100% - 28px));
+        }
+        .sakura-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+        .topbar-logo { width: 36px; height: 36px; border-radius: 10px; object-fit: contain; }
+        .brand-name { font-size: 17px; font-weight: 800; letter-spacing: -.03em; }
+        .brand-sub { font-size: 10px; color: var(--on-surface-3); letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+
+        .sakura-nav {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-inline: auto;
+        }
+        .sakura-nav a {
+            padding: 7px 14px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--on-surface-2);
+        }
+        .sakura-nav a:hover { background: var(--surface-2); color: var(--on-surface); }
+        .sakura-nav a.active { background: var(--primary-alpha); color: var(--primary); font-weight: 700; }
+
+        /* Main Content */
+        .privacy-container {
+            max-width: min(1280px, calc(100% - 28px));
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        .privacy-header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+        .privacy-header h1 {
+            font-size: clamp(32px, 5vw, 52px);
+            font-weight: 900;
+            letter-spacing: -.06em;
+            line-height: 1.05;
+        }
+        .privacy-meta {
+            font-size: 14.5px;
+            color: var(--on-surface-3);
+            margin-top: 12px;
+        }
+
+        .privacy-card {
+            background: #fff;
+            border-radius: var(--r-xl);
+            box-shadow: var(--elev-3);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            margin-bottom: 40px;
+        }
+        .privacy-section {
+            padding: 40px;
+        }
+        .privacy-section:not(:last-child) {
+            border-bottom: 1px solid var(--border);
+        }
+        .privacy-section h2 {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -.04em;
+            margin-bottom: 18px;
+        }
+        .privacy-section h3 {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 26px 0 12px;
+            color: var(--on-surface);
+        }
+        .privacy-section p,
+        .privacy-section li {
+            font-size: 15px;
+            color: var(--on-surface-2);
+            line-height: 1.75;
+            margin-bottom: 14px;
+        }
+        .privacy-section ul {
+            padding-left: 26px;
+        }
+        .last-updated {
+            background: var(--surface-2);
+            padding: 18px 40px;
+            font-size: 13.5px;
+            color: var(--on-surface-3);
+            border-top: 1px solid var(--border);
+        }
+
+        /* Footer */
+        .footer {
+            background: linear-gradient(170deg, #1a1f2e 0%, #111420 55%, #0e1119 100%);
+            color: #fff;
+            border-radius: var(--r-xl) var(--r-xl) 0 0;
+            padding: 64px 0 72px;
+            margin-top: 80px;
+        }
+        .footer-inner {
+            max-width: min(1280px, calc(100% - 28px));
+            margin: 0 auto;
+            padding: 0 20px;
+            display: grid;
+            grid-template-columns: 1.2fr .7fr .7fr 1fr;
+            gap: 32px;
+        }
+        .footer-logo-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .footer-logo-row img { width: 40px; height: 40px; border-radius: 10px; }
+        .footer h4 {
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,.48);
+            margin-bottom: 16px;
+        }
+        .footer-links { display: grid; gap: 10px; }
+        .footer-links a { 
+            font-size: 14px; 
+            font-weight: 600; 
+            color: rgba(255,255,255,.82); 
+        }
+        .footer-copy {
+            grid-column: 1 / -1;
+            padding-top: 28px;
+            border-top: 1px solid rgba(255,255,255,.08);
+            font-size: 12px;
+            color: rgba(255,255,255,.35);
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        @media (max-width: 980px) {
+            .privacy-section { padding: 32px 24px; }
+            .footer-inner { grid-template-columns: 1fr; }
+        }
+    </style>
 </head>
 <body>
-  <div class="wrap">
-    <header class="topbar">
-      <a class="brand" href="index.html">
-        <div class="mark"></div>
-        <div class="brand-name">Mortalive</div>
-      </a>
-      <nav class="nav">
-        <a href="about.html">About</a>
-        <a href="safety.html">Safety</a>
-        <a href="faq.html">FAQ</a>
-      </nav>
+
+    <!-- Topbar -->
+    <header class="sakura-topbar">
+        <a href="index.html" class="sakura-brand">
+            <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png" alt="Mortalive" class="topbar-logo">
+            <div>
+                <div class="brand-name">Mortalive</div>
+                <div class="brand-sub">Connect with the world</div>
+            </div>
+        </a>
+        
+        <nav class="sakura-nav">
+            <a href="index.html">Home</a>
+            <a href="about.html">About</a>
+            <a href="safety.html">Safety</a>
+            <a href="terms.html">Terms</a>
+            <a href="privacy.html" class="active">Privacy</a>
+        </nav>
     </header>
 
-    <main>
-      <section class="hero">
-        <h1 class="title">Privacy Policy</h1>
-        <p class="subtitle">Last updated: July 2026</p>
-      </section>
+    <div class="privacy-container">
+        <div class="privacy-header">
+            <h1>Privacy Policy</h1>
+            <p class="privacy-meta">Last updated: July 14, 2026</p>
+        </div>
 
-      <div class="content">
-        <h2>1. Information We Collect</h2>
-        <p>We collect minimal data. For guests, we collect no personal information. For registered users, we store username, hashed password, and Magnet Score.</p>
+        <div class="privacy-card">
 
-        <h2>2. How We Use Your Data</h2>
-        <p>Data is used only to provide the service, improve matching, and maintain safety through moderation.</p>
+            <div class="privacy-section">
+                <h2>1. Introduction</h2>
+                <p>At Mortalive, your privacy is one of our highest priorities. This Privacy Policy explains how we collect, use, store, and protect your information when you use our platform.</p>
+            </div>
 
-        <h2>3. Snapshots & Moderation</h2>
-        <p>During video chats, random snapshots may be taken for moderation purposes. These are deleted after review and are not stored long-term.</p>
+            <div class="privacy-section">
+                <h2>2. Information We Collect</h2>
+                <h3>Account Information</h3>
+                <p>Name, email address, profile picture, and username (if provided).</p>
 
-        <h2>4. Data Sharing</h2>
-        <p>We do not sell your data. Information is only shared with trusted service providers when necessary for platform operation.</p>
+                <h3>Usage Data</h3>
+                <p>How you interact with the platform, such as conversations started, features used, and session duration.</p>
 
-        <h2>5. Your Rights</h2>
-        <p>You can delete your account at any time. Guest users have no persistent data stored.</p>
+                <h3>Technical Data</h3>
+                <p>Device type, IP address, browser information, and operating system.</p>
 
-        <h2>6. Changes to Privacy Policy</h2>
-        <p>We may update this policy. Continued use of the service means you accept the updated policy.</p>
-      </div>
+                <h3>Media Data</h3>
+                <p>Camera and microphone access only when you explicitly grant permission during a video call. We do not store video or audio recordings.</p>
+            </div>
 
-      <footer class="footer">
-        <span>© 2026 Mortalive. All rights reserved.</span>
-        <span><a href="index.html">Back to Home</a></span>
-      </footer>
-    </main>
-  </div>
+            <div class="privacy-section">
+                <h2>3. How We Use Your Information</h2>
+                <ul>
+                    <li>To provide and improve our services</li>
+                    <li>To ensure platform safety and prevent abuse</li>
+                    <li>To personalize your experience</li>
+                    <li>To communicate important updates</li>
+                </ul>
+            </div>
+
+            <div class="privacy-section">
+                <h2>4. Data Sharing</h2>
+                <p>We do not sell your personal data to third parties. We may share information only in these cases:</p>
+                <ul>
+                    <li>With your explicit consent</li>
+                    <li>To comply with legal obligations</li>
+                    <li>To protect the safety of our users and the platform</li>
+                </ul>
+            </div>
+
+            <div class="privacy-section">
+                <h2>5. Your Rights</h2>
+                <p>You have the right to:</p>
+                <ul>
+                    <li>Access, correct, or delete your personal data</li>
+                    <li>Withdraw consent at any time</li>
+                    <li>Request data portability</li>
+                    <li>Opt out of certain processing activities</li>
+                </ul>
+            </div>
+
+            <div class="privacy-section">
+                <h2>6. Security</h2>
+                <p>We implement industry-standard security measures including encryption, secure servers, and regular audits to protect your data.</p>
+            </div>
+
+            <div class="last-updated">
+                This Privacy Policy may be updated from time to time. We will notify you of any material changes. Your continued use of Mortalive after such changes constitutes your acceptance of the updated policy.
+            </div>
+
+        </div>
+
+        <p style="text-align:center; color:var(--on-surface-3); font-size:14px;">
+            Questions about our privacy practices? Contact us at <a href="mailto:privacy@mortalive.com" style="color:var(--primary); font-weight:700;">privacy@mortalive.com</a>
+        </p>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <div>
+                <div class="footer-logo-row">
+                    <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png" alt="Mortalive">
+                    <div class="brand-name" style="color:#fff;">Mortalive</div>
+                </div>
+                <p style="color:rgba(255,255,255,.58);">Privacy-first social connection.</p>
+            </div>
+            
+            <div>
+                <h4>Product</h4>
+                <div class="footer-links">
+                    <a href="index.html">Home</a>
+                    <a href="about.html">About</a>
+                    <a href="safety.html">Safety</a>
+                </div>
+            </div>
+            
+            <div>
+                <h4>Legal</h4>
+                <div class="footer-links">
+                    <a href="terms.html">Terms of Service</a>
+                    <a href="privacy.html">Privacy Policy</a>
+                </div>
+            </div>
+            
+            <div>
+                <h4>Support</h4>
+                <div class="footer-links">
+                    <a href="faq.html">FAQ</a>
+                    <a href="#">Contact</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer-copy">
+            <span>© 2026 Mortalive. All rights reserved.</span>
+            <span>Your privacy matters</span>
+        </div>
+    </footer>
+
 </body>
 </html>
