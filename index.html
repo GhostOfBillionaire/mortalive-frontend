@@ -105,7 +105,13 @@ img { display: block; max-width: 100%; }
   content: '';
   position: absolute;
   top: 0;
-  left: 0;
+  /* Anchor to the WRAP's actual left edge, not the raw viewport edge.
+     .wrap is `min(1280px, calc(100% - 28px))` wide and centered, so its
+     left edge sits at max(14px, (100vw - 1280px) / 2). Matching that here
+     means the background always lines up with the content column and
+     stays inside the max-width container as the window is resized —
+     instead of drifting away from centered content on ultra-wide screens. */
+  left: max(14px, calc((100vw - 1280px) / 2));
   /* Natural image size — not stretched */
   width:  min(52vw, 720px);
   height: min(100vh, 900px);
@@ -122,6 +128,7 @@ img { display: block; max-width: 100%; }
 }
 @media (max-width: 900px) {
   #pg-land::before {
+    left: 0;
     width: 100%;
     background-position: center top;
     background-size: cover;
@@ -1628,7 +1635,7 @@ img { display: block; max-width: 100%; }
     <div class="hero-label">🌍 Random · Private · Instant</div>
 
     <h1 class="landing-title" id="hero-title">
-      <em>2026's best in conversing and<br>organic social connection webapp</em>
+      <em>2026's best in conversing and<br>Natural social connection webapp</em>
     </h1>
 
     <p class="hero-sub">
@@ -1668,7 +1675,7 @@ img { display: block; max-width: 100%; }
     <div class="hero-image-shell">
       <!-- TODO: replace src below with the final hero image URL -->
       <img class="hero-image-bg"
-           src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783935562/pc_nm2uoq.png"
+           src="https://placehold.co/1200x800/eef0f4/6b7280?text=Hero+Image"
            alt="People connecting worldwide">
       <div class="hero-image-overlay">
         <span class="hero-img-badge">🔒 Anonymous by default</span>
