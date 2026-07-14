@@ -1,358 +1,326 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Mortalive Blog — Updates, Stories & Insights</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Blog • Mortalive</title>
+    <meta name="description" content="Stories, insights, and tips about meaningful connections, digital wellbeing, and building authentic relationships.">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=Playfair+Display:wght@700;800&amp;display=swap" rel="stylesheet">
+    
+    <style>
+        /* =====================================================
+           MORTALIVE — Design system
+           ===================================================== */
+        :root {
+            --surface: #ffffff;
+            --surface-2: #f6f7f9;
+            --surface-3: #eef0f4;
+            --on-surface: #0d1117;
+            --on-surface-2: #3d4451;
+            --on-surface-3: #6b7280;
+            --primary: #1a6ef5;
+            --secondary: #7c3aed;
+            --accent: #06b6d4;
+            --border: rgba(0,0,0,.08);
+            --border-strong: rgba(0,0,0,.14);
+            --elev-2: 0 2px 8px rgba(0,0,0,.07), 0 8px 24px rgba(0,0,0,.05);
+            --elev-3: 0 4px 16px rgba(0,0,0,.08), 0 16px 48px rgba(0,0,0,.06);
+            --elev-4: 0 8px 28px rgba(0,0,0,.10), 0 24px 64px rgba(0,0,0,.08);
+            --r-lg: 28px;
+            --r-xl: 36px;
+        }
 
-:root{
-  --bg:#09090b;
-  --bg2:#111113;
-  --panel:rgba(255,255,255,.04);
-  --panel-2:rgba(255,255,255,.06);
-  --border:rgba(255,255,255,.10);
-  --border-strong:rgba(255,255,255,.16);
-  --text:#f4f4f5;
-  --muted:#a1a1aa;
-  --muted-2:#71717a;
-  --primary:#8b5cf6;
-  --primary-2:#22c55e;
-  --shadow:0 24px 80px rgba(0,0,0,.42);
-  --radius:24px;
-  --radius-sm:18px;
-  --radius-xs:14px;
-}
-*{box-sizing:border-box}
-html,body{margin:0;min-height:100%;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:
-  radial-gradient(circle at top left, rgba(139,92,246,.16), transparent 22%),
-  radial-gradient(circle at top right, rgba(34,197,94,.10), transparent 20%),
-  linear-gradient(180deg, #09090b 0%, #0b0b0d 100%);
-  color:var(--text);
-}
-body{
-  min-height:100dvh;
-  overflow-x:hidden;
-  background-attachment:fixed;
-}
-.wrap{
-  width:min(1140px, calc(100% - 32px));
-  margin:0 auto;
-  padding:24px 0 40px;
-  position:relative;
-  z-index:1;
-}
-.shell{
-  display:grid;
-  gap:18px;
-}
-.topbar{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:16px;
-  padding:18px 20px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.04);
-  backdrop-filter:blur(20px) saturate(140%);
-  border-radius:28px;
-  box-shadow:var(--shadow);
-}
-.brand{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  min-width:0;
-}
-.mark{
-  width:40px;height:40px;border-radius:14px;
-  background:linear-gradient(135deg, var(--primary), #2563eb 45%, var(--primary-2));
-  box-shadow:0 12px 28px rgba(139,92,246,.22);
-  flex:none;
-  position:relative;
-}
-.mark::after{
-  content:'';
-  position:absolute;
-  inset:11px;
-  border-radius:10px;
-  border:1px solid rgba(255,255,255,.65);
-}
-.brand-copy{min-width:0}
-.brand-name{font-size:18px;font-weight:800;letter-spacing:-.04em;line-height:1.1}
-.brand-sub{margin-top:3px;color:var(--muted);font-size:12px;letter-spacing:.12em;text-transform:uppercase}
-.nav{
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:flex-end;
-  gap:10px;
-}
-.nav a{
-  padding:10px 14px;
-  border-radius:999px;
-  border:1px solid transparent;
-  color:var(--muted);
-  transition:all .18s ease;
-}
-.nav a:hover{
-  color:var(--text);
-  background:rgba(255,255,255,.04);
-  border-color:var(--border);
-}
-.hero{
-  padding:26px;
-  border-radius:32px;
-  border:1px solid var(--border);
-  background:
-    radial-gradient(circle at 18% 12%, rgba(139,92,246,.16), transparent 18%),
-    radial-gradient(circle at 80% 20%, rgba(34,197,94,.10), transparent 20%),
-    rgba(255,255,255,.03);
-  backdrop-filter:blur(20px) saturate(140%);
-  box-shadow:var(--shadow);
-}
-.kicker{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding:8px 12px;
-  border-radius:999px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.03);
-  color:var(--muted);
-  font-size:12px;
-  letter-spacing:.12em;
-  text-transform:uppercase;
-  font-weight:700;
-}
-.title{
-  margin:16px 0 0;
-  font-size:clamp(34px, 4.8vw, 64px);
-  letter-spacing:-.06em;
-  line-height:1;
-}
-.subtitle{
-  margin:14px 0 0;
-  max-width:66ch;
-  color:var(--muted);
-  font-size:16px;
-  line-height:1.7;
-}
-.hero-actions{
-  margin-top:20px;
-  display:flex;
-  gap:12px;
-  flex-wrap:wrap;
-}
-.btn{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:8px;
-  height:46px;
-  padding:0 18px;
-  border-radius:14px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.04);
-  color:var(--text);
-  font-weight:700;
-}
-.btn-primary{
-  border-color:transparent;
-  background:linear-gradient(135deg, var(--primary), #2563eb);
-  box-shadow:0 14px 30px rgba(59,130,246,.18);
-}
-.grid{
-  display:grid;
-  grid-template-columns:repeat(12, minmax(0,1fr));
-  gap:16px;
-}
-.card{
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.04);
-  backdrop-filter:blur(18px) saturate(140%);
-  border-radius:24px;
-  box-shadow:var(--shadow);
-}
-.section{
-  padding:20px;
-}
-.section-head{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:16px;
-  margin-bottom:14px;
-}
-.section-title{
-  margin:0;
-  font-size:18px;
-  line-height:1.2;
-  letter-spacing:-.03em;
-}
-.section-note{
-  margin:6px 0 0;
-  color:var(--muted);
-  font-size:13px;
-  line-height:1.6;
-}
-.placeholder{
-  min-height:72px;
-  border-radius:18px;
-  border:1px dashed var(--border-strong);
-  background:rgba(255,255,255,.025);
-  padding:16px;
-  color:var(--muted);
-  line-height:1.7;
-}
-.placeholder.tall{min-height:180px}
-.placeholder.xl{min-height:240px}
-.split{
-  display:grid;
-  grid-template-columns:repeat(2, minmax(0,1fr));
-  gap:16px;
-}
-.stack{display:grid; gap:16px;}
-.badge-row{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-}
-.badge{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding:8px 12px;
-  border-radius:999px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.03);
-  color:var(--muted);
-  font-size:12px;
-  font-weight:600;
-}
-.footer{
-  margin-top:8px;
-  padding:16px 20px;
-  border-radius:24px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.03);
-  color:var(--muted);
-  font-size:13px;
-  line-height:1.6;
-  display:flex;
-  justify-content:space-between;
-  gap:14px;
-  flex-wrap:wrap;
-}
-.meta-link{
-  color:var(--text);
-  opacity:.86;
-}
-@media (max-width: 860px){
-  .topbar{flex-direction:column;align-items:flex-start}
-  .nav{justify-content:flex-start}
-  .split{grid-template-columns:1fr}
-  .grid{grid-template-columns:1fr}
-}
+        *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+        body {
+            font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--surface);
+            color: var(--on-surface);
+            min-height: 100dvh;
+            line-height: 1.65;
+        }
 
-</style>
+        /* Topbar */
+        .sakura-topbar {
+            position: sticky;
+            top: 16px;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 16px;
+            background: rgba(255,255,255,.86);
+            backdrop-filter: blur(20px) saturate(160%);
+            border: 1.5px solid rgba(0,0,0,.10);
+            border-radius: var(--r-xl);
+            box-shadow: var(--elev-2);
+            margin: 0 auto;
+            max-width: min(1280px, calc(100% - 28px));
+        }
+        .sakura-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+        .topbar-logo { width: 36px; height: 36px; border-radius: 10px; object-fit: contain; }
+        .brand-name { font-size: 17px; font-weight: 800; letter-spacing: -.03em; }
+        .brand-sub { font-size: 10px; color: var(--on-surface-3); letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+
+        .sakura-nav {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-inline: auto;
+        }
+        .sakura-nav a {
+            padding: 7px 14px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--on-surface-2);
+        }
+        .sakura-nav a:hover { background: var(--surface-2); color: var(--on-surface); }
+        .sakura-nav a.active { background: var(--primary-alpha); color: var(--primary); font-weight: 700; }
+
+        /* Main Content */
+        .blog-container {
+            max-width: min(1280px, calc(100% - 28px));
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        .blog-header {
+            text-align: center;
+            margin-bottom: 52px;
+        }
+        .blog-header h1 {
+            font-size: clamp(32px, 5.2vw, 52px);
+            font-weight: 900;
+            letter-spacing: -.06em;
+            line-height: 1.05;
+        }
+        .blog-header p {
+            font-size: 16px;
+            color: var(--on-surface-3);
+            max-width: 620px;
+            margin: 16px auto 0;
+        }
+
+        .blog-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 28px;
+        }
+        .blog-card {
+            background: #fff;
+            border-radius: var(--r-xl);
+            box-shadow: var(--elev-3);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+        .blog-card:hover {
+            transform: translateY(-6px);
+            box-shadow: var(--elev-4);
+        }
+        .blog-image {
+            height: 220px;
+            background: linear-gradient(135deg, #e0e7ff, #c4d0ff);
+            background-size: cover;
+            background-position: center;
+        }
+        .blog-content {
+            padding: 24px;
+        }
+        .blog-category {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+        .blog-title {
+            font-size: 19px;
+            font-weight: 800;
+            line-height: 1.3;
+            margin-bottom: 12px;
+        }
+        .blog-excerpt {
+            font-size: 14.5px;
+            color: var(--on-surface-2);
+            line-height: 1.65;
+            margin-bottom: 18px;
+        }
+        .blog-meta {
+            font-size: 13px;
+            color: var(--on-surface-3);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Footer */
+        .footer {
+            background: linear-gradient(170deg, #1a1f2e 0%, #111420 55%, #0e1119 100%);
+            color: #fff;
+            border-radius: var(--r-xl) var(--r-xl) 0 0;
+            padding: 64px 0 72px;
+            margin-top: 100px;
+        }
+        .footer-inner {
+            max-width: min(1280px, calc(100% - 28px));
+            margin: 0 auto;
+            padding: 0 20px;
+            display: grid;
+            grid-template-columns: 1.2fr .7fr .7fr 1fr;
+            gap: 32px;
+        }
+        .footer-logo-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .footer-logo-row img { width: 40px; height: 40px; border-radius: 10px; }
+        .footer h4 {
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,.48);
+            margin-bottom: 16px;
+        }
+        .footer-links { display: grid; gap: 10px; }
+        .footer-links a { 
+            font-size: 14px; 
+            font-weight: 600; 
+            color: rgba(255,255,255,.82); 
+        }
+        .footer-copy {
+            grid-column: 1 / -1;
+            padding-top: 28px;
+            border-top: 1px solid rgba(255,255,255,.08);
+            font-size: 12px;
+            color: rgba(255,255,255,.35);
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        @media (max-width: 980px) {
+            .blog-grid { grid-template-columns: 1fr; }
+        }
+    </style>
 </head>
 <body>
-  <div class="wrap">
-    <header class="topbar">
-      <a class="brand" href="index.html" aria-label="Back to home">
-        <div class="mark" aria-hidden="true"></div>
-        <div class="brand-copy">
-          <div class="brand-name">Mortalive</div>
-          <div class="brand-sub">Anonymous Chat</div>
-        </div>
-      </a>
-      <nav class="nav" aria-label="Primary">
-        <a href="about.html">About</a>
-        <a href="safety.html">Safety</a>
-        <a href="blog.html">Blog</a>
-        <a href="faq.html">FAQ</a>
-      </nav>
+
+    <!-- Topbar -->
+    <header class="sakura-topbar">
+        <a href="index.html" class="sakura-brand">
+            <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png" alt="Mortalive" class="topbar-logo">
+            <div>
+                <div class="brand-name">Mortalive</div>
+                <div class="brand-sub">Connect with the world</div>
+            </div>
+        </a>
+        
+        <nav class="sakura-nav">
+            <a href="index.html">Home</a>
+            <a href="about.html">About</a>
+            <a href="safety.html">Safety</a>
+            <a href="reviews.html">Reviews</a>
+            <a href="blog.html" class="active">Blog</a>
+        </nav>
     </header>
 
-    <main class="shell">
-      <section class="hero">
-        <span class="kicker">Blog</span>
-        <h1 class="title">Mortalive Blog</h1>
-        <p class="subtitle">Stories, updates, and insights from India's growing safer social app startup.</p>
-      </section>
+    <div class="blog-container">
+        <div class="blog-header">
+            <h1>The Mortalive Journal</h1>
+            <p>Thoughts on connection, digital wellbeing, and building meaningful relationships in 2026.</p>
+        </div>
 
-      <div class="stack">
+        <div class="blog-grid">
+
+            <!-- Blog Post 1 -->
+            <article class="blog-card">
+                <div class="blog-image" style="background-image: url('https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/blog_connection.jpg');"></div>
+                <div class="blog-content">
+                    <div class="blog-category">Connection</div>
+                    <h2 class="blog-title">Why Quiet Conversations Are the Future of Social Media</h2>
+                    <p class="blog-excerpt">In a noisy digital world, the most powerful connections happen in calm, intentional spaces. Here's what we've learned from our community.</p>
+                    <div class="blog-meta">
+                        <span>July 10, 2026</span>
+                        <span>8 min read</span>
+                    </div>
+                </div>
+            </article>
+
+            <!-- Blog Post 2 -->
+            <article class="blog-card">
+                <div class="blog-image" style="background-image: url('https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/blog_privacy.jpg');"></div>
+                <div class="blog-content">
+                    <div class="blog-category">Privacy</div>
+                    <h2 class="blog-title">Privacy-First Social: Is It Still Possible in 2026?</h2>
+                    <p class="blog-excerpt">Exploring how we built Mortalive with privacy as a foundation rather than an afterthought.</p>
+                    <div class="blog-meta">
+                        <span>July 5, 2026</span>
+                        <span>12 min read</span>
+                    </div>
+                </div>
+            </article>
+
+            <!-- Blog Post 3 -->
+            <article class="blog-card">
+                <div class="blog-image" style="background-image: url('https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/blog_wellbeing.jpg');"></div>
+                <div class="blog-content">
+                    <div class="blog-category">Wellbeing</div>
+                    <h2 class="blog-title">How to Have Meaningful Conversations Without Burnout</h2>
+                    <p class="blog-excerpt">Practical tips from real users on maintaining deep connections while protecting your energy and peace of mind.</p>
+                    <div class="blog-meta">
+                        <span>June 28, 2026</span>
+                        <span>6 min read</span>
+                    </div>
+                </div>
+            </article>
+
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <div>
+                <div class="footer-logo-row">
+                    <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png" alt="Mortalive">
+                    <div class="brand-name" style="color:#fff;">Mortalive</div>
+                </div>
+                <p style="color:rgba(255,255,255,.58);">Calm, authentic social connection.</p>
+            </div>
+            
+            <div>
+                <h4>Product</h4>
+                <div class="footer-links">
+                    <a href="index.html">Home</a>
+                    <a href="about.html">About</a>
+                    <a href="safety.html">Safety</a>
+                </div>
+            </div>
+            
+            <div>
+                <h4>Journal</h4>
+                <div class="footer-links">
+                    <a href="blog.html">Blog</a>
+                    <a href="reviews.html">Stories</a>
+                </div>
+            </div>
+            
+            <div>
+                <h4>Legal</h4>
+                <div class="footer-links">
+                    <a href="terms.html">Terms</a>
+                    <a href="privacy.html">Privacy</a>
+                </div>
+            </div>
+        </div>
         
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">Welcome to the Mortalive Blog</h2>
-            <p class="section-note">Made in India • Building the future of anonymous social connection</p>
-          </div>
+        <div class="footer-copy">
+            <span>© 2026 Mortalive. All rights reserved.</span>
+            <span>Real connections matter</span>
         </div>
-        <div class="placeholder xl">
-          We are a passionate Indian startup on a mission to create one of the safest and most enjoyable anonymous social platforms in the world. Mortalive combines the thrill of random chat with strong safety measures, live streaming features, and opportunities for creators to earn money through content, followers, and meaningful interactions.
-        </div>
-      </section>
+    </footer>
 
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">Why We Built Mortalive</h2>
-            <p class="section-note">A safer, modern social app startup from India</p>
-          </div>
-        </div>
-        <div class="placeholder xl">
-          In today's digital world, people are looking for authentic connections without the pressure of permanent profiles. As a Startup India initiative, we created Mortalive to offer a safer alternative to traditional anonymous chat apps. Our platform allows users to enjoy text chat, video chat, and live streaming while maintaining full anonymity and strong community guidelines. We believe technology should bring people closer in positive and respectful ways.
-        </div>
-      </section>
-
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">Live Streaming & Creator Economy</h2>
-            <p class="section-note">Earn money with content on Mortalive</p>
-          </div>
-        </div>
-        <div class="placeholder xl">
-          One of the most exciting features of Mortalive is live streaming. Creators can go live, interact with their followers in real time, and build a loyal audience. Through our messaging system and follower tools, users can earn money by creating engaging content, hosting interactive sessions, and growing their community. This creator-first approach makes Mortalive more than just a chat app — it is a complete social experience.
-        </div>
-      </section>
-
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">Safety at the Core</h2>
-            <p class="section-note">Our commitment to a safer social platform</p>
-          </div>
-        </div>
-        <div class="placeholder tall">
-          We understand that safety is the foundation of any successful anonymous social app. That's why we have implemented strong moderation, snapshot monitoring during video sessions, quick report handling, and clear community rules. As an Indian startup, we are especially focused on creating a platform that respects Indian values while providing a global stage for users to connect safely and freely.
-        </div>
-      </section>
-
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">Our Journey as a Startup</h2>
-            <p class="section-note">From idea to a growing social platform</p>
-          </div>
-        </div>
-        <div class="placeholder tall">
-          Starting as a small team with a big dream, Mortalive is proud to be part of the Startup India movement. We are building a platform that combines the best of anonymous chat, live streaming, and creator tools. Our vision is to grow into one of India's most loved social apps, giving millions of users a safe place to chat, stream, and earn through their content and community.
-        </div>
-      </section>
-
-      </div>
-
-      <footer class="footer">
-        <span>Stay updated with the latest from Mortalive. © 2026</span>
-        <span><a class="meta-link" href="index.html">Return to Mortalive</a></span>
-      </footer>
-    </main>
-  </div>
 </body>
 </html>
