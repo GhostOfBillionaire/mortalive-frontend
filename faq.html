@@ -1,368 +1,386 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Mortalive — FAQ</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>FAQ • Mortalive</title>
+    <meta name="description" content="Frequently Asked Questions about Mortalive - Privacy-first social connection platform.">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=Playfair+Display:wght@700;800&amp;display=swap" rel="stylesheet">
+    
+    <style>
+        /* =====================================================
+           MORTALIVE — Design system
+           ===================================================== */
+        :root {
+            --surface: #ffffff;
+            --surface-2: #f6f7f9;
+            --surface-3: #eef0f4;
+            --on-surface: #0d1117;
+            --on-surface-2: #3d4451;
+            --on-surface-3: #6b7280;
+            --primary: #1a6ef5;
+            --secondary: #7c3aed;
+            --accent: #06b6d4;
+            --border: rgba(0,0,0,.08);
+            --border-strong: rgba(0,0,0,.14);
+            --elev-2: 0 2px 8px rgba(0,0,0,.07), 0 8px 24px rgba(0,0,0,.05);
+            --elev-3: 0 4px 16px rgba(0,0,0,.08), 0 16px 48px rgba(0,0,0,.06);
+            --elev-4: 0 8px 28px rgba(0,0,0,.10), 0 24px 64px rgba(0,0,0,.08);
+            --r-lg: 28px;
+            --r-xl: 36px;
+        }
 
-:root{
-  --bg:#09090b;
-  --bg2:#111113;
-  --panel:rgba(255,255,255,.04);
-  --panel-2:rgba(255,255,255,.06);
-  --border:rgba(255,255,255,.10);
-  --border-strong:rgba(255,255,255,.16);
-  --text:#f4f4f5;
-  --muted:#a1a1aa;
-  --muted-2:#71717a;
-  --primary:#8b5cf6;
-  --primary-2:#22c55e;
-  --shadow:0 24px 80px rgba(0,0,0,.42);
-  --radius:24px;
-  --radius-sm:18px;
-  --radius-xs:14px;
-}
-*{box-sizing:border-box}
-html,body{margin:0;min-height:100%;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:
-  radial-gradient(circle at top left, rgba(139,92,246,.16), transparent 22%),
-  radial-gradient(circle at top right, rgba(34,197,94,.10), transparent 20%),
-  linear-gradient(180deg, #09090b 0%, #0b0b0d 100%);
-  color:var(--text);
-}
-body{
-  min-height:100dvh;
-  overflow-x:hidden;
-  background-attachment:fixed;
-}
-.wrap{
-  width:min(1140px, calc(100% - 32px));
-  margin:0 auto;
-  padding:24px 0 40px;
-  position:relative;
-  z-index:1;
-}
-.shell{
-  display:grid;
-  gap:18px;
-}
-.topbar{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:16px;
-  padding:18px 20px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.04);
-  backdrop-filter:blur(20px) saturate(140%);
-  border-radius:28px;
-  box-shadow:var(--shadow);
-}
-.brand{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  min-width:0;
-}
-.mark{
-  width:40px;height:40px;border-radius:14px;
-  background:linear-gradient(135deg, var(--primary), #2563eb 45%, var(--primary-2));
-  box-shadow:0 12px 28px rgba(139,92,246,.22);
-  flex:none;
-  position:relative;
-}
-.mark::after{
-  content:'';
-  position:absolute;
-  inset:11px;
-  border-radius:10px;
-  border:1px solid rgba(255,255,255,.65);
-}
-.brand-copy{min-width:0}
-.brand-name{font-size:18px;font-weight:800;letter-spacing:-.04em;line-height:1.1}
-.brand-sub{margin-top:3px;color:var(--muted);font-size:12px;letter-spacing:.12em;text-transform:uppercase}
-.nav{
-  display:flex;
-  flex-wrap:wrap;
-  justify-content:flex-end;
-  gap:10px;
-}
-.nav a{
-  padding:10px 14px;
-  border-radius:999px;
-  border:1px solid transparent;
-  color:var(--muted);
-  transition:all .18s ease;
-}
-.nav a:hover{
-  color:var(--text);
-  background:rgba(255,255,255,.04);
-  border-color:var(--border);
-}
-.hero{
-  padding:26px;
-  border-radius:32px;
-  border:1px solid var(--border);
-  background:
-    radial-gradient(circle at 18% 12%, rgba(139,92,246,.16), transparent 18%),
-    radial-gradient(circle at 80% 20%, rgba(34,197,94,.10), transparent 20%),
-    rgba(255,255,255,.03);
-  backdrop-filter:blur(20px) saturate(140%);
-  box-shadow:var(--shadow);
-}
-.kicker{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding:8px 12px;
-  border-radius:999px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.03);
-  color:var(--muted);
-  font-size:12px;
-  letter-spacing:.12em;
-  text-transform:uppercase;
-  font-weight:700;
-}
-.title{
-  margin:16px 0 0;
-  font-size:clamp(34px, 4.8vw, 64px);
-  letter-spacing:-.06em;
-  line-height:1;
-}
-.subtitle{
-  margin:14px 0 0;
-  max-width:66ch;
-  color:var(--muted);
-  font-size:16px;
-  line-height:1.7;
-}
-.hero-actions{
-  margin-top:20px;
-  display:flex;
-  gap:12px;
-  flex-wrap:wrap;
-}
-.btn{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:8px;
-  height:46px;
-  padding:0 18px;
-  border-radius:14px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.04);
-  color:var(--text);
-  font-weight:700;
-}
-.btn-primary{
-  border-color:transparent;
-  background:linear-gradient(135deg, var(--primary), #2563eb);
-  box-shadow:0 14px 30px rgba(59,130,246,.18);
-}
-.grid{
-  display:grid;
-  grid-template-columns:repeat(12, minmax(0,1fr));
-  gap:16px;
-}
-.card{
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.04);
-  backdrop-filter:blur(18px) saturate(140%);
-  border-radius:24px;
-  box-shadow:var(--shadow);
-}
-.section{
-  padding:20px;
-}
-.section-head{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:16px;
-  margin-bottom:14px;
-}
-.section-title{
-  margin:0;
-  font-size:18px;
-  line-height:1.2;
-  letter-spacing:-.03em;
-}
-.section-note{
-  margin:6px 0 0;
-  color:var(--muted);
-  font-size:13px;
-  line-height:1.6;
-}
-.placeholder{
-  min-height:72px;
-  border-radius:18px;
-  border:1px dashed var(--border-strong);
-  background:rgba(255,255,255,.025);
-  padding:16px;
-  color:var(--muted);
-  line-height:1.7;
-}
-.placeholder.tall{min-height:180px}
-.placeholder.xl{min-height:240px}
-.split{
-  display:grid;
-  grid-template-columns:repeat(2, minmax(0,1fr));
-  gap:16px;
-}
-.stack{display:grid; gap:16px;}
-.badge-row{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-}
-.badge{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding:8px 12px;
-  border-radius:999px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.03);
-  color:var(--muted);
-  font-size:12px;
-  font-weight:600;
-}
-.footer{
-  margin-top:8px;
-  padding:16px 20px;
-  border-radius:24px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.03);
-  color:var(--muted);
-  font-size:13px;
-  line-height:1.6;
-  display:flex;
-  justify-content:space-between;
-  gap:14px;
-  flex-wrap:wrap;
-}
-.meta-link{
-  color:var(--text);
-  opacity:.86;
-}
-@media (max-width: 860px){
-  .topbar{flex-direction:column;align-items:flex-start}
-  .nav{justify-content:flex-start}
-  .split{grid-template-columns:1fr}
-  .grid{grid-template-columns:1fr}
-}
+        *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+        body {
+            font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--surface);
+            color: var(--on-surface);
+            min-height: 100dvh;
+            line-height: 1.65;
+        }
 
-</style>
+        /* Topbar */
+        .sakura-topbar {
+            position: sticky;
+            top: 16px;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 16px;
+            background: rgba(255,255,255,.86);
+            backdrop-filter: blur(20px) saturate(160%);
+            border: 1.5px solid rgba(0,0,0,.10);
+            border-radius: var(--r-xl);
+            box-shadow: var(--elev-2);
+            margin: 0 auto;
+            max-width: min(1280px, calc(100% - 28px));
+        }
+        .sakura-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+        .topbar-logo { width: 36px; height: 36px; border-radius: 10px; object-fit: contain; }
+        .brand-name { font-size: 17px; font-weight: 800; letter-spacing: -.03em; }
+        .brand-sub { font-size: 10px; color: var(--on-surface-3); letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+
+        .sakura-nav {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-inline: auto;
+        }
+        .sakura-nav a {
+            padding: 7px 14px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--on-surface-2);
+        }
+        .sakura-nav a:hover { background: var(--surface-2); color: var(--on-surface); }
+        .sakura-nav a.active { background: var(--primary-alpha); color: var(--primary); font-weight: 700; }
+
+        /* Main Content */
+        .faq-container {
+            max-width: min(1280px, calc(100% - 28px));
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        .faq-header {
+            text-align: center;
+            margin-bottom: 52px;
+        }
+        .faq-header h1 {
+            font-size: clamp(32px, 5.2vw, 52px);
+            font-weight: 900;
+            letter-spacing: -.06em;
+            line-height: 1.05;
+        }
+        .faq-header p {
+            font-size: 16px;
+            color: var(--on-surface-3);
+            max-width: 620px;
+            margin: 16px auto 0;
+        }
+
+        .faq-card {
+            background: #fff;
+            border-radius: var(--r-xl);
+            box-shadow: var(--elev-3);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+        .faq-item {
+            border-bottom: 1px solid var(--border);
+        }
+        .faq-item:last-child {
+            border-bottom: none;
+        }
+        .faq-question {
+            padding: 28px 40px;
+            font-weight: 700;
+            font-size: 17px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+        .faq-question:hover {
+            background: var(--surface-2);
+        }
+        .faq-answer {
+            padding: 0 40px 28px;
+            font-size: 15px;
+            color: var(--on-surface-2);
+            line-height: 1.75;
+            display: none;
+        }
+        .faq-answer.show {
+            display: block;
+        }
+        .faq-toggle {
+            font-size: 22px;
+            color: var(--on-surface-3);
+            transition: transform 0.3s ease;
+        }
+        .faq-item.active .faq-toggle {
+            transform: rotate(45deg);
+        }
+
+        /* Footer */
+        .footer {
+            background: linear-gradient(170deg, #1a1f2e 0%, #111420 55%, #0e1119 100%);
+            color: #fff;
+            border-radius: var(--r-xl) var(--r-xl) 0 0;
+            padding: 64px 0 72px;
+            margin-top: 80px;
+        }
+        .footer-inner {
+            max-width: min(1280px, calc(100% - 28px));
+            margin: 0 auto;
+            padding: 0 20px;
+            display: grid;
+            grid-template-columns: 1.2fr .7fr .7fr 1fr;
+            gap: 32px;
+        }
+        .footer-logo-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .footer-logo-row img { width: 40px; height: 40px; border-radius: 10px; }
+        .footer h4 {
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,.48);
+            margin-bottom: 16px;
+        }
+        .footer-links { display: grid; gap: 10px; }
+        .footer-links a { 
+            font-size: 14px; 
+            font-weight: 600; 
+            color: rgba(255,255,255,.82); 
+        }
+        .footer-copy {
+            grid-column: 1 / -1;
+            padding-top: 28px;
+            border-top: 1px solid rgba(255,255,255,.08);
+            font-size: 12px;
+            color: rgba(255,255,255,.35);
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        @media (max-width: 980px) {
+            .faq-question, .faq-answer { padding-left: 24px; padding-right: 24px; }
+            .footer-inner { grid-template-columns: 1fr; }
+        }
+    </style>
 </head>
 <body>
-  <div class="wrap">
-    <header class="topbar">
-      <a class="brand" href="index.html" aria-label="Back to home">
-        <div class="mark" aria-hidden="true"></div>
-        <div class="brand-copy">
-          <div class="brand-name">Mortalive</div>
-          <div class="brand-sub">Anonymous Chat</div>
-        </div>
-      </a>
-      <nav class="nav" aria-label="Primary">
-        <a href="about.html">About</a>
-        <a href="safety.html">Safety</a>
-        <a href="blog.html">Blog</a>
-        <a href="faq.html">FAQ</a>
-      </nav>
+
+    <!-- Topbar -->
+    <header class="sakura-topbar">
+        <a href="index.html" class="sakura-brand">
+            <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png" alt="Mortalive" class="topbar-logo">
+            <div>
+                <div class="brand-name">Mortalive</div>
+                <div class="brand-sub">Connect with the world</div>
+            </div>
+        </a>
+        
+        <nav class="sakura-nav">
+            <a href="index.html">Home</a>
+            <a href="about.html">About</a>
+            <a href="safety.html">Safety</a>
+            <a href="reviews.html">Reviews</a>
+            <a href="faq.html" class="active">FAQ</a>
+        </nav>
     </header>
 
-    <main class="shell">
-      <section class="hero">
-        <span class="kicker">FAQ</span>
-        <h1 class="title">Frequently Asked Questions</h1>
-        <p class="subtitle">Find quick answers about how Mortalive works, safety, accounts, and more.</p>
-      </section>
+    <div class="faq-container">
+        <div class="faq-header">
+            <h1>Frequently Asked Questions</h1>
+            <p>Everything you need to know about using Mortalive</p>
+        </div>
 
-      <div class="stack">
+        <div class="faq-card">
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    What is Mortalive?
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    Mortalive is a calm, privacy-first social platform designed for meaningful video conversations and genuine connections. We focus on quality interactions rather than endless scrolling.
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    Is Mortalive free to use?
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    Yes, the core experience is completely free. We may introduce optional premium features in the future, but basic matching and conversations will always remain free.
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    How does privacy work on Mortalive?
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    Your identity is protected by default. You control what you share. We do not store video or audio recordings, and camera/microphone access is only granted when you start a call.
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    Do I need to turn on my camera?
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    No. You can choose to keep your camera off. Many users start with audio-only conversations and enable video only when they feel comfortable.
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    How do you keep the community safe?
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    We combine AI moderation with human review. Users can report others instantly, and we take swift action against harassment, scams, or inappropriate behavior.
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    Can I block or report someone?
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    Yes. You can block any user with one tap, and reporting is available during and after every conversation. All reports are reviewed seriously.
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    What age do I need to be to use Mortalive?
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    You must be at least 18 years old to create an account and use the platform.
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    Do you store my conversations?
+                    <span class="faq-toggle">+</span>
+                </div>
+                <div class="faq-answer">
+                    No. We do not record or store video or audio from your calls. Text messages are only stored temporarily for delivery and then deleted.
+                </div>
+            </div>
+
+        </div>
+
+        <p style="text-align:center; margin-top: 50px; color:var(--on-surface-3);">
+            Still have questions? Email us at <a href="mailto:support@mortalive.com" style="color:var(--primary); font-weight:700;">support@mortalive.com</a>
+        </p>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <div>
+                <div class="footer-logo-row">
+                    <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png" alt="Mortalive">
+                    <div class="brand-name" style="color:#fff;">Mortalive</div>
+                </div>
+                <p style="color:rgba(255,255,255,.58);">Calm, authentic social connection.</p>
+            </div>
+            
+            <div>
+                <h4>Product</h4>
+                <div class="footer-links">
+                    <a href="index.html">Home</a>
+                    <a href="about.html">About</a>
+                    <a href="safety.html">Safety</a>
+                </div>
+            </div>
+            
+            <div>
+                <h4>Community</h4>
+                <div class="footer-links">
+                    <a href="reviews.html">Reviews</a>
+                    <a href="faq.html">FAQ</a>
+                </div>
+            </div>
+            
+            <div>
+                <h4>Legal</h4>
+                <div class="footer-links">
+                    <a href="terms.html">Terms</a>
+                    <a href="privacy.html">Privacy</a>
+                </div>
+            </div>
+        </div>
         
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">General Questions</h2>
-          </div>
+        <div class="footer-copy">
+            <span>© 2026 Mortalive. All rights reserved.</span>
+            <span>Built for real connections</span>
         </div>
-        <div class="placeholder tall">
-          <strong>What is Mortalive?</strong><br>
-          Mortalive is a modern anonymous chat platform where you can talk to strangers through text or video. It is designed to be safer, cleaner, and more enjoyable than older random chat sites.<br><br>
-          <strong>Is Mortalive free?</strong><br>
-          Yes, the core experience is completely free. You can chat as a guest without signing up.
-        </div>
-      </section>
+    </footer>
 
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">Accounts & Login</h2>
-          </div>
-        </div>
-        <div class="placeholder tall">
-          <strong>Do I need an account?</strong><br>
-          No. You can start chatting immediately as a guest. Creating an account is optional and allows you to earn a Magnet Score based on positive interactions.<br><br>
-          <strong>How do I sign up?</strong><br>
-          Click on "Log in / Sign up" and choose the signup option. Choose a username and password — no email verification is required at this time.
-        </div>
-      </section>
+    <script>
+        // Simple FAQ accordion functionality
+        document.querySelectorAll('.faq-question').forEach(question => {
+            question.addEventListener('click', () => {
+                const item = question.parentElement;
+                const answer = item.querySelector('.faq-answer');
+                
+                const isActive = item.classList.contains('active');
+                
+                // Close all other items
+                document.querySelectorAll('.faq-item').forEach(el => {
+                    el.classList.remove('active');
+                    el.querySelector('.faq-answer').classList.remove('show');
+                });
+                
+                // Toggle current item
+                if (!isActive) {
+                    item.classList.add('active');
+                    answer.classList.add('show');
+                }
+            });
+        });
+    </script>
 
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">Chat & Matching</h2>
-          </div>
-        </div>
-        <div class="placeholder tall">
-          <strong>How does matching work?</strong><br>
-          The system finds another user who is also looking to chat. You can add interests to get better matches. If no one is available, you can wait or try again later.<br><br>
-          <strong>Can I skip a chat?</strong><br>
-          Yes. You can end the current chat and find a new person at any time by clicking the "Next" button.
-        </div>
-      </section>
-
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">Safety & Privacy</h2>
-          </div>
-        </div>
-        <div class="placeholder tall">
-          <strong>Is Mortalive safe?</strong><br>
-          We take safety seriously. We use snapshot monitoring during video chats, quick report handling, and strict rules against harassment. All chats are anonymous by default.<br><br>
-          <strong>Can someone find my identity?</strong><br>
-          No. We do not require personal information. Guests remain completely anonymous.
-        </div>
-      </section>
-
-      <section class="card section">
-        <div class="section-head">
-          <div>
-            <h2 class="section-title">Technical & Support</h2>
-          </div>
-        </div>
-        <div class="placeholder tall">
-          <strong>Why is my camera not working?</strong><br>
-          Make sure you have granted camera and microphone permissions in your browser. Try refreshing the page or using a different browser.<br><br>
-          <strong>How can I contact support?</strong><br>
-          Use the report button during a chat or email us at support@mortalive.in for any serious issues.
-        </div>
-      </section>
-
-      </div>
-
-      <footer class="footer">
-        <span>Can't find your answer? Feel free to report issues during chat.</span>
-        <span><a class="meta-link" href="index.html">Return to Mortalive</a></span>
-      </footer>
-    </main>
-  </div>
 </body>
 </html>
