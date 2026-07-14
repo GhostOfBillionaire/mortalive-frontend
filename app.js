@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-07-01-3'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-07-14-4'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -670,20 +670,35 @@ function setText(id, value) {
   if (el) el.textContent = value;
 }
 
+/* ── FIX: this used to do `el.className = 'cbd ' + state`, which wiped out
+   the base ".dot" / ".conn-dot" class entirely and replaced it with a
+   class ("cbd ...") that doesn't exist anywhere in the CSS. That meant the
+   connection status dots on the matching page and in the chat topbar never
+   actually changed color — "connecting" / "connected" / "failed" were being
+   set as the *only* class instead of being added alongside the real one.
+   Now each dot keeps its base class and only toggles state on top of it,
+   matching the .dot.connecting/.connected/.failed and
+   .conn-dot.connecting/.connected/.failed rules in the stylesheet. */
 function setCallStatus(state, label) {
-  ['conn-dot', 'call-dot'].forEach((id) => {
-    const el = $(id);
-    if (el) el.className = `cbd ${state}`;
-  });
+  const connDot = $('conn-dot');
+  if (connDot) connDot.className = `dot ${state}`;
+  const callDot = $('call-dot');
+  if (callDot) callDot.className = `conn-dot ${state}`;
   ['conn-text', 'call-text'].forEach((id) => {
     const el = $(id);
     if (el) el.textContent = label;
   });
 }
 
+/* ── FIX: previously only updated #online-n (lobby) and #match-count
+   (matching page), so the "2,847 online now" pill on the landing page
+   hero (#online-n-hero) just sat frozen forever instead of ticking up/down
+   with the rest of the site. Now every matching id gets updated together. */
 function updateOnlineCount() {
-  const el = $('online-n') || $('online-count') || $('online-users');
-  if (el) el.textContent = S.onlineCount.toLocaleString();
+  ['online-n', 'online-n-hero', 'online-count', 'online-users'].forEach((id) => {
+    const el = $(id);
+    if (el) el.textContent = S.onlineCount.toLocaleString();
+  });
   const mc = $('match-count');
   if (mc) mc.textContent = S.onlineCount.toLocaleString();
 }
@@ -902,12 +917,16 @@ function requestCameraPermission() {
 
       if (S.pendingAction === 'match') {
         S.pendingAction = null;
-        // Permission just succeeded because the user wanted video mode —
-        // NOW it's safe to commit S.mode to 'video' and sync the visible
-        // toggle button, right before actually queuing for a match.
+        // Permission just succeeded because the user clicked "Find" while
+        // in video mode without a camera yet — NOW it's safe to commit
+        // S.mode to 'video' and sync the visible toggle button, right
+        // before actually queuing for a match.
         setActiveMode('video');
         setTimeout(startMatching, 350);
       } else if (S.pendingAction === 'lobby-video') {
+        // Permission succeeded because the user just clicked the "Video
+        // Chat" mode tab in the lobby (not "Find") — switch the mode and
+        // stay right here in the lobby. Do NOT auto-start a match.
         S.pendingAction = null;
         setActiveMode('video');
       }
@@ -1186,7 +1205,14 @@ function initLobbyControls() {
       const newMode = btn.dataset.mode || 'text';
 
       if (newMode === 'video' && !S.camGranted) {
-        S.pendingAction = 'match';
+        // FIX: this used to set S.pendingAction = 'match', which is the
+        // code path meant for clicking "Find" — after granting permission
+        // it would immediately call startMatching() and yank the user
+        // straight into a search, even though all they did was tap the
+        // "Video Chat" mode tab. Using 'lobby-video' here means the
+        // permission handler just switches the mode and leaves them in
+        // the lobby, matching what they actually asked for.
+        S.pendingAction = 'lobby-video';
         showPage('pg-perm');
         toast('Grant camera access to use video mode', '📹');
         return;
