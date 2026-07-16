@@ -6,8 +6,8 @@ const BUILD_TAG = 'mortalive-build-2026-07-14-4'; // bump this string on every d
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
   (location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://mortalive-server-production.up.railway.app');
+    ? 'http://localhost:3000'
+    : 'https://mortalive-backend.containers.snapdeploy.app');
 
 console.log(`[Mortalive] ${BUILD_TAG} loaded`);
 console.log(`[Mortalive] SERVER_URL = ${SERVER_URL}`);
