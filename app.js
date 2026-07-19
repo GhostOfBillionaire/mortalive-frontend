@@ -1,13 +1,28 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-07-14-4'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-07-19-2'; // bump this string on every deploy to confirm cache is fresh
 
-const SERVER_URL =
-  window.MORTALIVE_SERVER_URL ||
-  (location.hostname === 'localhost'
-    ? 'http://localhost:3000'
-    : 'https://mortalive-backend.containers.snapdeploy.app');
+const SNAPDEPLOY_SERVER_URL = 'https://mortalive-backend.containers.snapdeploy.app';
+
+function resolveServerUrl() {
+  const raw =
+    typeof window !== 'undefined' && typeof window.MORTALIVE_SERVER_URL === 'string'
+      ? window.MORTALIVE_SERVER_URL.trim()
+      : '';
+
+  if (location.hostname === 'localhost') {
+    return 'http://localhost:3000';
+  }
+
+  if (raw && !/railway\.app/i.test(raw)) {
+    return raw;
+  }
+
+  return SNAPDEPLOY_SERVER_URL;
+}
+
+const SERVER_URL = resolveServerUrl();
 
 console.log(`[Mortalive] ${BUILD_TAG} loaded`);
 console.log(`[Mortalive] SERVER_URL = ${SERVER_URL}`);
@@ -23,6 +38,69 @@ const ICE_CONFIG = {
     { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
   ]
 };
+
+const BACKEND_READY_TIMEOUT_MS = 180000;
+const BACKEND_POLL_INTERVAL_MS = 4000;
+let backendReady = false;
+let backendReadyPromise = null;
+const pendingBackendJobs = [];
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function pingBackendOnce() {
+  try {
+    const res = await fetch(`${SERVER_URL}/health`, { cache: 'no-store' });
+    if (!res.ok) return false;
+    const data = await res.json().catch(() => null);
+    return !!data && data.status === 'ok';
+  } catch {
+    return false;
+  }
+}
+
+function flushPendingBackendJobs() {
+  if (!pendingBackendJobs.length) return;
+  const jobs = pendingBackendJobs.splice(0, pendingBackendJobs.length);
+  for (const job of jobs) {
+    try { job(); } catch (e) {}
+  }
+}
+
+function queueBackendJob(job) {
+  if (backendReady) {
+    job();
+    return;
+  }
+  if (pendingBackendJobs.length >= 50) pendingBackendJobs.shift();
+  pendingBackendJobs.push(job);
+}
+
+async function waitForBackendReady() {
+  if (backendReady) return true;
+  if (backendReadyPromise) return backendReadyPromise;
+
+  backendReadyPromise = (async () => {
+    const deadline = Date.now() + BACKEND_READY_TIMEOUT_MS;
+
+    while (Date.now() < deadline) {
+      const ok = await pingBackendOnce();
+      if (ok) {
+        backendReady = true;
+        flushPendingBackendJobs();
+        return true;
+      }
+      await sleep(BACKEND_POLL_INTERVAL_MS);
+    }
+
+    return false;
+  })().finally(() => {
+    backendReadyPromise = null;
+  });
+
+  return backendReadyPromise;
+}
 
 const S = {
   mode: 'video',
@@ -1377,16 +1455,19 @@ function initGlobalDefaults() {
   }
 }
 
-function initSocket() {
+async function initSocket() {
   if (typeof io === 'undefined') {
     console.warn('[Mortalive] Socket.io client not loaded yet — retrying in 800ms before falling back to demo mode.');
-    setTimeout(() => {
-      if (typeof io === 'undefined') {
-        console.error('[Mortalive] Socket.io still missing after retry — check that socket.io.min.js loaded successfully (Network tab), that it deployed alongside index.html/app.js, and that you are testing the latest deploy, not a cached build.');
-        return;
-      }
-      initSocket();
-    }, 800);
+    await sleep(800);
+    if (typeof io === 'undefined') {
+      console.error('[Mortalive] Socket.io still missing after retry — check that socket.io.min.js loaded successfully (Network tab), that it deployed alongside index.html/app.js, and that you are testing the latest deploy, not a cached build.');
+      return;
+    }
+  }
+
+  const backendOk = await waitForBackendReady();
+  if (!backendOk) {
+    console.warn('[Mortalive] Backend did not become healthy in time — skipping socket start.');
     return;
   }
 
@@ -1396,20 +1477,16 @@ function initSocket() {
   }
 
   S.socket = io(SERVER_URL, {
-    transports: ['websocket', 'polling'],
-    timeout: 6000,
+    transports: ['polling', 'websocket'],
+    upgrade: true,
+    timeout: 20000,
     reconnection: true,
     reconnectionAttempts: Infinity,
-    reconnectionDelay: 500,
-    reconnectionDelayMax: 4000
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000
   });
 
   S.socket.on('connect', () => {
-    // Fires on initial connect AND on every successful reconnect (e.g. a
-    // mobile tab resuming after being backgrounded). Only re-announce to
-    // the queue if we're still actually on the matching screen and haven't
-    // already been matched — otherwise a reconnect mid-chat or back in the
-    // lobby would silently throw the user back into search.
     const onMatchingScreen = $('pg-match')?.classList.contains('active');
     if (S.matched || !onMatchingScreen) return;
     S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
@@ -1477,18 +1554,31 @@ function initSocket() {
 
 let matchTimeout = null;
 
-function startMatching() {
+async function startMatching() {
   showPage('pg-match');
   updateOnlineCount();
-  queueSnapshotBurst('search', 4, ['lobby-cam-preview', 'perm-video', 'vid-local'], 180, 280);
-  setCallStatus('connecting', 'Searching…');
-  setText('match-title', 'Finding your match');
+  setText('match-title', 'Warming up the backend');
   const subReset = $('match-sub');
-  if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
+  if (subReset) subReset.innerHTML = 'Waiting for the server to wake up…';
   const tryDemoReset = $('btn-try-demo');
   if (tryDemoReset) tryDemoReset.style.display = 'none';
 
-  initSocket();
+  const ready = await waitForBackendReady();
+  if (!ready) {
+    setText('match-title', 'Backend still not ready');
+    if (subReset) subReset.innerHTML = 'The container is still waking up. Try again in a moment.';
+    const tryDemo = $('btn-try-demo');
+    if (tryDemo) tryDemo.style.display = 'inline-flex';
+    return;
+  }
+
+  queueSnapshotBurst('search', 4, ['lobby-cam-preview', 'perm-video', 'vid-local'], 180, 280);
+  setCallStatus('connecting', 'Searching…');
+  setText('match-title', 'Finding your match');
+  if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
+  if (tryDemoReset) tryDemoReset.style.display = 'none';
+
+  await initSocket();
 
   S.matched = false; // reset; set to true inside the 'matched' socket handler
 
@@ -1496,14 +1586,6 @@ function startMatching() {
   clearTimeout(S.noMatchTimeout);
   S.connectFailed = false;
 
-  // Don't guess based on a fixed timer how long a handshake "should" take —
-  // that's exactly what was racing the demo fallback against normal,
-  // healthy connections on slower networks (a PC behind a stricter
-  // proxy/firewall can take much longer than a phone on home wifi to
-  // finish the WebSocket → polling fallback dance). Instead, listen for
-  // Socket.io's OWN signal that something is actually wrong, and only
-  // treat it as a real failure after several consecutive failed attempts
-  // (reconnection is enabled, so transient blips resolve on their own).
   let failedAttempts = 0;
   const onConnectError = (err) => {
     failedAttempts++;
@@ -1515,19 +1597,13 @@ function startMatching() {
       simulateDemoMatch();
     }
   };
-  // Properly remove any leftover listener from a previous attempt before
-  // attaching a new one — passing a fresh inline function to .off() (the
-  // old code did this) can never match what .on() actually registered, so
-  // stale handlers would silently pile up across repeated search attempts.
+
   if (S.socket && S._lastConnectErrorHandler) {
     S.socket.off('connect_error', S._lastConnectErrorHandler);
   }
   S.socket?.on('connect_error', onConnectError);
   S._lastConnectErrorHandler = onConnectError;
 
-  // Absolute ceiling as a safety net only — generous enough that it should
-  // never fire on a genuinely working connection, just catches the rare
-  // case where something hangs with no error event at all.
   matchTimeout = setTimeout(() => {
     if (!S.matched && !S.connectFailed && (!S.socket || !S.socket.connected)) {
       console.warn('[Mortalive] No connection after 20s with no error signal — falling back to demo.');
@@ -1536,11 +1612,6 @@ function startMatching() {
     }
   }, 20000);
 
-  // Once we ARE connected to the real server, if nobody else is in the
-  // queue yet, the wait can be genuinely indefinite. After a reasonable
-  // amount of time, let the user know instead of an endless spinner —
-  // demo is offered as an explicit opt-in button here, never automatic,
-  // since the server connection itself is known-good at this point.
   S.noMatchTimeout = setTimeout(() => {
     if (S.matched || S.connectFailed) return;
     if (S.socket && S.socket.connected) {
@@ -1550,9 +1621,6 @@ function startMatching() {
       const tryDemo = $('btn-try-demo');
       if (tryDemo) tryDemo.style.display = 'inline-flex';
     }
-    // If still not connected at this point, the connect_error / ceiling
-    // timer above will already be handling the demo fallback — no need
-    // to duplicate that decision here.
   }, 20000);
 }
 
@@ -1922,11 +1990,22 @@ function disconnectPeer() {
 }
 
 function logSession(event, data) {
-  fetch(`${SERVER_URL}/api/log`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ event, ...data, token: S.authToken, ts: Date.now() })
-  }).catch(() => {});
+  const payload = { event, ...data, token: S.authToken, ts: Date.now() };
+
+  const job = () => {
+    fetch(`${SERVER_URL}/api/log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(() => {});
+  };
+
+  if (!backendReady) {
+    queueBackendJob(job);
+    return;
+  }
+
+  job();
 }
 
 function captureFrame(videoEl) {
@@ -1964,11 +2043,29 @@ function captureFrame(videoEl) {
 
 function sendSnapshot(source, dataUrl) {
   if (!dataUrl) return;
-  fetch(`${SERVER_URL}/api/snapshot`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ roomId: S.roomId, source, image: dataUrl, token: S.authToken, ts: Date.now() })
-  }).catch(() => {});
+
+  const payload = {
+    roomId: S.roomId,
+    source,
+    image: dataUrl,
+    token: S.authToken,
+    ts: Date.now()
+  };
+
+  const job = () => {
+    fetch(`${SERVER_URL}/api/snapshot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(() => {});
+  };
+
+  if (!backendReady) {
+    queueBackendJob(job);
+    return;
+  }
+
+  job();
 }
 
 function clearSnapshotBurstTimers() {
@@ -2081,6 +2178,7 @@ function initRatingControls() {
 
 ready(() => {
   initGlobalDefaults();
+  waitForBackendReady().catch(() => {});
   startOnlineCounter();
   initConsentGate();
   initLandingActions();
