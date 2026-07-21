@@ -1,9 +1,9 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-07-19-2'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-07-20-render'; // bump this string on every deploy to confirm cache is fresh
 
-const SNAPDEPLOY_SERVER_URL = 'https://mortalive-backend.containers.snapdeploy.app';
+const RENDER_SERVER_URL = 'https://mortalive-server.onrender.com';
 
 function resolveServerUrl() {
   const raw =
@@ -19,7 +19,7 @@ function resolveServerUrl() {
     return raw;
   }
 
-  return SNAPDEPLOY_SERVER_URL;
+  return RENDER_SERVER_URL;
 }
 
 const SERVER_URL = resolveServerUrl();
