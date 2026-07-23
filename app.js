@@ -16,9 +16,13 @@ console.log(`[Mortalive] Socket.io client ${typeof io === 'undefined' ? 'NOT LOA
 // ════════════════════════════════════════════════════════════════
 // SUPABASE INITIALIZATION
 // ════════════════════════════════════════════════════════════════
-// IMPORTANT: Replace these with your Supabase project credentials
-const SUPABASE_URL = 'https://your-project.supabase.co';
-const SUPABASE_ANON_KEY = 'your-anon-key-here';
+// IMPORTANT: Replace these with your Supabase project credentials.
+// You can also inject them from the page with:
+//   window.MORTALIVE_SUPABASE_URL = 'https://xxxxx.supabase.co'
+//   window.MORTALIVE_SUPABASE_ANON_KEY = 'eyJ...'
+const SUPABASE_URL = window.MORTALIVE_SUPABASE_URL || window.SUPABASE_URL || 'https://your-project.supabase.co';
+const SUPABASE_ANON_KEY = window.MORTALIVE_SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || 'your-anon-key-here';
+const SUPABASE_CONFIGURED = !/your-project\.supabase\.co|your-anon-key-here/i.test(`${SUPABASE_URL} ${SUPABASE_ANON_KEY}`);
 
 let supabase = null;
 let supabaseInitPromise = null;
@@ -29,6 +33,11 @@ async function initSupabase() {
 
   supabaseInitPromise = (async () => {
     try {
+      if (!SUPABASE_CONFIGURED) {
+        console.warn('[Supabase] URL / anon key are still placeholders.');
+        toast('Supabase is not configured yet. Guest mode is available.', '⚠️');
+        return null;
+      }
       const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/+esm');
       supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       console.log('[Supabase] Client initialized ✓');
@@ -48,6 +57,7 @@ async function signUpWithEmail(email, password, username) {
   if (!client) return { error: new Error('Service unavailable') };
 
   try {
+    if (!SUPABASE_CONFIGURED) return { error: new Error('Supabase credentials are not configured yet.') };
     const { data, error } = await client.auth.signUp({
       email,
       password,
@@ -83,6 +93,7 @@ async function signInWithEmail(email, password) {
   if (!client) return { error: new Error('Service unavailable') };
 
   try {
+    if (!SUPABASE_CONFIGURED) return { error: new Error('Supabase credentials are not configured yet.') };
     const { data, error } = await client.auth.signInWithPassword({ email, password });
     if (error) throw error;
 
@@ -810,6 +821,11 @@ function showPage(id) {
   window.scrollTo(0, 0);
 }
 
+function scrollToAuthCard() {
+  const anchor = $('auth-anchor');
+  if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function toast(msg, icon = '✅') {
   let root = $('toast-root');
   if (!root) {
@@ -1326,7 +1342,8 @@ function initLandingActions() {
     if (loggedIn) {
       enterLobby();
     } else {
-      showPage('pg-auth');
+      showPage('pg-land');
+      scrollToAuthCard();
     }
   }
 
@@ -1363,7 +1380,10 @@ function initPermissionControls() {
 }
 
 function initLobbyControls() {
-  $('btn-switch-account')?.addEventListener('click', () => showPage('pg-auth'));
+  $('btn-switch-account')?.addEventListener('click', () => {
+    showPage('pg-land');
+    scrollToAuthCard();
+  });
   $('score-pill-btn')?.addEventListener('click', openProgressSheet);
 
   $('btn-logout')?.addEventListener('click', async () => {
@@ -1385,7 +1405,8 @@ function initLobbyControls() {
     toast('Logged out', '👋');
     updateIdentityDisplay();
     updateProgressText();
-    showPage('pg-auth');
+    showPage('pg-land');
+    scrollToAuthCard();
   });
 
   const modeToggle = $('mode-toggle');
@@ -2302,7 +2323,7 @@ ready(() => {
   if ($('pg-land')) showPage('pg-land');
 
   // Validate any stored session token in the background. If a returning
-  // user's account is reached on pg-auth, this lets us skip straight to
+  // user's account is reached on the landing auth card, this lets us skip straight to
   // the lobby instead of making them log in again every visit.
   tryAutoLogin();
 
