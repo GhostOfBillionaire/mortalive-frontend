@@ -1,2527 +1,1269 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Mortalive — Connect with the world</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Playfair+Display:ital,wght@1,600;1,700;1,800&display=swap" rel="stylesheet">
+/**
+ * MORTALIVE — Signaling + Live Broadcast Server
+ * Node.js + Express + Socket.io
+ *
+ * Handles:
+ *  - WebRTC 1:1 signaling (offer/answer/ICE)
+ *  - Matchmaking queues (text, video, live-seeker)
+ *  - Live broadcast relay (broadcaster → many viewers via SFU-lite fan-out)
+ *  - Chat relay (1:1 and live stream chat)
+ *  - Session + message logging to Supabase (legal compliance)
+ *  - Profile/recording metadata API
+ *  - Live stream index API
+ */
+
+const express  = require('express');
+const http     = require('http');
+const path     = require('path');
+const { Server } = require('socket.io');
+const cors     = require('cors');
+const { createClient } = require('@supabase/supabase-js');
+const crypto   = require('crypto');
+const bcrypt   = require('bcryptjs');
+require('dotenv').config();
+
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED REJECTION:', reason);
+});
+
+// ── CONFIG ────────────────────────────────────────────────
+const PORT              = process.env.PORT || 3000;
+const SUPABASE_URL      = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const ADMIN_KEY          = process.env.ADMIN_KEY || '';
+
+// Normalize FRONTEND_URL: a bare domain like "mortalive.vercel.app" (missing
+// the https:// scheme) is an INVALID Access-Control-Allow-Origin value and
+// browsers will reject it outright. Auto-fix that common mistake here so a
+// misconfigured env var doesn't silently break every cross-origin request.
+function normalizeOrigin(raw) {
+  if (!raw || raw === '*') return raw || '*';
+  const trimmed = raw.trim().replace(/\/+$/, ''); // drop trailing slash(es)
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  console.warn(`[CORS] FRONTEND_URL "${raw}" is missing a scheme — assuming https://`);
+  return `https://${trimmed}`;
+}
+const FRONTEND_URL = normalizeOrigin(process.env.FRONTEND_URL);
+
+const allowedOrigins = Array.from(new Set([
+  FRONTEND_URL,
+  normalizeOrigin('https://www.mortalive.com'),
+  normalizeOrigin('https://mortalive.com'),
+  normalizeOrigin('https://mortalive.vercel.app')
+].filter(Boolean)));
+
+console.log(`[CORS] Allowing origins: ${allowedOrigins.join(', ')}`);
+
+const SNAPSHOT_SOURCE_MAP = new Set([
+  'local',
+  'remote',
+  'search',
+  'permission',
+  'live',
+  'manual',
+  'unknown',
+  'other'
+]);
+
+function normalizeSnapshotSource(source) {
+  const raw = String(source || '').trim().toLowerCase();
+  if (!raw) return 'unknown';
+  if (SNAPSHOT_SOURCE_MAP.has(raw)) return raw;
+  if (/^search-\d+$/.test(raw)) return 'search';
+  if (/^permission-\d+$/.test(raw)) return 'permission';
+  if (/^live-\d+$/.test(raw)) return 'live';
+  return 'other';
+}
+
+function normalizeRoomId(roomId) {
+  const raw = String(roomId || '').trim();
+  return raw || 'unassigned';
+}
+
+const SNAPSHOT_PAGE_DEFAULT_LIMIT = 12;
+const SNAPSHOT_PAGE_MAX_LIMIT = 48;
+const SNAPSHOT_MIN_GAP_MS = 8000;
+const snapshotThrottle = new Map();
+
+function normalizePositiveInt(value, fallback, min, max) {
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function snapshotThrottleKey(roomId, source) {
+  return `${normalizeRoomId(roomId)}:${normalizeSnapshotSource(source)}`;
+}
+
+function shouldAcceptSnapshot(roomId, source) {
+  const key = snapshotThrottleKey(roomId, source);
+  const now = Date.now();
+  const last = snapshotThrottle.get(key) || 0;
+  if (now - last < SNAPSHOT_MIN_GAP_MS) return false;
+  snapshotThrottle.set(key, now);
+  return true;
+}
+
+function buildSnapshotStoragePath(roomId, source, capturedAt = new Date()) {
+  const ts = capturedAt instanceof Date ? capturedAt : new Date(capturedAt);
+  const safeStamp = ts.toISOString().replace(/[:.]/g, '-');
+  const random = crypto.randomBytes(4).toString('hex');
+  return `snapshots/${normalizeRoomId(roomId)}/${normalizeSnapshotSource(source)}/${safeStamp}-${random}.jpg`;
+}
+
+async function insertSnapshotRow(candidateRows) {
+  if (!db) return { data: null, error: new Error('no db') };
+  let lastResult = { data: null, error: null };
+
+  for (const row of candidateRows) {
+    lastResult = await db.from('snapshots').insert([row]).select();
+    if (!lastResult.error) return lastResult;
+  }
+
+  return lastResult;
+}
+
+function sanitizeFilenamePart(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 64) || 'snapshot';
+}
+
+// ── SUPABASE ──────────────────────────────────────────────
+let db = null;
+if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
+  db = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+  console.log('[DB] Supabase connected');
+} else {
+  console.warn('[DB] No Supabase credentials — logging disabled');
+}
+
+async function dbLog(table, data) {
+  if (!db) return;
+  try {
+    const { error } = await db.from(table).insert(data);
+    if (error) console.error('[DB error]', table, error.message);
+  } catch (e) { console.error('[DB exception]', e.message); }
+}
+
+async function dbUpdate(table, match, data) {
+  if (!db) return;
+  try {
+    const { error } = await db.from(table).update(data).match(match);
+    if (error) console.error('[DB update error]', table, error.message);
+  } catch (e) { console.error('[DB update exception]', e.message); }
+}
+
+async function dbSelectOne(table, match) {
+  if (!db) return null;
+  try {
+    const { data, error } = await db.from(table).select('*').match(match).maybeSingle();
+    if (error) { console.error('[DB select error]', table, error.message); return null; }
+    return data;
+  } catch (e) { console.error('[DB select exception]', e.message); return null; }
+}
+
+// ── SESSION TOKENS ────────────────────────────────────────
+// Lightweight, no-email-verification auth: a random opaque token maps to
+// an account id, kept in memory. Good enough for this stage — if the
+// server restarts everyone is simply logged out and has to log back in
+// (their account + score are untouched, only the live session resets).
+const sessionTokens = new Map(); // token → { accountId, username, createdAt }
+
+function issueSessionToken(accountId, username) {
+  const token = crypto.randomBytes(24).toString('hex');
+  sessionTokens.set(token, { accountId, username, createdAt: Date.now() });
+  return token;
+}
+
+function getSessionFromToken(token) {
+  if (!token) return null;
+  return sessionTokens.get(token) || null;
+}
+
+const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
+function isValidUsername(u) { return typeof u === 'string' && USERNAME_RE.test(u); }
+function isValidPassword(p) { return typeof p === 'string' && p.length >= 6 && p.length <= 200; }
+
+// ── EXPRESS ───────────────────────────────────────────────
+const app    = express();
+const server = http.createServer(app);
+
+app.set('trust proxy', 1);
+
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    console.warn('[CORS] Blocked origin:', origin);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Key', 'x-admin-key']
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+app.use(express.json({ limit: '5mb' })); // recordings metadata can be larger
+app.use(express.static(path.join(__dirname, '../frontend')));
+
+// ── HEALTH ────────────────────────────────────────────────
+app.get('/health', (req, res) => res.json({ status: 'ok', ts: Date.now() }));
+app.get('/', (req, res) => res.status(200).send('Mortalive backend running'));
+
+// Quick visibility into current queue state — helps diagnose "why didn't
+// my two devices match" without digging through server logs. Shows counts
+// only, never any personally identifying info.
+app.get('/api/debug/queues', (req, res) => {
+  res.json({
+    text:        queues.text.length,
+    video:       queues.video.length,
+    live_seeker: queues.live_seeker.length,
+    activeRooms: Object.keys(rooms).length,
+    liveStreams: Object.keys(liveStreams).length
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// AUTH — username + password accounts (guests skip all of this)
+// ══════════════════════════════════════════════════════════
+
+app.post('/api/signup', async (req, res) => {
+  const { username, password, email } = req.body || {};
+
+  if (!isValidUsername(username)) {
+    return res.status(400).json({ error: 'Username must be 3-20 characters: letters, numbers, underscore only.' });
+  }
+  if (!isValidPassword(password)) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  }
+  if (!db) return res.status(503).json({ error: 'Database not configured on the server.' });
+
+  const existing = await dbSelectOne('accounts', { username });
+  if (existing) return res.status(409).json({ error: 'That username is already taken.' });
+
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  try {
+    const { data, error } = await db
+      .from('accounts')
+      .insert({ username, password_hash: passwordHash, email: email || null, magnet_score: 100 })
+      .select()
+      .single();
+    if (error) throw error;
+
+    const token = issueSessionToken(data.id, data.username);
+    res.json({ ok: true, token, username: data.username, magnetScore: data.magnet_score });
+  } catch (e) {
+    console.error('[signup error]', e.message);
+    res.status(500).json({ error: 'Could not create account.' });
+  }
+});
+
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
+  if (!db) return res.status(503).json({ error: 'Database not configured on the server.' });
+
+  const account = await dbSelectOne('accounts', { username });
+  if (!account) return res.status(401).json({ error: 'Incorrect username or password.' });
+
+  const match = await bcrypt.compare(password, account.password_hash);
+  if (!match) return res.status(401).json({ error: 'Incorrect username or password.' });
+
+  await dbUpdate('accounts', { id: account.id }, { last_login_at: new Date().toISOString() });
+
+  const token = issueSessionToken(account.id, account.username);
+  res.json({ ok: true, token, username: account.username, magnetScore: account.magnet_score });
+});
+
+app.get('/api/me', async (req, res) => {
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const session = getSessionFromToken(token);
+  if (!session) return res.status(401).json({ error: 'Not logged in.' });
+
+  const account = await dbSelectOne('accounts', { id: session.accountId });
+  if (!account) return res.status(401).json({ error: 'Account no longer exists.' });
+
+  res.json({ ok: true, username: account.username, magnetScore: account.magnet_score });
+});
+
+app.post('/api/logout', (req, res) => {
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  sessionTokens.delete(token);
+  res.json({ ok: true });
+});
+
+// Stub for now: logs the request and stores it, does not actually send an
+// email. Wire up Resend (or similar) here later — see DEPLOY.md.
+app.post('/api/forgot-password', async (req, res) => {
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ error: 'Email required.' });
+
+  if (db) {
+    const account = await dbSelectOne('accounts', { email });
+    const token = crypto.randomBytes(24).toString('hex');
+    await dbLog('password_reset_requests', {
+      account_id: account ? account.id : null,
+      email,
+      token,
+      requested_at: new Date().toISOString()
+    });
+  }
+
+  // Always return the same generic response whether or not the email
+  // matched an account — avoids leaking which emails have accounts.
+  res.json({ ok: true, message: 'If an account exists for that email, a reset link will be sent soon. (Email sending is not yet wired up.)' });
+});
+
+// ── LIVE STREAMS INDEX ────────────────────────────────────
+// Returns list of currently active live streams
+app.get('/api/lives', (req, res) => {
+  const lives = Object.entries(liveStreams).map(([streamId, s]) => ({
+    streamId,
+    title:       s.title,
+    broadcasterName: s.broadcasterName,
+    viewerCount: s.viewers.size,
+    startedAt:   s.startedAt,
+    category:    s.category || 'general',
+  }));
+  res.json({ lives });
+});
+
+// ── PROFILE API ───────────────────────────────────────────
+// Save recording metadata to DB
+app.post('/api/profile/recording', async (req, res) => {
+  const { userId, title, duration, thumbnail, videoDataUrl, ts } = req.body;
+  if (!userId || !videoDataUrl) return res.status(400).json({ error: 'missing fields' });
+
+  await dbLog('recordings', {
+    user_id:       userId,
+    title:         title || 'Untitled recording',
+    duration_sec:  duration || 0,
+    thumbnail:     thumbnail || null,
+    video_data:    videoDataUrl,  // base64 stored in DB (for small recordings)
+    recorded_at:   new Date(ts || Date.now()).toISOString()
+  });
+  res.json({ ok: true });
+});
+
+// Get recordings for a user
+app.get('/api/profile/:userId/recordings', async (req, res) => {
+  if (!db) return res.json({ recordings: [] });
+  try {
+    const { data, error } = await db
+      .from('recordings')
+      .select('id, title, duration_sec, thumbnail, recorded_at')
+      .eq('user_id', req.params.userId)
+      .order('recorded_at', { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    res.json({ recordings: data || [] });
+  } catch (e) { res.json({ recordings: [] }); }
+});
+
+// Get single recording (full video data — owner only via userId check)
+app.get('/api/profile/:userId/recording/:id', async (req, res) => {
+  if (!db) return res.status(404).json({ error: 'no db' });
+  try {
+    const { data, error } = await db
+      .from('recordings')
+      .select('*')
+      .eq('id', req.params.id)
+      .eq('user_id', req.params.userId)
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'not found' });
+    res.json({ recording: data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── LOG ENDPOINT (called by frontend) ────────────────────
+function requireAdmin(req, res, next) {
+  const key = req.headers['x-admin-key'] || req.query.key;
+  if (!ADMIN_KEY || key !== ADMIN_KEY) {
+    return res.status(401).send('Unauthorized');
+  }
+  next();
+}
+
+app.get('/api/admin/snapshots', requireAdmin, async (req, res) => {
+  if (!db) return res.json({ snapshots: [], limit: SNAPSHOT_PAGE_DEFAULT_LIMIT, offset: 0, hasMore: false });
+  const roomId = String(req.query.roomId || '').trim();
+  const limit = normalizePositiveInt(req.query.limit, SNAPSHOT_PAGE_DEFAULT_LIMIT, 1, SNAPSHOT_PAGE_MAX_LIMIT);
+  const offset = normalizePositiveInt(req.query.offset, 0, 0, 1000000);
+  try {
+    let query = db
+      .from('snapshots')
+      .select('id, room_id, source, captured_at')
+      .order('captured_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (roomId) query = query.eq('room_id', roomId);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const snapshots = Array.isArray(data) ? data : [];
+    res.json({
+      snapshots,
+      limit,
+      offset,
+      hasMore: snapshots.length === limit
+    });
+  } catch (e) {
+    res.json({ snapshots: [], limit, offset, hasMore: false });
+  }
+});
+
+app.get('/api/admin/snapshots/:id/image', requireAdmin, async (req, res) => {
+  const row = await dbSelectOne('snapshots', { id: req.params.id });
+  
+  if (!row || !row.image_base64) {
+    console.log('[Admin Image] Not found or no image_base64 for id:', req.params.id);
+    return res.status(404).send('Image not found');
+  }
+
+  try {
+    // Handle both full data URL and raw base64
+    let base64Data = row.image_base64;
+    if (base64Data.startsWith('data:image')) {
+      base64Data = base64Data.split(',')[1];
+    }
+
+    const buffer = Buffer.from(base64Data, 'base64');
+    res.set('Content-Type', 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=300');
+    res.send(buffer);
+  } catch (err) {
+    console.error('[Admin Image Error]', err.message);
+    res.status(500).send('Failed to process image');
+  }
+});
+
+app.get('/api/admin/snapshots/:id/download', requireAdmin, async (req, res) => {
+  const row = await dbSelectOne('snapshots', { id: req.params.id });
+
+  if (!row || !row.image_base64) {
+    console.log('[Admin Download] Not found or no image_base64 for id:', req.params.id);
+    return res.status(404).send('Image not found');
+  }
+
+  try {
+    let base64Data = row.image_base64;
+    if (base64Data.startsWith('data:image')) {
+      base64Data = base64Data.split(',')[1];
+    }
+
+    const buffer = Buffer.from(base64Data, 'base64');
+    const filename = [
+      'snapshot',
+      sanitizeFilenamePart(row.room_id),
+      sanitizeFilenamePart(row.source),
+      sanitizeFilenamePart(req.params.id)
+    ].join('-') + '.jpg';
+
+    res.set('Content-Type', 'image/jpeg');
+    res.set('Content-Disposition', `attachment; filename="${filename}"`);
+    res.set('Cache-Control', 'no-store');
+    res.send(buffer);
+  } catch (err) {
+    console.error('[Admin Download Error]', err.message);
+    res.status(500).send('Failed to process image');
+  }
+});
+
+app.delete('/api/admin/snapshots/:id', requireAdmin, async (req, res) => {
+  if (!db) return res.status(503).json({ ok: false, error: 'Database not configured' });
+  try {
+    const { error } = await db.from('snapshots').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Admin Delete Error]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/admin/snapshots', requireAdmin, (req, res) => {
+  res.set('Content-Type', 'text/html');
+  res.send(`<!DOCTYPE html>
+<html><head><title>Snapshots</title>
 <style>
-/* =====================================================
-   MORTALIVE — Design system
-   Flutter-inspired Material You aesthetic
-   Clean single-pass CSS, no !important wars
-   ===================================================== */
-
-/* ── Tokens ─────────────────────────────────────────── */
-:root {
-  /* Surface */
-  --surface:       #ffffff;
-  --surface-2:     #f6f7f9;
-  --surface-3:     #eef0f4;
-  --surface-tint:  rgba(24,119,242,.06);
-
-  /* Text */
-  --on-surface:    #0d1117;
-  --on-surface-2:  #3d4451;
-  --on-surface-3:  #6b7280;
-
-  /* Brand */
-  --primary:       #1a6ef5;
-  --primary-dark:  #1459cc;
-  --primary-alpha: rgba(26,110,245,.12);
-  --secondary:     #7c3aed;
-  --secondary-alpha: rgba(124,58,237,.10);
-  --accent:        #06b6d4;   /* teal pop */
-
-  /* Semantic */
-  --danger:        #dc2626;
-  --success:       #16a34a;
-  --warning:       #d97706;
-
-  /* Borders */
-  --border:        rgba(0,0,0,.08);
-  --border-strong: rgba(0,0,0,.14);
-
-  /* Elevation (flutter-like shadows) */
-  --elev-1: 0 1px 3px rgba(0,0,0,.06), 0 4px 10px rgba(0,0,0,.04);
-  --elev-2: 0 2px 8px rgba(0,0,0,.07), 0 8px 24px rgba(0,0,0,.05);
-  --elev-3: 0 4px 16px rgba(0,0,0,.08), 0 16px 48px rgba(0,0,0,.06);
-  --elev-4: 0 8px 28px rgba(0,0,0,.10), 0 24px 64px rgba(0,0,0,.08);
-
-  /* Radius */
-  --r-xs:  8px;
-  --r-sm:  14px;
-  --r-md:  20px;
-  --r-lg:  28px;
-  --r-xl:  36px;
-  --r-full: 999px;
-
-  /* Motion */
-  --ease-out:  cubic-bezier(.16,1,.3,1);
-  --ease-spring: cubic-bezier(.34,1.56,.64,1);
-  --dur-fast: 140ms;
-  --dur-mid:  220ms;
-  --dur-slow: 360ms;
-}
-
-/* ── Reset ──────────────────────────────────────────── */
-*,*::before,*::after { box-sizing:border-box; margin:0; }
-html { scroll-behavior:smooth; -webkit-text-size-adjust:100%; }
-body {
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: var(--surface);
-  color: var(--on-surface);
-  min-height: 100dvh;
-  overflow-x: hidden;
-  -webkit-font-smoothing: antialiased;
-}
-button, input { font: inherit; }
-button { cursor: pointer; border: 0; background: none; }
-a { color: inherit; text-decoration: none; }
-img { display: block; max-width: 100%; }
-
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 99px; }
-::-webkit-scrollbar-track { background: transparent; }
-
-/* ── Page system ────────────────────────────────────── */
-.page { display: none; min-height: 100dvh; width: 100%; flex-direction: column; }
-.page.active { display: flex; }
-
-#pg-land.active  { flex-direction: column; align-items: stretch; }
-#pg-auth.active,
-#pg-perm.active,
-#pg-lobby.active,
-#pg-match.active  { align-items: center; justify-content: center; padding: 24px 0; }
-#pg-chat.active   { flex-direction: column; height: 100dvh; overflow: hidden; padding: 10px; gap: 10px; }
-
-/* ── Background: hero image pinned top-left, natural size ─ */
-#pg-land {
-  position: relative;
-}
-#pg-land::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  /* Anchor to the WRAP's actual left edge, not the raw viewport edge.
-     .wrap is `min(1280px, calc(100% - 28px))` wide and centered, so its
-     left edge sits at max(14px, (100vw - 1280px) / 2). Matching that here
-     means the background always lines up with the content column and
-     stays inside the max-width container as the window is resized —
-     instead of drifting away from centered content on ultra-wide screens. */
-  left: 0;
-  width: 100%;
-  height: min(100vh, 900px);
-  background:
-    url('https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortallive_background_manssu.png')
-    center top / cover no-repeat;
-  /* Mild fade ONLY at the bottom, bleeding into the white page
-     background. No right-edge fade — the image stays full-strength
-     across its whole width and only softens near the bottom. */
-  -webkit-mask-image: linear-gradient(to bottom, black 78%, transparent 100%);
-  mask-image:         linear-gradient(to bottom, black 78%, transparent 100%);
-  pointer-events: none;
-  z-index: 0;
-}
-@media (max-width: 900px) {
-  #pg-land::before {
-    left: 0;
-    width: 100%;
-    background-position: center top;
-    background-size: cover;
-    opacity: .18;
-    -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-    mask-image:         linear-gradient(to bottom, black 60%, transparent 100%);
-  }
-}
-
-/* ── Wrap ───────────────────────────────────────────── */
-.wrap {
-  position: relative;
-  z-index: 1;
-  width: min(1280px, calc(100% - 28px));
-  margin-inline: auto;
-  padding: 20px 0;
-}
-
-/* ── Topbar ─────────────────────────────────────────── */
-.sakura-topbar {
-  position: sticky;
-  top: 16px;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  background: rgba(255,255,255,.86);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 1.5px solid rgba(0,0,0,.10);
-  border-radius: var(--r-xl);
-  box-shadow: var(--elev-2), inset 0 1px 0 rgba(255,255,255,.9);
-  margin-bottom: 0;
-}
-.sakura-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 0 0 auto;
-  text-decoration: none;
-}
-.topbar-logo {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  object-fit: contain;
-}
-.brand-name {
-  font-size: 17px;
-  font-weight: 800;
-  color: var(--on-surface);
-  letter-spacing: -.03em;
-}
-.brand-sub {
-  font-size: 10px;
-  color: var(--on-surface-3);
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  font-weight: 600;
-}
-/* Nav centred on desktop */
-.sakura-nav {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-inline: auto;
-}
-.sakura-nav a {
-  padding: 7px 14px;
-  border-radius: var(--r-full);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--on-surface-2);
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast);
-}
-.sakura-nav a:hover {
-  background: var(--surface-2);
-  color: var(--on-surface);
-}
-
-/* ── Shared card ────────────────────────────────────── */
-.card {
-  background: rgba(255,255,255,.88);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--elev-3);
-}
-
-/* ── Buttons (Flutter-style filled/tonal/outlined) ─── */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 13px 22px;
-  border-radius: var(--r-sm);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: .01em;
-  cursor: pointer;
-  border: 0;
-  transition:
-    transform var(--dur-fast) var(--ease-spring),
-    box-shadow var(--dur-fast) var(--ease-out),
-    background var(--dur-fast),
-    opacity var(--dur-fast);
-}
-.btn:hover   { transform: translateY(-1px); }
-.btn:active  { transform: translateY(0) scale(.98); }
-.btn:disabled { opacity: .42; cursor: not-allowed; transform: none; }
-
-/* Filled primary */
-.btn-primary {
-  background: linear-gradient(145deg, var(--primary) 0%, var(--secondary) 100%);
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(26,110,245,.28), 0 2px 6px rgba(26,110,245,.16);
-}
-.btn-primary:hover {
-  box-shadow: 0 6px 20px rgba(26,110,245,.36), 0 3px 8px rgba(26,110,245,.20);
-}
-
-/* Tonal (Flutter surface variant) */
-.btn-tonal {
-  background: var(--primary-alpha);
-  color: var(--primary);
-  border: 1px solid rgba(26,110,245,.14);
-}
-.btn-tonal:hover { background: rgba(26,110,245,.16); }
-
-/* Ghost / outlined */
-.btn-ghost {
-  background: #fff;
-  color: var(--on-surface);
-  border: 1.5px solid var(--border-strong);
-}
-.btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
-
-.btn-wide { width: 100%; }
-
-/* ── Flutter-style pill chip ────────────────────────── */
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 13px;
-  border-radius: var(--r-full);
-  font-size: 12px;
-  font-weight: 600;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--on-surface-2);
-}
-.chip.on {
-  background: var(--primary-alpha);
-  border-color: rgba(26,110,245,.22);
-  color: var(--primary);
-}
-
-/* ── Landing shell ──────────────────────────────────── */
-.landing-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 34px;
-  padding-bottom: 0;
-}
-
-/* Hero ─────────────────────────────────────────────── */
-.landing-hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 22px 0 10px;
-  gap: 12px;
-}
-
-.hero-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: var(--r-full);
-  background: var(--primary-alpha);
-  border: 1px solid rgba(26,110,245,.18);
-  color: var(--primary);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-
-.landing-title {
-  font-size: clamp(32px, 5.1vw, 66px);
-  font-weight: 900;
-  line-height: 1.02;
-  letter-spacing: -.07em;
-  color: var(--on-surface);
-  max-width: 15ch;
-  text-wrap: balance;
-}
-.landing-title em {
-  font-style: italic;
-  font-weight: 800;
-  font-family: 'Playfair Display', 'Georgia', serif;
-  letter-spacing: -.02em;
-  background: linear-gradient(130deg, var(--secondary) 0%, var(--accent) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.hero-sub {
-  font-size: 15px;
-  color: var(--on-surface-3);
-  line-height: 1.65;
-  max-width: 48ch;
-}
-
-.landing-cta {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  width: min(100%, 400px);
-}
-
-/* Continue button — contained, large */
-.landing-continue {
-  min-height: 52px;
-  font-size: 15px;
-  border-radius: var(--r-md);
-  width: 100%;
-}
-
-/* Consent toggle row */
-.consent-toggle {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  cursor: pointer;
-  width: 100%;
-  text-align: left;
-}
-.consent-toggle input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-  width: 1px;
-  height: 1px;
-}
-.consent-box {
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  border: 2px solid var(--border-strong);
-  background: #fff;
-  flex: none;
-  display: grid;
-  place-items: center;
-  margin-top: 1px;
-  transition: all var(--dur-fast) var(--ease-out);
-}
-.consent-toggle input:checked + .consent-box {
-  background: linear-gradient(145deg, var(--primary), var(--secondary));
-  border-color: transparent;
-}
-.consent-toggle input:checked + .consent-box::after {
-  content: '✓';
-  color: #fff;
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1;
-}
-.consent-text {
-  font-size: 12.5px;
-  color: var(--on-surface-3);
-  line-height: 1.7;
-  flex: 1;
-}
-.consent-text a {
-  color: var(--primary);
-  font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-/* Stats row */
-.hero-stats {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 14px;
-  border-radius: var(--r-full);
-  background: rgba(255,255,255,.72);
-  border: 1px solid var(--border);
-  box-shadow: var(--elev-1);
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--on-surface-2);
-  backdrop-filter: blur(10px);
-}
-.stat-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--success);
-  box-shadow: 0 0 0 3px rgba(22,163,74,.15);
-}
-
-/* ── Hero image card ────────────────────────────────── */
-.hero-image-band {}
-.hero-image-shell {
-  position: relative;
-  border-radius: var(--r-xl);
-  overflow: hidden;
-  border: 1px solid var(--border);
-  box-shadow: var(--elev-4);
-  background: var(--surface-3);
-  min-height: 380px;
-  /* 5px padding around image */
-  padding: 5px;
-}
-.hero-image-shell img,
-.hero-image-bg {
-  width: 100%;
-  height: 100%;
-  min-height: 370px;
-  object-fit: cover;
-  border-radius: calc(var(--r-xl) - 5px);
-  display: block;
-  background: linear-gradient(180deg, #e8eef8, #d4dff0);
-}
-/* Glass overlay strip at bottom of hero image */
-.hero-image-overlay {
-  position: absolute;
-  bottom: 20px;
-  left: 20px;
-  right: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  pointer-events: none;
-}
-.hero-img-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 16px;
-  border-radius: var(--r-full);
-  background: rgba(255,255,255,.72);
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(255,255,255,.6);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--on-surface);
-  box-shadow: var(--elev-1);
-}
-
-/* ── Feature cards (3-col desktop) ─────────────────── */
-.section-head {
-  text-align: center;
-  margin-bottom: 28px;
-}
-.section-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 14px;
-  border-radius: var(--r-full);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .10em;
-  text-transform: uppercase;
-  color: var(--on-surface-3);
-  margin-bottom: 12px;
-}
-.section-title {
-  font-size: clamp(26px, 4vw, 48px);
-  font-weight: 900;
-  letter-spacing: -.05em;
-  line-height: 1.05;
-  color: var(--on-surface);
-}
-.section-sub {
-  margin-top: 10px;
-  font-size: 15px;
-  color: var(--on-surface-3);
-  line-height: 1.8;
-  max-width: 56ch;
-  margin-inline: auto;
-}
-
-.feature-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0,1fr));
-  gap: 16px;
-}
-.feature-card {
-  position: relative;
-  padding: 28px 24px;
-  border-radius: var(--r-lg);
-  background: #fff;
-  border: 1px solid var(--border);
-  box-shadow: var(--elev-2);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  transition: transform var(--dur-mid) var(--ease-out), box-shadow var(--dur-mid);
-  aspect-ratio: 1 / 1;
-}
-.feature-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--elev-4);
-}
-/* Tinted accent glow per card */
-.feature-card:nth-child(1)::before { background: radial-gradient(circle at 80% 10%, rgba(26,110,245,.10), transparent 60%); }
-.feature-card:nth-child(2)::before { background: radial-gradient(circle at 80% 10%, rgba(124,58,237,.09), transparent 60%); }
-.feature-card:nth-child(3)::before { background: radial-gradient(circle at 80% 10%, rgba(6,182,212,.09), transparent 60%); }
-.feature-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-/* Frosted bottom sheen */
-.feature-card::after {
-  content: '';
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  height: 22%;
-  background: linear-gradient(to top, rgba(255,255,255,.9) 0%, transparent 100%);
-  backdrop-filter: blur(6px);
-  pointer-events: none;
-  border-radius: 0 0 var(--r-lg) var(--r-lg);
-}
-
-.feature-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  font-size: 20px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-}
-.feature-card:nth-child(1) .feature-icon { background: var(--primary-alpha); border-color: rgba(26,110,245,.14); }
-.feature-card:nth-child(2) .feature-icon { background: var(--secondary-alpha); border-color: rgba(124,58,237,.14); }
-.feature-card:nth-child(3) .feature-icon { background: rgba(6,182,212,.10); border-color: rgba(6,182,212,.14); }
-
-.feature-body { flex: 1; }
-.feature-body h3 {
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -.03em;
-  color: var(--on-surface);
-  line-height: 1.2;
-  margin-bottom: 8px;
-}
-.feature-body p {
-  font-size: 13.5px;
-  color: var(--on-surface-3);
-  line-height: 1.7;
-}
-.feature-link {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--primary);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  position: relative;
-  z-index: 1;
-}
-
-/* ── Phone portrait cards ───────────────────────────── */
-.phone-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0,1fr));
-  gap: 16px;
-}
-.phone-frame {
-  position: relative;
-  aspect-ratio: 9 / 16;
-  border-radius: var(--r-xl);
-  overflow: hidden;
-  border: 1px solid var(--border);
-  box-shadow: var(--elev-3);
-  /* 5px padding for inset effect */
-  padding: 5px;
-  background: var(--surface-3);
-  transition: transform var(--dur-mid) var(--ease-out), box-shadow var(--dur-mid);
-}
-.phone-frame:hover { transform: translateY(-4px) scale(1.01); box-shadow: var(--elev-4); }
-.phone-fill {
-  width: 100%;
-  height: 100%;
-  border-radius: calc(var(--r-xl) - 5px);
-  overflow: hidden;
-  position: relative;
-  display: flex;
-  align-items: flex-end;
-}
-.phone-photo {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center top;
-}
-/* gradient overlay so label reads on any photo */
-.phone-fill::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, transparent 50%, rgba(0,0,0,.45) 100%);
-  z-index: 1;
-}
-.phone-label {
-  position: relative;
-  z-index: 2;
-  margin: 0 0 14px 14px;
-  padding: 7px 12px;
-  border-radius: var(--r-full);
-  background: rgba(255,255,255,.82);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,.6);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--on-surface);
-}
-
-/* ── Consent panel ──────────────────────────────────── */
-.consent-panel {
-  border-radius: var(--r-xl);
-  overflow: hidden;
-  padding: 40px;
-  background: #fff;
-  border: 1px solid var(--border);
-  box-shadow: var(--elev-3);
-}
-.consent-layout {
-  display: grid;
-  grid-template-columns: 1.1fr .9fr;
-  gap: 40px;
-  align-items: start;
-}
-.consent-panel h2 {
-  font-size: clamp(26px, 3.6vw, 48px);
-  font-weight: 900;
-  letter-spacing: -.06em;
-  line-height: 1.02;
-  color: var(--on-surface);
-  margin-bottom: 14px;
-}
-.consent-panel p {
-  font-size: 15px;
-  color: var(--on-surface-3);
-  line-height: 1.8;
-  margin-bottom: 10px;
-}
-.checklist { display: grid; gap: 12px; }
-.check-item {
-  display: flex;
-  gap: 13px;
-  align-items: flex-start;
-  padding: 14px 16px;
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  transition: border-color var(--dur-fast);
-}
-.check-item:hover { border-color: rgba(26,110,245,.24); }
-.check-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--primary-alpha);
-  color: var(--primary);
-  font-size: 14px;
-  font-weight: 900;
-  flex: none;
-  box-shadow: 0 2px 6px rgba(26,110,245,.15);
-}
-.check-item strong {
-  display: block;
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--on-surface);
-  margin-bottom: 3px;
-}
-.check-item span {
-  font-size: 12.5px;
-  color: var(--on-surface-3);
-  line-height: 1.55;
-}
-
-/* ── Policy panel ───────────────────────────────────── */
-.policy-panel {
-  border-radius: var(--r-xl);
-  padding: 36px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-}
-.policy-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0,1fr));
-  gap: 14px;
-  margin-top: 20px;
-}
-.policy-box {
-  min-height: 120px;
-  border-radius: var(--r-md);
-  border: 1.5px dashed var(--border-strong);
-  background: #fff;
-  padding: 20px;
-  color: var(--on-surface-3);
-  font-size: 13.5px;
-  line-height: 1.6;
-}
-
-/* ── Footer ─────────────────────────────────────────── */
-.footer {
-  margin-top: 0;
-  background: linear-gradient(170deg, #1a1f2e 0%, #111420 55%, #0e1119 100%);
-  color: #fff;
-  border-radius: var(--r-xl) var(--r-xl) 0 0;
-  padding: 64px 0 72px;
-  position: relative;
-  overflow: hidden;
-}
-.footer::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 20% 30%, rgba(26,110,245,.14), transparent 40%),
-    radial-gradient(circle at 80% 70%, rgba(124,58,237,.12), transparent 40%);
-  pointer-events: none;
-}
-.footer-inner {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: 1.2fr .7fr .7fr 1fr;
-  gap: 32px;
-  align-items: start;
-}
-.footer-logo-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.footer-logo-row img {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  object-fit: contain;
-}
-.footer-wordmark {
-  width: 140px;
-  height: auto;
-  object-fit: contain;
-  filter: brightness(0) invert(1);
-}
-.footer-note {
-  font-size: 13.5px;
-  color: rgba(255,255,255,.58);
-  line-height: 1.75;
-  max-width: 38ch;
-}
-.footer h4 {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,.48);
-  margin-bottom: 16px;
-}
-.footer-links { display: grid; gap: 10px; }
-.footer-links a {
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(255,255,255,.82);
-  transition: color var(--dur-fast);
-}
-.footer-links a:hover { color: #fff; }
-.footer-copy {
-  grid-column: 1 / -1;
-  padding-top: 28px;
-  border-top: 1px solid rgba(255,255,255,.08);
-  font-size: 12px;
-  color: rgba(255,255,255,.35);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-/* ── Auth page ──────────────────────────────────────── */
-.auth-card {
-  width: min(520px, calc(100% - 24px));
-  padding: 28px;
-}
-.auth-card-inner { display: flex; flex-direction: column; gap: 20px; }
-
-.auth-guest-panel {
-  padding: 22px;
-  border-radius: var(--r-md);
-  background: linear-gradient(145deg, var(--primary-alpha) 0%, rgba(124,58,237,.06) 100%);
-  border: 1px solid rgba(26,110,245,.14);
-}
-.auth-guest-panel h2 {
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -.04em;
-  color: var(--on-surface);
-  margin: 10px 0 8px;
-}
-.auth-guest-panel p {
-  font-size: 13.5px;
-  color: var(--on-surface-3);
-  line-height: 1.65;
-}
-.auth-divider {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .12em;
-  color: var(--on-surface-3);
-}
-.auth-divider::before,
-.auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-
-.auth-tabs { display: flex; gap: 8px; }
-.auth-tab {
-  flex: 1;
-  padding: 11px 16px;
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--on-surface-3);
-  transition: all var(--dur-fast);
-}
-.auth-tab.active {
-  background: linear-gradient(145deg, var(--primary), var(--secondary));
-  color: #fff;
-  border-color: transparent;
-  box-shadow: 0 4px 12px rgba(26,110,245,.22);
-}
-
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field label {
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--on-surface-3);
-}
-.field input {
-  width: 100%;
-  padding: 13px 15px;
-  border-radius: var(--r-sm);
-  border: 1.5px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--on-surface);
-  font-size: 14px;
-  outline: none;
-  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
-}
-.field input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 4px rgba(26,110,245,.10);
-}
-.field input::placeholder { color: var(--on-surface-3); }
-.help-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11.5px;
-  color: var(--on-surface-3);
-}
-.notice {
-  padding: 13px 15px;
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  font-size: 13px;
-  color: var(--on-surface-3);
-  line-height: 1.6;
-}
-.auth-note { font-size: 12px; color: var(--on-surface-3); line-height: 1.5; margin-top: 4px; }
-
-.auth-panel { display: none; }
-.auth-panel.active { display: block; animation: fadeIn var(--dur-mid) var(--ease-out); }
-.auth-login-panel, .auth-signup-panel { animation: fadeIn var(--dur-mid) var(--ease-out); }
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.checkbox-group {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 16px;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.checkbox-group input[type="checkbox"] {
-  flex: 0 0 18px;
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
-  cursor: pointer;
-  accent-color: var(--primary);
-}
-
-.checkbox-group label {
-  cursor: pointer;
-  flex: 1;
-}
-
-.checkbox-group a {
-  color: var(--primary);
-  font-weight: 600;
-  text-decoration: underline;
-  transition: color var(--dur-fast) var(--ease-out);
-}
-
-.checkbox-group a:hover {
-  color: var(--primary-dark);
-}
-
-
-/* ── Permission page ────────────────────────────────── */
-.perm-card { width: min(680px, calc(100% - 24px)); padding: 28px; }
-.perm-inner {
-  display: grid;
-  grid-template-columns: minmax(0,1.1fr) minmax(0,.9fr);
-  gap: 22px;
-  align-items: stretch;
-}
-.perm-video-wrap {
-  border-radius: var(--r-md);
-  overflow: hidden;
-  border: 1px solid var(--border);
-  background: var(--surface-3);
-  min-height: 300px;
-  position: relative;
-}
-#perm-video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  transform: scaleX(-1);
-  background: #dde4f0;
-}
-.perm-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: var(--on-surface-3);
-  text-align: center;
-  padding: 20px;
-}
-.perm-overlay .icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: #fff;
-  border: 1px solid var(--border);
-  display: grid;
-  place-items: center;
-  font-size: 26px;
-  box-shadow: var(--elev-2);
-}
-.status-chip {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 12px;
-  border-radius: var(--r-full);
-  background: rgba(255,255,255,.9);
-  border: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--on-surface-3);
-  backdrop-filter: blur(10px);
-}
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--on-surface-3); }
-.dot.ok         { background: var(--success); }
-.dot.bad        { background: var(--danger); }
-.dot.connecting { background: var(--warning); }
-.dot.connected  { background: var(--success); }
-.dot.failed     { background: var(--danger); }
-
-.perm-copy { display: flex; flex-direction: column; justify-content: center; gap: 16px; }
-.perm-copy h2 { font-size: 24px; font-weight: 800; letter-spacing: -.04em; }
-.perm-copy p  { font-size: 14px; color: var(--on-surface-3); line-height: 1.7; }
-.permission-list { display: grid; gap: 10px; }
-.permission-item {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 13px 15px;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-}
-.permission-item strong { font-weight: 700; color: var(--on-surface); font-size: 13.5px; }
-.badge { margin-left: auto; font-size: 12px; font-weight: 700; }
-.badge.ok   { color: var(--success); }
-.badge.warn { color: var(--warning); }
-.perm-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-
-/* ── Lobby page ─────────────────────────────────────── */
-.lobby-card { width: min(740px, calc(100% - 24px)); padding: 28px; }
-.lobby-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 22px;
-  flex-wrap: wrap;
-}
-.lobby-brand { display: flex; align-items: center; gap: 10px; }
-.lobby-logo { width: 34px; height: 34px; border-radius: 10px; object-fit: contain; }
-.brand-stack .brand-name { font-size: 16px; font-weight: 800; letter-spacing: -.03em; }
-.brand-stack .brand-sub  { font-size: 10px; color: var(--on-surface-3); text-transform: uppercase; letter-spacing: .08em; }
-
-.mini-copy { font-size: 13px; color: var(--on-surface-3); line-height: 1.65; margin-top: 8px; max-width: 58ch; }
-
-.live-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--on-surface-3);
-  flex-wrap: wrap;
-}
-.live-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--success);
-  box-shadow: 0 0 0 4px rgba(22,163,74,.14);
-  animation: pulse 2.4s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%,100% { box-shadow: 0 0 0 4px rgba(22,163,74,.14); }
-  50%      { box-shadow: 0 0 0 8px rgba(22,163,74,.06); }
-}
-
-.cam-strip {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  margin-bottom: 16px;
-}
-#lobby-cam-preview {
-  width: 88px;
-  height: 64px;
-  object-fit: cover;
-  border-radius: var(--r-sm);
-  background: #000;
-}
-
-.identity-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 16px;
-  padding: 11px 14px;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  font-size: 13px;
-  color: var(--on-surface-3);
-  flex-wrap: wrap;
-}
-
-.mode-switch {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  padding: 6px;
-  border-radius: var(--r-md);
-  background: var(--surface-3);
-  border: 1px solid var(--border);
-  margin-bottom: 18px;
-}
-.mode-btn {
-  padding: 12px 14px;
-  border-radius: calc(var(--r-md) - 6px);
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--on-surface-3);
-  background: transparent;
-  transition: all var(--dur-fast) var(--ease-out);
-}
-.mode-btn.active {
-  background: #fff;
-  color: var(--on-surface);
-  box-shadow: var(--elev-2);
-}
-
-.lobby-grid {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 12px;
-  align-items: end;
-}
-.start-row { margin-top: 16px; display: flex; gap: 10px; }
-
-/* ── Matching page ──────────────────────────────────── */
-.match-card {
-  width: min(420px, calc(100% - 24px));
-  padding: 32px 28px;
-  text-align: center;
-}
-.spinner {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  margin: 0 auto 22px;
-  border: 3px solid var(--surface-3);
-  border-top-color: var(--primary);
-  border-right-color: var(--secondary);
-  animation: spin .9s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-.match-title {
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -.04em;
-  color: var(--on-surface);
-}
-.match-sub { margin-top: 8px; font-size: 14px; color: var(--on-surface-3); line-height: 1.65; }
-.match-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 18px;
-  padding: 9px 15px;
-  border-radius: var(--r-full);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  font-size: 12.5px;
-  color: var(--on-surface-3);
-}
-
-/* ── Chat page ──────────────────────────────────────── */
-.chat-shell {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow: hidden;
-}
-.chat-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 13px 16px;
-  border-radius: var(--r-lg);
-  flex-shrink: 0;
-}
-.chat-peer { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.peer-ava {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: linear-gradient(145deg, var(--primary), var(--secondary));
-  color: #fff;
-  font-size: 18px;
-  display: grid;
-  place-items: center;
-  flex: none;
-  box-shadow: 0 4px 12px rgba(26,110,245,.24);
-}
-.peer-name { font-size: 15px; font-weight: 800; letter-spacing: -.02em; }
-.peer-sub { font-size: 12px; color: var(--on-surface-3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.icon-btn {
-  height: 38px;
-  padding: 0 14px;
-  border-radius: var(--r-full);
-  border: 1.5px solid var(--border-strong);
-  background: #fff;
-  color: var(--on-surface-3);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 700;
-  gap: 6px;
-  white-space: nowrap;
-  transition: all var(--dur-fast);
-}
-.icon-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-alpha); }
-.icon-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: rgba(220,38,38,.06); }
-
-.conn-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 12px;
-  border-radius: var(--r-full);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--on-surface-3);
-}
-.conn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); }
-.conn-dot.connecting { background: var(--warning); }
-.conn-dot.connected  { background: var(--success); }
-.conn-dot.failed     { background: var(--danger); }
-
-.chat-body {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
-  gap: 10px;
-  overflow: hidden;
-}
-.video-panel {
-  display: none;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-  height: 100%;
-}
-.video-panel.visible { display: flex; }
-
-.video-feeds {
-  flex: 1;
-  min-height: 0;
-  background: #0d1117;
-  border-radius: var(--r-lg);
-  border: 1px solid rgba(255,255,255,.06);
-  box-shadow: var(--elev-3);
-  display: grid;
-  overflow: hidden;
-  position: relative;
-}
-.video-feeds.layout-horizontal { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
-.video-feeds.layout-vertical   { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
-
-.video-wrapper { position: relative; overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; }
-.video-wrapper.remote,
-.video-wrapper.local { min-width: 0; min-height: 0; }
-#vid-remote, #vid-local { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; background: #0d1117; }
-#vid-local { transform: scaleX(-1); background: #111827; }
-
-.no-video {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 10px;
-  color: rgba(255,255,255,.54);
-  text-align: center;
-  padding: 20px;
-}
-.no-video .big {
-  width: 66px; height: 66px; border-radius: 50%;
-  display: grid; place-items: center;
-  background: rgba(255,255,255,.07);
-  font-size: 28px;
-}
-.quality {
-  position: absolute;
-  left: 12px;
-  top: 12px;
-  display: none;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 11px;
-  border-radius: var(--r-full);
-  background: rgba(13,17,23,.78);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  backdrop-filter: blur(10px);
-}
-.quality .qdot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
-
-.video-controls {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.vc-btn {
-  height: 38px;
-  padding: 0 14px;
-  border-radius: var(--r-full);
-  border: 1.5px solid var(--border-strong);
-  background: #fff;
-  color: var(--on-surface-3);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-  transition: all var(--dur-fast);
-}
-.vc-btn:hover,
-.vc-btn.active { border-color: var(--primary); color: var(--primary); background: var(--primary-alpha); }
-.vc-btn.off    { border-color: rgba(220,38,38,.26); color: var(--danger); background: rgba(220,38,38,.06); }
-
-.chat-panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-.chat-messages {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--elev-2);
-}
-.sys-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--on-surface-3);
-  font-size: 11.5px;
-  padding: 4px 0;
-}
-.sys-line::before,.sys-line::after { content: ''; height: 1px; flex: 1; background: var(--border); }
-.msg { display: flex; gap: 9px; max-width: 82%; align-self: flex-start; }
-.msg.me { align-self: flex-end; flex-direction: row-reverse; }
-.msg-ava {
-  width: 28px; height: 28px; border-radius: 50%;
-  display: grid; place-items: center;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  flex: none; font-size: 12px;
-}
-.msg.me .msg-ava {
-  background: linear-gradient(145deg, var(--primary), var(--secondary));
-  color: #fff;
-  border-color: transparent;
-}
-.msg-bubble {
-  padding: 10px 13px;
-  border-radius: 16px 16px 16px 4px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--on-surface);
-  font-size: 13.5px;
-  line-height: 1.55;
-  word-break: break-word;
-}
-.msg.me .msg-bubble {
-  background: var(--primary-alpha);
-  border-color: rgba(26,110,245,.18);
-  border-radius: 16px 16px 4px 16px;
-}
-.msg-time { font-size: 10px; color: var(--on-surface-3); margin-top: 4px; text-align: right; }
-.chat-input { margin-top: 10px; display: flex; gap: 8px; }
-.chat-input input {
-  flex: 1;
-  padding: 13px 16px;
-  border-radius: var(--r-md);
-  border: 1.5px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--on-surface);
-  font-size: 14px;
-  outline: none;
-  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
-}
-.chat-input input:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(26,110,245,.10); }
-.send-btn { width: 50px; border-radius: var(--r-md); padding: 0; font-size: 16px; }
-
-/* Fullscreen video */
-#video-panel:fullscreen,
-#video-panel:-webkit-full-screen,
-#video-panel:-moz-full-screen {
-  background: #0d1117;
-  padding: 8px;
-  gap: 8px;
-}
-#video-panel:fullscreen .video-controls,
-#video-panel:-webkit-full-screen .video-controls,
-#video-panel:-moz-full-screen .video-controls {
-  position: absolute;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(13,17,23,.75);
-  padding: 10px 14px;
-  border-radius: var(--r-md);
-  flex-wrap: nowrap;
-  z-index: 99;
-}
-
-/* ── Modal / overlay / toast ────────────────────────── */
-.overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.44);
-  backdrop-filter: blur(12px);
-  z-index: 100;
-  padding: 18px;
-  align-items: center;
-  justify-content: center;
-}
-.overlay.open { display: flex; }
-.modal {
-  width: min(420px,100%);
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--elev-4);
-  padding: 28px;
-  text-align: center;
-}
-.modal-ico { font-size: 38px; }
-.modal-title { font-size: 21px; font-weight: 800; letter-spacing: -.04em; margin-top: 8px; color: var(--on-surface); }
-.modal-sub { font-size: 13.5px; color: var(--on-surface-3); line-height: 1.65; margin: 10px 0 18px; }
-.stars, .vibes { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-.star, .vibe {
-  border: 1.5px solid var(--border-strong);
-  background: var(--surface-2);
-  border-radius: var(--r-full);
-  padding: 8px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--on-surface-3);
-  cursor: pointer;
-  transition: all var(--dur-fast);
-}
-.star.lit, .vibe.on {
-  border-color: rgba(26,110,245,.28);
-  background: var(--primary-alpha);
-  color: var(--primary);
-}
-.modal-row { display: flex; gap: 10px; margin-top: 18px; }
-.modal-row .btn { flex: 1; }
-
-.toast-root {
-  position: fixed;
-  left: 50%;
-  bottom: 24px;
-  transform: translateX(-50%);
-  z-index: 120;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: center;
-  pointer-events: none;
-}
-.toast {
-  background: rgba(13,17,23,.92);
-  color: #fff;
-  border-radius: var(--r-full);
-  padding: 11px 18px;
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,.12);
-  box-shadow: var(--elev-3);
-  animation: toastIn .18s var(--ease-out);
-}
-@keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
-
-/* ── Responsive ─────────────────────────────────────── */
-@media (max-width: 980px) {
-  .feature-grid,
-  .phone-grid,
-  .consent-layout,
-  .footer-inner { grid-template-columns: 1fr; }
-
-  .feature-card { aspect-ratio: auto; min-height: 200px; max-width: 440px; margin-inline: auto; }
-  .phone-grid { justify-items: center; }
-  .phone-frame { max-width: 280px; width: 100%; }
-  .chat-body   { grid-template-columns: 1fr; grid-template-rows: minmax(280px,48vh) minmax(0,1fr); }
-  .policy-grid { grid-template-columns: 1fr; }
-  .footer-copy { flex-direction: column; align-items: flex-start; }
-}
-
-@media (max-width: 720px) {
-  .sakura-topbar {
-    flex-direction: column;
-    align-items: center;
-    border-radius: var(--r-lg);
-    top: 10px;
-    gap: 10px;
-    padding: 12px 14px;
-  }
-  .sakura-nav {
-    flex-wrap: wrap;
-    justify-content: center;
-    margin-inline: 0;
-    gap: 2px;
-  }
-  .landing-hero   { padding: 18px 0 10px; gap: 12px; }
-  .landing-title  { font-size: clamp(30px, 8.4vw, 48px); max-width: 100%; }
-  .landing-cta    { width: 100%; }
-  .hero-stats     { flex-direction: column; align-items: center; }
-
-  .feature-card   { width: 100%; max-width: 100%; }
-  .phone-frame    { max-width: 200px; }
-  .consent-panel  { padding: 22px; }
-  .policy-grid    { grid-template-columns: 1fr; }
-  .footer         { border-radius: 28px 28px 0 0; padding: 48px 0 56px; }
-
-  .perm-inner     { grid-template-columns: 1fr; }
-  .lobby-grid     { grid-template-columns: 1fr; }
-  .lobby-head     { flex-direction: column; }
-  .mode-switch    { grid-template-columns: 1fr; }
-  .perm-actions,
-  .start-row,
-  .modal-row      { flex-direction: column; }
-  .btn, .icon-btn, .vc-btn { width: 100%; justify-content: center; min-height: 46px; }
-  .send-btn       { width: 50px; }
-
-  #pg-chat { padding: 8px; gap: 8px; }
-  .chat-body { grid-template-rows: minmax(260px,50vh) minmax(0,1fr); }
-  .video-panel { min-height: 260px; }
-  .video-controls {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    gap: 6px;
-    width: 100%;
-  }
-  .video-controls .vc-btn {
-    flex: 1 1 0;
-    min-width: 0;
-    white-space: nowrap;
-    padding: 0 8px;
-    width: auto;
-    min-height: 40px;
-  }
-
-  .landing-shell  { gap: 30px; }
-  .hero-image-band,
-  .landing-stage,
-  .phone-band,
-  .consent-section,
-  .policy-anchor  { /* already handled by gap */ }
-}
-
-/* Phone fullscreen video fix */
-@media (max-width: 720px) {
-  #video-panel:fullscreen .video-feeds,
-  #video-panel:-webkit-full-screen .video-feeds,
-  #video-panel:-moz-full-screen .video-feeds {
-    grid-template-columns: 1fr !important;
-    grid-template-rows: 1fr 1fr !important;
-  }
-}
-
-/* ── Animations ─────────────────────────────────────── */
-@media (prefers-reduced-motion: no-preference) {
-  .card:hover   { transform: translateY(-2px); }
-  .auth-card,
-  .perm-card,
-  .lobby-card,
-  .match-card   { transition: transform var(--dur-mid) var(--ease-out); }
-}
-
-/* ===== Landing-page refinement patch ===== */
-#pg-land::before{
-  left: 0;
-  width: 100vw;
-  height: min(100vh, 980px);
-  background:
-    url('https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortallive_background_manssu.png')
-    center top / cover no-repeat;
-  -webkit-mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
-  mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
-}
-
-.sakura-topbar{
-  background: rgba(255,255,255,.10);
-  border: 1px solid rgba(255,255,255,.10);
-  box-shadow: none;
-  backdrop-filter: blur(12px) saturate(120%);
-  -webkit-backdrop-filter: blur(12px) saturate(120%);
-  transition: background-color .22s ease, border-color .22s ease, box-shadow .22s ease, transform .22s ease;
-}
-
-.sakura-topbar.scrolled{
-  background: rgba(255,255,255,.98);
-  border-color: rgba(0,0,0,.08);
-  box-shadow: 0 10px 30px rgba(20,34,68,.10);
-}
-
-.landing-shell{
-  gap: 52px;
-}
-
-.landing-hero{
-  padding: 34px 0 10px;
-  gap: 16px;
-}
-
-.landing-title{
-  font-size: clamp(26px, 3.4vw, 46px);
-  max-width: 100%;
-  width: fit-content;
-  line-height: 1.02;
-  letter-spacing: -.06em;
-}
-.landing-title em{
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-  font-style: italic;
-}
-.landing-title .title-line{
-  display: block;
-  white-space: nowrap;
-}
-
-.hero-sub{
-  margin-top: -2px;
-}
-
-@media (min-width: 981px){
-  .hero-image-band{
-    margin-top: -4px;
-  }
-}
-
-.hero-image-shell::after{
-  content:'';
-  position:absolute;
-  inset:0;
-  z-index:1;
-  pointer-events:none;
-  background: linear-gradient(180deg, rgba(0,0,0,.02) 0%, rgba(0,0,0,.10) 100%);
-}
-
-.hero-image-shell .hero-image-overlay{
-  z-index:2;
-}
-
-.landing-cta .landing-continue{
-  background: linear-gradient(145deg, #0f4fd8 0%, #5b3df0 100%);
-  color: #fff;
-  border: 1px solid rgba(255,255,255,.18);
-  box-shadow: 0 14px 30px rgba(15,79,216,.26), 0 2px 8px rgba(0,0,0,.08);
-}
-.landing-cta .landing-continue:hover{
-  box-shadow: 0 16px 36px rgba(15,79,216,.32), 0 4px 12px rgba(0,0,0,.12);
-}
-
-.consent-text{
-  font-size: 12.8px;
-  font-weight: 500;
-  color: var(--on-surface-3);
-}
-.consent-text .consent-lead{
-  font-weight: 800;
-  color: var(--on-surface);
-}
-
-.scroll-reveal{
-  opacity: 1;
-  transform: none;
-}
-body.reveal-ready .scroll-reveal{
-  opacity: 0;
-  transform: translateY(22px);
-  transition: opacity .72s ease, transform .72s ease;
-  will-change: opacity, transform;
-}
-body.reveal-ready .scroll-reveal.in-view{
-  opacity: 1;
-  transform: translateY(0);
-}
-
-@media (max-width: 980px){
-  #pg-land::before{
-    width: 100vw;
-    left: 0;
-  }
-  .landing-title{
-    max-width: 100%;
-  }
-  .landing-title .title-line{
-    white-space: normal;
-  }
-}
-
-@media (max-width: 720px){
-  .landing-hero{
-    padding: 40px 0 14px;
-    gap: 18px;
-  }
-  .landing-title{
-    font-size: clamp(28px, 8.5vw, 46px);
-    max-width: 100%;
-  }
-  .landing-title .title-line{
-    white-space: normal;
-  }
-}
-
-</style>
-</head>
+body{font-family:system-ui,sans-serif;background:#0b0b14;color:#eee;margin:0;padding:20px}
+h1{font-size:18px;margin:0 0 8px}
+.sub{color:#98a2b3;font-size:13px;line-height:1.5;margin:0 0 16px;max-width:72ch}
+.bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+input{padding:8px 10px;border-radius:6px;border:1px solid #333;background:#1a1a28;color:#eee;min-width:240px}
+button,a.btn{padding:8px 14px;border-radius:6px;border:none;background:#6d5efc;color:#fff;cursor:pointer;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+button:disabled{opacity:.5;cursor:not-allowed}
+.feed{display:grid;gap:16px}
+.room{border:1px solid #23233a;background:#11111b;border-radius:12px;overflow:hidden}
+.room-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid #22263a;background:rgba(255,255,255,.02)}
+.room-title{font-weight:800;font-size:14px}
+.room-meta{font-size:12px;color:#9ca3af}
+.row{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(180px,220px);gap:12px;overflow-x:auto;padding:14px;scroll-snap-type:x proximity}
+.card{position:relative;background:#14141f;border:1px solid #2a2a3a;border-radius:10px;overflow:hidden;scroll-snap-align:start;min-width:0}
+.card.flagged{border-color:#f59e0b;box-shadow:0 0 0 1px rgba(245,158,11,.25) inset}
+.card img{width:100%;display:block;aspect-ratio:4/3;object-fit:cover;background:#000}
+.seq{position:absolute;top:10px;left:10px;z-index:2;padding:4px 8px;border-radius:999px;background:rgba(0,0,0,.8);color:#fff;font-size:12px;font-weight:800}
+.meta{padding:8px 10px 10px;font-size:12px;color:#aaa;line-height:1.45}
+.meta-top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.meta-top .room-id{font-weight:700;color:#ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:88px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.action{flex:1 1 72px;padding:7px 8px;border-radius:6px;border:1px solid #333;background:#1a1a28;color:#eee;font-size:12px;font-weight:700;cursor:pointer;text-align:center}
+.action:hover{border-color:#555}
+.action.danger{background:#3a1c1c;border-color:#5b2a2a}
+.action.warn{background:#2f2812;border-color:#5e4a13}
+.empty{padding:18px;border:1px dashed #2a2a3a;border-radius:10px;background:#11111b;color:#9ca3af}
+.footer{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px}
+.hint{font-size:12px;color:#9ca3af}
+</style></head>
 <body>
-
-<!-- ═══════════════════ LANDING ═══════════════════ -->
-<section id="pg-land" class="page active">
-<div class="wrap landing-shell">
-
-  <!-- Topbar -->
-  <div class="sakura-topbar" role="banner" aria-label="Mortalive header">
-    <a class="sakura-brand" href="#">
-      <img class="topbar-logo"
-           src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783865256/cllogo_ystlxa.png"
-           alt="Mortalive logo">
-      <div>
-        <div class="brand-name">Mortalive</div>
-        <div class="brand-sub">Connect with the world</div>
-      </div>
-    </a>
-    <nav class="sakura-nav" aria-label="Primary">
-      <a href="about.html">About</a>
-      <a href="safety.html">Safety</a>
-      <a href="blog.html">Blog</a>
-      <a href="faq.html">FAQ</a>
-    </nav>
-  </div>
-
-  <!-- Hero -->
-  <div class="landing-hero">
-    <div class="hero-label">🌍 Random · Private · Instant</div>
-
-    <h1 class="landing-title" id="hero-title">
-      <em><span class="title-line">2026's best in conversing and</span><span class="title-line">Natural social connection webapp</span></em>
-    </h1>
-
-    <p class="hero-sub">
-      Connect with strangers worldwide in seconds.
-      Private by default, fast by design, always in your control.
-    </p>
-
-    <!-- Stats row -->
-    <div class="hero-stats">
-      <div class="stat-item">
-        <span class="stat-dot"></span>
-        <span id="online-n-hero">2,847</span> online now
-      </div>
-      <div class="stat-item">✔ Your identity stays private</div>
-      <div class="stat-item">⚡ Matches in under 10 s</div>
-    </div>
-
-    <!-- CTA -->
-    <div class="landing-cta">
-      <button class="btn btn-primary landing-continue" id="btn-enter" disabled>
-        Continue
-      </button>
-      <label class="consent-toggle" for="landing-consent">
-        <input id="landing-consent" type="checkbox" aria-label="Agree to terms and privacy policy">
-        <span class="consent-box" aria-hidden="true"></span>
-        <span class="consent-text">
-          <span class="consent-lead">By continuing</span> you agree to Mortalive's
-          <a href="terms.html">terms</a> and
-          <a href="privacy.html">privacy</a> policy.
-        </span>
-      </label>
-    </div>
-  </div><!-- /landing-hero -->
-
-  <!-- Landscape hero image -->
-  <section class="hero-image-band scroll-reveal" aria-label="Hero visual">
-    <div class="hero-image-shell">
-      <!-- TODO: replace src below with the final hero image URL -->
-      <img class="hero-image-bg"
-           src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783935562/pc_nm2uoq.png"
-           alt="People connecting worldwide">
-      <div class="hero-image-overlay">
-        <span class="hero-img-badge">🔒 Anonymous by default</span>
-        <span class="hero-img-badge">🎯 Smart matching</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- Feature cards -->
-  <section class="landing-stage scroll-reveal" aria-labelledby="features-heading">
-    <div class="section-head">
-      <div class="section-eyebrow">Why Mortalive</div>
-      <h2 class="section-title" id="features-heading">Built for real connection</h2>
-      <p class="section-sub">Every design decision was made to help you have better conversations, not just more of them.</p>
-    </div>
-
-    <div class="feature-grid">
-      <article class="feature-card">
-        <div class="feature-icon">🔒</div>
-        <div class="feature-body">
-          <h3>Private by design</h3>
-          <p>No account required. Your identity never leaves your device unless you choose otherwise. Clean slate every session.</p>
-        </div>
-        <div class="feature-link">Learn more →</div>
-      </article>
-
-      <article class="feature-card">
-        <div class="feature-icon">🌍</div>
-        <div class="feature-body">
-          <h3>Worldwide reach</h3>
-          <p>Thousands of real people online at any moment. Match by interest, language, or just let fate decide who you meet next.</p>
-        </div>
-        <div class="feature-link">See how it works →</div>
-      </article>
-
-      <article class="feature-card">
-        <div class="feature-icon">⚡</div>
-        <div class="feature-body">
-          <h3>Instant matching</h3>
-          <p>Skip the queue. Get matched in seconds with smart peer routing, then skip, stay, or rate — always your call.</p>
-        </div>
-        <div class="feature-link">Start now →</div>
-      </article>
-    </div>
-  </section>
-
-  <!-- Phone portrait cards -->
-  <section class="phone-band scroll-reveal" aria-label="Mobile experience">
-    <div class="section-head">
-      <div class="section-eyebrow">Works everywhere</div>
-      <h2 class="section-title">Beautiful on any device</h2>
-    </div>
-
-    <div class="phone-grid">
-      <div class="phone-frame">
-        <div class="phone-fill">
-          <img class="phone-photo"
-               src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/phone2_l1dhsz.png"
-               alt="Video chat screen">
-          <span class="phone-label">🎥 Video chat</span>
-        </div>
-      </div>
-      <div class="phone-frame">
-        <div class="phone-fill">
-          <img class="phone-photo"
-               src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/phone_1_kj7tqh.png"
-               alt="Text chat screen">
-          <span class="phone-label">💬 Text mode</span>
-        </div>
-      </div>
-      <div class="phone-frame">
-        <div class="phone-fill">
-          <img class="phone-photo"
-               src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920404/phone_3_sc3pf1.png"
-               alt="Matching screen">
-          <span class="phone-label">✨ Fast match</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Consent / Terms section -->
-  <section class="consent-section scroll-reveal" id="consent" aria-labelledby="consent-heading">
-    <div class="consent-panel">
-      <div class="consent-layout">
-        <div>
-          <div class="section-eyebrow">Before you start</div>
-          <h2 id="consent-heading">Read the rules. Then connect.</h2>
-          <p>Mortalive is a privacy-first random chat experience. Keep it respectful, keep it honest, and stay in control of every conversation.</p>
-          <p>Video mode requests camera and microphone access. Text mode works with no permissions at all.</p>
-        </div>
-        <div class="checklist">
-          <div class="check-item">
-            <div class="check-mark">✓</div>
-            <div>
-              <strong>Fast matching, anonymous by default.</strong>
-              <span>Your session starts fresh every time — no history stored.</span>
-            </div>
-          </div>
-          <div class="check-item">
-            <div class="check-mark">✓</div>
-            <div>
-              <strong>No personal info shared without consent.</strong>
-              <span>You decide what to share and when. Nothing automatic.</span>
-            </div>
-          </div>
-          <div class="check-item">
-            <div class="check-mark">✓</div>
-            <div>
-              <strong>Report or skip at any time.</strong>
-              <span>Full control is always one tap away, no confirmation needed.</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Policy anchor -->
-  <section class="policy-anchor scroll-reveal" id="terms-policy" aria-labelledby="policy-heading">
-    <div class="policy-panel">
-      <div class="section-eyebrow">Legal</div>
-      <h2 class="section-title" id="policy-heading">Terms & Privacy</h2>
-      <div class="policy-grid">
-        <div class="policy-box">Your full terms of service will go here. Describe usage rules, content policy, and acceptable use.</div>
-        <div class="policy-box">Your privacy notice will go here. Describe what data is collected, stored, and how it is used.</div>
-        <div class="policy-box">Your community guidelines will go here. Describe expected behaviour and enforcement policy.</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Footer -->
-  <footer class="footer scroll-reveal" aria-label="Site footer">
-    <div class="wrap" style="padding:0;">
-      <div class="footer-inner">
-        <div>
-          <div class="footer-logo-row">
-            <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783865256/cllogo_ystlxa.png"
-                 alt="Mortalive logo">
-          </div>
-          <p class="footer-note">A calm, privacy-first space to meet the world — one conversation at a time.</p>
-        </div>
-
-        <div>
-          <h4>Pages</h4>
-          <div class="footer-links">
-            <a href="about.html">About</a>
-            <a href="safety.html">Safety</a>
-            <a href="blog.html">Blog</a>
-            <a href="faq.html">FAQ</a>
-            <a href="reviews.html">Reviews</a>
-          </div>
-        </div>
-
-        <div>
-          <h4>Legal</h4>
-          <div class="footer-links">
-            <a href="terms.html">Terms</a>
-            <a href="privacy.html">Privacy</a>
-            <a href="#terms-policy">Policies</a>
-          </div>
-        </div>
-
-        <div>
-          <h4>Contact</h4>
-          <p class="footer-note">Questions? Reach us via the safety page. We read every message.</p>
-        </div>
-
-        <div class="footer-copy">
-          <span>© 2026 Mortalive. All rights reserved.</span>
-          <span>Built with care for genuine human connection.</span>
-        </div>
-      </div>
-    </div>
-  </footer>
-
-</div><!-- /wrap -->
-</section><!-- /pg-land -->
-
-<!-- ═══════════════════ AUTH ═══════════════════════ -->
-<section id="pg-auth" class="page">
-  <div class="wrap">
-    <div class="auth-card">
-      <div style="margin-bottom:16px;">
-        <button class="icon-btn setup-back" type="button" data-target="pg-land">← Back</button>
-      </div>
-
-      <div class="auth-card-inner">
-        <div class="auth-tabs">
-          <button class="auth-tab active" id="tab-login" type="button">Login</button>
-          <button class="auth-tab" id="tab-signup" type="button">Sign up</button>
-          <button class="auth-tab" id="tab-guest" type="button">Guest</button>
-        </div>
-
-        <div id="login-panel" class="auth-panel active">
-          <div class="auth-login-panel">
-            <h2>Welcome back</h2>
-            <p>Sign in to continue chatting and keep your Magnet Score history.</p>
-
-            <div class="field">
-              <label for="login-email">Email</label>
-              <input id="login-email" type="email" placeholder="you@example.com" autocomplete="email">
-            </div>
-
-            <div class="field">
-              <label for="login-password">Password</label>
-              <input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
-            </div>
-
-            <button class="btn btn-primary btn-wide" id="btn-sign-in" type="button">
-              Sign in →
-            </button>
-
-            <div id="login-error" class="notice" style="display:none;margin-top:12px;"></div>
-
-            <p class="auth-note" style="margin-top:14px;">
-              Don't have an account?
-              <a href="#" onclick="document.getElementById('tab-signup').click(); return false;" style="color: var(--primary); font-weight: 600;">Sign up</a>
-            </p>
-          </div>
-        </div>
-
-        <div id="signup-panel" class="auth-panel">
-          <div class="auth-signup-panel">
-            <h2>Join Mortalive</h2>
-            <p>Create an account to save your progress and unlock your profile.</p>
-
-            <div class="field">
-              <label for="signup-email">Email</label>
-              <input id="signup-email" type="email" placeholder="you@example.com" autocomplete="email">
-            </div>
-
-            <div class="field">
-              <label for="signup-username">Username</label>
-              <input id="signup-username" type="text" placeholder="Choose a username" maxlength="24" autocomplete="off">
-              <div class="help-row">
-                <span>3-24 characters, letters, numbers, underscore</span>
-              </div>
-            </div>
-
-            <div class="field">
-              <label for="signup-password">Password</label>
-              <input id="signup-password" type="password" placeholder="Min 8 characters" autocomplete="new-password">
-            </div>
-
-            <div class="field">
-              <label for="signup-confirm">Confirm password</label>
-              <input id="signup-confirm" type="password" placeholder="Repeat password" autocomplete="new-password">
-            </div>
-
-            <div class="checkbox-group">
-              <input type="checkbox" id="signup-terms">
-              <label for="signup-terms">
-                I agree to Mortalive's <a href="terms.html" target="_blank">Terms of Service</a> and <a href="privacy.html" target="_blank">Privacy Policy</a>
-              </label>
-            </div>
-
-            <button class="btn btn-primary btn-wide" id="btn-create-account" type="button">
-              Create account →
-            </button>
-
-            <div id="signup-error" class="notice" style="display:none;margin-top:12px;"></div>
-
-            <p class="auth-note" style="margin-top:14px;">
-              Already have an account?
-              <a href="#" onclick="document.getElementById('tab-login').click(); return false;" style="color: var(--primary); font-weight: 600;">Sign in</a>
-            </p>
-          </div>
-        </div>
-
-        <div id="guest-panel" class="auth-panel">
-          <div class="auth-guest-panel">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
-              <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783865256/cllogo_ystlxa.png"
-                   alt="" style="width:28px;height:28px;border-radius:8px;object-fit:contain;">
-              <span style="font-size:13px;font-weight:700;color:var(--on-surface-3);letter-spacing:.04em;text-transform:uppercase;">Guest Mode</span>
-            </div>
-            <h2>Continue as guest</h2>
-            <p>Start chatting right now without creating an account. No sign-up, instant access.</p>
-
-            <div class="field" style="margin-top:16px;">
-              <label for="guest-name">Display name (optional)</label>
-              <input id="guest-name" type="text" maxlength="24"
-                     placeholder="Pick a name for this session" autocomplete="off">
-              <div class="help-row">
-                <span>✓ No account needed</span>
-                <span>✓ Instant access</span>
-              </div>
-            </div>
-
-            <button class="btn btn-primary btn-wide" id="btn-continue-guest" type="button">
-              Continue as guest →
-            </button>
-
-            <p class="auth-note" style="margin-top:14px;">
-              Create an account to save your Magnet Score and weekly rank
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════ PERMISSION ════════════════════ -->
-<section id="pg-perm" class="page">
-  <div class="wrap" style="display:flex;justify-content:center;">
-    <div class="card perm-card">
-      <div style="margin-bottom:16px;">
-        <button class="icon-btn setup-back" type="button" data-target="pg-auth">← Back</button>
-      </div>
-      <div class="perm-inner">
-        <div class="perm-video-wrap">
-          <video id="perm-video" autoplay playsinline muted></video>
-          <div class="perm-overlay" id="perm-overlay">
-            <div class="icon">📷</div>
-            <div id="perm-overlay-txt" style="font-size:13px;color:var(--on-surface-3);line-height:1.6;">
-              Tap allow to preview your camera.
-            </div>
-          </div>
-          <div class="status-chip">
-            <span class="dot" id="perm-dot"></span>
-            <span id="perm-status-txt">Waiting for permission</span>
-          </div>
-        </div>
-        <div class="perm-copy">
-          <div>
-            <h2>Camera &amp; microphone</h2>
-            <p>Video chat needs your camera and mic. You can always skip and use text chat — no permissions needed.</p>
-          </div>
-          <div class="permission-list">
-            <div class="permission-item">
-              <span>📷</span>
-              <strong>Camera</strong>
-              <span class="badge warn" id="cam-status-lbl">waiting</span>
-            </div>
-            <div class="permission-item">
-              <span>🎤</span>
-              <strong>Microphone</strong>
-              <span class="badge warn" id="mic-status-lbl">waiting</span>
-            </div>
-          </div>
-          <div class="perm-actions">
-            <button class="btn btn-primary" id="btn-allow">Allow camera &amp; mic</button>
-            <button class="btn btn-ghost" id="btn-skip-cam">Skip to text chat</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════ LOBBY ══════════════════════ -->
-<section id="pg-lobby" class="page">
-  <div class="wrap" style="display:flex;justify-content:center;">
-    <div class="card lobby-card">
-      <div style="margin-bottom:16px;">
-        <button class="icon-btn setup-back" type="button" data-target="pg-auth">← Back</button>
-      </div>
-      <div class="lobby-head">
-        <div>
-          <div class="lobby-brand">
-            <img class="lobby-logo"
-                 src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783865256/cllogo_ystlxa.png"
-                 alt="Mortalive logo">
-            <div class="brand-stack">
-              <div class="brand-name">Mortalive</div>
-              <div class="brand-sub">Lobby · ready to match</div>
-            </div>
-          </div>
-          <p class="mini-copy">Pick a mode, add an interest, and find your next conversation.</p>
-        </div>
-        <div class="live-line">
-          <span class="live-dot"></span>
-          <strong id="online-n">2,847</strong>&nbsp;online now
-          <span class="chip" id="mode-label" style="margin-left:6px;">Video</span>
-        </div>
-      </div>
-
-      <!-- Camera preview strip (shown when cam granted) -->
-      <div class="cam-strip" id="cam-strip" style="display:none;">
-        <video id="lobby-cam-preview" autoplay playsinline muted></video>
-        <div>
-          <div style="font-size:13.5px;font-weight:700;">Camera preview</div>
-          <div style="font-size:12px;color:var(--on-surface-3);margin-top:3px;">Your video is live and ready.</div>
-        </div>
-      </div>
-
-      <!-- Identity row -->
-      <div class="identity-row" id="identity-row">
-        <span id="identity-label">Browsing as guest</span>
-        <button class="btn btn-ghost" id="btn-switch-account" type="button"
-                style="padding:6px 12px;font-size:12px;width:auto;min-height:auto;">Log in / Sign up</button>
-        <button class="btn btn-ghost" id="btn-logout" type="button"
-                style="padding:6px 12px;font-size:12px;display:none;width:auto;min-height:auto;">Log out</button>
-      </div>
-
-      <!-- Mode switch -->
-      <div class="mode-switch" id="mode-toggle">
-        <button class="mode-btn" data-mode="text">💬 Text Chat</button>
-        <button class="mode-btn active" data-mode="video">🎥 Video Chat</button>
-      </div>
-
-      <!-- Interest + Find -->
-      <div class="lobby-grid">
-        <div class="field">
-          <label for="interest-input">Interest (optional)</label>
-          <input id="interest-input" type="text" maxlength="64"
-                 placeholder="music, gaming, travel, study…" autocomplete="off">
-          <div class="help-row">
-            <span>Helps match you with like-minded people</span>
-          </div>
-        </div>
-        <button class="btn btn-primary" id="btn-find" style="width:auto;min-height:52px;align-self:end;">
-          Find →
-        </button>
-      </div>
-
-      <div class="start-row">
-        <button class="btn btn-ghost" id="score-pill-btn" type="button" style="display:none;">Open status sheet</button>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════ MATCHING ═══════════════════ -->
-<section id="pg-match" class="page">
-  <div class="wrap" style="display:flex;justify-content:center;">
-    <div class="card match-card">
-      <div style="margin-bottom:16px;">
-        <button class="icon-btn setup-back" type="button" data-target="pg-lobby" style="width:auto;min-height:auto;">← Back</button>
-      </div>
-      <div class="spinner" aria-hidden="true"></div>
-      <h2 class="match-title" id="match-title">Finding your match</h2>
-      <p class="match-sub" id="match-sub">
-        Scanning <strong id="match-count">2,847</strong> people online right now.
-      </p>
-      <div class="match-badge">
-        <span class="dot" id="conn-dot"></span>
-        <span id="conn-text">Searching…</span>
-      </div>
-      <div style="margin-top:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-        <button class="btn btn-ghost" id="btn-cancel" style="width:auto;min-height:auto;padding:10px 20px;">Cancel</button>
-        <button class="btn btn-tonal" id="btn-try-demo" style="display:none;width:auto;min-height:auto;padding:10px 20px;">Try demo chat</button>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════ CHAT ═══════════════════════ -->
-<section id="pg-chat" class="page">
-  <div class="chat-shell">
-
-    <!-- Topbar -->
-    <div class="card chat-topbar">
-      <div class="chat-peer">
-        <div class="peer-ava" id="peer-ava">👤</div>
-        <div>
-          <div class="peer-name" id="peer-name">Stranger</div>
-          <div class="peer-sub" id="peer-score">Random chat · connected</div>
-        </div>
-      </div>
-      <div class="top-actions">
-        <button class="icon-btn setup-back" type="button" data-target="pg-lobby" style="width:auto;min-height:auto;">← Back</button>
-        <div class="conn-badge">
-          <span class="conn-dot" id="call-dot"></span>
-          <span id="call-text">connecting</span>
-        </div>
-        <button class="icon-btn" id="btn-rate-top" style="width:auto;min-height:auto;">⭐ Rate</button>
-        <button class="icon-btn" id="btn-skip" style="width:auto;min-height:auto;">⏭ Next</button>
-        <button class="icon-btn danger" id="btn-end" style="width:auto;min-height:auto;">✕ Leave</button>
-      </div>
-    </div>
-
-    <!-- Body -->
-    <div class="chat-body">
-
-      <!-- Video panel -->
-      <div class="video-panel" id="video-panel">
-        <div class="video-feeds layout-horizontal" id="video-feeds">
-          <div class="no-video" id="no-video-ph">
-            <div class="big">📹</div>
-            <div id="ph-txt" style="font-size:13px;margin-top:4px;">Waiting for video…</div>
-          </div>
-          <div class="video-wrapper remote">
-            <video id="vid-remote" autoplay playsinline></video>
-          </div>
-          <div class="video-wrapper local">
-            <video id="vid-local" autoplay playsinline muted></video>
-          </div>
-          <div class="quality" id="quality-bar">
-            <span class="qdot" id="qual-dot"></span>
-            <span id="qual-text">HD</span>
-          </div>
-        </div>
-
-        <div class="video-controls">
-          <button class="vc-btn" id="vc-mic" title="Mute microphone">🎤 Mic</button>
-          <button class="vc-btn" id="vc-cam" title="Toggle camera">📷 Cam</button>
-          <button class="vc-btn" id="vc-flip" title="Flip camera">🔄 Flip</button>
-          <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶ Full</button>
-        </div>
-      </div><!-- /video-panel -->
-
-      <!-- Chat panel -->
-      <div class="chat-panel">
-        <div class="chat-messages" id="chat-msgs"></div>
-        <div class="chat-input">
-          <input id="cin" type="text" placeholder="Say something…" maxlength="500" autocomplete="off">
-          <button class="btn btn-primary send-btn" id="btn-send">➤</button>
-        </div>
-      </div>
-
-    </div><!-- /chat-body -->
-  </div><!-- /chat-shell -->
-</section>
-
-<!-- ═══════════════════ RATING MODAL ══════════════ -->
-<div class="overlay" id="rating-overlay" role="dialog" aria-modal="true" aria-labelledby="rating-title">
-  <div class="modal">
-    <div class="modal-ico">⭐</div>
-    <div class="modal-title" id="rating-title">Rate this chat</div>
-    <div class="modal-sub">Help us improve the experience for everyone.</div>
-    <div style="font-size:11.5px;color:var(--on-surface-3);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:10px;">Overall</div>
-    <div class="stars" id="stars" role="group" aria-label="Star rating">
-      <button class="star" data-v="1">1</button>
-      <button class="star" data-v="2">2</button>
-      <button class="star" data-v="3">3</button>
-      <button class="star" data-v="4">4</button>
-      <button class="star" data-v="5">5</button>
-    </div>
-    <div style="font-size:11.5px;color:var(--on-surface-3);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin:16px 0 10px;">Vibe</div>
-    <div class="vibes" id="vibes">
-      <button class="vibe" data-v="funny">Funny</button>
-      <button class="vibe" data-v="deep">Deep</button>
-      <button class="vibe" data-v="kind">Kind</button>
-      <button class="vibe" data-v="interesting">Interesting</button>
-      <button class="vibe" data-v="chill">Chill</button>
-      <button class="vibe" data-v="honest">Honest</button>
-    </div>
-    <div class="modal-row">
-      <button class="btn btn-ghost" id="btn-skip-rating">Skip</button>
-      <button class="btn btn-primary" id="btn-submit-rating">Submit</button>
-    </div>
-  </div>
+<h1>Mortalive — Snapshot Viewer</h1>
+<p class="sub">Snapshots are grouped by room and loaded in small batches so the page stays lighter on Render. Each snapshot is numbered, and you can download, flag, or delete it directly from the card.</p>
+<div class="bar">
+  <input id="roomId" placeholder="Filter by room_id (optional)">
+  <button id="btnLoad" onclick="load(true)">Load</button>
+  <button id="btnMore" onclick="load(false)" style="display:none;">Load more</button>
 </div>
-
-<!-- Progress identity sheet (dynamically inserted by app.js) -->
-<div class="overlay" id="progress-overlay" style="display:none;">
-  <div class="modal" style="width:min(760px,100%);text-align:left;background:rgba(13,17,23,.92);border:1px solid rgba(255,255,255,.12);color:#fff;">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px;">
-      <div>
-        <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.6;font-weight:800;">Progress identity</div>
-        <div style="font-size:26px;line-height:1.05;letter-spacing:-.04em;font-weight:800;margin-top:6px;">Your status, live</div>
-        <div id="progress-goal" style="margin-top:10px;color:rgba(255,255,255,.72);font-size:14px;line-height:1.6;">Loading…</div>
-      </div>
-      <button id="progress-close" type="button"
-              style="width:40px;height:40px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;font-size:20px;cursor:pointer;">×</button>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
-      <div style="padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);">
-        <div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.10em;">Magnet Score</div>
-        <div id="progress-score" style="font-size:28px;font-weight:800;line-height:1.1;margin-top:6px;">0</div>
-      </div>
-      <div style="padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);">
-        <div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.10em;">Weekly rank</div>
-        <div id="progress-rank" style="font-size:28px;font-weight:800;line-height:1.1;margin-top:6px;">#—</div>
-      </div>
-      <div style="padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);">
-        <div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.10em;">Completions</div>
-        <div id="progress-completions" style="font-size:28px;font-weight:800;line-height:1.1;margin-top:6px;">0</div>
-      </div>
-      <div style="padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);">
-        <div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.10em;">Top percentile</div>
-        <div id="progress-percentile" style="font-size:28px;font-weight:800;line-height:1.1;margin-top:6px;">Top —%</div>
-      </div>
-    </div>
-    <div style="margin-top:10px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);">
-      <div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.10em;">Streak</div>
-      <div id="progress-streak" style="font-size:20px;font-weight:800;margin-top:6px;">0 days</div>
-    </div>
-    <div style="margin-top:10px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);">
-      <div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.10em;">Badges</div>
-      <div id="progress-badges" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;"></div>
-    </div>
-    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
-      <button id="progress-share" type="button"
-              style="flex:1;min-width:160px;height:46px;border:0;border-radius:14px;background:linear-gradient(145deg,#1a6ef5,#7c3aed);color:#fff;font-weight:800;cursor:pointer;">
-        Copy share card
-      </button>
-      <button id="progress-refresh" type="button"
-              style="flex:1;min-width:160px;height:46px;border:1px solid rgba(255,255,255,.16);border-radius:14px;background:rgba(255,255,255,.07);color:#fff;font-weight:800;cursor:pointer;">
-        Refresh stats
-      </button>
-    </div>
-    <div id="progress-frame"  style="display:none;"></div>
-    <div id="progress-quote"  style="display:none;"></div>
-    <div id="progress-pinned" style="display:none;"></div>
-  </div>
+<div class="feed" id="feed"></div>
+<div class="footer">
+  <div class="hint" id="status">Ready.</div>
 </div>
-
-<div class="toast-root" id="toast-root" aria-live="polite"></div>
-
 <script>
-  window.MORTALIVE_SERVER_URL = 'https://mortalive-server.onrender.com';
-</script>
+const key = new URLSearchParams(location.search).get('key') || '';
+const feed = document.getElementById('feed');
+const statusEl = document.getElementById('status');
+const btnMore = document.getElementById('btnMore');
+const btnLoad = document.getElementById('btnLoad');
+const PAGE_SIZE = 12;
+const FLAG_KEY = 'mortalive_snapshot_flags_v1';
+let offset = 0;
+let activeRoom = '';
+let loading = false;
+let flaggedIds = loadFlagState();
 
-<script>
-(function () {
-  document.body.classList.add('reveal-ready');
-  const topbar = document.querySelector('.sakura-topbar');
-  const revealEls = Array.from(document.querySelectorAll('.scroll-reveal'));
-  let observer = null;
+function setStatus(text) {
+  if (statusEl) statusEl.textContent = text;
+}
 
-  function syncTopbar() {
-    if (!topbar) return;
-    topbar.classList.toggle('scrolled', window.scrollY > 8);
+function loadFlagState() {
+  try {
+    const raw = localStorage.getItem(FLAG_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(list) ? list.map(String) : []);
+  } catch (e) {
+    return new Set();
   }
+}
 
-  function revealNow(el) {
-    if (!el) return;
-    el.classList.add('in-view');
-  }
+function saveFlagState() {
+  try {
+    localStorage.setItem(FLAG_KEY, JSON.stringify(Array.from(flaggedIds)));
+  } catch (e) {}
+}
 
-  function initReveal() {
-    if (observer) {
-      observer.disconnect();
-      observer = null;
-    }
+function groupByRoom(items) {
+  const map = new Map();
+  items.forEach((item) => {
+    const room = item.room_id || 'unassigned';
+    if (!map.has(room)) map.set(room, []);
+    map.get(room).push(item);
+  });
+  return map;
+}
 
-    if ('IntersectionObserver' in window) {
-      observer = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('in-view');
-            observer.unobserve(entry.target);
-          }
-        });
-      }, { threshold: 0.15, rootMargin: '0px 0px -6% 0px' });
+function refreshRoomMeta(roomEl) {
+  if (!roomEl) return;
+  const meta = roomEl.querySelector('.room-meta');
+  const count = roomEl.querySelectorAll('.card').length;
+  if (meta) meta.textContent = count + ' snapshot' + (count === 1 ? '' : 's');
+}
 
-      revealEls.forEach((el) => {
-        observer.observe(el);
-      });
-    } else {
-      revealEls.forEach(revealNow);
-    }
+function syncFlagUI(card, id) {
+  const isFlagged = flaggedIds.has(String(id));
+  card.classList.toggle('flagged', isFlagged);
+  const flagBtn = card.querySelector('[data-action="flag"]');
+  if (flagBtn) flagBtn.textContent = isFlagged ? 'Unflag' : 'Flag';
+}
 
-    syncTopbar();
-  }
-
-  window.addEventListener('scroll', syncTopbar, { passive: true });
-  window.addEventListener('resize', syncTopbar, { passive: true });
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initReveal, { once: true });
+function toggleFlag(id, card) {
+  const sid = String(id);
+  if (flaggedIds.has(sid)) {
+    flaggedIds.delete(sid);
   } else {
-    initReveal();
+    flaggedIds.add(sid);
   }
-})();
-</script>
+  saveFlagState();
+  syncFlagUI(card, sid);
+  setStatus((flaggedIds.has(sid) ? 'Flagged ' : 'Unflagged ') + 'snapshot ' + sid + '.');
+}
 
-<script src="socket.io.min.js"></script>
-<script src="app.js"></script>
-</body>
-</html>
+async function deleteSnapshot(id, card) {
+  const sid = String(id);
+  if (!confirm('Delete snapshot ' + sid + '? This cannot be undone.')) return;
+  try {
+    const res = await fetch('/api/admin/snapshots/' + encodeURIComponent(sid) + '?key=' + encodeURIComponent(key), { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) throw new Error(data.error || 'Delete failed');
+    const room = card.closest('.room');
+    card.remove();
+    if (room) {
+      refreshRoomMeta(room);
+      if (!room.querySelector('.card')) room.remove();
+    }
+    setStatus('Deleted snapshot ' + sid + '.');
+  } catch (e) {
+    console.error(e);
+    alert(e.message || 'Delete failed');
+    setStatus('Failed to delete snapshot ' + sid + '.');
+  }
+}
+
+function renderGroups(items, append = true) {
+  if (!append) feed.innerHTML = '';
+  const grouped = groupByRoom(items);
+  if (!grouped.size && !append) {
+    feed.innerHTML = '<div class="empty">No snapshots found for this room.</div>';
+    return;
+  }
+
+  let displayIndex = offset + 1;
+  grouped.forEach((shots, roomId) => {
+    const room = document.createElement('section');
+    room.className = 'room';
+    room.dataset.roomId = roomId;
+
+    const head = document.createElement('div');
+    head.className = 'room-head';
+    head.innerHTML = '<div><div class="room-title">' + roomId + '</div><div class="room-meta">' + shots.length + ' snapshot' + (shots.length === 1 ? '' : 's') + '</div></div><div class="room-meta">Room row</div>';
+
+    const row = document.createElement('div');
+    row.className = 'row';
+
+    shots.forEach((s) => {
+      const idx = displayIndex++;
+      const card = document.createElement('article');
+      card.className = 'card';
+      card.dataset.snapshotId = s.id;
+      card.innerHTML =
+        '<div class="seq">#' + idx + '</div>' +
+        '<img src="/api/admin/snapshots/' + s.id + '/image?key=' + encodeURIComponent(key) + '" loading="lazy" decoding="async" alt="Snapshot #' + idx + '">' +
+        '<div class="meta">' +
+          '<div class="meta-top"><span class="room-id">' + (s.source || 'unknown') + '</span><span>' + new Date(s.captured_at).toLocaleString() + '</span></div>' +
+          '<div class="actions">' +
+            '<a class="action" href="/api/admin/snapshots/' + s.id + '/download?key=' + encodeURIComponent(key) + '">Download</a>' +
+            '<button class="action warn" type="button" data-action="flag">Flag</button>' +
+            '<button class="action danger" type="button" data-action="delete">Delete</button>' +
+          '</div>' +
+        '</div>';
+
+      row.appendChild(card);
+
+      const flagBtn = card.querySelector('[data-action="flag"]');
+      const deleteBtn = card.querySelector('[data-action="delete"]');
+      flagBtn && flagBtn.addEventListener('click', () => toggleFlag(s.id, card));
+      deleteBtn && deleteBtn.addEventListener('click', () => deleteSnapshot(s.id, card));
+      syncFlagUI(card, s.id);
+    });
+
+    room.appendChild(head);
+    room.appendChild(row);
+    feed.appendChild(room);
+  });
+}
+
+async function load(reset) {
+  if (loading) return;
+  loading = true;
+  btnLoad.disabled = true;
+  if (btnMore) btnMore.disabled = true;
+
+  try {
+    if (reset) {
+      offset = 0;
+      activeRoom = document.getElementById('roomId').value.trim();
+      feed.innerHTML = '';
+    }
+
+    const roomId = activeRoom || document.getElementById('roomId').value.trim();
+    activeRoom = roomId;
+    const url = '/api/admin/snapshots?key=' + encodeURIComponent(key) + '&limit=' + PAGE_SIZE + '&offset=' + offset + (roomId ? '&roomId=' + encodeURIComponent(roomId) : '');
+    setStatus('Loading snapshots…');
+    const res = await fetch(url);
+    const data = await res.json();
+    const snapshots = Array.isArray(data.snapshots) ? data.snapshots : [];
+
+    if (reset) feed.innerHTML = '';
+    if (snapshots.length) {
+      renderGroups(snapshots, true);
+      offset += snapshots.length;
+      setStatus('Loaded ' + offset + ' snapshot' + (offset === 1 ? '' : 's') + '.');
+    } else if (reset) {
+      feed.innerHTML = '<div class="empty">No snapshots found.</div>';
+      setStatus('No snapshots found.');
+    }
+
+    const more = !!data.hasMore && snapshots.length === PAGE_SIZE;
+    if (btnMore) btnMore.style.display = more ? 'inline-flex' : 'none';
+  } catch (e) {
+    console.error(e);
+    setStatus('Failed to load snapshots.');
+  } finally {
+    loading = false;
+    btnLoad.disabled = false;
+    if (btnMore) btnMore.disabled = false;
+  }
+}
+load(true);
+</script>
+</body></html>`);
+});
+
+app.post('/api/snapshot', async (req, res) => {
+  const { roomId, source, image, token } = req.body || {};
+
+  console.log('[Snapshot Received]', {
+    hasRoomId: !!roomId,
+    hasImage: !!image,
+    imageLength: image ? image.length : 0,
+    source
+  });
+
+  if (!image) {
+    console.log('[Snapshot] Rejected - missing image');
+    return res.json({ ok: true });
+  }
+
+  if (!db) {
+    console.error('[Snapshot] Supabase client is NULL - no DB connection');
+    return res.json({ ok: true });
+  }
+
+  const safeRoomId = normalizeRoomId(roomId);
+  const safeSource = normalizeSnapshotSource(source);
+
+  // Keep Render and Supabase happier by dropping rapid duplicate bursts
+  // for the same room/source pair. The frontend now sends fewer frames,
+  // and this is the second safety valve so a busy room does not flood the DB.
+  if (!shouldAcceptSnapshot(safeRoomId, safeSource)) {
+    return res.json({ ok: true, throttled: true });
+  }
+
+  const capturedAt = new Date();
+  const storagePath = buildSnapshotStoragePath(safeRoomId, safeSource, capturedAt);
+  const baseRow = {
+    room_id: safeRoomId,
+    source: safeSource,
+    image_base64: image,
+    captured_at: capturedAt.toISOString()
+  };
+
+  const candidates = [
+    { ...baseRow, storage_path: storagePath },
+    { ...baseRow },
+    { ...baseRow, source: 'other', storage_path: storagePath },
+    { ...baseRow, source: 'other' }
+  ];
+
+  try {
+    const result = await insertSnapshotRow(candidates);
+    const { data, error } = result || {};
+
+    if (error) {
+      console.error('[Snapshot DB Error]', error.message);
+      return res.json({ ok: true });
+    }
+
+    console.log('[Snapshot SUCCESS] Inserted row ID:', data?.[0]?.id, 'path:', storagePath);
+    res.json({ ok: true, id: data?.[0]?.id, path: storagePath });
+  } catch (err) {
+    console.error('[Snapshot Exception]', err.message);
+    res.json({ ok: true });
+  }
+});
+app.post('/api/log', async (req, res) => {
+  const { event, roomId, text, who, stars, vibes, reason, ts, token } = req.body;
+  const ip     = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const ipHash = crypto.createHash('sha256')
+    .update(ip + (process.env.IP_SALT || 'mortalive-salt')).digest('hex');
+
+  if      (event === 'message') {
+    await dbLog('messages', { room_id: roomId, sender_hash: ipHash, direction: who, content: text, created_at: new Date(ts||Date.now()).toISOString() });
+
+  } else if (event === 'rating') {
+    const raterSession = getSessionFromToken(token);
+    const participants  = findRoomParticipants(roomId);
+
+    let ratedAccountId = null;
+    let newScore = null;
+
+    if (participants) {
+      const socketIds = Object.keys(participants);
+      // The rated person is whichever participant ISN'T the rater.
+      const raterSocketId = raterSession
+        ? socketIds.find((sid) => participants[sid].accountId === raterSession.accountId)
+        : null;
+      const ratedSocketId = socketIds.find((sid) => sid !== raterSocketId);
+      const ratedIdentity = ratedSocketId ? participants[ratedSocketId] : null;
+
+      if (ratedIdentity && !ratedIdentity.isGuest && ratedIdentity.accountId) {
+        // Guard against a person rating themself if something upstream
+        // ever sends a malformed roomId.
+        if (!raterSession || ratedIdentity.accountId !== raterSession.accountId) {
+          ratedAccountId = ratedIdentity.accountId;
+          newScore = await applyRatingToAccount(ratedAccountId, stars);
+        }
+      }
+    }
+
+    await dbLog('ratings', {
+      room_id: roomId,
+      rated_account_id: ratedAccountId,
+      rater_account_id: raterSession ? raterSession.accountId : null,
+      rater_ip_hash: ipHash,
+      stars,
+      vibes: vibes || [],
+      points_awarded: ratedAccountId ? (STAR_POINTS[stars] ?? 0) : 0,
+      rated_at: new Date().toISOString()
+    });
+
+    return res.json({ ok: true, ratedAccountId, newScore });
+
+  } else if (event === 'start') {
+    await dbLog('sessions', { room_id: roomId, mode: req.body.mode, stranger_name: req.body.stranger, started_at: new Date().toISOString() });
+  } else if (event === 'end') {
+    await dbLog('session_events', { room_id: roomId, event_type: reason, occurred_at: new Date().toISOString() });
+  } else if (event === 'live_start') {
+    await dbLog('live_sessions', { stream_id: req.body.streamId, broadcaster_hash: ipHash, title: req.body.title, started_at: new Date().toISOString() });
+  } else if (event === 'live_end') {
+    await dbUpdate('live_sessions', { stream_id: req.body.streamId }, { ended_at: new Date().toISOString(), peak_viewers: req.body.peakViewers || 0 });
+  }
+
+  res.json({ ok: true });
+});
+
+// ── SOCKET.IO ─────────────────────────────────────────────
+const io = new Server(server, {
+  cors:          { origin: allowedOrigins, methods: ['GET','POST'], credentials: true },
+  pingTimeout:   25000,
+  pingInterval:  10000,
+  maxHttpBufferSize: 2e6, // 2MB for video signaling frames
+  // Mobile browsers aggressively suspend background tabs (screen lock,
+  // app switch), which silently drops the WebSocket. Without recovery,
+  // that socket falls out of the matching queue and the device looks
+  // like it's still searching when it's actually gone. This keeps the
+  // session alive for a short window so a quick reconnect resumes the
+  // SAME socket.id instead of being treated as a brand new connection.
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 60 * 1000, // 60s grace window
+    skipMiddlewares: true
+  }
+});
+
+// ── IN-MEMORY STATE ───────────────────────────────────────
+const queues = { text: [], video: [], live_seeker: [] };
+const rooms  = {};  // roomId → { sockets, mode, startedAt, ipHashes, participants }
+
+// Participants survive AFTER a room is torn down (chat ended), specifically
+// so a rating submitted post-chat can still resolve who was in the room.
+// Cleared after 1 hour to avoid unbounded memory growth.
+const roomParticipantsArchive = {}; // roomId → { participants, archivedAt }
+function archiveRoomParticipants(roomId, participants) {
+  roomParticipantsArchive[roomId] = { participants, archivedAt: Date.now() };
+}
+function getArchivedParticipants(roomId) {
+  return roomParticipantsArchive[roomId]?.participants || null;
+}
+setInterval(() => {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  for (const [roomId, entry] of Object.entries(roomParticipantsArchive)) {
+    if (entry.archivedAt < cutoff) delete roomParticipantsArchive[roomId];
+  }
+}, 10 * 60 * 1000);
+
+setInterval(() => {
+  const cutoff = Date.now() - SNAPSHOT_MIN_GAP_MS * 4;
+  for (const [key, lastSeen] of snapshotThrottle.entries()) {
+    if (lastSeen < cutoff) snapshotThrottle.delete(key);
+  }
+}, 10 * 60 * 1000);
+
+function findRoomParticipants(roomId) {
+  return rooms[roomId]?.participants || getArchivedParticipants(roomId) || null;
+}
+
+// Net score delta per star rating. 3 stars is neutral on purpose —
+// a score should only move on a genuinely positive or negative signal.
+const STAR_POINTS = { 5: 12, 4: 6, 3: 0, 2: -8, 1: -16 };
+const MIN_SCORE = 0;
+const MAX_SCORE = 1000;
+
+async function applyRatingToAccount(accountId, stars) {
+  if (!db || !accountId) return null;
+  const delta = STAR_POINTS[stars] ?? 0;
+  const account = await dbSelectOne('accounts', { id: accountId });
+  if (!account) return null;
+  const newScore = Math.max(MIN_SCORE, Math.min(MAX_SCORE, account.magnet_score + delta));
+  await dbUpdate('accounts', { id: accountId }, { magnet_score: newScore });
+  return newScore;
+}
+
+// liveStreams: streamId → { broadcasterSocket, title, viewers: Set<socketId>, startedAt, viewerSockets: Map<socketId,socket> }
+const liveStreams = {};
+
+// socketToStream: socketId → streamId (for cleanup)
+const socketToStream = {};
+const socketToRoom   = {};
+
+io.on('connection', (socket) => {
+  console.log(`[+] ${socket.id}${socket.recovered ? ' (recovered session — reconnected within grace window)' : ''}`);
+  const ip     = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
+  const ipHash = crypto.createHash('sha256')
+    .update(ip + (process.env.IP_SALT || 'mortalive-salt')).digest('hex');
+
+  // ── 1:1 MATCHMAKING QUEUE ─────────────────────────────
+  socket.on('queue', async (data) => {
+    const mode = ['video','text','live_seeker'].includes(data.mode) ? data.mode : 'text';
+    removeFromAllQueues(socket.id);
+
+    // Resolve who this socket actually is: a logged-in account (via
+    // session token) takes priority over a guest-typed display name.
+    const session = getSessionFromToken(data.token);
+    const identity = session
+      ? { accountId: session.accountId, name: session.username, isGuest: false }
+      : { accountId: null, name: sanitizeGuestName(data.guestName), isGuest: true };
+
+    if (mode === 'live_seeker') {
+      const streamIds = Object.keys(liveStreams);
+      if (streamIds.length > 0) {
+        const streamId = streamIds[Math.floor(Math.random() * streamIds.length)];
+        socket.emit('live_found', { streamId, stream: publicStreamInfo(streamId) });
+      } else {
+        queues.live_seeker.push({ id: socket.id, socket, ipHash, identity });
+        socket.emit('live_waiting', { queueSize: queues.live_seeker.length });
+      }
+      return;
+    }
+
+    const queue = queues[mode];
+    console.log(`[Queue] ${socket.id} (${identity.name}) → ${mode} (queue: ${queue.length})`);
+
+    if (queue.length > 0) {
+      const peer   = queue.shift();
+      const roomId = 'room_' + crypto.randomBytes(8).toString('hex');
+
+      rooms[roomId] = {
+        sockets: [socket.id, peer.id],
+        mode, startedAt: Date.now(),
+        ipHashes: [ipHash, peer.ipHash],
+        // Remember each side's identity so a rating submitted later can be
+        // applied to the correct account (or correctly ignored for guests).
+        participants: {
+          [socket.id]:  identity,
+          [peer.id]:    peer.identity
+        }
+      };
+      socketToRoom[socket.id] = roomId;
+      socketToRoom[peer.id]   = roomId;
+
+      socket.join(roomId);
+      peer.socket.join(roomId);
+
+      socket.emit('matched',      { roomId, initiator: false, peer: await publicIdentity(peer.identity) });
+      peer.socket.emit('matched', { roomId, initiator: true,  peer: await publicIdentity(identity) });
+
+      dbLog('sessions', { room_id: roomId, mode, started_at: new Date().toISOString(), ip_hash_a: ipHash, ip_hash_b: peer.ipHash });
+      console.log(`[Match] ${roomId}: ${peer.identity.name} ↔ ${identity.name}`);
+    } else {
+      queue.push({ id: socket.id, socket, ipHash, identity });
+    }
+  });
+
+  // ── 1:1 WebRTC SIGNAL RELAY ───────────────────────────
+  socket.on('signal', (data) => {
+    const { roomId, ...signal } = data;
+    socket.to(roomId).emit('signal', signal);
+  });
+
+  // ── 1:1 CHAT RELAY ────────────────────────────────────
+  socket.on('chat', async (data) => {
+    const { roomId, text } = data;
+    if (!text || !roomId || text.length > 1000) return;
+    socket.to(roomId).emit('peer-chat', { text });
+    await dbLog('messages', { room_id: roomId, sender_hash: ipHash, direction: 'a', content: text, created_at: new Date().toISOString() });
+  });
+
+  // ── LEAVE 1:1 ─────────────────────────────────────────
+  socket.on('leave', ({ roomId }) => handleLeave(socket, roomId, 'left'));
+
+  // ══════════════════════════════════════════════════════
+  // LIVE STREAMING
+  // ══════════════════════════════════════════════════════
+
+  // ── GO LIVE ───────────────────────────────────────────
+  socket.on('live_start', (data) => {
+    const streamId = 'live_' + crypto.randomBytes(6).toString('hex');
+    const stream   = {
+      broadcasterSocket: socket,
+      broadcasterId:     socket.id,
+      title:             (data.title || 'Live Stream').slice(0, 60),
+      category:          data.category || 'general',
+      broadcasterName:   data.name || 'Streamer',
+      viewers:           new Set(),
+      viewerSockets:     new Map(),
+      startedAt:         Date.now(),
+      peakViewers:       0,
+      chatLog:           [],
+    };
+    liveStreams[streamId] = stream;
+    socketToStream[socket.id] = streamId;
+    socket.join(streamId);
+
+    socket.emit('live_started', { streamId });
+    console.log(`[Live] ${socket.id} started stream ${streamId}: "${stream.title}"`);
+
+    // Alert any seekers waiting in queue
+    while (queues.live_seeker.length > 0) {
+      const seeker = queues.live_seeker.shift();
+      seeker.socket.emit('live_found', { streamId, stream: publicStreamInfo(streamId) });
+    }
+
+    // Broadcast updated stream list to everyone
+    io.emit('lives_updated', { lives: getPublicLivesList() });
+
+    dbLog('live_sessions', { stream_id: streamId, broadcaster_hash: ipHash, title: stream.title, started_at: new Date().toISOString() });
+  });
+
+  // ── END LIVE ──────────────────────────────────────────
+  socket.on('live_end', () => {
+    const streamId = socketToStream[socket.id];
+    if (!streamId) return;
+    endLiveStream(socket, streamId, 'ended');
+  });
+
+  // ── JOIN LIVE AS VIEWER ───────────────────────────────
+  socket.on('live_join', (data) => {
+    const { streamId } = data;
+    const stream = liveStreams[streamId];
+    if (!stream) { socket.emit('live_error', { msg: 'Stream not found or ended' }); return; }
+
+    stream.viewers.add(socket.id);
+    stream.viewerSockets.set(socket.id, socket);
+    if (stream.viewers.size > stream.peakViewers) stream.peakViewers = stream.viewers.size;
+    socketToStream[socket.id] = streamId;
+    socket.join(streamId);
+
+    // Tell viewer: stream info + recent chat
+    socket.emit('live_joined', {
+      streamId,
+      title:           stream.title,
+      broadcasterName: stream.broadcasterName,
+      viewerCount:     stream.viewers.size,
+      recentChat:      stream.chatLog.slice(-30),
+    });
+
+    // Tell broadcaster: viewer count update
+    stream.broadcasterSocket.emit('live_viewer_update', { viewerCount: stream.viewers.size });
+
+    // Initiate WebRTC: broadcaster sends offer to new viewer
+    stream.broadcasterSocket.emit('live_viewer_joined', { viewerSocketId: socket.id });
+
+    // Update public list
+    io.emit('lives_updated', { lives: getPublicLivesList() });
+    console.log(`[Live] Viewer ${socket.id} joined ${streamId} (${stream.viewers.size} viewers)`);
+  });
+
+  // ── LEAVE LIVE AS VIEWER ──────────────────────────────
+  socket.on('live_leave', () => {
+    const streamId = socketToStream[socket.id];
+    if (!streamId || !liveStreams[streamId]) return;
+    removeViewerFromStream(socket, streamId);
+  });
+
+  // ── LIVE WebRTC SIGNALING ─────────────────────────────
+  // Broadcaster → specific viewer
+  socket.on('live_signal_to_viewer', ({ viewerSocketId, signal }) => {
+    const viewerSocket = io.sockets.sockets.get(viewerSocketId);
+    if (viewerSocket) viewerSocket.emit('live_signal_from_broadcaster', { signal });
+  });
+
+  // Viewer → broadcaster
+  socket.on('live_signal_to_broadcaster', ({ signal }) => {
+    const streamId = socketToStream[socket.id];
+    if (!streamId || !liveStreams[streamId]) return;
+    liveStreams[streamId].broadcasterSocket.emit('live_signal_from_viewer', { viewerSocketId: socket.id, signal });
+  });
+
+  // ── LIVE CHAT ─────────────────────────────────────────
+  socket.on('live_chat', async (data) => {
+    const { streamId, text, senderName } = data;
+    const stream = liveStreams[streamId];
+    if (!stream || !text || text.length > 300) return;
+
+    const msg = { text: text.slice(0, 300), senderName: (senderName || 'Viewer').slice(0, 20), ts: Date.now() };
+    stream.chatLog.push(msg);
+    if (stream.chatLog.length > 200) stream.chatLog.shift(); // keep last 200
+
+    // Broadcast to everyone in stream room (broadcaster + all viewers)
+    io.to(streamId).emit('live_chat_msg', msg);
+
+    await dbLog('messages', { room_id: streamId, sender_hash: ipHash, direction: 'live', content: text, created_at: new Date().toISOString() });
+  });
+
+  // ── REPORT ────────────────────────────────────────────
+  socket.on('report', async ({ roomId, reason }) => {
+    await dbLog('reports', { room_id: roomId, reporter_hash: ipHash, reason: reason||'unspecified', reported_at: new Date().toISOString() });
+    socket.emit('report-received', { ok: true });
+  });
+
+  // ── DISCONNECT ────────────────────────────────────────
+  socket.on('disconnect', () => {
+    console.log(`[-] ${socket.id} disconnected (reason will determine queue handling)`);
+
+    // Don't yank someone out of the matching queue the instant their
+    // socket drops — mobile tabs reconnect within seconds after being
+    // backgrounded. Give it a short grace window; if they're truly gone
+    // (still disconnected after the window), THEN remove them from queue.
+    setTimeout(() => {
+      const stillConnected = io.sockets.sockets.get(socket.id)?.connected;
+      if (!stillConnected) {
+        removeFromAllQueues(socket.id);
+        console.log(`[Queue] ${socket.id} removed after grace window (no reconnect)`);
+      }
+    }, 8000);
+
+    // Active rooms and live streams DO tear down immediately — your chat
+    // partner or viewers shouldn't be left hanging not knowing you dropped.
+    const roomId = socketToRoom[socket.id];
+    if (roomId) { handleLeave(socket, roomId, 'disconnected'); delete socketToRoom[socket.id]; }
+
+    const streamId = socketToStream[socket.id];
+    if (streamId && liveStreams[streamId]) {
+      if (liveStreams[streamId].broadcasterId === socket.id) {
+        endLiveStream(socket, streamId, 'disconnected');
+      } else {
+        removeViewerFromStream(socket, streamId);
+      }
+    }
+    delete socketToStream[socket.id];
+  });
+});
+
+// ── LIVE HELPERS ──────────────────────────────────────────
+function endLiveStream(broadcasterSocket, streamId, reason) {
+  const stream = liveStreams[streamId];
+  if (!stream) return;
+
+  // Notify all viewers
+  io.to(streamId).emit('live_ended', { reason, streamId });
+
+  dbUpdate('live_sessions', { stream_id: streamId }, {
+    ended_at:     new Date().toISOString(),
+    peak_viewers: stream.peakViewers
+  });
+
+  delete liveStreams[streamId];
+  delete socketToStream[broadcasterSocket.id];
+  io.emit('lives_updated', { lives: getPublicLivesList() });
+  console.log(`[Live] Stream ${streamId} ended (${reason})`);
+}
+
+function removeViewerFromStream(socket, streamId) {
+  const stream = liveStreams[streamId];
+  if (!stream) return;
+  stream.viewers.delete(socket.id);
+  stream.viewerSockets.delete(socket.id);
+  delete socketToStream[socket.id];
+
+  // Tell broadcaster viewer left
+  stream.broadcasterSocket.emit('live_viewer_update', { viewerCount: stream.viewers.size });
+  stream.broadcasterSocket.emit('live_viewer_left',   { viewerSocketId: socket.id });
+  io.emit('lives_updated', { lives: getPublicLivesList() });
+}
+
+function publicStreamInfo(streamId) {
+  const s = liveStreams[streamId];
+  if (!s) return null;
+  return { streamId, title: s.title, broadcasterName: s.broadcasterName, viewerCount: s.viewers.size, startedAt: s.startedAt, category: s.category };
+}
+
+function getPublicLivesList() {
+  return Object.keys(liveStreams).map(publicStreamInfo).filter(Boolean);
+}
+
+// ── 1:1 HELPERS ───────────────────────────────────────────
+function removeFromAllQueues(socketId) {
+  for (const q of Object.values(queues)) {
+    const i = q.findIndex(x => x.id === socketId);
+    if (i !== -1) q.splice(i, 1);
+  }
+}
+
+function handleLeave(socket, roomId, reason) {
+  const room = rooms[roomId];
+  if (!room) return;
+  socket.to(roomId).emit('peer-disconnected', { reason });
+  dbLog('session_events', { room_id: roomId, event_type: reason, duration_ms: Date.now() - (room.startedAt||Date.now()), occurred_at: new Date().toISOString() });
+  if (room.participants) archiveRoomParticipants(roomId, room.participants);
+  delete rooms[roomId];
+}
+
+function randomEmoji() {
+  const e = ['🦊','🎭','🌸','⚡','🌙','🔮','☀️','🖤','🎯','🌀','🦋','🎪','🐺','🌊'];
+  return e[Math.floor(Math.random() * e.length)];
+}
+
+function sanitizeGuestName(raw) {
+  const fallback = 'Guest_' + Math.floor(1000 + Math.random() * 9000);
+  if (typeof raw !== 'string') return fallback;
+  const cleaned = raw.trim().slice(0, 24).replace(/[<>]/g, '');
+  return cleaned.length >= 2 ? cleaned : fallback;
+}
+
+// What gets sent to the OTHER person about this participant. Guests show
+// their typed name with no score (nothing durable to show). Accounts show
+// their real username and live magnet_score fetched from the DB.
+async function publicIdentity(identity) {
+  if (!identity.isGuest && identity.accountId) {
+    const account = await dbSelectOne('accounts', { id: identity.accountId });
+    return {
+      name: identity.name,
+      score: account ? account.magnet_score : null,
+      emoji: randomEmoji(),
+      isGuest: false
+    };
+  }
+  return { name: identity.name, score: null, emoji: randomEmoji(), isGuest: true };
+}
+
+// ── START ─────────────────────────────────────────────────
+server.on('error', (err) => {
+  console.error('HTTP SERVER ERROR:', err);
+});
+
+server.on('clientError', (err, socket) => {
+  console.error('CLIENT ERROR:', err.message);
+  try { socket.end('HTTP/1.1 400 Bad Request\r\n\r\n'); } catch (e) {}
+});
+
+server.listen(PORT, () => {
+  console.log(`\n💀 Mortalive server running on port ${PORT}`);
+  console.log(`   Health:      http://localhost:${PORT}/health`);
+  console.log(`   Live index:  http://localhost:${PORT}/api/lives`);
+  console.log(`   DB: ${db ? '✓ Supabase connected' : '✗ No DB (set env vars)'}\n`);
+});
+
+module.exports = { app, server };
