@@ -13,6 +13,150 @@ console.log(`[Mortalive] ${BUILD_TAG} loaded`);
 console.log(`[Mortalive] SERVER_URL = ${SERVER_URL}`);
 console.log(`[Mortalive] Socket.io client ${typeof io === 'undefined' ? 'NOT LOADED ✗' : 'loaded ✓'}`);
 
+// ════════════════════════════════════════════════════════════════
+// SUPABASE INITIALIZATION
+// ════════════════════════════════════════════════════════════════
+// IMPORTANT: Replace these with your Supabase project credentials
+const SUPABASE_URL = 'https://your-project.supabase.co';
+const SUPABASE_ANON_KEY = 'your-anon-key-here';
+
+let supabase = null;
+let supabaseInitPromise = null;
+
+async function initSupabase() {
+  if (supabase) return supabase;
+  if (supabaseInitPromise) return supabaseInitPromise;
+
+  supabaseInitPromise = (async () => {
+    try {
+      const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/+esm');
+      supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      console.log('[Supabase] Client initialized ✓');
+      return supabase;
+    } catch (err) {
+      console.error('[Supabase] Failed to initialize:', err);
+      toast('Auth service connection failed. Guest mode available.', '⚠️');
+      return null;
+    }
+  })();
+
+  return supabaseInitPromise;
+}
+
+async function signUpWithEmail(email, password, username) {
+  const client = await initSupabase();
+  if (!client) return { error: new Error('Service unavailable') };
+
+  try {
+    const { data, error } = await client.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          username,
+          display_name: username
+        }
+      }
+    });
+    if (error) throw error;
+
+    S.authToken = data.session?.access_token || null;
+    S.username = username;
+    S.userId = data.user?.id || null;
+    S.isGuest = false;
+
+    if (S.authToken) {
+      localStorage.setItem('mortalive_token', S.authToken);
+      localStorage.setItem('mortalive_username', S.username);
+      if (S.userId) localStorage.setItem('mortalive_user_id', S.userId);
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('[Supabase signup]', error);
+    return { error };
+  }
+}
+
+async function signInWithEmail(email, password) {
+  const client = await initSupabase();
+  if (!client) return { error: new Error('Service unavailable') };
+
+  try {
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+
+    S.authToken = data.session?.access_token || null;
+    S.username = data.user?.user_metadata?.username || data.user?.email?.split('@')[0] || null;
+    S.userId = data.user?.id || null;
+    S.isGuest = false;
+
+    if (S.authToken) {
+      localStorage.setItem('mortalive_token', S.authToken);
+      if (S.username) localStorage.setItem('mortalive_username', S.username);
+      if (S.userId) localStorage.setItem('mortalive_user_id', S.userId);
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('[Supabase login]', error);
+    return { error };
+  }
+}
+
+async function signOut() {
+  try {
+    if (supabase) await supabase.auth.signOut();
+  } catch (error) {
+    console.warn('[Supabase signOut]', error);
+  }
+
+  S.authToken = null;
+  S.username = null;
+  S.userId = null;
+  S.isGuest = true;
+
+  localStorage.removeItem('mortalive_token');
+  localStorage.removeItem('mortalive_username');
+  localStorage.removeItem('mortalive_user_id');
+}
+
+async function checkAuthStatus() {
+  const client = await initSupabase();
+  if (!client) return false;
+
+  try {
+    const { data: { session } } = await client.auth.getSession();
+    if (!session) {
+      S.authToken = null;
+      S.userId = null;
+      S.username = localStorage.getItem('mortalive_username') || null;
+      S.isGuest = !S.username;
+      return false;
+    }
+
+    S.authToken = session.access_token || null;
+    S.userId = session.user?.id || null;
+    S.username = session.user?.user_metadata?.username || session.user?.email?.split('@')[0] || S.username || null;
+    S.isGuest = false;
+
+    if (S.authToken) localStorage.setItem('mortalive_token', S.authToken);
+    if (S.username) localStorage.setItem('mortalive_username', S.username);
+    if (S.userId) localStorage.setItem('mortalive_user_id', S.userId);
+
+    return true;
+  } catch (error) {
+    console.error('[Supabase session]', error);
+    return false;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// END SUPABASE CODE
+// ════════════════════════════════════════════════════════════════
+
+
+
 const ICE_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -47,9 +191,11 @@ const S = {
   // identity
   authToken: localStorage.getItem('mortalive_token') || null,
   username: localStorage.getItem('mortalive_username') || null,
+  userId: localStorage.getItem('mortalive_user_id') || null,
   magnetScore: null,
-  isGuest: true,
+  isGuest: !localStorage.getItem('mortalive_token'),
   guestName: localStorage.getItem('mortalive_guest_name') || '',
+  authMode: 'login',
   videoLayout: 'horizontal',
   chatStartedAt: null,
   chatCounted: false,
@@ -987,121 +1133,158 @@ function requestCameraPermission() {
 }
 
 function initAuthControls() {
-  const tabLogin  = $('tab-login');
+  const tabLogin = $('tab-login');
   const tabSignup = $('tab-signup');
-  const loginForm  = $('auth-login-form');
-  const signupForm = $('auth-signup-form');
-  const forgotForm = $('auth-forgot-form');
+  const tabGuest = $('tab-guest');
+  const loginPanel = $('login-panel');
+  const signupPanel = $('signup-panel');
+  const guestPanel = $('guest-panel');
 
   function showAuthTab(which) {
-    if (forgotForm) forgotForm.style.display = 'none';
-    if (which === 'login') {
-      if (loginForm) loginForm.style.display = '';
-      if (signupForm) signupForm.style.display = 'none';
-      tabLogin?.classList.add('active');
-      tabSignup?.classList.remove('active');
-    } else {
-      if (loginForm) loginForm.style.display = 'none';
-      if (signupForm) signupForm.style.display = '';
-      tabSignup?.classList.add('active');
-      tabLogin?.classList.remove('active');
-    }
+    S.authMode = which;
+
+    const show = (el, active) => {
+      if (!el) return;
+      el.classList.toggle('active', active);
+    };
+
+    show(tabLogin, which === 'login');
+    show(tabSignup, which === 'signup');
+    show(tabGuest, which === 'guest');
+
+    show(loginPanel, which === 'login');
+    show(signupPanel, which === 'signup');
+    show(guestPanel, which === 'guest');
   }
 
   tabLogin?.addEventListener('click', () => showAuthTab('login'));
   tabSignup?.addEventListener('click', () => showAuthTab('signup'));
+  tabGuest?.addEventListener('click', () => showAuthTab('guest'));
 
   function setError(id, msg) {
     const el = $(id);
     if (!el) return;
-    if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
+    if (!msg) {
+      el.style.display = 'none';
+      el.textContent = '';
+      return;
+    }
     el.style.display = 'block';
     el.textContent = msg;
   }
 
-  function afterAuthSuccess(token, username, magnetScore) {
-    S.authToken = token;
-    S.username = username;
-    S.magnetScore = magnetScore;
+  async function finishAuth(token, username, userId) {
+    S.authToken = token || null;
+    S.username = username || null;
+    S.userId = userId || null;
     S.isGuest = false;
-    localStorage.setItem('mortalive_token', token);
-    localStorage.setItem('mortalive_username', username);
-    syncAuthProgress(magnetScore);
-    toast(`Welcome, ${username}!`, '🧲');
-    enterLobby();
+
+    if (S.authToken) localStorage.setItem('mortalive_token', S.authToken);
+    if (S.username) localStorage.setItem('mortalive_username', S.username);
+    if (S.userId) localStorage.setItem('mortalive_user_id', S.userId);
+
+    updateIdentityDisplay();
+    updateProgressText();
+    toast(`Welcome, ${S.username || 'friend'}!`, '🧲');
+    showPage('pg-perm');
   }
 
-  $('btn-login')?.addEventListener('click', async () => {
-    const username = ($('login-username')?.value || '').trim();
+  $('btn-sign-in')?.addEventListener('click', async () => {
+    const email = ($('login-email')?.value || '').trim();
     const password = $('login-password')?.value || '';
     setError('login-error', null);
-    if (!username || !password) { setError('login-error', 'Enter your username and password.'); return; }
 
-    try {
-      const res = await fetch(`${SERVER_URL}/api/login`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      const data = await res.json();
-      if (!res.ok) { setError('login-error', data.error || 'Login failed.'); return; }
-      afterAuthSuccess(data.token, data.username, data.magnetScore);
-    } catch (e) {
-      setError('login-error', 'Could not reach the server. Try again in a moment.');
+    if (!email || !password) {
+      setError('login-error', 'Enter your email and password.');
+      return;
+    }
+
+    const btn = $('btn-sign-in');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Signing in…';
+    }
+
+    const { data, error } = await signInWithEmail(email, password);
+
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Sign in →';
+    }
+
+    if (error) {
+      setError('login-error', error.message || 'Login failed.');
+      toast(error.message || 'Login failed', '⚠️');
+      return;
+    }
+
+    if (data) {
+      if ($('login-email')) $('login-email').value = '';
+      if ($('login-password')) $('login-password').value = '';
+      await finishAuth(S.authToken, S.username, S.userId);
     }
   });
 
-  $('btn-signup')?.addEventListener('click', async () => {
+  $('btn-create-account')?.addEventListener('click', async () => {
+    const email = ($('signup-email')?.value || '').trim();
     const username = ($('signup-username')?.value || '').trim();
-    const email    = ($('signup-email')?.value || '').trim();
     const password = $('signup-password')?.value || '';
+    const confirmPassword = $('signup-confirm')?.value || '';
+    const termsCheckbox = $('signup-terms');
     setError('signup-error', null);
 
-    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-      setError('signup-error', 'Username must be 3-20 characters: letters, numbers, underscore only.');
+    if (!email || !username || !password || !confirmPassword) {
+      setError('signup-error', 'Please fill in all fields.');
       return;
     }
-    if (password.length < 6) {
-      setError('signup-error', 'Password must be at least 6 characters.');
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
+      setError('signup-error', 'Username must be 3-24 characters: letters, numbers, underscore only.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('signup-error', 'Password must be at least 8 characters.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('signup-error', 'Passwords do not match.');
+      return;
+    }
+    if (termsCheckbox && !termsCheckbox.checked) {
+      setError('signup-error', 'Please agree to the terms.');
       return;
     }
 
-    try {
-      const res = await fetch(`${SERVER_URL}/api/signup`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, email: email || null })
-      });
-      const data = await res.json();
-      if (!res.ok) { setError('signup-error', data.error || 'Could not create account.'); return; }
-      afterAuthSuccess(data.token, data.username, data.magnetScore);
-    } catch (e) {
-      setError('signup-error', 'Could not reach the server. Try again in a moment.');
+    const btn = $('btn-create-account');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Creating account…';
     }
-  });
 
-  $('btn-forgot')?.addEventListener('click', () => {
-    if (loginForm) loginForm.style.display = 'none';
-    if (forgotForm) forgotForm.style.display = '';
-  });
-  $('btn-forgot-back')?.addEventListener('click', () => {
-    if (forgotForm) forgotForm.style.display = 'none';
-    showAuthTab('login');
-  });
-  $('btn-forgot-submit')?.addEventListener('click', async () => {
-    const email = ($('forgot-email')?.value || '').trim();
-    const msgEl = $('forgot-message');
-    if (!email) return;
-    try {
-      const res = await fetch(`${SERVER_URL}/api/forgot-password`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
-      const data = await res.json();
-      if (msgEl) {
-        msgEl.style.display = 'block';
-        msgEl.textContent = data.message || 'If an account exists for that email, a reset link will be sent soon.';
-      }
-    } catch (e) {
-      if (msgEl) { msgEl.style.display = 'block'; msgEl.textContent = 'Could not reach the server.'; }
+    const { data, error } = await signUpWithEmail(email, password, username);
+
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Create account →';
+    }
+
+    if (error) {
+      setError('signup-error', error.message || 'Could not create account.');
+      toast(error.message || 'Signup failed', '⚠️');
+      return;
+    }
+
+    if ($('signup-email')) $('signup-email').value = '';
+    if ($('signup-username')) $('signup-username').value = '';
+    if ($('signup-password')) $('signup-password').value = '';
+    if ($('signup-confirm')) $('signup-confirm').value = '';
+    if (termsCheckbox) termsCheckbox.checked = false;
+
+    if (data?.session?.access_token) {
+      await finishAuth(S.authToken, S.username, S.userId);
+    } else {
+      setError('signup-error', 'Account created. Check your email to confirm, then sign in.');
+      toast('Account created! Check your email to confirm.', '✅');
+      showPage('pg-perm');
     }
   });
 
@@ -1109,41 +1292,27 @@ function initAuthControls() {
     const name = ($('guest-name')?.value || '').trim();
     S.authToken = null;
     S.username = null;
+    S.userId = null;
     S.magnetScore = null;
     S.isGuest = true;
     S.guestName = name.slice(0, 24) || `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
     updateProgressText();
     localStorage.removeItem('mortalive_token');
     localStorage.removeItem('mortalive_username');
+    localStorage.removeItem('mortalive_user_id');
     localStorage.setItem('mortalive_guest_name', S.guestName);
-    enterLobby();
+    showPage('pg-perm');
   });
 
   const guestInput = $('guest-name');
   if (guestInput && S.guestName) guestInput.value = S.guestName;
+
+  showAuthTab(S.authMode || (S.isGuest ? 'guest' : 'login'));
 }
 
-// If a session token is already stored, validate it on load and skip
-// straight past the auth screen into the lobby on success.
 async function tryAutoLogin() {
-  if (!S.authToken) return false;
-  try {
-    const res = await fetch(`${SERVER_URL}/api/me`, {
-      headers: { Authorization: `Bearer ${S.authToken}` }
-    });
-    if (!res.ok) throw new Error('invalid session');
-    const data = await res.json();
-    S.username = data.username;
-    S.magnetScore = data.magnetScore;
-    S.isGuest = false;
-    syncAuthProgress(data.magnetScore);
-    return true;
-  } catch (e) {
-    S.authToken = null;
-    localStorage.removeItem('mortalive_token');
-    localStorage.removeItem('mortalive_username');
-    return false;
-  }
+  const hasAuth = await checkAuthStatus();
+  return hasAuth;
 }
 
 function initLandingActions() {
@@ -1198,18 +1367,21 @@ function initLobbyControls() {
   $('score-pill-btn')?.addEventListener('click', openProgressSheet);
 
   $('btn-logout')?.addEventListener('click', async () => {
+    try { await signOut(); } catch (e) {}
     try {
       await fetch(`${SERVER_URL}/api/logout`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${S.authToken}` }
+        headers: { Authorization: `Bearer ${S.authToken || ''}` }
       });
     } catch (e) {}
     S.authToken = null;
     S.username = null;
+    S.userId = null;
     S.magnetScore = null;
     S.isGuest = true;
     localStorage.removeItem('mortalive_token');
     localStorage.removeItem('mortalive_username');
+    localStorage.removeItem('mortalive_user_id');
     toast('Logged out', '👋');
     updateIdentityDisplay();
     updateProgressText();
