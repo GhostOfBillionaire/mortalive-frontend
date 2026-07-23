@@ -945,6 +945,50 @@ img { display: block; max-width: 100%; }
 }
 .auth-note { font-size: 12px; color: var(--on-surface-3); line-height: 1.5; margin-top: 4px; }
 
+.auth-panel { display: none; }
+.auth-panel.active { display: block; animation: fadeIn var(--dur-mid) var(--ease-out); }
+.auth-login-panel, .auth-signup-panel { animation: fadeIn var(--dur-mid) var(--ease-out); }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.checkbox-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.checkbox-group input[type="checkbox"] {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.checkbox-group label {
+  cursor: pointer;
+  flex: 1;
+}
+
+.checkbox-group a {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: underline;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.checkbox-group a:hover {
+  color: var(--primary-dark);
+}
+
+
 /* ── Permission page ────────────────────────────────── */
 .perm-card { width: min(680px, calc(100% - 24px)); padding: 28px; }
 .perm-inner {
@@ -1997,36 +2041,124 @@ body.reveal-ready .scroll-reveal.in-view{
 
 <!-- ═══════════════════ AUTH ═══════════════════════ -->
 <section id="pg-auth" class="page">
-  <div class="wrap" style="display:flex;justify-content:center;">
-    <div class="card auth-card">
+  <div class="wrap">
+    <div class="auth-card">
       <div style="margin-bottom:16px;">
         <button class="icon-btn setup-back" type="button" data-target="pg-land">← Back</button>
       </div>
+
       <div class="auth-card-inner">
-        <div class="auth-guest-panel">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
-            <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783865256/cllogo_ystlxa.png"
-                 alt="" style="width:28px;height:28px;border-radius:8px;object-fit:contain;">
-            <span style="font-size:13px;font-weight:700;color:var(--on-surface-3);letter-spacing:.04em;text-transform:uppercase;">Guest path</span>
-          </div>
-          <h2>Choose how to start.</h2>
-          <p>Continue as a guest for instant access, or log in to keep your Magnet Score, badges and weekly rank.</p>
-          <div class="field" style="margin-top:16px;">
-            <label for="guest-name">Display name (optional)</label>
-            <input id="guest-name" type="text" maxlength="24"
-                   placeholder="Pick a name for this session" autocomplete="off">
-            <div class="help-row">
-              <span>No account needed</span>
-              <span>Guests don't earn Magnet Score</span>
-            </div>
-          </div>
-          <button class="btn btn-primary btn-wide" id="btn-continue-guest" style="margin-top:14px;">
-            Continue as guest →
-          </button>
-          <p class="auth-note" style="margin-top:10px;">Fastest option — no sign-up, no wait.</p>
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tab-login" type="button">Login</button>
+          <button class="auth-tab" id="tab-signup" type="button">Sign up</button>
+          <button class="auth-tab" id="tab-guest" type="button">Guest</button>
         </div>
 
-        <!-- Login/Signup hidden for now (guest-only mode) -->
+        <div id="login-panel" class="auth-panel active">
+          <div class="auth-login-panel">
+            <h2>Welcome back</h2>
+            <p>Sign in to continue chatting and keep your Magnet Score history.</p>
+
+            <div class="field">
+              <label for="login-email">Email</label>
+              <input id="login-email" type="email" placeholder="you@example.com" autocomplete="email">
+            </div>
+
+            <div class="field">
+              <label for="login-password">Password</label>
+              <input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
+            </div>
+
+            <button class="btn btn-primary btn-wide" id="btn-sign-in" type="button">
+              Sign in →
+            </button>
+
+            <div id="login-error" class="notice" style="display:none;margin-top:12px;"></div>
+
+            <p class="auth-note" style="margin-top:14px;">
+              Don't have an account?
+              <a href="#" onclick="document.getElementById('tab-signup').click(); return false;" style="color: var(--primary); font-weight: 600;">Sign up</a>
+            </p>
+          </div>
+        </div>
+
+        <div id="signup-panel" class="auth-panel">
+          <div class="auth-signup-panel">
+            <h2>Join Mortalive</h2>
+            <p>Create an account to save your progress and unlock your profile.</p>
+
+            <div class="field">
+              <label for="signup-email">Email</label>
+              <input id="signup-email" type="email" placeholder="you@example.com" autocomplete="email">
+            </div>
+
+            <div class="field">
+              <label for="signup-username">Username</label>
+              <input id="signup-username" type="text" placeholder="Choose a username" maxlength="24" autocomplete="off">
+              <div class="help-row">
+                <span>3-24 characters, letters, numbers, underscore</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="signup-password">Password</label>
+              <input id="signup-password" type="password" placeholder="Min 8 characters" autocomplete="new-password">
+            </div>
+
+            <div class="field">
+              <label for="signup-confirm">Confirm password</label>
+              <input id="signup-confirm" type="password" placeholder="Repeat password" autocomplete="new-password">
+            </div>
+
+            <div class="checkbox-group">
+              <input type="checkbox" id="signup-terms">
+              <label for="signup-terms">
+                I agree to Mortalive's <a href="terms.html" target="_blank">Terms of Service</a> and <a href="privacy.html" target="_blank">Privacy Policy</a>
+              </label>
+            </div>
+
+            <button class="btn btn-primary btn-wide" id="btn-create-account" type="button">
+              Create account →
+            </button>
+
+            <div id="signup-error" class="notice" style="display:none;margin-top:12px;"></div>
+
+            <p class="auth-note" style="margin-top:14px;">
+              Already have an account?
+              <a href="#" onclick="document.getElementById('tab-login').click(); return false;" style="color: var(--primary); font-weight: 600;">Sign in</a>
+            </p>
+          </div>
+        </div>
+
+        <div id="guest-panel" class="auth-panel">
+          <div class="auth-guest-panel">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+              <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783865256/cllogo_ystlxa.png"
+                   alt="" style="width:28px;height:28px;border-radius:8px;object-fit:contain;">
+              <span style="font-size:13px;font-weight:700;color:var(--on-surface-3);letter-spacing:.04em;text-transform:uppercase;">Guest Mode</span>
+            </div>
+            <h2>Continue as guest</h2>
+            <p>Start chatting right now without creating an account. No sign-up, instant access.</p>
+
+            <div class="field" style="margin-top:16px;">
+              <label for="guest-name">Display name (optional)</label>
+              <input id="guest-name" type="text" maxlength="24"
+                     placeholder="Pick a name for this session" autocomplete="off">
+              <div class="help-row">
+                <span>✓ No account needed</span>
+                <span>✓ Instant access</span>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-wide" id="btn-continue-guest" type="button">
+              Continue as guest →
+            </button>
+
+            <p class="auth-note" style="margin-top:14px;">
+              Create an account to save your Magnet Score and weekly rank
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
