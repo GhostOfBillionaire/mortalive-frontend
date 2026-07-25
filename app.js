@@ -46,7 +46,7 @@ const S = {
   authToken: localStorage.getItem('mortalive_token') || null,
   username: localStorage.getItem('mortalive_username') || null,
   userId: localStorage.getItem('mortalive_user_id') || null,
-  magnetScore: null,
+  crockroachScore: null,
   isGuest: !localStorage.getItem('mortalive_token'),
   guestName: localStorage.getItem('mortalive_guest_name') || '',
   videoLayout: 'horizontal',
@@ -172,7 +172,7 @@ function defaultProgress() {
     profileTheme: 'aurora',
     profileFrame: 'Liquid Glass',
     featuredQuote: 'Building momentum one connection at a time.',
-    pinnedNote: 'Connect with the world, build your Magnet Score, and unlock your profile.',
+    pinnedNote: 'Connect with the world, build your crockroach Score, and unlock your profile.',
     avatarFrame: 'halo',
     lastSyncedAt: 0
   };
@@ -183,7 +183,7 @@ function defaultProfile() {
     theme: 'aurora',
     frame: 'Liquid Glass',
     quote: 'Building momentum one connection at a time.',
-    pinned: 'Connect with the world, build your Magnet Score, and unlock your profile.',
+    pinned: 'Connect with the world, build your crockroach Score, and unlock your profile.',
     accent: 'rgba(90, 177, 255, .95)',
     pattern: 'mesh'
   };
@@ -393,7 +393,7 @@ function updateProgressText() {
 
   const scorePill = $('score-pill-btn');
   if (scorePill) {
-    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} Magnet Score · ${summary.badges} badges`;
+    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} crockroach Score · ${summary.badges} badges`;
     scorePill.title = S.isGuest
       ? 'Guest sessions do not earn status'
       : `Top ${summary.percentile}% · #${summary.rank} weekly rank`;
@@ -454,7 +454,7 @@ function awardProgress(kind, amount = 1, meta = {}) {
   if (meta.completion) {
     const goal = computeGoalText(progress);
     if (source === 'chat_complete') {
-      toast(`+${delta} Magnet Score · ${goal}`, '🧲');
+      toast(`+${delta} crockroach Score · ${goal}`, '🧲');
     } else {
       toast(`Milestone reached · ${goal}`, '🏁');
     }
@@ -492,7 +492,7 @@ function copyProgressShareCard() {
   const profile = getCurrentProfile();
   const text = [
     `Mortalive status`,
-    `${S.username || S.guestName || 'Guest'} · ${summary.score} Magnet Score`,
+    `${S.username || S.guestName || 'Guest'} · ${summary.score} crockroach Score`,
     `${summary.streak} day streak · ${summary.completions} completions`,
     `Top ${summary.percentile}% · #${summary.rank} weekly`,
     `Frame: ${profile.frame || 'Liquid Glass'}`
@@ -788,7 +788,7 @@ function updateIdentityDisplay() {
   const summary = formatProgressLine(progress);
 
   if (!S.isGuest && S.username) {
-    if (label) label.textContent = `Logged in as ${S.username} · 🧲 ${summary.score} Magnet Score · ${summary.streak} streak · #${summary.rank}`;
+    if (label) label.textContent = `Logged in as ${S.username} · 🧲 ${summary.score} crockroach Score · ${summary.streak} streak · #${summary.rank}`;
     if (switchBtn) switchBtn.style.display = 'none';
     if (logoutBtn) logoutBtn.style.display = '';
     if (scorePill) scorePill.style.display = '';
@@ -940,16 +940,16 @@ function initAuthControls() {
     el.textContent = msg;
   }
 
-  function afterAuthSuccess(token, username, magnetScore, userId) {
+  function afterAuthSuccess(token, username, crockroachScore, userId) {
     S.authToken   = token;
     S.username    = username;
     S.userId      = userId || null;
-    S.magnetScore = magnetScore;
+    S.crockroachScore = crockroachScore;
     S.isGuest     = false;
     localStorage.setItem('mortalive_token',    token);
     localStorage.setItem('mortalive_username', username);
     if (userId) localStorage.setItem('mortalive_user_id', userId);
-    syncAuthProgress(magnetScore);
+    syncAuthProgress(crockroachScore);
     toast(`Welcome, ${username}!`, '🧲');
     enterLobby();
   }
@@ -967,7 +967,7 @@ function initAuthControls() {
       });
       const data = await res.json();
       if (!res.ok) { setError('login-error', data.error || 'Login failed.'); return; }
-      afterAuthSuccess(data.token, data.username, data.magnetScore, data.userId);
+      afterAuthSuccess(data.token, data.username, data.crockroachScore, data.userId);
     } catch (e) {
       setError('login-error', 'Could not reach the server. Try again in a moment.');
     }
@@ -1005,7 +1005,7 @@ function initAuthControls() {
       });
       const data = await res.json();
       if (!res.ok) { setError('signup-error', data.error || 'Could not create account.'); return; }
-      afterAuthSuccess(data.token, data.username, data.magnetScore, data.userId);
+      afterAuthSuccess(data.token, data.username, data.crockroachScore, data.userId);
     } catch (e) {
       setError('signup-error', 'Could not reach the server. Try again in a moment.');
     }
@@ -1043,7 +1043,7 @@ function initAuthControls() {
     S.authToken   = null;
     S.username    = null;
     S.userId      = null;
-    S.magnetScore = null;
+    S.crockroachScore = null;
     S.isGuest     = true;
     S.guestName   = name.slice(0, 24) || `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
     updateProgressText();
@@ -1075,10 +1075,10 @@ async function tryAutoLogin() {
       const data = await res.json();
       S.username    = data.username;
       S.userId      = data.userId || null;
-      S.magnetScore = data.magnetScore;
+      S.crockroachScore = data.crockroachScore;
       S.isGuest     = false;
       if (data.userId) localStorage.setItem('mortalive_user_id', data.userId);
-      syncAuthProgress(data.magnetScore);
+      syncAuthProgress(data.crockroachScore);
       return true;
     } catch (e) {
       S.authToken = null;
@@ -1155,7 +1155,7 @@ function initLobbyControls() {
     S.authToken   = null;
     S.username    = null;
     S.userId      = null;
-    S.magnetScore = null;
+    S.crockroachScore = null;
     S.isGuest     = true;
     _autoLoginPromise = null; // allow fresh login attempt
     localStorage.removeItem('mortalive_token');
@@ -1756,7 +1756,7 @@ function beginChat() {
   const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
   setText('peer-ava', s.emoji);
   setText('peer-name', s.name);
-  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} Magnet Score · connected`);
+  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`);
 
   const panel = $('video-panel');
   applyVideoLayout();
