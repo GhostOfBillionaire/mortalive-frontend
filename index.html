@@ -1701,6 +1701,26 @@ img { display: block; max-width: 100%; }
   color: var(--on-surface);
 }
 
+/* ── Checkbox group (signup terms) ─────────────────── */
+.checkbox-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--on-surface-3);
+  line-height: 1.6;
+  cursor: pointer;
+}
+.checkbox-group input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.checkbox-group a { color: var(--primary); font-weight: 600; text-underline-offset: 2px; }
+
 .scroll-reveal{
   opacity: 1;
   transform: none;
@@ -1763,9 +1783,10 @@ body.reveal-ready .scroll-reveal.in-view{
       </div>
     </a>
     <nav class="sakura-nav" aria-label="Primary">
+      <a href="feed.html">Feed</a>
+      <a href="messages.html">Messages</a>
       <a href="about.html">About</a>
       <a href="safety.html">Safety</a>
-      <a href="blog.html">Blog</a>
       <a href="faq.html">FAQ</a>
     </nav>
   </div>
@@ -2026,7 +2047,63 @@ body.reveal-ready .scroll-reveal.in-view{
           <p class="auth-note" style="margin-top:10px;">Fastest option — no sign-up, no wait.</p>
         </div>
 
-        <!-- Login/Signup hidden for now (guest-only mode) -->
+        <div class="auth-divider">or use an account</div>
+
+        <div class="auth-tabs">
+          <button class="btn btn-ghost auth-tab active" id="tab-login" type="button">Log in</button>
+          <button class="btn btn-ghost auth-tab" id="tab-signup" type="button">Sign up</button>
+        </div>
+
+        <div id="auth-login-form">
+          <div class="field">
+            <label for="login-username">Username</label>
+            <input id="login-username" type="text" autocomplete="username" placeholder="your_username">
+          </div>
+          <div class="field">
+            <label for="login-password">Password</label>
+            <input id="login-password" type="password" autocomplete="current-password" placeholder="••••••••">
+          </div>
+          <div id="login-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
+          <button class="btn btn-primary btn-wide" id="btn-login" style="margin-top:8px;">Sign in →</button>
+          <button class="btn btn-ghost btn-wide" id="btn-forgot" type="button" style="margin-top:8px;">Forgot password?</button>
+        </div>
+
+        <div id="auth-signup-form" style="display:none;">
+          <div class="field">
+            <label for="signup-username">Username</label>
+            <input id="signup-username" type="text" autocomplete="username" placeholder="3–24 chars: letters, numbers, _" maxlength="24">
+          </div>
+          <div class="field">
+            <label for="signup-email">Email <span style="font-weight:400;color:var(--on-surface-3);">(for password reset only)</span></label>
+            <input id="signup-email" type="email" autocomplete="email" placeholder="you@example.com">
+          </div>
+          <div class="field">
+            <label for="signup-password">Password</label>
+            <input id="signup-password" type="password" autocomplete="new-password" placeholder="At least 8 characters">
+          </div>
+          <div class="field">
+            <label for="signup-confirm">Confirm password</label>
+            <input id="signup-confirm" type="password" autocomplete="new-password" placeholder="Repeat password">
+          </div>
+          <label class="checkbox-group" for="signup-terms" style="margin-top:12px;">
+            <input id="signup-terms" type="checkbox">
+            <span>
+              I agree to Mortalive's <a href="terms.html" target="_blank" rel="noreferrer">Terms of Service</a> and <a href="privacy.html" target="_blank" rel="noreferrer">Privacy Policy</a>
+            </span>
+          </label>
+          <div id="signup-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
+          <button class="btn btn-primary btn-wide" id="btn-signup" style="margin-top:8px;">Create account →</button>
+        </div>
+
+        <div id="auth-forgot-form" style="display:none;">
+          <div class="field">
+            <label for="forgot-email">Email</label>
+            <input id="forgot-email" type="email" autocomplete="email" placeholder="you@example.com">
+          </div>
+          <div id="forgot-message" class="notice" style="display:none;"></div>
+          <button class="btn btn-primary btn-wide" id="btn-forgot-submit" type="button" style="margin-top:8px;">Send reset link</button>
+          <button class="btn btn-ghost btn-wide" id="btn-forgot-back" type="button" style="margin-top:8px;">Back to login</button>
+        </div>
       </div>
     </div>
   </div>
@@ -2085,7 +2162,7 @@ body.reveal-ready .scroll-reveal.in-view{
   <div class="wrap" style="display:flex;justify-content:center;">
     <div class="card lobby-card">
       <div style="margin-bottom:16px;">
-        <button class="icon-btn setup-back" type="button" data-target="pg-auth">← Back</button>
+        <button class="icon-btn setup-back" type="button" data-target="pg-land">← Back</button>
       </div>
       <div class="lobby-head">
         <div>
