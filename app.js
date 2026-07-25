@@ -45,8 +45,9 @@ const S = {
   // identity
   authToken: localStorage.getItem('mortalive_token') || null,
   username: localStorage.getItem('mortalive_username') || null,
+  userId: localStorage.getItem('mortalive_user_id') || null,
   magnetScore: null,
-  isGuest: true,
+  isGuest: !localStorage.getItem('mortalive_token'),
   guestName: localStorage.getItem('mortalive_guest_name') || '',
   videoLayout: 'horizontal',
   chatStartedAt: null,
@@ -476,6 +477,8 @@ function finalizeChatProgress(reason = 'completed') {
   if (durationMs < 6000) return;
 
   awardProgress('chat_complete', 1, { completion: true, durationMs });
+  // Tell feed.html to show the "just ended a chat — share something" banner.
+  try { sessionStorage.setItem('mortalive_just_chatted', '1'); } catch (e) {}
 }
 
 function resetChatProgress() {
@@ -539,70 +542,7 @@ function ensureProgressSheet() {
     'color:#fff'
   ].join(';');
 
-  panel.innerHTML = `
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px;">
-      <div style="min-width:0;">
-        <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.7;font-weight:800;">Progress identity</div>
-        <div style="font-size:28px;line-height:1.05;letter-spacing:-.04em;font-weight:800;margin-top:6px;">Your status, live</div>
-        <div id="progress-goal" style="margin-top:10px;color:rgba(255,255,255,.78);font-size:14px;line-height:1.6;">Loading progress…</div>
-      </div>
-      <button id="progress-close" type="button" style="width:42px;height:42px;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.10);color:#fff;font-size:22px;line-height:1;">×</button>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
-      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);">
-        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Magnet Score</div>
-        <div id="progress-score" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">0</div>
-      </div>
-      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);">
-        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Weekly rank</div>
-        <div id="progress-rank" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">#—</div>
-      </div>
-      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);">
-        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Completion count</div>
-        <div id="progress-completions" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">0</div>
-      </div>
-      <div style="padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);">
-        <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Top percentile</div>
-        <div id="progress-percentile" style="font-size:30px;font-weight:800;line-height:1.05;margin-top:6px;">Top —%</div>
-      </div>
-    </div>
-    <div style="margin-top:12px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);">
-      <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Streak</div>
-      <div id="progress-streak" style="font-size:22px;font-weight:800;line-height:1.2;margin-top:6px;">0 days</div>
-    </div>
-    <div style="margin-top:12px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);">
-      <div style="font-size:12px;opacity:.72;text-transform:uppercase;letter-spacing:.12em;">Badges</div>
-      <div id="progress-badges" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;line-height:1.4;"></div>
-    </div>
-    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
-      <button id="progress-share" type="button" style="flex:1;min-width:180px;height:48px;border:0;border-radius:16px;background:linear-gradient(135deg, rgba(90,177,255,.96), rgba(168,120,255,.96));color:#fff;font-weight:800;">Copy share card</button>
-      <button id="progress-refresh" type="button" style="flex:1;min-width:180px;height:48px;border:1px solid rgba(255,255,255,.20);border-radius:16px;background:rgba(255,255,255,.08);color:#fff;font-weight:800;">Refresh stats</button>
-    </div>
-    <div id="progress-frame" style="display:none;"></div>
-    <div id="progress-quote" style="display:none;"></div>
-    <div id="progress-pinned" style="display:none;"></div>
-  `;
 
-  overlay.appendChild(panel);
-  document.body.appendChild(overlay);
-
-  const close = () => {
-    overlay.style.display = 'none';
-  };
-
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) close();
-  });
-
-  panel.querySelector('#progress-close')?.addEventListener('click', close);
-  panel.querySelector('#progress-share')?.addEventListener('click', copyProgressShareCard);
-  panel.querySelector('#progress-refresh')?.addEventListener('click', () => {
-    updateDerivedProgress();
-    updateProgressText();
-    toast('Progress refreshed', '🧲');
-  });
-
-  return overlay;
 }
 
 function openProgressSheet() {
@@ -827,7 +767,7 @@ function ensureLobbyCameraPreview() {
   const preview = $('lobby-cam-preview');
   if (preview && S.localStream) preview.srcObject = S.localStream;
   const strip = $('cam-strip');
-  if (strip && S.localStream) strip.classList.add('visible');
+  if (strip) strip.style.display = S.localStream ? 'flex' : 'none';
 }
 
 function enterLobby() {
@@ -909,7 +849,7 @@ function requestCameraPermission() {
       if (lobbyPreview) lobbyPreview.srcObject = stream;
 
       const camStrip = $('cam-strip');
-      if (camStrip) camStrip.classList.add('visible');
+      if (camStrip) camStrip.style.display = 'flex';
 
       queueSnapshotBurst('permission', 2, ['perm-video', 'lobby-cam-preview', 'vid-local'], 140, 320);
 
@@ -1000,13 +940,15 @@ function initAuthControls() {
     el.textContent = msg;
   }
 
-  function afterAuthSuccess(token, username, magnetScore) {
-    S.authToken = token;
-    S.username = username;
+  function afterAuthSuccess(token, username, magnetScore, userId) {
+    S.authToken   = token;
+    S.username    = username;
+    S.userId      = userId || null;
     S.magnetScore = magnetScore;
-    S.isGuest = false;
-    localStorage.setItem('mortalive_token', token);
+    S.isGuest     = false;
+    localStorage.setItem('mortalive_token',    token);
     localStorage.setItem('mortalive_username', username);
+    if (userId) localStorage.setItem('mortalive_user_id', userId);
     syncAuthProgress(magnetScore);
     toast(`Welcome, ${username}!`, '🧲');
     enterLobby();
@@ -1025,7 +967,7 @@ function initAuthControls() {
       });
       const data = await res.json();
       if (!res.ok) { setError('login-error', data.error || 'Login failed.'); return; }
-      afterAuthSuccess(data.token, data.username, data.magnetScore);
+      afterAuthSuccess(data.token, data.username, data.magnetScore, data.userId);
     } catch (e) {
       setError('login-error', 'Could not reach the server. Try again in a moment.');
     }
@@ -1033,16 +975,26 @@ function initAuthControls() {
 
   $('btn-signup')?.addEventListener('click', async () => {
     const username = ($('signup-username')?.value || '').trim();
-    const email    = ($('signup-email')?.value || '').trim();
-    const password = $('signup-password')?.value || '';
+    const email    = ($('signup-email')?.value    || '').trim();
+    const password = $('signup-password')?.value  || '';
+    const confirm  = $('signup-confirm')?.value   || '';
+    const terms    = $('signup-terms');
     setError('signup-error', null);
 
-    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-      setError('signup-error', 'Username must be 3-20 characters: letters, numbers, underscore only.');
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
+      setError('signup-error', 'Username must be 3–24 characters: letters, numbers, underscore only.');
       return;
     }
     if (password.length < 6) {
       setError('signup-error', 'Password must be at least 6 characters.');
+      return;
+    }
+    if (confirm && password !== confirm) {
+      setError('signup-error', 'Passwords do not match.');
+      return;
+    }
+    if (terms && !terms.checked) {
+      setError('signup-error', 'Please agree to the Terms of Service and Privacy Policy.');
       return;
     }
 
@@ -1053,7 +1005,7 @@ function initAuthControls() {
       });
       const data = await res.json();
       if (!res.ok) { setError('signup-error', data.error || 'Could not create account.'); return; }
-      afterAuthSuccess(data.token, data.username, data.magnetScore);
+      afterAuthSuccess(data.token, data.username, data.magnetScore, data.userId);
     } catch (e) {
       setError('signup-error', 'Could not reach the server. Try again in a moment.');
     }
@@ -1088,14 +1040,16 @@ function initAuthControls() {
 
   $('btn-continue-guest')?.addEventListener('click', () => {
     const name = ($('guest-name')?.value || '').trim();
-    S.authToken = null;
-    S.username = null;
+    S.authToken   = null;
+    S.username    = null;
+    S.userId      = null;
     S.magnetScore = null;
-    S.isGuest = true;
-    S.guestName = name.slice(0, 24) || `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
+    S.isGuest     = true;
+    S.guestName   = name.slice(0, 24) || `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
     updateProgressText();
     localStorage.removeItem('mortalive_token');
     localStorage.removeItem('mortalive_username');
+    localStorage.removeItem('mortalive_user_id');
     localStorage.setItem('mortalive_guest_name', S.guestName);
     enterLobby();
   });
@@ -1106,25 +1060,36 @@ function initAuthControls() {
 
 // If a session token is already stored, validate it on load and skip
 // straight past the auth screen into the lobby on success.
+// The promise is cached so calling tryAutoLogin() a second time
+// (from proceedPastLanding) just awaits the same in-flight request.
+let _autoLoginPromise = null;
 async function tryAutoLogin() {
-  if (!S.authToken) return false;
-  try {
-    const res = await fetch(`${SERVER_URL}/api/me`, {
-      headers: { Authorization: `Bearer ${S.authToken}` }
-    });
-    if (!res.ok) throw new Error('invalid session');
-    const data = await res.json();
-    S.username = data.username;
-    S.magnetScore = data.magnetScore;
-    S.isGuest = false;
-    syncAuthProgress(data.magnetScore);
-    return true;
-  } catch (e) {
-    S.authToken = null;
-    localStorage.removeItem('mortalive_token');
-    localStorage.removeItem('mortalive_username');
-    return false;
-  }
+  if (_autoLoginPromise) return _autoLoginPromise;
+  _autoLoginPromise = (async () => {
+    if (!S.authToken) return false;
+    try {
+      const res = await fetch(`${SERVER_URL}/api/me`, {
+        headers: { Authorization: `Bearer ${S.authToken}` }
+      });
+      if (!res.ok) throw new Error('invalid session');
+      const data = await res.json();
+      S.username    = data.username;
+      S.userId      = data.userId || null;
+      S.magnetScore = data.magnetScore;
+      S.isGuest     = false;
+      if (data.userId) localStorage.setItem('mortalive_user_id', data.userId);
+      syncAuthProgress(data.magnetScore);
+      return true;
+    } catch (e) {
+      S.authToken = null;
+      S.isGuest   = true;
+      localStorage.removeItem('mortalive_token');
+      localStorage.removeItem('mortalive_username');
+      localStorage.removeItem('mortalive_user_id');
+      return false;
+    }
+  })();
+  return _autoLoginPromise;
 }
 
 function initLandingActions() {
@@ -1139,6 +1104,8 @@ function initLandingActions() {
       enterLobby();
     } else {
       showPage('pg-auth');
+      $('tab-login')?.click();
+      $('login-username')?.focus?.();
     }
   }
 
@@ -1175,7 +1142,7 @@ function initPermissionControls() {
 }
 
 function initLobbyControls() {
-  $('btn-switch-account')?.addEventListener('click', () => showPage('pg-auth'));
+  $('btn-switch-account')?.addEventListener('click', () => { showPage('pg-auth'); $('tab-login')?.click(); $('login-username')?.focus?.(); });
   $('score-pill-btn')?.addEventListener('click', openProgressSheet);
 
   $('btn-logout')?.addEventListener('click', async () => {
@@ -1185,16 +1152,21 @@ function initLobbyControls() {
         headers: { Authorization: `Bearer ${S.authToken}` }
       });
     } catch (e) {}
-    S.authToken = null;
-    S.username = null;
+    S.authToken   = null;
+    S.username    = null;
+    S.userId      = null;
     S.magnetScore = null;
-    S.isGuest = true;
+    S.isGuest     = true;
+    _autoLoginPromise = null; // allow fresh login attempt
     localStorage.removeItem('mortalive_token');
     localStorage.removeItem('mortalive_username');
+    localStorage.removeItem('mortalive_user_id');
     toast('Logged out', '👋');
     updateIdentityDisplay();
     updateProgressText();
     showPage('pg-auth');
+    $('tab-login')?.click();
+    $('login-username')?.focus?.();
   });
 
   const modeToggle = $('mode-toggle');
