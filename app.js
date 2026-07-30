@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-07-22-render-fixed'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-07-28-synthetic-video'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -41,7 +41,13 @@ const S = {
   onlineTimerStarted: false,
   pendingAction: null,
   replyTimer: null,
-  demoActive: false,
+  // synthetic video fallback
+  syntheticActive: false,
+  syntheticSkipCount: 0,
+  syntheticVideos: [],
+  syntheticCurrentIndex: 0,
+  syntheticVideoId: null,
+  syntheticVideoStartTime: null,
   // identity
   authToken: localStorage.getItem('mortalive_token') || null,
   username: localStorage.getItem('mortalive_username') || null,
@@ -56,15 +62,26 @@ const S = {
   profile: null
 };
 
-const strangerPool = [
-  { name: 'Nova_82', score: 310, emoji: '🦊' },
-  { name: 'Theorist_X', score: 520, emoji: '🎭' },
-  { name: 'Mira_Glow', score: 88, emoji: '🌸' },
-  { name: 'Static_J', score: 205, emoji: '⚡' },
-  { name: 'DuskRider', score: 445, emoji: '🌙' },
-  { name: 'Cipher_9', score: 731, emoji: '🔮' },
-  { name: 'SunKid', score: 62, emoji: '☀️' },
-  { name: 'Nox_V', score: 890, emoji: '🖤' }
+// ── Synthetic video fallback constants ───────────────────
+const SYNTHETIC_SKIP_LIMIT = 10; // videos per "round" before final options shown
+
+// AI bot responses used when user picks "Chat with AI" after exhausting videos
+const BOT_REPLIES = [
+  "That's interesting — tell me more!",
+  "haha yeah I feel that",
+  "what got you into that?",
+  "honestly same energy",
+  "okay wait, explain that part again",
+  "that's a pretty solid take",
+  "I've been thinking about this lately too",
+  "ngl that surprised me",
+  "go on…",
+  "what would you do differently?",
+  "that tracks actually",
+  "interesting — most people don't think about it that way",
+  "okay I kind of agree",
+  "that's wild lol",
+  "wait really? how long has that been going on?"
 ];
 
 const autoReplies = [
@@ -1243,18 +1260,43 @@ function initChatControls() {
 
   $('btn-skip')?.addEventListener('click', () => {
     clearTimeout(S.replyTimer);
-    finalizeChatProgress('skipped');
-    logSession('end', { reason: 'skip', roomId: S.roomId });
-    disconnectPeer();
-    addSysLine('↩ Skipping — searching next match…');
-    setTimeout(startMatching, 800);
+
+    if (S.syntheticActive) {
+      // ── Synthetic video skip ──────────────────────────────
+      S.syntheticSkipCount++;
+      console.log(`[Synthetic] Skip #${S.syntheticSkipCount}/${SYNTHETIC_SKIP_LIMIT}`);
+      stopSyntheticVideo();
+      logSession('end', { reason: 'skip_synthetic', roomId: S.roomId, videoId: S.syntheticVideoId });
+
+      if (S.syntheticSkipCount >= SYNTHETIC_SKIP_LIMIT) {
+        showSyntheticExhaustionMenu();
+      } else {
+        S.syntheticCurrentIndex++;
+        addSysLine('↩ Loading next video…');
+        setTimeout(beginSyntheticMatch, 600);
+      }
+    } else {
+      // ── Real match skip ───────────────────────────────────
+      finalizeChatProgress('skipped');
+      logSession('end', { reason: 'skip', roomId: S.roomId });
+      disconnectPeer();
+      addSysLine('↩ Skipping — searching next match…');
+      setTimeout(startMatching, 800);
+    }
   });
 
   $('btn-end')?.addEventListener('click', () => {
     clearTimeout(S.replyTimer);
-    finalizeChatProgress('completed');
-    logSession('end', { reason: 'ended', roomId: S.roomId });
-    disconnectPeer();
+
+    if (S.syntheticActive) {
+      stopSyntheticVideo();
+      logSession('end', { reason: 'ended_synthetic', roomId: S.roomId, videoId: S.syntheticVideoId });
+    } else {
+      finalizeChatProgress('completed');
+      logSession('end', { reason: 'ended', roomId: S.roomId });
+      disconnectPeer();
+    }
+
     showPage('pg-lobby');
     updateIdentityDisplay();
   });
@@ -1279,7 +1321,6 @@ function initChatControls() {
 
     panel.classList.add('visible');
     $('btn-toggle-video')?.classList.add('active');
-    if (S.demoActive && (!S.localStream || !S.localStream.active)) setupDemoVideo();
   });
 
   $('vc-mic')?.addEventListener('click', () => {
@@ -1329,12 +1370,7 @@ $('vc-fs')?.addEventListener('click', () => {
     showPage('pg-lobby');
   });
 
-  $('btn-try-demo')?.addEventListener('click', () => {
-    clearTimeout(matchTimeout);
-    clearTimeout(S.noMatchTimeout);
-    if (S.socket && S.socket.connected) removeFromQueueSafely();
-    simulateDemoMatch();
-  });
+
 }
 
 function initGlobalDefaults() {
@@ -1457,9 +1493,6 @@ function startMatching() {
   setText('match-title', 'Finding your match');
   const subReset = $('match-sub');
   if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
-  const tryDemoReset = $('btn-try-demo');
-  if (tryDemoReset) tryDemoReset.style.display = 'none';
-
   initSocket();
 
   S.matched = false; // reset; set to true inside the 'matched' socket handler
@@ -1483,8 +1516,8 @@ function startMatching() {
     if (S.matched || S.connectFailed) return;
     if (failedAttempts >= 4) {
       S.connectFailed = true;
-      console.warn('[Mortalive] Server unreachable after repeated attempts — falling back to demo.');
-      simulateDemoMatch();
+      console.warn('[Mortalive] Server unreachable after repeated attempts — falling back to synthetic video.');
+      beginSyntheticMatch();
     }
   };
   // Properly remove any leftover listener from a previous attempt before
@@ -1502,29 +1535,21 @@ function startMatching() {
   // case where something hangs with no error event at all.
   matchTimeout = setTimeout(() => {
     if (!S.matched && !S.connectFailed && (!S.socket || !S.socket.connected)) {
-      console.warn('[Mortalive] No connection after 20s with no error signal — falling back to demo.');
+      console.warn('[Mortalive] No connection after 20s with no error signal — falling back to synthetic video.');
       S.connectFailed = true;
-      simulateDemoMatch();
+      beginSyntheticMatch();
     }
   }, 20000);
 
   // Once we ARE connected to the real server, if nobody else is in the
-  // queue yet, the wait can be genuinely indefinite. After a reasonable
-  // amount of time, let the user know instead of an endless spinner —
-  // demo is offered as an explicit opt-in button here, never automatic,
-  // since the server connection itself is known-good at this point.
+  // queue yet, start synthetic video automatically — no button, no dead end.
   S.noMatchTimeout = setTimeout(() => {
     if (S.matched || S.connectFailed) return;
     if (S.socket && S.socket.connected) {
-      setText('match-title', "No one's online right now");
-      const sub = $('match-sub');
-      if (sub) sub.innerHTML = 'Nobody else is in the queue yet. You can keep waiting, or try a one-off demo chat while the site grows.';
-      const tryDemo = $('btn-try-demo');
-      if (tryDemo) tryDemo.style.display = 'inline-flex';
+      console.log('[Mortalive] No peer found after 20s — starting synthetic video fallback.');
+      beginSyntheticMatch();
     }
-    // If still not connected at this point, the connect_error / ceiling
-    // timer above will already be handling the demo fallback — no need
-    // to duplicate that decision here.
+    // If still not connected, connect_error / ceiling timer handles it.
   }, 20000);
 }
 
@@ -1541,14 +1566,20 @@ function hideRemoteVideo(message) {
   const q = $('quality-bar');
 
   if (remote) {
+    // Stop any real WebRTC tracks (never stop our own local stream).
     try {
-      // Same guard as disconnectPeer(): never stop tracks that actually
-      // belong to our own local camera stream (demo mode reuses it).
       if (remote.srcObject && remote.srcObject !== S.localStream) {
         remote.srcObject.getTracks().forEach((t) => t.stop());
       }
     } catch (e) {}
     remote.srcObject = null;
+    // Also clear src in case this was a synthetic video file.
+    if (remote.src) {
+      remote.onended = null;
+      remote.pause();
+      remote.src = '';
+      remote.removeAttribute('src');
+    }
     remote.style.display = 'none';
   }
   if (noVideo) noVideo.style.display = 'flex';
@@ -1674,78 +1705,255 @@ function monitorQuality() {
   }, 4000);
 }
 
-function simulateDemoMatch() {
-  if (S.demoActive) return;
-  S.demoActive = true;
+// ═══════════════════════════════════════════════════════════════════
+// SYNTHETIC VIDEO FALLBACK SYSTEM
+// Replaces the old demo mode entirely.
+// Fetches prerecorded videos from Supabase and plays them as if they
+// were real strangers. User can skip up to SYNTHETIC_SKIP_LIMIT times
+// before seeing the final options menu (AI chat / more videos / share).
+// ═══════════════════════════════════════════════════════════════════
 
-  let pool = [...strangerPool];
-  if (S.interest && S.interest.toLowerCase().includes('high')) {
-    pool = pool.filter((s) => s.score > 300);
-  }
-
-  S.stranger = pool[Math.floor(Math.random() * pool.length)];
-  S.roomId = `demo-${Date.now()}`;
-
-  // Decide once per match whether the "stranger" has their camera on.
-  // Roughly 6 in 10 strangers have video on, matching typical real usage.
-  S.demoStrangerCamOn = Math.random() < 0.6;
-
-  beginChat();
-
-  if (S.mode === 'video') {
-    const panel = $('video-panel');
-    if (panel) panel.classList.add('visible');
-    setupDemoVideo();
+async function fetchSyntheticVideoBatch() {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/synthetic-videos?limit=${SYNTHETIC_SKIP_LIMIT}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!Array.isArray(data.videos) || data.videos.length === 0) {
+      console.warn('[Synthetic] No videos in database yet.');
+      return [];
+    }
+    console.log(`[Synthetic] Loaded ${data.videos.length} video(s) from server.`);
+    return data.videos;
+  } catch (e) {
+    console.warn('[Synthetic] Could not fetch videos:', e.message);
+    return [];
   }
 }
 
-async function setupDemoVideo() {
-  // Bring up the user's own camera exactly like a real call would.
-  try {
-    if (!S.localStream || !S.localStream.active) {
-      S.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      S.camGranted = true;
+async function beginSyntheticMatch() {
+  // If there are no videos loaded yet (or we've used them all), fetch a fresh batch.
+  if (S.syntheticVideos.length === 0 || S.syntheticCurrentIndex >= S.syntheticVideos.length) {
+    const batch = await fetchSyntheticVideoBatch();
+    if (batch.length === 0) {
+      // No videos in the database at all — skip straight to final options.
+      showSyntheticExhaustionMenu();
+      return;
     }
-    const localVid = $('vid-local');
-    if (localVid) {
-      localVid.srcObject = S.localStream;
-      localVid.style.display = 'block';
-    }
-  } catch (e) {
-    // No camera available locally — that's fine, the demo can still show
-    // the "stranger" side; just keep the waiting placeholder for our own feed.
+    S.syntheticVideos = batch;
+    S.syntheticCurrentIndex = 0;
   }
 
-  // Believable connecting delay before the stranger's feed "arrives",
-  // same pacing a real WebRTC handshake would have.
-  setText('ph-txt', 'Waiting for video…');
-  const noVideoPh = $('no-video-ph');
+  const video = S.syntheticVideos[S.syntheticCurrentIndex];
+  S.syntheticActive = true;
+  S.syntheticVideoId = video.id;
+  S.syntheticVideoStartTime = Date.now();
+
+  // Present them as a stranger — just like a real matched user.
+  S.stranger = {
+    name:      video.stranger_name  || 'Stream User',
+    score:     video.stranger_score || null,
+    emoji:     video.stranger_emoji || '🎬',
+    isGuest:   video.is_guest !== false,
+    isSynthetic: true
+  };
+  S.roomId = `synthetic-${video.id}-${Date.now()}`;
+
+  // Always show as video mode so the video element is visible.
+  S.mode = 'video';
+  setActiveMode('video');
+
+  // Standard chat setup — clears messages, shows peer name, switches to pg-chat.
+  beginChat();
+
+  // Show the prerecorded video in the remote slot.
   const remoteVid = $('vid-remote');
+  if (remoteVid) {
+    // Clear any old srcObject (real WebRTC stream) first.
+    remoteVid.srcObject = null;
+    remoteVid.src = video.video_url;
+    remoteVid.loop = false;
+    remoteVid.style.display = 'block';
+    remoteVid.play().catch((e) => {
+      console.warn('[Synthetic] Video play failed:', e.message);
+      setText('ph-txt', 'Video could not load — click Next to try another.');
+    });
+
+    // When the video ends naturally, auto-advance to the next one.
+    remoteVid.onended = () => {
+      if (!S.syntheticActive) return;
+      S.syntheticCurrentIndex++;
+      if (S.syntheticCurrentIndex < S.syntheticVideos.length) {
+        addSysLine('↩ Video ended — loading next…');
+        setTimeout(beginSyntheticMatch, 500);
+      } else {
+        showSyntheticExhaustionMenu();
+      }
+    };
+  }
+
+  const noVideo = $('no-video-ph');
+  const panel   = $('video-panel');
+  if (noVideo) noVideo.style.display = 'none';
+  if (panel)   panel.classList.add('visible', 'has-remote');
+
+  const q = $('quality-bar');
+  if (q) q.style.display = 'none'; // no quality stats for pre-recorded
+
+  setCallStatus('connected', 'video');
+  logSession('start', { stranger: S.stranger.name, mode: 'video', roomId: S.roomId, isSynthetic: true });
+}
+
+function stopSyntheticVideo() {
+  S.syntheticActive = false;
+  const remoteVid = $('vid-remote');
+  if (remoteVid) {
+    remoteVid.onended = null;
+    remoteVid.pause();
+    remoteVid.src = '';
+    remoteVid.removeAttribute('src');
+    remoteVid.style.display = 'none';
+  }
+  const panel = $('video-panel');
+  if (panel) panel.classList.remove('visible', 'has-remote');
+  S.syntheticVideoId = null;
+  S.syntheticVideoStartTime = null;
+}
+
+function showSyntheticExhaustionMenu() {
+  // Remove any existing instance first.
+  document.getElementById('synthetic-exhaustion-overlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay open';
+  overlay.id = 'synthetic-exhaustion-overlay';
+
+  overlay.innerHTML = `
+    <div class="modal" style="width:min(480px,100%);text-align:center;">
+      <div class="modal-ico">🎬</div>
+      <div class="modal-title">You've seen ${SYNTHETIC_SKIP_LIMIT} videos</div>
+      <div class="modal-sub">
+        Mortalive is still growing. While we build the community,
+        pick what you'd like to do next:
+      </div>
+      <div style="display:grid;gap:10px;margin-top:18px;">
+        <button id="syn-btn-ai"    class="btn btn-primary btn-wide">💬 Chat with AI</button>
+        <button id="syn-btn-more"  class="btn btn-tonal   btn-wide">🎬 Watch 10 more videos</button>
+        <button id="syn-btn-share" class="btn btn-ghost   btn-wide">🔗 Invite friends to Mortalive</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('syn-btn-ai')?.addEventListener('click', () => {
+    overlay.remove();
+    startBotChat();
+  });
+
+  document.getElementById('syn-btn-more')?.addEventListener('click', () => {
+    overlay.remove();
+    // Reset skip count and force a fresh fetch on next call.
+    S.syntheticSkipCount   = 0;
+    S.syntheticCurrentIndex = 0;
+    S.syntheticVideos       = [];
+    beginSyntheticMatch();
+  });
+
+  document.getElementById('syn-btn-share')?.addEventListener('click', () => {
+    overlay.remove();
+    showShareOverlay();
+  });
+}
+
+function showShareOverlay() {
+  document.getElementById('syn-share-overlay')?.remove();
+
+  const shareUrl  = window.location.origin;
+  const shareText = `Try Mortalive — instant random video chat, no account needed: ${shareUrl}`;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay open';
+  overlay.id = 'syn-share-overlay';
+
+  overlay.innerHTML = `
+    <div class="modal" style="width:min(460px,100%);">
+      <div class="modal-ico">🔗</div>
+      <div class="modal-title">Invite friends</div>
+      <div class="modal-sub">Share this link — more people means real matches faster.</div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <input id="syn-share-input" type="text" value="${shareUrl}" readonly
+          style="flex:1;padding:11px 13px;border:1.5px solid var(--border-strong);border-radius:12px;
+                 background:var(--surface);color:var(--on-surface);font-size:13px;outline:none;">
+        <button id="syn-copy-btn" class="btn btn-primary" style="min-width:auto;padding:11px 16px;">Copy</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">
+        <button id="syn-share-twitter"  class="btn btn-ghost" style="font-size:13px;">𝕏 Tweet</button>
+        <button id="syn-share-whatsapp" class="btn btn-ghost" style="font-size:13px;">💬 WhatsApp</button>
+      </div>
+      <button id="syn-share-close" class="btn btn-ghost btn-wide" style="margin-top:14px;">← Back</button>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('syn-copy-btn')?.addEventListener('click', () => {
+    navigator.clipboard?.writeText(shareUrl)
+      .then(() => toast('Link copied!', '📋'))
+      .catch(() => toast('Copy failed — select and copy manually', '⚠️'));
+  });
+
+  document.getElementById('syn-share-twitter')?.addEventListener('click', () => {
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`, '_blank', 'width=550,height=420');
+  });
+
+  document.getElementById('syn-share-whatsapp')?.addEventListener('click', () => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
+  });
+
+  document.getElementById('syn-share-close')?.addEventListener('click', () => {
+    overlay.remove();
+    // Take them back to the lobby rather than leaving them in limbo.
+    showPage('pg-lobby');
+    updateIdentityDisplay();
+  });
+}
+
+function startBotChat() {
+  // Pure text chat with a simple AI-driven bot.
+  S.syntheticActive = false;
+  S.stranger = { name: 'Mortalive AI', score: null, emoji: '🤖', isGuest: true, isBot: true };
+  S.roomId   = `bot-${Date.now()}`;
+  S.mode     = 'text';
+  setActiveMode('text');
+
+  beginChat();
+
+  // Hide video panel — this is a text-only session.
+  const panel = $('video-panel');
+  if (panel) panel.classList.remove('visible');
+
+  setCallStatus('connected', 'AI chat');
 
   setTimeout(() => {
-    if (!S.demoActive) return; // user already left before this fired
+    appendMsg("Hey! I'm Mortalive's AI. Real people are being matched as the community grows — for now, ask me anything or just chat.", 'them');
+  }, 700);
 
-    // IMPORTANT: never assign S.localStream to the remote video element.
-    // That was previously done as a "stand-in" for a second person's feed,
-    // but it just shows the user their own face mirrored back labeled as
-    // the stranger — an obvious, confusing tell, not a believable demo.
-    // There is no real second video source available in demo mode, so the
-    // honest behavior is the same placeholder a real camera-off peer would
-    // produce, whether or not S.demoStrangerCamOn is true.
-    if (remoteVid) {
-      remoteVid.srcObject = null;
-      remoteVid.style.display = 'none';
-    }
-    const qbar = $('quality-bar');
-    if (qbar) qbar.style.display = 'none';
+  logSession('start', { stranger: 'Mortalive AI', mode: 'text', roomId: S.roomId, isBot: true });
+}
 
-    if (S.demoStrangerCamOn) {
-      setText('ph-txt', `${S.stranger?.name || 'Stranger'} is connecting their camera…`);
-    } else {
-      setText('ph-txt', `${S.stranger?.name || 'Stranger'}'s camera is off`);
-    }
-    if (noVideoPh) noVideoPh.style.display = 'flex';
-  }, 900 + Math.random() * 900);
+// Override scheduleReply to use BOT_REPLIES when in bot chat
+// (real WebRTC chats never reach this because we guard on socket.connected)
+function scheduleReplyMaybeBot() {
+  clearTimeout(S.replyTimer);
+  if (S.stranger && S.stranger.isBot) {
+    // Always reply in bot mode
+    S.replyTimer = setTimeout(() => {
+      appendMsg(BOT_REPLIES[Math.floor(Math.random() * BOT_REPLIES.length)], 'them');
+    }, 1200 + Math.random() * 2000);
+  } else if (Math.random() > 0.22) {
+    S.replyTimer = setTimeout(() => {
+      if (S.socket && S.socket.connected) return;
+      appendMsg(autoReplies[Math.floor(Math.random() * autoReplies.length)], 'them');
+    }, 1100 + Math.random() * 2800);
+  }
 }
 
 function beginChat() {
@@ -1813,7 +2021,7 @@ function appendMsg(text, who) {
   msgs.scrollTop = msgs.scrollHeight;
 
   logSession('message', { roomId: S.roomId, text, who, ts: Date.now() });
-  if (who === 'me') scheduleReply();
+  if (who === 'me') scheduleReplyMaybeBot();
 }
 
 function addSysLine(text) {
@@ -1890,7 +2098,7 @@ function disconnectPeer() {
   S.roomId = null;
   S.stranger = null;
   S.isInitiator = false;
-  S.demoActive = false;
+  S.syntheticActive = false;
 }
 
 function logSession(event, data) {
@@ -2065,10 +2273,16 @@ ready(() => {
 
   if ($('pg-land')) showPage('pg-land');
 
-  // Validate any stored session token in the background. If a returning
-  // user's account is reached on pg-auth, this lets us skip straight to
-  // the lobby instead of making them log in again every visit.
+  // Validate any stored session token in the background.
   tryAutoLogin();
+
+  // Preload the synthetic video batch silently so it's ready the instant
+  // a user hits the 20-second no-match timeout — avoids an extra fetch delay.
+  setTimeout(() => {
+    fetchSyntheticVideoBatch().then((videos) => {
+      if (videos.length) S.syntheticVideos = videos;
+    }).catch(() => {});
+  }, 1500);
 
   if (navigator.mediaDevices && !navigator.mediaDevices.getUserMedia) {
     const btnAllow = $('btn-allow');
