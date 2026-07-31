@@ -89,6 +89,7 @@ function prepareVideoElement(videoEl) {
   videoEl.style.objectFit = 'contain';
   videoEl.style.objectPosition = 'center center';
   videoEl.style.background = '#000';
+  videoEl.style.aspectRatio = 'auto';
   if (videoEl.parentElement) {
     videoEl.parentElement.style.overflow = 'hidden';
     videoEl.parentElement.style.minWidth = '0';
@@ -754,9 +755,15 @@ function syncVideoPanelButton(forcedLayout) {
   if (!btn) return;
   const layout = forcedLayout || getEffectiveVideoLayout();
   const isHorizontal = layout === 'horizontal';
-  btn.textContent = isHorizontal ? 'Layout: Side' : 'Layout: Stack';
-  btn.title = isHorizontal ? 'Switch to stacked layout' : 'Switch to side-by-side layout';
-  btn.disabled = isCompactViewport();
+  
+  // On phone, hint fullscreen instead of toggle
+  if (isCompactViewport()) {
+    btn.textContent = 'Fullscreen';
+    btn.title = 'Tap to enter fullscreen (then swipe to toggle layout)';
+  } else {
+    btn.textContent = isHorizontal ? 'Layout: Side' : 'Layout: Stack';
+    btn.title = isHorizontal ? 'Switch to stacked layout' : 'Switch to side-by-side layout';
+  }
 }
 
 function isFullscreenVideoMode() {
@@ -767,27 +774,41 @@ function isFullscreenVideoMode() {
 
 function applyVideoLayout() {
   const feeds = $('video-feeds');
+  const panel = $('video-panel');
+  
   // On phone/compact: stay horizontal by default, only force vertical when fullscreen is manually activated
   const layout = isFullscreenVideoMode() ? 'vertical' : getEffectiveVideoLayout();
   prepareVideoSurfaces();
+  
   if (feeds) {
     feeds.classList.toggle('layout-horizontal', layout === 'horizontal');
     feeds.classList.toggle('layout-vertical', layout === 'vertical');
+    
+    // Constrain video feeds height to prevent chat section from disappearing on desktop
+    // On desktop: max 65vh, on mobile: max 50vh (respects fullscreen mode when active)
+    const maxHeight = isCompactViewport() ? '50vh' : '65vh';
+    feeds.style.maxHeight = maxHeight;
+    feeds.style.overflow = 'hidden';
   }
+  
+  if (panel) {
+    panel.style.maxHeight = isCompactViewport() ? '60vh' : '70vh';
+    panel.style.overflow = 'hidden';
+  }
+  
   syncVideoPanelButton(layout);
 }
 
 function toggleVideoLayout() {
+  // Compact viewports stay horizontal (unless fullscreen), can't toggle
   if (isCompactViewport()) {
-    S.videoLayout = 'vertical';
-    applyVideoLayout();
-    toast('Phone stays in stacked layout', '📱');
+    toast('On mobile, swipe fullscreen to change layout', '📱');
     return;
   }
   S.videoLayout = getEffectiveVideoLayout() === 'horizontal' ? 'vertical' : 'horizontal';
   localStorage.setItem('mortalive_video_layout', S.videoLayout);
   applyVideoLayout();
-  toast(S.videoLayout === 'horizontal' ? 'Camera layout set to side-by-side' : 'Camera layout set to stacked', '🎬');
+  toast(S.videoLayout === 'horizontal' ? 'Camera layout: side-by-side' : 'Camera layout: stacked', '🎬');
 }
 
 function setActiveMode(mode) {
