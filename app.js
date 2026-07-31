@@ -48,6 +48,7 @@ const S = {
   syntheticCurrentIndex: 0,
   syntheticVideoId: null,
   syntheticVideoStartTime: null,
+  syntheticSearchTimer: null,
   // identity
   authToken: localStorage.getItem('mortalive_token') || null,
   username: localStorage.getItem('mortalive_username') || null,
@@ -64,6 +65,86 @@ const S = {
 
 // ── Synthetic video fallback constants ───────────────────
 const SYNTHETIC_SKIP_LIMIT = 10; // videos per "round" before final options shown
+
+function isSyntheticPlayback() {
+  return !!(S.syntheticActive || (S.stranger && S.stranger.isSynthetic));
+}
+
+function clearSyntheticSearchTimer() {
+  clearTimeout(S.syntheticSearchTimer);
+  S.syntheticSearchTimer = null;
+}
+
+function prepareVideoElement(videoEl) {
+  if (!videoEl) return;
+  videoEl.setAttribute('playsinline', '');
+  videoEl.playsInline = true;
+  videoEl.autoplay = true;
+  videoEl.style.width = '100%';
+  videoEl.style.height = '100%';
+  videoEl.style.maxWidth = '100%';
+  videoEl.style.maxHeight = '100%';
+  videoEl.style.minWidth = '0';
+  videoEl.style.minHeight = '0';
+  videoEl.style.objectFit = 'contain';
+  videoEl.style.objectPosition = 'center center';
+  videoEl.style.background = '#000';
+  if (videoEl.parentElement) {
+    videoEl.parentElement.style.overflow = 'hidden';
+    videoEl.parentElement.style.minWidth = '0';
+    videoEl.parentElement.style.minHeight = '0';
+  }
+}
+
+function prepareVideoSurfaces() {
+  ['vid-local', 'vid-remote', 'lobby-cam-preview', 'perm-video'].forEach((id) => prepareVideoElement($(id)));
+}
+
+function syncLocalCameraPreview() {
+  prepareVideoSurfaces();
+  const localVid = $('vid-local');
+  if (!localVid) return;
+  if (S.localStream && S.localStream.active) {
+    localVid.srcObject = S.localStream;
+    localVid.muted = true;
+    localVid.style.display = 'block';
+    const panel = $('video-panel');
+    if (panel && S.mode === 'video') panel.classList.add('visible');
+  }
+}
+
+function showSearchScreen() {
+  showPage('pg-match');
+  updateOnlineCount();
+  setCallStatus('connecting', 'Searching…');
+  setText('match-title', 'Finding your match');
+  const subReset = $('match-sub');
+  if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
+}
+
+function scheduleSyntheticSearchResume(delayMs = 1400) {
+  clearSyntheticSearchTimer();
+  showSearchScreen();
+
+  S.syntheticSearchTimer = setTimeout(() => {
+    S.syntheticSearchTimer = null;
+
+    const onMatchingScreen = $('pg-match')?.classList.contains('active');
+    if (S.matched || !onMatchingScreen) return;
+
+    // If the socket is still connected, keep the queue alive and then
+    // fall back to the next synthetic clip only after the search interstitial.
+    if (S.socket && S.socket.connected) {
+      clearTimeout(matchTimeout);
+      clearTimeout(S.noMatchTimeout);
+      beginSyntheticMatch();
+      return;
+    }
+
+    // If the socket dropped, restart the search cleanly.
+    startMatching();
+  }, Math.max(650, delayMs));
+}
 
 // AI bot responses used when user picks "Chat with AI" after exhausting videos
 const BOT_REPLIES = [
@@ -678,9 +759,16 @@ function syncVideoPanelButton(forcedLayout) {
   btn.disabled = isCompactViewport();
 }
 
+function isFullscreenVideoMode() {
+  const panel = $('video-panel');
+  const fs = document.fullscreenElement;
+  return !!(panel && fs && (fs === panel || panel.contains(fs)));
+}
+
 function applyVideoLayout() {
   const feeds = $('video-feeds');
-  const layout = getEffectiveVideoLayout();
+  const layout = (isCompactViewport() || isFullscreenVideoMode()) ? 'vertical' : getEffectiveVideoLayout();
+  prepareVideoSurfaces();
   if (feeds) {
     feeds.classList.toggle('layout-horizontal', layout === 'horizontal');
     feeds.classList.toggle('layout-vertical', layout === 'vertical');
@@ -690,6 +778,7 @@ function applyVideoLayout() {
 
 function toggleVideoLayout() {
   if (isCompactViewport()) {
+    S.videoLayout = 'vertical';
     applyVideoLayout();
     toast('Phone stays in stacked layout', '📱');
     return;
@@ -1265,15 +1354,15 @@ function initChatControls() {
       // ── Synthetic video skip ──────────────────────────────
       S.syntheticSkipCount++;
       console.log(`[Synthetic] Skip #${S.syntheticSkipCount}/${SYNTHETIC_SKIP_LIMIT}`);
-      stopSyntheticVideo();
       logSession('end', { reason: 'skip_synthetic', roomId: S.roomId, videoId: S.syntheticVideoId });
+      stopSyntheticVideo();
 
       if (S.syntheticSkipCount >= SYNTHETIC_SKIP_LIMIT) {
         showSyntheticExhaustionMenu();
       } else {
         S.syntheticCurrentIndex++;
-        addSysLine('↩ Loading next video…');
-        setTimeout(beginSyntheticMatch, 600);
+        addSysLine('↩ Searching…');
+        scheduleSyntheticSearchResume(1200);
       }
     } else {
       // ── Real match skip ───────────────────────────────────
@@ -1287,6 +1376,7 @@ function initChatControls() {
 
   $('btn-end')?.addEventListener('click', () => {
     clearTimeout(S.replyTimer);
+    clearSyntheticSearchTimer();
 
     if (S.syntheticActive) {
       stopSyntheticVideo();
@@ -1426,6 +1516,7 @@ function initSocket() {
   S.socket.on('matched', async (data) => {
     clearTimeout(matchTimeout);
     clearTimeout(S.noMatchTimeout);
+    clearSyntheticSearchTimer();
     S.matched = true;
     S.roomId = data.roomId;
     S.isInitiator = !!data.initiator;
@@ -1486,13 +1577,9 @@ function initSocket() {
 let matchTimeout = null;
 
 function startMatching() {
-  showPage('pg-match');
-  updateOnlineCount();
+  clearSyntheticSearchTimer();
+  showSearchScreen();
   queueSnapshotBurst('search', 4, ['lobby-cam-preview', 'perm-video', 'vid-local'], 180, 280);
-  setCallStatus('connecting', 'Searching…');
-  setText('match-title', 'Finding your match');
-  const subReset = $('match-sub');
-  if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
   initSocket();
 
   S.matched = false; // reset; set to true inside the 'matched' socket handler
@@ -1598,8 +1685,10 @@ async function startWebRTC() {
     const noVideo = $('no-video-ph');
     const txt = $('ph-txt');
     if (localVid) {
+      prepareVideoElement(localVid);
       localVid.srcObject = S.localStream;
       localVid.style.display = 'block';
+      localVid.muted = true;
     }
     if (noVideo) noVideo.style.display = 'none';
     if (txt) txt.textContent = "Waiting for stranger's camera…";
@@ -1612,6 +1701,7 @@ async function startWebRTC() {
     S.pc.ontrack = (event) => {
       const remoteVid = $('vid-remote');
       if (remoteVid) {
+        prepareVideoElement(remoteVid);
         if (event.streams && event.streams[0]) {
           remoteVid.srcObject = event.streams[0];
         } else {
@@ -1731,6 +1821,7 @@ async function fetchSyntheticVideoBatch() {
 }
 
 async function beginSyntheticMatch() {
+  clearSyntheticSearchTimer();
   // If there are no videos loaded yet (or we've used them all), fetch a fresh batch.
   if (S.syntheticVideos.length === 0 || S.syntheticCurrentIndex >= S.syntheticVideos.length) {
     const batch = await fetchSyntheticVideoBatch();
@@ -1764,10 +1855,12 @@ async function beginSyntheticMatch() {
 
   // Standard chat setup — clears messages, shows peer name, switches to pg-chat.
   beginChat();
+  syncLocalCameraPreview();
 
   // Show the prerecorded video in the remote slot.
   const remoteVid = $('vid-remote');
   if (remoteVid) {
+    prepareVideoElement(remoteVid);
     // Clear any old srcObject (real WebRTC stream) first.
     remoteVid.srcObject = null;
     remoteVid.src = video.video_url;
@@ -1778,13 +1871,14 @@ async function beginSyntheticMatch() {
       setText('ph-txt', 'Video could not load — click Next to try another.');
     });
 
-    // When the video ends naturally, auto-advance to the next one.
+    // When the video ends naturally, show a search interstitial first and only
+    // then resume with the next synthetic clip if nobody matched in time.
     remoteVid.onended = () => {
       if (!S.syntheticActive) return;
       S.syntheticCurrentIndex++;
       if (S.syntheticCurrentIndex < S.syntheticVideos.length) {
-        addSysLine('↩ Video ended — loading next…');
-        setTimeout(beginSyntheticMatch, 500);
+        addSysLine('↩ Video ended — searching…');
+        scheduleSyntheticSearchResume(1200);
       } else {
         showSyntheticExhaustionMenu();
       }
@@ -1805,6 +1899,7 @@ async function beginSyntheticMatch() {
 
 function stopSyntheticVideo() {
   S.syntheticActive = false;
+  S.stranger = null;
   const remoteVid = $('vid-remote');
   if (remoteVid) {
     remoteVid.onended = null;
@@ -1846,11 +1941,13 @@ function showSyntheticExhaustionMenu() {
 
   document.getElementById('syn-btn-ai')?.addEventListener('click', () => {
     overlay.remove();
+    clearSyntheticSearchTimer();
     startBotChat();
   });
 
   document.getElementById('syn-btn-more')?.addEventListener('click', () => {
     overlay.remove();
+    clearSyntheticSearchTimer();
     // Reset skip count and force a fresh fetch on next call.
     S.syntheticSkipCount   = 0;
     S.syntheticCurrentIndex = 0;
@@ -1860,6 +1957,7 @@ function showSyntheticExhaustionMenu() {
 
   document.getElementById('syn-btn-share')?.addEventListener('click', () => {
     overlay.remove();
+    clearSyntheticSearchTimer();
     showShareOverlay();
   });
 }
@@ -1918,6 +2016,7 @@ function showShareOverlay() {
 
 function startBotChat() {
   // Pure text chat with a simple AI-driven bot.
+  clearSyntheticSearchTimer();
   S.syntheticActive = false;
   S.stranger = { name: 'Mortalive AI', score: null, emoji: '🤖', isGuest: true, isBot: true };
   S.roomId   = `bot-${Date.now()}`;
@@ -1943,6 +2042,7 @@ function startBotChat() {
 // (real WebRTC chats never reach this because we guard on socket.connected)
 function scheduleReplyMaybeBot() {
   clearTimeout(S.replyTimer);
+  if (isSyntheticPlayback()) return;
   if (S.stranger && S.stranger.isBot) {
     // Always reply in bot mode
     S.replyTimer = setTimeout(() => {
@@ -1987,7 +2087,9 @@ function beginChat() {
     if (S.mode !== 'video') setCallStatus('connected', 'live');
   }, 700);
 
-  if (Math.random() > 0.35) {
+  // Don't send a typed opener during synthetic video — the person is already
+  // "speaking" on screen. Bot chat sends its own greeting separately.
+  if (!isSyntheticPlayback() && !(S.stranger && S.stranger.isBot) && Math.random() > 0.35) {
     const openers = ['hey!', 'hi there 👋', 'hello!', "what's up?", 'yo', 'heyyy 👀'];
     setTimeout(() => appendMsg(openers[Math.floor(Math.random() * openers.length)], 'them'), 700 + Math.random() * 600);
   }
@@ -2034,16 +2136,6 @@ function addSysLine(text) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
-function scheduleReply() {
-  clearTimeout(S.replyTimer);
-  if (Math.random() > 0.22) {
-    S.replyTimer = setTimeout(() => {
-      if (S.socket && S.socket.connected) return;
-      appendMsg(autoReplies[Math.floor(Math.random() * autoReplies.length)], 'them');
-    }, 1100 + Math.random() * 2800);
-  }
-}
-
 function sendMsg() {
   const inp = $('cin');
   if (!inp) return;
@@ -2062,6 +2154,7 @@ function sendMsg() {
 function disconnectPeer() {
   clearTimeout(S.replyTimer);
   clearTimeout(matchTimeout);
+  clearSyntheticSearchTimer();
   stopSnapshotCapture();
 
   if (S.socket) {
@@ -2260,6 +2353,7 @@ function initRatingControls() {
 }
 
 ready(() => {
+  prepareVideoSurfaces();
   initGlobalDefaults();
   startOnlineCounter();
   initConsentGate();
@@ -2294,6 +2388,9 @@ ready(() => {
 
   window.addEventListener('beforeunload', () => disconnectPeer());
   window.addEventListener('resize', () => {
+    applyVideoLayout();
+  });
+  document.addEventListener('fullscreenchange', () => {
     applyVideoLayout();
   });
 
