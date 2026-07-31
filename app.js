@@ -767,7 +767,8 @@ function isFullscreenVideoMode() {
 
 function applyVideoLayout() {
   const feeds = $('video-feeds');
-  const layout = (isCompactViewport() || isFullscreenVideoMode()) ? 'vertical' : getEffectiveVideoLayout();
+  // On phone/compact: stay horizontal by default, only force vertical when fullscreen is manually activated
+  const layout = isFullscreenVideoMode() ? 'vertical' : getEffectiveVideoLayout();
   prepareVideoSurfaces();
   if (feeds) {
     feeds.classList.toggle('layout-horizontal', layout === 'horizontal');
