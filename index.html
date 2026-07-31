@@ -105,21 +105,12 @@ img { display: block; max-width: 100%; }
   content: '';
   position: absolute;
   top: 0;
-  /* Anchor to the WRAP's actual left edge, not the raw viewport edge.
-     .wrap is `min(1280px, calc(100% - 28px))` wide and centered, so its
-     left edge sits at max(14px, (100vw - 1280px) / 2). Matching that here
-     means the background always lines up with the content column and
-     stays inside the max-width container as the window is resized —
-     instead of drifting away from centered content on ultra-wide screens. */
   left: 0;
   width: 100%;
   height: min(100vh, 900px);
   background:
     url('https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortallive_background_manssu.png')
     center top / cover no-repeat;
-  /* Mild fade ONLY at the bottom, bleeding into the white page
-     background. No right-edge fade — the image stays full-strength
-     across its whole width and only softens near the bottom. */
   -webkit-mask-image: linear-gradient(to bottom, black 78%, transparent 100%);
   mask-image:         linear-gradient(to bottom, black 78%, transparent 100%);
   pointer-events: none;
@@ -457,7 +448,6 @@ img { display: block; max-width: 100%; }
   box-shadow: var(--elev-4);
   background: var(--surface-3);
   min-height: 380px;
-  /* 5px padding around image */
   padding: 5px;
 }
 .hero-image-shell img,
@@ -630,7 +620,6 @@ img { display: block; max-width: 100%; }
   overflow: hidden;
   border: 1px solid var(--border);
   box-shadow: var(--elev-3);
-  /* 5px padding for inset effect */
   padding: 5px;
   background: var(--surface-3);
   transition: transform var(--dur-mid) var(--ease-out), box-shadow var(--dur-mid);
@@ -1263,6 +1252,7 @@ img { display: block; max-width: 100%; }
 }
 .video-panel.visible { display: flex; }
 
+/* ═══ LAYOUT FIX: Video feeds with fixed aspect ratio ═══ */
 .video-feeds {
   flex: 1;
   min-height: 0;
@@ -1273,14 +1263,38 @@ img { display: block; max-width: 100%; }
   display: grid;
   overflow: hidden;
   position: relative;
+  /* FIX: Fixed aspect ratio to prevent stretching */
+  aspect-ratio: 16/9;
+  max-width: 100%;
+  max-height: 100%;
 }
 .video-feeds.layout-horizontal { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
 .video-feeds.layout-vertical   { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
 
-.video-wrapper { position: relative; overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; }
+/* FIX: Video wrappers maintain aspect ratio */
+.video-wrapper { 
+  position: relative; 
+  overflow: hidden; 
+  background: #000; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+  aspect-ratio: 16/9;
+  min-width: 0;
+  min-height: 0;
+}
 .video-wrapper.remote,
 .video-wrapper.local { min-width: 0; min-height: 0; }
-#vid-remote, #vid-local { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; background: #0d1117; }
+
+/* FIX: Use object-fit: cover to crop instead of stretch */
+#vid-remote, #vid-local { 
+  width: 100%; 
+  height: 100%; 
+  object-fit: cover;
+  object-position: center; 
+  display: block; 
+  background: #0d1117;
+}
 #vid-local { transform: scaleX(-1); background: #111827; }
 
 .no-video {
@@ -1560,20 +1574,21 @@ img { display: block; max-width: 100%; }
   #pg-chat { padding: 8px; gap: 8px; }
   .chat-body { grid-template-rows: minmax(260px,50vh) minmax(0,1fr); }
   .video-panel { min-height: 260px; }
+  
+  /* FIX: Mobile video controls wrap to 2 columns */
   .video-controls {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    flex-wrap: wrap;
     gap: 6px;
     width: 100%;
   }
   .video-controls .vc-btn {
-    flex: 1 1 0;
+    flex: 0 1 calc(50% - 3px);
     min-width: 0;
     white-space: nowrap;
     padding: 0 8px;
     width: auto;
     min-height: 40px;
+    font-size: 12px;
   }
 
   .landing-shell  { gap: 30px; }
@@ -1833,7 +1848,6 @@ body.reveal-ready .scroll-reveal.in-view{
   <!-- Landscape hero image -->
   <section class="hero-image-band scroll-reveal" aria-label="Hero visual">
     <div class="hero-image-shell">
-      <!-- TODO: replace src below with the final hero image URL -->
       <img class="hero-image-bg"
            src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783935562/pc_nm2uoq.png"
            alt="People connecting worldwide">
@@ -1953,8 +1967,6 @@ body.reveal-ready .scroll-reveal.in-view{
       </div>
     </div>
   </section>
-
-
 
   <!-- Footer -->
   <footer class="footer scroll-reveal" aria-label="Site footer">
