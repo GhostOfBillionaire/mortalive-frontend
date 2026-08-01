@@ -1267,12 +1267,14 @@ img { display: block; max-width: 100%; }
 }
 .video-panel.visible { display: flex; }
 
-/* Video container — keeps both feeds aligned without forcing square crops */
+/* Video container — desktop default: two squares side by side */
 .video-feeds {
+  /* Don't flex-grow into the panel height — size is driven by the
+     wrappers' own aspect-ratio. flex:1 + min-height:0 was causing the
+     container to fill available height and then clip the squares. */
   flex: none;
   width: 100%;
-  height: clamp(230px, 34vh, 360px);
-  max-height: 42vh;
+  max-height: 50vh;
   background: #0d1117;
   border-radius: var(--r-lg);
   border: 1px solid rgba(255,255,255,.06);
@@ -1280,20 +1282,19 @@ img { display: block; max-width: 100%; }
   display: grid;
   overflow: hidden;
   position: relative;
+  /* Desktop normal: 2 squares side by side, height driven by wrapper aspect-ratio */
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr;
-  align-items: stretch;
+  grid-template-rows: auto;
   min-width: 0;
   gap: 2px;
 }
 
-/* In fullscreen, keep side-by-side and fill the screen on desktop */
+/* In fullscreen, keep side-by-side and fill the screen */
 #video-panel:fullscreen .video-feeds,
 #video-panel:-webkit-full-screen .video-feeds,
 #video-panel:-moz-full-screen .video-feeds {
   flex: 1;
   min-height: 0;
-  height: 100%;
   max-height: none;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr;
@@ -1309,7 +1310,7 @@ img { display: block; max-width: 100%; }
   height: 100%;
 }
 
-/* Each video wrapper fills its grid cell; the video itself preserves ratio */
+/* Each video wrapper is a square (1:1 aspect ratio) */
 .video-wrapper { 
   position: relative; 
   overflow: hidden; 
@@ -1317,8 +1318,9 @@ img { display: block; max-width: 100%; }
   display: flex; 
   align-items: center; 
   justify-content: center;
+  /* Width is 50% of .video-feeds (1fr column); aspect-ratio 1:1 sets height */
   width: 100%;
-  height: 100%;
+  aspect-ratio: 1 / 1;
   min-width: 0;
   min-height: 0;
 }
@@ -1329,18 +1331,18 @@ img { display: block; max-width: 100%; }
   min-height: 0; 
 }
 
-/* Videos preserve their aspect ratio and never stretch the page */
+/* Videos crop to fit the container without stretching */
 #vid-remote, #vid-local { 
   width: 100%; 
   height: 100%; 
-  object-fit: contain; 
-  object-position: center center; 
+  object-fit: cover; 
+  object-position: center; 
   display: block; 
-  background: #000; 
+  background: #0d1117; 
 }
 #vid-local { 
   transform: scaleX(-1); 
-  background: #000; 
+  background: #111827; 
 }
 
 .no-video {
@@ -1630,29 +1632,30 @@ img { display: block; max-width: 100%; }
     grid-template-rows: auto minmax(0, 1fr);
   }
   .video-panel {
+    /* No fixed height — let the squares determine the height naturally */
     min-height: 0;
     max-height: none;
     overflow: visible;
   }
   .video-feeds {
-    /* Mobile normal: keep the videos compact so the chat stays visible. */
-    height: clamp(190px, 28vh, 250px);
-    max-height: 32vh;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr;
+    /* Mobile: 2 squares stacked vertically (each square = 50vw wide → 50vw tall)
+       Capped at 45vh so chat is always visible on small screens. */
+    max-height: 45vh;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
     gap: 2px;
   }
   .video-feeds .video-wrapper {
+    /* Each wrapper is full width of the panel → square height = viewport width */
     width: 100%;
-    height: 100%;
+    aspect-ratio: 1 / 1;
   }
-  /* Mobile fullscreen: stack the streams and hide the chat panel entirely. */
+  /* Mobile fullscreen: still stacked (never side-by-side on small screen) */
   #video-panel:fullscreen .video-feeds,
   #video-panel:-webkit-full-screen .video-feeds,
   #video-panel:-moz-full-screen .video-feeds {
     flex: 1;
     min-height: 0;
-    height: 100%;
     max-height: none;
     grid-template-columns: 1fr;
     grid-template-rows: 1fr 1fr;
@@ -1664,20 +1667,6 @@ img { display: block; max-width: 100%; }
     aspect-ratio: auto;
     width: 100%;
     height: 100%;
-  }
-  body.phone-video-fullscreen .chat-panel {
-    display: none;
-  }
-  body.phone-video-fullscreen .chat-body {
-    grid-template-rows: 1fr;
-  }
-  body.phone-video-fullscreen .video-panel {
-    flex: 1;
-  }
-  body.phone-video-fullscreen #video-panel:fullscreen .video-controls,
-  body.phone-video-fullscreen #video-panel:-webkit-full-screen .video-controls,
-  body.phone-video-fullscreen #video-panel:-moz-full-screen .video-controls {
-    bottom: 14px;
   }
   .video-controls {
     flex-direction: row;
@@ -1888,6 +1877,187 @@ body.reveal-ready .scroll-reveal.in-view{
   }
   .landing-title .title-line{
     white-space: normal;
+  }
+}
+
+
+/* =====================================================
+   Video layout revamp patch
+   - main remote video fills the stage
+   - self preview becomes a small PiP card
+   - phone fullscreen stacks vertically and hides chat
+   ===================================================== */
+#pg-chat .chat-body {
+  align-items: stretch;
+}
+
+#video-panel {
+  position: relative;
+  overflow: visible;
+}
+
+#video-feeds {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: clamp(240px, 38dvh, 360px);
+  max-height: none;
+  background: #000;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: var(--elev-3);
+  border: 1px solid rgba(255,255,255,.06);
+}
+
+.video-wrapper {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  overflow: hidden;
+  background: #000;
+  min-width: 0;
+  min-height: 0;
+}
+
+.video-wrapper.remote {
+  z-index: 1;
+}
+
+.video-wrapper.local {
+  inset: auto 14px 14px auto;
+  width: clamp(100px, 17vw, 160px);
+  aspect-ratio: 3 / 4;
+  z-index: 3;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow: 0 10px 28px rgba(0,0,0,.35);
+}
+
+#vid-remote,
+#vid-local {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #000;
+}
+
+#vid-remote {
+  object-fit: contain;
+  object-position: center center;
+}
+
+#vid-local {
+  object-fit: cover;
+  object-position: center center;
+  transform: scaleX(-1);
+}
+
+#video-feeds .no-video {
+  z-index: 2;
+}
+
+#video-panel:fullscreen {
+  padding: 0;
+  gap: 0;
+}
+
+#video-panel:fullscreen .video-feeds,
+#video-panel:-webkit-full-screen .video-feeds,
+#video-panel:-moz-full-screen .video-feeds {
+  display: block;
+  height: 100%;
+  max-height: none;
+  width: 100%;
+}
+
+#video-panel:fullscreen .video-wrapper,
+#video-panel:-webkit-full-screen .video-wrapper,
+#video-panel:-moz-full-screen .video-wrapper {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+  box-shadow: none;
+  border: 0;
+}
+
+#video-panel:fullscreen .video-wrapper.local,
+#video-panel:-webkit-full-screen .video-wrapper.local,
+#video-panel:-moz-full-screen .video-wrapper.local {
+  inset: auto 18px 18px auto;
+  width: clamp(120px, 16vw, 220px);
+  aspect-ratio: 3 / 4;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(255,255,255,.16);
+  box-shadow: 0 10px 30px rgba(0,0,0,.4);
+}
+
+#video-panel:fullscreen + .chat-panel,
+#video-panel:-webkit-full-screen + .chat-panel,
+#video-panel:-moz-full-screen + .chat-panel {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  #video-feeds {
+    height: clamp(220px, 32dvh, 300px);
+  }
+
+  .video-wrapper.local {
+    inset: auto 10px 10px auto;
+    width: clamp(84px, 24vw, 120px);
+  }
+
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 6px;
+    padding: 6px;
+  }
+
+  #video-panel:fullscreen .video-wrapper,
+  #video-panel:-webkit-full-screen .video-wrapper,
+  #video-panel:-moz-full-screen .video-wrapper {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    height: 100%;
+    aspect-ratio: auto;
+    border-radius: var(--r-md);
+    overflow: hidden;
+  }
+
+  #video-panel:fullscreen .video-wrapper.local,
+  #video-panel:-webkit-full-screen .video-wrapper.local,
+  #video-panel:-moz-full-screen .video-wrapper.local {
+    inset: auto;
+    width: 100%;
+    aspect-ratio: auto;
+    border: 0;
+    box-shadow: none;
+  }
+
+  #video-panel:fullscreen + .chat-panel,
+  #video-panel:-webkit-full-screen + .chat-panel,
+  #video-panel:-moz-full-screen + .chat-panel {
+    display: none;
+  }
+
+  #video-panel:fullscreen .video-controls,
+  #video-panel:-webkit-full-screen .video-controls,
+  #video-panel:-moz-full-screen .video-controls {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    z-index: 5;
   }
 }
 
