@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-07-28-synthetic-video'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-01-video-layout-fix'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -87,7 +87,7 @@ function prepareVideoElement(videoEl) {
   videoEl.style.minWidth = '0';
   videoEl.style.minHeight = '0';
   // Crop videos to fit square container without stretching
-  videoEl.style.objectFit = 'cover';
+  videoEl.style.objectFit = 'contain';
   videoEl.style.objectPosition = 'center center';
   videoEl.style.background = '#000';
   if (videoEl.parentElement) {
@@ -99,6 +99,16 @@ function prepareVideoElement(videoEl) {
 
 function prepareVideoSurfaces() {
   ['vid-local', 'vid-remote', 'lobby-cam-preview', 'perm-video'].forEach((id) => prepareVideoElement($(id)));
+}
+
+function syncVideoLayoutState() {
+  const body = document.body;
+  if (!body) return;
+  const compact = isCompactViewport();
+  const fullscreen = !!document.fullscreenElement;
+  body.classList.toggle('mortalive-video-compact', compact);
+  body.classList.toggle('mortalive-video-fullscreen', fullscreen);
+  body.classList.toggle('mortalive-video-compact-fullscreen', compact && fullscreen);
 }
 
 function syncLocalCameraPreview() {
@@ -767,12 +777,9 @@ function isFullscreenVideoMode() {
 }
 
 function applyVideoLayout() {
-  // Layout is now entirely CSS-driven:
-  //   Desktop normal     → 2 squares side by side (grid-template-columns: 1fr 1fr)
-  //   Desktop fullscreen → 2 squares side by side filling the screen
-  //   Mobile normal      → 2 squares stacked (grid-template-columns: 1fr)
-  //   Mobile fullscreen  → 2 squares stacked filling the screen
-  // No class toggling needed — just ensure video surfaces are prepared.
+  // Keep the page locked to the container size, and let the video fit
+  // inside it instead of letting the video determine the page layout.
+  syncVideoLayoutState();
   prepareVideoSurfaces();
 }
 
@@ -1467,6 +1474,7 @@ function initGlobalDefaults() {
   bootProgressState();
   setActiveMode(S.mode);
   updateOnlineCount();
+  syncVideoLayoutState();
   applyVideoLayout();
   refreshLaunchpadCopy();
   setPrimaryButtonsEnabled(false);
