@@ -1454,6 +1454,10 @@ $('vc-fs')?.addEventListener('click', () => {
   if (!panel) return;
   if (!document.fullscreenElement) panel.requestFullscreen?.().catch(() => {});
   else document.exitFullscreen?.();
+  setTimeout(() => {
+    applyVideoLayout();
+    prepareVideoSurfaces();
+  }, 0);
 });
 
   $('btn-cancel')?.addEventListener('click', () => {
@@ -2401,6 +2405,9 @@ ready(() => {
   });
   document.addEventListener('fullscreenchange', () => {
     applyVideoLayout();
+    // Re-apply the native streams after the browser swaps fullscreen state,
+    // keeping the square tiles stable and the controls visible.
+    prepareVideoSurfaces();
   });
 
   // Mobile browsers can fully suspend JS execution while a tab is
