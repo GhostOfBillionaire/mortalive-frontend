@@ -1274,6 +1274,7 @@ img { display: block; max-width: 100%; }
      container to fill available height and then clip the squares. */
   flex: none;
   width: 100%;
+  max-height: 50vh;
   background: #0d1117;
   border-radius: var(--r-lg);
   border: 1px solid rgba(255,255,255,.06);
@@ -1294,6 +1295,7 @@ img { display: block; max-width: 100%; }
 #video-panel:-moz-full-screen .video-feeds {
   flex: 1;
   min-height: 0;
+  max-height: none;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr;
   gap: 4px;
@@ -1636,7 +1638,9 @@ img { display: block; max-width: 100%; }
     overflow: visible;
   }
   .video-feeds {
-    /* Mobile: 2 squares stacked vertically (each square = 50vw wide → 50vw tall) */
+    /* Mobile: 2 squares stacked vertically (each square = 50vw wide → 50vw tall)
+       Capped at 45vh so chat is always visible on small screens. */
+    max-height: 45vh;
     grid-template-columns: 1fr;
     grid-template-rows: auto auto;
     gap: 2px;
@@ -1652,6 +1656,7 @@ img { display: block; max-width: 100%; }
   #video-panel:-moz-full-screen .video-feeds {
     flex: 1;
     min-height: 0;
+    max-height: none;
     grid-template-columns: 1fr;
     grid-template-rows: 1fr 1fr;
     gap: 2px;
