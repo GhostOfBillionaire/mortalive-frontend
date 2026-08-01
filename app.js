@@ -2400,15 +2400,78 @@ ready(() => {
   }
 
   window.addEventListener('beforeunload', () => disconnectPeer());
+  
+  // ===== FULLSCREEN ORIENTATION FIX (v12) =====
+  // Force correct video grid layout based on actual orientation in fullscreen
+  function handleFullscreenChange() {
+    const panel = $('video-panel');
+    const feeds = $('video-feeds');
+    const fsControls = $('fs-controls');
+    const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
+    
+    if (!fsControls) return;
+    
+    if (!isFs) {
+      // Exit fullscreen
+      fsControls.classList.remove('visible');
+      if (feeds) {
+        feeds.style.gridTemplateColumns = '';
+        feeds.style.gridTemplateRows = '';
+      }
+      return;
+    }
+    
+    // Enter fullscreen - show controls and apply layout
+    fsControls.classList.add('visible');
+    applyVideoLayout();
+    prepareVideoSurfaces();
+    
+    // Detect orientation from screen dimensions (most reliable in fullscreen)
+    const isLandscape = window.screen.width > window.screen.height || window.innerWidth > window.innerHeight;
+    
+    if (feeds) {
+      if (isLandscape) {
+        // Landscape fullscreen: side by side (2 columns)
+        feeds.style.gridTemplateColumns = '1fr 1fr';
+        feeds.style.gridTemplateRows = '1fr';
+      } else {
+        // Portrait fullscreen: stacked (1 column, 2 rows)
+        feeds.style.gridTemplateColumns = '1fr';
+        feeds.style.gridTemplateRows = '1fr 1fr';
+      }
+    }
+  }
+  
+  // Sync mic/cam button states to fullscreen emoji buttons
+  function syncFsButtonStates() {
+    const micBtn = $('vc-mic');
+    const camBtn = $('vc-cam');
+    const fsMicBtn = $('fs-mic');
+    const fsCamBtn = $('fs-cam');
+    
+    if (micBtn && fsMicBtn) {
+      fsMicBtn.classList.toggle('off', micBtn.classList.contains('off'));
+    }
+    if (camBtn && fsCamBtn) {
+      fsCamBtn.classList.toggle('off', camBtn.classList.contains('off'));
+    }
+  }
+  
+  // Watch for fullscreen changes
+  document.addEventListener('fullscreenchange', handleFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+  document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+  
+  // Re-apply fullscreen orientation on rotation/resize
   window.addEventListener('resize', () => {
     applyVideoLayout();
+    if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement) {
+      handleFullscreenChange();
+    }
   });
-  document.addEventListener('fullscreenchange', () => {
-    applyVideoLayout();
-    // Re-apply the native streams after the browser swaps fullscreen state,
-    // keeping the square tiles stable and the controls visible.
-    prepareVideoSurfaces();
-  });
+  
+  // Watch mic/cam button changes
+  setInterval(syncFsButtonStates, 200);
 
   // Mobile browsers can fully suspend JS execution while a tab is
   // backgrounded (screen lock, app switch), not just the network — so
