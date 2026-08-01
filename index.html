@@ -2168,16 +2168,16 @@ body.reveal-ready .scroll-reveal.in-view{
   #pg-chat.active .video-controls::-webkit-scrollbar { display: none; }
   #pg-chat.active .video-controls .vc-btn { flex: 0 0 auto; }
 
-  /* Issue 2: Landscape fullscreen — side-by-side squares, controls visible */
+  /* Issue 2: Landscape fullscreen — side-by-side, full screen, controls at bottom */
   #video-panel:fullscreen,
   #video-panel:-webkit-full-screen,
   #video-panel:-moz-full-screen {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: 12px 16px;
-    gap: 10px;
+    justify-content: flex-start;
+    padding: 0;
+    gap: 0;
     background: #000;
     width: 100vw;
     height: 100vh;
@@ -2188,17 +2188,17 @@ body.reveal-ready .scroll-reveal.in-view{
   #video-panel:fullscreen .video-feeds,
   #video-panel:-webkit-full-screen .video-feeds,
   #video-panel:-moz-full-screen .video-feeds {
-    /* Side-by-side squares: height = available height, width = 2 × height */
-    height: calc(100vh - 80px);
-    width: calc((100vh - 80px) * 2);
-    max-width: 100vw;
+    /* Side-by-side: fill screen height, width = 2x height */
+    flex: 1;
+    height: 100%;
+    width: 100vw;
+    max-width: none;
     max-height: none;
     aspect-ratio: unset;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr;
-    gap: 4px;
+    gap: 0;
     flex-shrink: 0;
-    margin-inline: auto;
   }
 
   #video-panel:fullscreen .video-wrapper,
@@ -2214,16 +2214,14 @@ body.reveal-ready .scroll-reveal.in-view{
   #video-panel:-moz-full-screen .video-controls {
     display: flex;
     flex-shrink: 0;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     justify-content: center;
     gap: 8px;
-    background: rgba(13,17,23,.75);
-    padding: 8px 16px;
-    border-radius: var(--r-md);
-    width: auto;
-    max-width: 100%;
+    background: rgba(13,17,23,.95);
+    padding: 12px 16px;
+    width: 100vw;
     box-sizing: border-box;
-    overflow-x: auto;
+    border-top: 1px solid rgba(255,255,255,.08);
   }
 }
 
@@ -2256,7 +2254,7 @@ body.reveal-ready .scroll-reveal.in-view{
     margin-top: 0;
   }
 
-  /* Issue 4: Portrait fullscreen — stacked tiles, controls pinned at bottom */
+  /* Issue 4: Portrait fullscreen — stacked full screen, controls at bottom */
   #video-panel:fullscreen,
   #video-panel:-webkit-full-screen,
   #video-panel:-moz-full-screen {
@@ -2276,16 +2274,15 @@ body.reveal-ready .scroll-reveal.in-view{
   #video-panel:fullscreen .video-feeds,
   #video-panel:-webkit-full-screen .video-feeds,
   #video-panel:-moz-full-screen .video-feeds {
+    flex: 1;
     width: 100vw;
-    height: calc(100vh - 64px);
+    height: 100%;
     max-width: none;
     max-height: none;
     aspect-ratio: unset;
     grid-template-columns: 1fr;
     grid-template-rows: 1fr 1fr;
-    gap: 2px;
-    flex: 1;
-    min-height: 0;
+    gap: 0;
   }
 
   #video-panel:fullscreen .video-wrapper,
@@ -2301,30 +2298,14 @@ body.reveal-ready .scroll-reveal.in-view{
   #video-panel:-moz-full-screen .video-controls {
     display: flex;
     flex-shrink: 0;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     justify-content: center;
     gap: 8px;
-    background: rgba(13,17,23,.88);
-    padding: 10px 16px;
+    background: rgba(13,17,23,.95);
+    padding: 12px 16px;
     width: 100vw;
-    height: 64px;
     box-sizing: border-box;
-    border-radius: 0;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  #video-panel:fullscreen .vc-btn,
-  #video-panel:-webkit-full-screen .vc-btn,
-  #video-panel:-moz-full-screen .vc-btn {
-    flex-shrink: 0;
-    min-width: 0;
-    color: #fff;
-    border-color: rgba(255,255,255,.25);
-    background: rgba(255,255,255,.1);
-    height: 38px;
-    padding: 0 12px;
-    font-size: 12px;
+    border-top: 1px solid rgba(255,255,255,.08);
   }
 }
 </style>
