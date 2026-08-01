@@ -2168,7 +2168,7 @@ body.reveal-ready .scroll-reveal.in-view{
   #pg-chat.active .video-controls::-webkit-scrollbar { display: none; }
   #pg-chat.active .video-controls .vc-btn { flex: 0 0 auto; }
 
-  /* Issue 2: Landscape fullscreen — side-by-side, full screen, controls at bottom */
+  /* Issue 2: Landscape fullscreen — side-by-side (2 columns), full screen, controls at bottom */
   #video-panel:fullscreen,
   #video-panel:-webkit-full-screen,
   #video-panel:-moz-full-screen {
@@ -2188,7 +2188,6 @@ body.reveal-ready .scroll-reveal.in-view{
   #video-panel:fullscreen .video-feeds,
   #video-panel:-webkit-full-screen .video-feeds,
   #video-panel:-moz-full-screen .video-feeds {
-    /* Side-by-side: fill screen height, width = 2x height */
     flex: 1;
     height: 100%;
     width: 100vw;
@@ -2198,7 +2197,6 @@ body.reveal-ready .scroll-reveal.in-view{
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr;
     gap: 0;
-    flex-shrink: 0;
   }
 
   #video-panel:fullscreen .video-wrapper,
@@ -2254,7 +2252,7 @@ body.reveal-ready .scroll-reveal.in-view{
     margin-top: 0;
   }
 
-  /* Issue 4: Portrait fullscreen — stacked full screen, controls at bottom */
+  /* Issue 4: Portrait fullscreen — stacked (1 column up/down), full screen, controls at bottom */
   #video-panel:fullscreen,
   #video-panel:-webkit-full-screen,
   #video-panel:-moz-full-screen {
