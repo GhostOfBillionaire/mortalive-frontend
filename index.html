@@ -2031,6 +2031,111 @@ body.reveal-ready .scroll-reveal.in-view{
   }
 }
 
+
+
+/* ===== Desktop landscape / portrait chat-video layout reset ===== */
+@media (min-width: 981px) and (orientation: landscape) {
+  #pg-chat.active .chat-shell {
+    width: min(100%, 1480px);
+  }
+
+  #pg-chat.active .chat-body {
+    grid-template-columns: clamp(360px, 37vw, 560px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  #pg-chat.active .video-panel,
+  #pg-chat.active .chat-panel {
+    width: 100%;
+    margin-inline: 0;
+    min-width: 0;
+  }
+
+  #pg-chat.active .video-panel {
+    align-self: start;
+  }
+
+  #pg-chat.active .video-feeds {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    aspect-ratio: 1 / 1;
+  }
+
+  #pg-chat.active .chat-panel {
+    min-height: 0;
+  }
+
+  /* Desktop fullscreen: overlay controls on top of the video section */
+  #video-panel:fullscreen,
+  #video-panel:-webkit-full-screen,
+  #video-panel:-moz-full-screen {
+    padding: 0;
+    justify-content: center;
+    align-items: center;
+  }
+
+  #video-panel:fullscreen .video-controls,
+  #video-panel:-webkit-full-screen .video-controls,
+  #video-panel:-moz-full-screen .video-controls {
+    display: flex;
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    width: min(calc(100vw - 24px), calc(100vh * 2));
+    margin: 0;
+    padding: 10px 14px;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    background: rgba(13,17,23,.72);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: var(--r-md);
+    backdrop-filter: blur(12px);
+    z-index: 210;
+  }
+
+  #video-panel:fullscreen .video-controls .vc-btn,
+  #video-panel:-webkit-full-screen .video-controls .vc-btn,
+  #video-panel:-moz-full-screen .video-controls .vc-btn {
+    flex: 0 0 auto;
+  }
+
+  #video-panel:fullscreen #btn-skip-fs,
+  #video-panel:-webkit-full-screen #btn-skip-fs,
+  #video-panel:-moz-full-screen #btn-skip-fs {
+    display: inline-flex;
+  }
+}
+
+@media (orientation: portrait) {
+  #pg-chat.active .chat-shell {
+    width: min(100%, 980px);
+  }
+
+  #pg-chat.active .chat-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  #pg-chat.active .video-panel,
+  #pg-chat.active .chat-panel {
+    width: min(100%, 72vw);
+    margin-inline: auto;
+    min-width: 0;
+  }
+
+  #pg-chat.active .video-feeds {
+    width: 100%;
+    max-height: 32vh;
+  }
+}
+
 </style>
 </head>
 <body>
