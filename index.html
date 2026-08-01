@@ -1331,11 +1331,40 @@ img { display: block; max-width: 100%; }
   min-height: 0; 
 }
 
-/* Videos crop to fit the container without stretching */
+/* Video layout guardrails: keep the feed boxes fixed and let the video
+   adapt to them rather than letting the page adapt to the video ratio. */
+body.mortalive-video-compact .video-feeds,
+body.mortalive-video-compact-fullscreen .video-feeds {
+  grid-template-columns: 1fr !important;
+  grid-template-rows: auto auto !important;
+  gap: 4px;
+}
+
+body.mortalive-video-compact .video-wrapper,
+body.mortalive-video-compact-fullscreen .video-wrapper {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  height: 100%;
+}
+
+body.mortalive-video-compact .video-feeds {
+  max-height: 45vh;
+}
+
+body.mortalive-video-compact-fullscreen .video-feeds {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+body.mortalive-video-fullscreen .video-feeds {
+  max-height: none;
+}
+
 #vid-remote, #vid-local { 
   width: 100%; 
   height: 100%; 
-  object-fit: cover; 
+  object-fit: contain; 
   object-position: center; 
   display: block; 
   background: #0d1117; 
@@ -1343,6 +1372,23 @@ img { display: block; max-width: 100%; }
 #vid-local { 
   transform: scaleX(-1); 
   background: #111827; 
+}
+
+#perm-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  transform: scaleX(-1);
+  background: #dde4f0;
+}
+
+#lobby-cam-preview {
+  width: 88px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: var(--r-sm);
+  background: #000;
 }
 
 .no-video {
@@ -1638,8 +1684,7 @@ img { display: block; max-width: 100%; }
     overflow: visible;
   }
   .video-feeds {
-    /* Mobile: 2 squares stacked vertically (each square = 50vw wide → 50vw tall)
-       Capped at 45vh so chat is always visible on small screens. */
+    /* Mobile: 2 squares stacked vertically, capped so chat stays visible. */
     max-height: 45vh;
     grid-template-columns: 1fr;
     grid-template-rows: auto auto;
@@ -1653,17 +1698,19 @@ img { display: block; max-width: 100%; }
   /* Mobile fullscreen: still stacked (never side-by-side on small screen) */
   #video-panel:fullscreen .video-feeds,
   #video-panel:-webkit-full-screen .video-feeds,
-  #video-panel:-moz-full-screen .video-feeds {
+  #video-panel:-moz-full-screen .video-feeds,
+  body.mortalive-video-compact-fullscreen .video-feeds {
     flex: 1;
     min-height: 0;
     max-height: none;
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr 1fr;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr 1fr !important;
     gap: 2px;
   }
   #video-panel:fullscreen .video-wrapper,
   #video-panel:-webkit-full-screen .video-wrapper,
-  #video-panel:-moz-full-screen .video-wrapper {
+  #video-panel:-moz-full-screen .video-wrapper,
+  body.mortalive-video-compact-fullscreen .video-wrapper {
     aspect-ratio: auto;
     width: 100%;
     height: 100%;
