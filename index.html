@@ -1270,13 +1270,13 @@ img { display: block; max-width: 100%; }
 /* Video container — desktop default: two squares side by side */
 .video-feeds {
   /* Don't flex-grow into the panel height — size is driven by the
-     wrappers' own aspect-ratio. flex:1 + min-height:0 was causing the
-     container to fill available height and then clip the squares. */
+     wrappers' own aspect-ratio. Keep it a little smaller in normal
+     mode so the chat stays comfortably visible. */
   flex: none;
-  width: min(860px, calc(100% - 24px));
-  max-width: 860px;
+  width: min(740px, calc(100% - 24px));
+  max-width: 740px;
   margin-inline: auto;
-  max-height: 44vh;
+  max-height: 36vh;
   background: #0d1117;
   border-radius: var(--r-lg);
   border: 1px solid rgba(255,255,255,.06);
@@ -1295,15 +1295,17 @@ img { display: block; max-width: 100%; }
 #video-panel:fullscreen .video-feeds,
 #video-panel:-webkit-full-screen .video-feeds,
 #video-panel:-moz-full-screen .video-feeds {
-  flex: 1;
-  width: 100%;
+  flex: none;
+  width: min(100%, calc((100vh - 110px) * 2));
   max-width: none;
   margin-inline: 0;
   min-height: 0;
   max-height: none;
+  aspect-ratio: 2 / 1;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr;
   gap: 4px;
+  box-sizing: border-box;
 }
 
 /* Fullscreen: wrappers fill the row height instead of using aspect-ratio */
@@ -1488,29 +1490,41 @@ img { display: block; max-width: 100%; }
   display: flex;
   flex-direction: column;
   background: #0d1117;
-  padding: 8px;
-  gap: 8px;
+  padding: 10px 12px 12px;
+  gap: 10px;
   position: fixed;
   inset: 0;
   z-index: 200;
+  box-sizing: border-box;
+  overflow: hidden;
+  align-items: center;
+  justify-content: flex-start;
 }
 #video-panel:fullscreen .video-controls,
 #video-panel:-webkit-full-screen .video-controls,
 #video-panel:-moz-full-screen .video-controls {
-  position: absolute;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  position: static;
+  width: min(100%, calc((100vh - 110px) * 2));
+  margin-top: auto;
   background: rgba(13,17,23,.75);
   padding: 10px 14px;
   border-radius: var(--r-md);
   flex-wrap: nowrap;
+  justify-content: center;
+  gap: 8px;
   z-index: 99;
+  box-sizing: border-box;
 }
 
 #video-panel:fullscreen #btn-skip-fs,
 #video-panel:-webkit-full-screen #btn-skip-fs,
 #video-panel:-moz-full-screen #btn-skip-fs {
+  display: inline-flex;
+}
+
+#video-panel:fullscreen .video-controls #btn-skip-fs,
+#video-panel:-webkit-full-screen .video-controls #btn-skip-fs,
+#video-panel:-moz-full-screen .video-controls #btn-skip-fs {
   display: inline-flex;
 }
 
