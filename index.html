@@ -1267,14 +1267,12 @@ img { display: block; max-width: 100%; }
 }
 .video-panel.visible { display: flex; }
 
-/* Video container — desktop default: two squares side by side */
+/* Video container — keeps both feeds aligned without forcing square crops */
 .video-feeds {
-  /* Don't flex-grow into the panel height — size is driven by the
-     wrappers' own aspect-ratio. flex:1 + min-height:0 was causing the
-     container to fill available height and then clip the squares. */
   flex: none;
   width: 100%;
-  max-height: 50vh;
+  height: clamp(230px, 34vh, 360px);
+  max-height: 42vh;
   background: #0d1117;
   border-radius: var(--r-lg);
   border: 1px solid rgba(255,255,255,.06);
@@ -1282,19 +1280,20 @@ img { display: block; max-width: 100%; }
   display: grid;
   overflow: hidden;
   position: relative;
-  /* Desktop normal: 2 squares side by side, height driven by wrapper aspect-ratio */
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto;
+  grid-template-rows: 1fr;
+  align-items: stretch;
   min-width: 0;
   gap: 2px;
 }
 
-/* In fullscreen, keep side-by-side and fill the screen */
+/* In fullscreen, keep side-by-side and fill the screen on desktop */
 #video-panel:fullscreen .video-feeds,
 #video-panel:-webkit-full-screen .video-feeds,
 #video-panel:-moz-full-screen .video-feeds {
   flex: 1;
   min-height: 0;
+  height: 100%;
   max-height: none;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr;
@@ -1310,7 +1309,7 @@ img { display: block; max-width: 100%; }
   height: 100%;
 }
 
-/* Each video wrapper is a square (1:1 aspect ratio) */
+/* Each video wrapper fills its grid cell; the video itself preserves ratio */
 .video-wrapper { 
   position: relative; 
   overflow: hidden; 
@@ -1318,9 +1317,8 @@ img { display: block; max-width: 100%; }
   display: flex; 
   align-items: center; 
   justify-content: center;
-  /* Width is 50% of .video-feeds (1fr column); aspect-ratio 1:1 sets height */
   width: 100%;
-  aspect-ratio: 1 / 1;
+  height: 100%;
   min-width: 0;
   min-height: 0;
 }
@@ -1331,64 +1329,18 @@ img { display: block; max-width: 100%; }
   min-height: 0; 
 }
 
-/* Video layout guardrails: keep the feed boxes fixed and let the video
-   adapt to them rather than letting the page adapt to the video ratio. */
-body.mortalive-video-compact .video-feeds,
-body.mortalive-video-compact-fullscreen .video-feeds {
-  grid-template-columns: 1fr !important;
-  grid-template-rows: auto auto !important;
-  gap: 4px;
-}
-
-body.mortalive-video-compact .video-wrapper,
-body.mortalive-video-compact-fullscreen .video-wrapper {
-  aspect-ratio: 1 / 1;
-  width: 100%;
-  height: 100%;
-}
-
-body.mortalive-video-compact .video-feeds {
-  max-height: 45vh;
-}
-
-body.mortalive-video-compact-fullscreen .video-feeds {
-  flex: 1;
-  min-height: 0;
-  max-height: none;
-}
-
-body.mortalive-video-fullscreen .video-feeds {
-  max-height: none;
-}
-
+/* Videos preserve their aspect ratio and never stretch the page */
 #vid-remote, #vid-local { 
   width: 100%; 
   height: 100%; 
   object-fit: contain; 
-  object-position: center; 
+  object-position: center center; 
   display: block; 
-  background: #0d1117; 
+  background: #000; 
 }
 #vid-local { 
   transform: scaleX(-1); 
-  background: #111827; 
-}
-
-#perm-video {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  transform: scaleX(-1);
-  background: #dde4f0;
-}
-
-#lobby-cam-preview {
-  width: 88px;
-  height: 64px;
-  object-fit: contain;
-  border-radius: var(--r-sm);
-  background: #000;
+  background: #000; 
 }
 
 .no-video {
@@ -1678,42 +1630,54 @@ body.mortalive-video-fullscreen .video-feeds {
     grid-template-rows: auto minmax(0, 1fr);
   }
   .video-panel {
-    /* No fixed height — let the squares determine the height naturally */
     min-height: 0;
     max-height: none;
     overflow: visible;
   }
   .video-feeds {
-    /* Mobile: 2 squares stacked vertically, capped so chat stays visible. */
-    max-height: 45vh;
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto;
+    /* Mobile normal: keep the videos compact so the chat stays visible. */
+    height: clamp(190px, 28vh, 250px);
+    max-height: 32vh;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr;
     gap: 2px;
   }
   .video-feeds .video-wrapper {
-    /* Each wrapper is full width of the panel → square height = viewport width */
     width: 100%;
-    aspect-ratio: 1 / 1;
+    height: 100%;
   }
-  /* Mobile fullscreen: still stacked (never side-by-side on small screen) */
+  /* Mobile fullscreen: stack the streams and hide the chat panel entirely. */
   #video-panel:fullscreen .video-feeds,
   #video-panel:-webkit-full-screen .video-feeds,
-  #video-panel:-moz-full-screen .video-feeds,
-  body.mortalive-video-compact-fullscreen .video-feeds {
+  #video-panel:-moz-full-screen .video-feeds {
     flex: 1;
     min-height: 0;
+    height: 100%;
     max-height: none;
-    grid-template-columns: 1fr !important;
-    grid-template-rows: 1fr 1fr !important;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
     gap: 2px;
   }
   #video-panel:fullscreen .video-wrapper,
   #video-panel:-webkit-full-screen .video-wrapper,
-  #video-panel:-moz-full-screen .video-wrapper,
-  body.mortalive-video-compact-fullscreen .video-wrapper {
+  #video-panel:-moz-full-screen .video-wrapper {
     aspect-ratio: auto;
     width: 100%;
     height: 100%;
+  }
+  body.phone-video-fullscreen .chat-panel {
+    display: none;
+  }
+  body.phone-video-fullscreen .chat-body {
+    grid-template-rows: 1fr;
+  }
+  body.phone-video-fullscreen .video-panel {
+    flex: 1;
+  }
+  body.phone-video-fullscreen #video-panel:fullscreen .video-controls,
+  body.phone-video-fullscreen #video-panel:-webkit-full-screen .video-controls,
+  body.phone-video-fullscreen #video-panel:-moz-full-screen .video-controls {
+    bottom: 14px;
   }
   .video-controls {
     flex-direction: row;
