@@ -2184,6 +2184,32 @@ body.reveal-ready .scroll-reveal.in-view{
   }
 }
 
+/* ===== Video layout tweak v9 — align feed height with chat box ===== */
+#pg-chat.active .video-panel {
+  align-self: stretch;
+  height: 100%;
+}
+
+#pg-chat.active .video-feeds {
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  aspect-ratio: 1 / 2;
+}
+
+#pg-chat.active .video-controls {
+  margin-top: auto;
+}
+
+/* Keep portrait fullscreen stacked vertically */
+@media (max-width: 720px) and (orientation: portrait) {
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+}
 </style>
 </head>
 <body>
