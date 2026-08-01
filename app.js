@@ -2331,6 +2331,17 @@ function stopSnapshotCapture() {
   clearSnapshotBurstTimers();
 }
 
+// ===== FULLSCREEN ORIENTATION FIX (v12) =====
+// Defined at global scope so initChatControls click handlers can call it.
+// Uses screen.orientation.type (most reliable), falls back to dimension compare.
+function getIsPortrait() {
+  if (screen.orientation && screen.orientation.type) {
+    return screen.orientation.type.startsWith('portrait');
+  }
+  // Fallback: compare physical screen dimensions
+  return window.screen.height >= window.screen.width;
+}
+
 function initRatingControls() {
   const overlay = $('rating-overlay');
   if (!overlay) return;
@@ -2416,17 +2427,6 @@ ready(() => {
 
   window.addEventListener('beforeunload', () => disconnectPeer());
   
-  // ===== FULLSCREEN ORIENTATION FIX (v12) =====
-  // Forces correct video grid in fullscreen based on actual device orientation.
-  // Uses screen.orientation.type (most reliable), falls back to dimension compare.
-  function getIsPortrait() {
-    if (screen.orientation && screen.orientation.type) {
-      return screen.orientation.type.startsWith('portrait');
-    }
-    // Fallback: compare physical screen dimensions
-    return window.screen.height >= window.screen.width;
-  }
-
   function applyFsGrid() {
     const feeds = $('video-feeds');
     if (!feeds) return;
