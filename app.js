@@ -80,19 +80,17 @@ function prepareVideoElement(videoEl) {
   videoEl.setAttribute('playsinline', '');
   videoEl.playsInline = true;
   videoEl.autoplay = true;
-  videoEl.style.position = 'absolute';
-  videoEl.style.inset = '0';
   videoEl.style.width = '100%';
   videoEl.style.height = '100%';
   videoEl.style.maxWidth = '100%';
   videoEl.style.maxHeight = '100%';
   videoEl.style.minWidth = '0';
   videoEl.style.minHeight = '0';
+  // Crop videos to fit square container without stretching
   videoEl.style.objectFit = 'cover';
   videoEl.style.objectPosition = 'center center';
   videoEl.style.background = '#000';
   if (videoEl.parentElement) {
-    videoEl.parentElement.style.position = 'relative';
     videoEl.parentElement.style.overflow = 'hidden';
     videoEl.parentElement.style.minWidth = '0';
     videoEl.parentElement.style.minHeight = '0';
@@ -769,11 +767,13 @@ function isFullscreenVideoMode() {
 }
 
 function applyVideoLayout() {
-  // Keep video cropping/positioning consistent and toggle fullscreen-aware
-  // layout hints so the chat can hide when the video panel enters fullscreen.
+  // Layout is now entirely CSS-driven:
+  //   Desktop normal     → 2 squares side by side (grid-template-columns: 1fr 1fr)
+  //   Desktop fullscreen → 2 squares side by side filling the screen
+  //   Mobile normal      → 2 squares stacked (grid-template-columns: 1fr)
+  //   Mobile fullscreen  → 2 squares stacked filling the screen
+  // No class toggling needed — just ensure video surfaces are prepared.
   prepareVideoSurfaces();
-  document.body.classList.toggle('video-layout-fullscreen', isFullscreenVideoMode());
-  document.body.classList.toggle('video-layout-fullscreen-mobile', isFullscreenVideoMode() && isCompactViewport());
 }
 
 function toggleVideoLayout() {
@@ -1347,7 +1347,7 @@ function initChatControls() {
     });
   }
 
-  $('btn-skip')?.addEventListener('click', () => {
+  const handleNext = () => {
     clearTimeout(S.replyTimer);
 
     if (S.syntheticActive) {
@@ -1372,7 +1372,10 @@ function initChatControls() {
       addSysLine('↩ Skipping — searching next match…');
       setTimeout(startMatching, 800);
     }
-  });
+  };
+
+  $('btn-skip')?.addEventListener('click', handleNext);
+  $('btn-skip-fs')?.addEventListener('click', handleNext);
 
   $('btn-end')?.addEventListener('click', () => {
     clearTimeout(S.replyTimer);
@@ -1451,7 +1454,6 @@ $('vc-fs')?.addEventListener('click', () => {
   if (!panel) return;
   if (!document.fullscreenElement) panel.requestFullscreen?.().catch(() => {});
   else document.exitFullscreen?.();
-  applyVideoLayout();
 });
 
   $('btn-cancel')?.addEventListener('click', () => {
