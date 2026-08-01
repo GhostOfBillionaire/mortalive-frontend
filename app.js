@@ -2402,75 +2402,92 @@ ready(() => {
   window.addEventListener('beforeunload', () => disconnectPeer());
   
   // ===== FULLSCREEN ORIENTATION FIX (v12) =====
-  // Force correct video grid layout based on actual orientation in fullscreen
-  function handleFullscreenChange() {
-    const panel = $('video-panel');
+  // Forces correct video grid in fullscreen based on actual device orientation.
+  // Uses screen.orientation.type (most reliable), falls back to dimension compare.
+  function getIsPortrait() {
+    if (screen.orientation && screen.orientation.type) {
+      return screen.orientation.type.startsWith('portrait');
+    }
+    // Fallback: compare physical screen dimensions
+    return window.screen.height >= window.screen.width;
+  }
+
+  function applyFsGrid() {
     const feeds = $('video-feeds');
+    if (!feeds) return;
+    if (getIsPortrait()) {
+      // Portrait fullscreen: up-and-down (1 column, 2 rows)
+      feeds.style.gridTemplateColumns = '1fr';
+      feeds.style.gridTemplateRows   = '1fr 1fr';
+    } else {
+      // Landscape fullscreen: side-by-side (2 columns, 1 row)
+      feeds.style.gridTemplateColumns = '1fr 1fr';
+      feeds.style.gridTemplateRows   = '1fr';
+    }
+  }
+
+  function handleFullscreenChange() {
+    const feeds     = $('video-feeds');
     const fsControls = $('fs-controls');
-    const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
-    
-    if (!fsControls) return;
-    
+    const isFs = !!(document.fullscreenElement ||
+                    document.webkitFullscreenElement ||
+                    document.mozFullScreenElement);
+
     if (!isFs) {
-      // Exit fullscreen
-      fsControls.classList.remove('visible');
+      // Exiting fullscreen — clear inline styles so CSS takes over again
+      if (fsControls) fsControls.classList.remove('visible');
       if (feeds) {
         feeds.style.gridTemplateColumns = '';
-        feeds.style.gridTemplateRows = '';
+        feeds.style.gridTemplateRows   = '';
       }
       return;
     }
-    
-    // Enter fullscreen - show controls and apply layout
-    fsControls.classList.add('visible');
+
+    // Entering fullscreen
+    if (fsControls) fsControls.classList.add('visible');
     applyVideoLayout();
     prepareVideoSurfaces();
-    
-    // Detect orientation from screen dimensions (most reliable in fullscreen)
-    const isLandscape = window.screen.width > window.screen.height || window.innerWidth > window.innerHeight;
-    
-    if (feeds) {
-      if (isLandscape) {
-        // Landscape fullscreen: side by side (2 columns)
-        feeds.style.gridTemplateColumns = '1fr 1fr';
-        feeds.style.gridTemplateRows = '1fr';
-      } else {
-        // Portrait fullscreen: stacked (1 column, 2 rows)
-        feeds.style.gridTemplateColumns = '1fr';
-        feeds.style.gridTemplateRows = '1fr 1fr';
-      }
-    }
+
+    // Apply immediately, then re-check after 150 ms in case Android hasn't
+    // finished the fullscreen transition (dimensions can be stale at event fire)
+    applyFsGrid();
+    setTimeout(applyFsGrid, 150);
   }
-  
-  // Sync mic/cam button states to fullscreen emoji buttons
+
+  // Sync mic/cam button .off state to fullscreen emoji buttons
   function syncFsButtonStates() {
-    const micBtn = $('vc-mic');
-    const camBtn = $('vc-cam');
-    const fsMicBtn = $('fs-mic');
-    const fsCamBtn = $('fs-cam');
-    
-    if (micBtn && fsMicBtn) {
-      fsMicBtn.classList.toggle('off', micBtn.classList.contains('off'));
-    }
-    if (camBtn && fsCamBtn) {
-      fsCamBtn.classList.toggle('off', camBtn.classList.contains('off'));
-    }
+    const pairs = [['vc-mic','fs-mic'],['vc-cam','fs-cam']];
+    pairs.forEach(([srcId, dstId]) => {
+      const src = $(srcId), dst = $(dstId);
+      if (src && dst) dst.classList.toggle('off', src.classList.contains('off'));
+    });
   }
-  
-  // Watch for fullscreen changes
-  document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+  // Watch for fullscreen changes (standard + vendor prefixes)
+  document.addEventListener('fullscreenchange',       handleFullscreenChange);
   document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-  document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-  
-  // Re-apply fullscreen orientation on rotation/resize
+  document.addEventListener('mozfullscreenchange',    handleFullscreenChange);
+
+  // Re-apply grid when device rotates while already in fullscreen
   window.addEventListener('resize', () => {
     applyVideoLayout();
-    if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement) {
-      handleFullscreenChange();
+    if (document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement) {
+      applyFsGrid();
     }
   });
-  
-  // Watch mic/cam button changes
+  if (screen.orientation) {
+    screen.orientation.addEventListener('change', () => {
+      if (document.fullscreenElement ||
+          document.webkitFullscreenElement ||
+          document.mozFullScreenElement) {
+        applyFsGrid();
+      }
+    });
+  }
+
+  // Sync button states every 200 ms
   setInterval(syncFsButtonStates, 200);
 
   // Mobile browsers can fully suspend JS execution while a tab is
