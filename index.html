@@ -1282,6 +1282,7 @@ img { display: block; max-width: 100%; }
   grid-template-rows: 1fr 1fr;
   min-width: 0;
   min-height: 0;
+  gap: 0;
 }
 
 /* In fullscreen, switch to side-by-side squares */
@@ -1290,6 +1291,7 @@ img { display: block; max-width: 100%; }
 #video-panel:-moz-full-screen .video-feeds {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr;
+  gap: 8px;
 }
 
 /* Each video wrapper is a square (1:1 aspect ratio) */
@@ -1301,7 +1303,8 @@ img { display: block; max-width: 100%; }
   align-items: center; 
   justify-content: center;
   /* Square aspect ratio */
-  aspect-ratio: 1;
+  width: 100%;
+  aspect-ratio: 1 / 1;
   min-width: 0;
   min-height: 0;
 }
