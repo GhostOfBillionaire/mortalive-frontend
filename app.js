@@ -80,18 +80,19 @@ function prepareVideoElement(videoEl) {
   videoEl.setAttribute('playsinline', '');
   videoEl.playsInline = true;
   videoEl.autoplay = true;
+  videoEl.style.position = 'absolute';
+  videoEl.style.inset = '0';
   videoEl.style.width = '100%';
   videoEl.style.height = '100%';
   videoEl.style.maxWidth = '100%';
   videoEl.style.maxHeight = '100%';
   videoEl.style.minWidth = '0';
   videoEl.style.minHeight = '0';
-  // Preserve the camera's native aspect ratio so portrait/landscape feeds
-  // fit inside the frame without stretching or cropping the page.
-  videoEl.style.objectFit = 'contain';
+  videoEl.style.objectFit = 'cover';
   videoEl.style.objectPosition = 'center center';
   videoEl.style.background = '#000';
   if (videoEl.parentElement) {
+    videoEl.parentElement.style.position = 'relative';
     videoEl.parentElement.style.overflow = 'hidden';
     videoEl.parentElement.style.minWidth = '0';
     videoEl.parentElement.style.minHeight = '0';
@@ -767,16 +768,12 @@ function isFullscreenVideoMode() {
   return !!(panel && fs && (fs === panel || panel.contains(fs)));
 }
 
-function syncVideoLayoutState() {
-  const isPhoneFullscreen = isCompactViewport() && isFullscreenVideoMode();
-  document.body.classList.toggle('phone-video-fullscreen', isPhoneFullscreen);
-}
-
 function applyVideoLayout() {
-  // Layout is now CSS-driven. The JS only keeps the video surfaces ready and
-  // toggles the phone fullscreen class so chat can be hidden on mobile only.
+  // Keep video cropping/positioning consistent and toggle fullscreen-aware
+  // layout hints so the chat can hide when the video panel enters fullscreen.
   prepareVideoSurfaces();
-  syncVideoLayoutState();
+  document.body.classList.toggle('video-layout-fullscreen', isFullscreenVideoMode());
+  document.body.classList.toggle('video-layout-fullscreen-mobile', isFullscreenVideoMode() && isCompactViewport());
 }
 
 function toggleVideoLayout() {
@@ -1454,6 +1451,7 @@ $('vc-fs')?.addEventListener('click', () => {
   if (!panel) return;
   if (!document.fullscreenElement) panel.requestFullscreen?.().catch(() => {});
   else document.exitFullscreen?.();
+  applyVideoLayout();
 });
 
   $('btn-cancel')?.addEventListener('click', () => {
