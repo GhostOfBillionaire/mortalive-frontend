@@ -1452,8 +1452,23 @@ function initChatControls() {
 $('vc-fs')?.addEventListener('click', () => {
   const panel = $('video-panel');
   if (!panel) return;
-  if (!document.fullscreenElement) panel.requestFullscreen?.().catch(() => {});
-  else document.exitFullscreen?.();
+  if (!document.fullscreenElement) {
+    // Snapshot orientation NOW — before Android auto-rotates on fullscreen entry
+    S.fsEnteredAsPortrait = getIsPortrait();
+    const req = panel.requestFullscreen?.();
+    if (req) {
+      req.then(() => {
+        // Lock orientation after fullscreen is granted (required by spec)
+        if (S.fsEnteredAsPortrait) {
+          screen.orientation?.lock?.('portrait').catch(() => {});
+        }
+      }).catch(() => {});
+    }
+  } else {
+    screen.orientation?.unlock?.();
+    S.fsEnteredAsPortrait = null;
+    document.exitFullscreen?.();
+  }
   setTimeout(() => {
     applyVideoLayout();
     prepareVideoSurfaces();
@@ -2415,7 +2430,12 @@ ready(() => {
   function applyFsGrid() {
     const feeds = $('video-feeds');
     if (!feeds) return;
-    if (getIsPortrait()) {
+    // Use pre-entry snapshot if available (avoids race with Android auto-rotate).
+    // Fall back to live detection for mid-fullscreen rotation events.
+    const isPortrait = (S.fsEnteredAsPortrait != null)
+      ? S.fsEnteredAsPortrait
+      : getIsPortrait();
+    if (isPortrait) {
       // Portrait fullscreen: up-and-down (1 column, 2 rows)
       feeds.style.gridTemplateColumns = '1fr';
       feeds.style.gridTemplateRows   = '1fr 1fr';
@@ -2436,6 +2456,8 @@ ready(() => {
     if (!isFs) {
       // Exiting fullscreen — clear inline styles so CSS takes over again
       if (fsControls) fsControls.classList.remove('visible');
+      screen.orientation?.unlock?.();
+      S.fsEnteredAsPortrait = null;
       if (feeds) {
         feeds.style.gridTemplateColumns = '';
         feeds.style.gridTemplateRows   = '';
