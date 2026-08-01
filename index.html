@@ -2123,6 +2123,67 @@ body.reveal-ready .scroll-reveal.in-view{
     font-size: 12px;
   }
 }
+/* ===== Video/fullscreen spacing patch ===== */
+@media (orientation: landscape) and (min-width: 721px) {
+  #pg-chat.active .video-feeds {
+    max-height: 31vh;
+  }
+
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds {
+    width: min(100vw, calc((100vh - 96px) * 2));
+    height: min(calc(100vh - 96px), calc(100vw / 2));
+  }
+
+  #video-panel:fullscreen .video-controls,
+  #video-panel:-webkit-full-screen .video-controls,
+  #video-panel:-moz-full-screen .video-controls {
+    display: flex;
+    position: static;
+    width: min(100%, calc((100vh - 96px) * 2));
+    margin-top: auto;
+    background: rgba(13,17,23,.75);
+    padding: 10px 14px;
+    border-radius: var(--r-md);
+    flex-wrap: nowrap;
+    justify-content: center;
+    gap: 8px;
+    z-index: 99;
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 720px) and (orientation: portrait) {
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds {
+    width: 100vw;
+    max-width: none;
+    height: auto;
+    max-height: calc(100vh - 132px);
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+
+  #video-panel:fullscreen .video-controls,
+  #video-panel:-webkit-full-screen .video-controls,
+  #video-panel:-moz-full-screen .video-controls {
+    display: flex;
+    position: static;
+    width: 100vw;
+    margin-top: auto;
+    background: rgba(13,17,23,.75);
+    padding: 10px 12px;
+    border-radius: var(--r-md) var(--r-md) 0 0;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    z-index: 99;
+    box-sizing: border-box;
+  }
+}
+
 </style>
 </head>
 <body>
