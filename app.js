@@ -767,38 +767,13 @@ function isFullscreenVideoMode() {
 }
 
 function applyVideoLayout() {
-  const feeds = $('video-feeds');
-  const panel = $('video-panel');
-  
+  // Layout is now entirely CSS-driven:
+  //   Desktop normal     → 2 squares side by side (grid-template-columns: 1fr 1fr)
+  //   Desktop fullscreen → 2 squares side by side filling the screen
+  //   Mobile normal      → 2 squares stacked (grid-template-columns: 1fr)
+  //   Mobile fullscreen  → 2 squares stacked filling the screen
+  // No class toggling needed — just ensure video surfaces are prepared.
   prepareVideoSurfaces();
-  
-  if (feeds) {
-    // Desktop fullscreen: side-by-side squares
-    // Desktop non-fullscreen: always stacked squares
-    // Mobile: always stacked squares
-    const isFullscreen = isFullscreenVideoMode();
-    const isDesktop = !isCompactViewport();
-    
-    if (isFullscreen && isDesktop) {
-      // Desktop fullscreen: show side-by-side
-      feeds.classList.add('layout-horizontal');
-      feeds.classList.remove('layout-vertical');
-    } else {
-      // Default: always stacked (desktop normal, mobile any)
-      feeds.classList.add('layout-vertical');
-      feeds.classList.remove('layout-horizontal');
-    }
-  }
-  
-  if (panel && S.mode === 'video' && panel.classList.contains('visible')) {
-    // Ensure video wrappers are square (1:1)
-    const wrappers = panel.querySelectorAll('.video-wrapper');
-    wrappers.forEach((wrapper) => {
-      wrapper.style.aspectRatio = '1';
-    });
-  }
-  
-  // Don't sync button label for layout toggle - it's confusing now
 }
 
 function toggleVideoLayout() {
