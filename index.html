@@ -1910,31 +1910,55 @@ body.reveal-ready .scroll-reveal.in-view{
 
 
 /* =====================================================
-   Video layout patch v3 — keep the square tiles fixed,
-   center the whole chat shell, and let fullscreen use
-   the viewport without hiding the bottom of the page.
+   Video layout patch v8 — square tiles stay square.
+   Desktop: tall feed column on the left, chat on the side.
+   Fullscreen desktop: two square tiles only, no buttons.
+   Mobile: keep all buttons visible and compact.
    ===================================================== */
 
 #pg-chat.active .chat-shell {
-  width: min(100%, 1120px);
-  margin-inline: auto;
+  width: min(100%, 1460px);
 }
 
 #pg-chat.active .chat-body {
   width: 100%;
-  justify-items: center;
+  justify-items: stretch;
   align-content: start;
+  grid-template-columns: clamp(280px, 27vw, 360px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 14px;
 }
 
 #pg-chat.active .video-panel,
 #pg-chat.active .chat-panel {
-  width: min(100%, 960px);
-  margin-inline: auto;
+  width: 100%;
+  margin-inline: 0;
+  min-width: 0;
+}
+
+#pg-chat.active .video-panel {
+  align-self: start;
+}
+
+#pg-chat.active .chat-panel {
+  min-height: 0;
 }
 
 #pg-chat.active .video-feeds {
   width: 100%;
+  max-width: none;
   max-height: none;
+  aspect-ratio: 1 / 2;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+}
+
+#pg-chat.active .video-wrapper {
+  aspect-ratio: auto;
+  width: 100%;
+  height: 100%;
 }
 
 #pg-chat.active .chat-messages {
@@ -1967,6 +1991,7 @@ body.reveal-ready .scroll-reveal.in-view{
   align-items: center;
   justify-content: center;
   background: #000;
+  overflow: hidden;
 }
 
 #video-panel:fullscreen .video-controls,
@@ -1979,9 +2004,11 @@ body.reveal-ready .scroll-reveal.in-view{
 #video-panel:-webkit-full-screen .video-feeds,
 #video-panel:-moz-full-screen .video-feeds {
   width: min(100vw, calc(100vh * 2));
-  max-width: 100vw;
-  max-height: 100vh;
+  height: min(100vh, calc(100vw / 2));
+  max-width: none;
+  max-height: none;
   margin-inline: auto;
+  aspect-ratio: 2 / 1;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr;
   gap: 4px;
@@ -1990,7 +2017,7 @@ body.reveal-ready .scroll-reveal.in-view{
 #video-panel:fullscreen .video-wrapper,
 #video-panel:-webkit-full-screen .video-wrapper,
 #video-panel:-moz-full-screen .video-wrapper {
-  aspect-ratio: 1 / 1;
+  aspect-ratio: auto;
   width: 100%;
   height: 100%;
 }
@@ -2012,8 +2039,39 @@ body.reveal-ready .scroll-reveal.in-view{
     width: 100%;
   }
 
+  #pg-chat.active .chat-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 10px;
+  }
+
   #pg-chat.active .video-feeds {
     width: 100%;
+    max-height: 32vh;
+    aspect-ratio: 2 / 1;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto;
+  }
+
+  #pg-chat.active .video-wrapper {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    height: auto;
+  }
+
+  #pg-chat.active .video-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    overflow: visible;
+  }
+
+  #pg-chat.active .video-controls .vc-btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    padding: 0 10px;
+    font-size: 12px;
   }
 
   #video-panel:fullscreen .video-feeds,
@@ -2022,93 +2080,6 @@ body.reveal-ready .scroll-reveal.in-view{
     width: 100vw;
     grid-template-columns: 1fr;
     grid-template-rows: 1fr 1fr;
-  }
-
-  #video-panel:fullscreen .video-controls,
-  #video-panel:-webkit-full-screen .video-controls,
-  #video-panel:-moz-full-screen .video-controls {
-    display: none;
-  }
-}
-
-
-
-/* ===== Desktop landscape / portrait chat-video layout reset ===== */
-@media (min-width: 981px) and (orientation: landscape) {
-  #pg-chat.active .chat-shell {
-    width: min(100%, 1480px);
-  }
-
-  #pg-chat.active .chat-body {
-    grid-template-columns: clamp(360px, 37vw, 560px) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
-    align-items: stretch;
-    gap: 14px;
-  }
-
-  #pg-chat.active .video-panel,
-  #pg-chat.active .chat-panel {
-    width: 100%;
-    margin-inline: 0;
-    min-width: 0;
-  }
-
-  #pg-chat.active .video-panel {
-    align-self: start;
-  }
-
-  #pg-chat.active .video-feeds {
-    width: 100%;
-    max-width: none;
-    max-height: none;
-    aspect-ratio: 1 / 1;
-  }
-
-  #pg-chat.active .chat-panel {
-    min-height: 0;
-  }
-
-  /* Desktop fullscreen: overlay controls on top of the video section */
-  #video-panel:fullscreen,
-  #video-panel:-webkit-full-screen,
-  #video-panel:-moz-full-screen {
-    padding: 0;
-    justify-content: center;
-    align-items: center;
-  }
-
-  #video-panel:fullscreen .video-controls,
-  #video-panel:-webkit-full-screen .video-controls,
-  #video-panel:-moz-full-screen .video-controls {
-    display: flex;
-    position: absolute;
-    left: 50%;
-    bottom: 12px;
-    transform: translateX(-50%);
-    width: min(calc(100vw - 24px), calc(100vh * 2));
-    margin: 0;
-    padding: 10px 14px;
-    gap: 8px;
-    justify-content: center;
-    align-items: center;
-    flex-wrap: wrap;
-    background: rgba(13,17,23,.72);
-    border: 1px solid rgba(255,255,255,.08);
-    border-radius: var(--r-md);
-    backdrop-filter: blur(12px);
-    z-index: 210;
-  }
-
-  #video-panel:fullscreen .video-controls .vc-btn,
-  #video-panel:-webkit-full-screen .video-controls .vc-btn,
-  #video-panel:-moz-full-screen .video-controls .vc-btn {
-    flex: 0 0 auto;
-  }
-
-  #video-panel:fullscreen #btn-skip-fs,
-  #video-panel:-webkit-full-screen #btn-skip-fs,
-  #video-panel:-moz-full-screen #btn-skip-fs {
-    display: inline-flex;
   }
 }
 
@@ -2125,17 +2096,33 @@ body.reveal-ready .scroll-reveal.in-view{
 
   #pg-chat.active .video-panel,
   #pg-chat.active .chat-panel {
-    width: min(100%, 72vw);
+    width: min(100%, 92vw);
     margin-inline: auto;
     min-width: 0;
   }
 
   #pg-chat.active .video-feeds {
     width: 100%;
-    max-height: 32vh;
+    max-height: 30vh;
+    aspect-ratio: 2 / 1;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto;
+  }
+
+  #pg-chat.active .video-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  #pg-chat.active .video-controls .vc-btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    padding: 0 10px;
+    font-size: 12px;
   }
 }
-
 </style>
 </head>
 <body>
