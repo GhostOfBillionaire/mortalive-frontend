@@ -1291,20 +1291,17 @@ img { display: block; max-width: 100%; }
   gap: 2px;
 }
 
-/* In fullscreen, keep side-by-side and fill the screen */
+/* fullscreen feeds base — neutralised; v10 orientation blocks set grid layout */
 #video-panel:fullscreen .video-feeds,
 #video-panel:-webkit-full-screen .video-feeds,
 #video-panel:-moz-full-screen .video-feeds {
-  flex: none;
-  width: min(100%, calc((100vh - 110px) * 2));
+  flex: 1;
+  width: 100vw;
   max-width: none;
-  margin-inline: 0;
   min-height: 0;
   max-height: none;
-  aspect-ratio: 2 / 1;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr;
-  gap: 4px;
+  aspect-ratio: unset;
+  gap: 0;
   box-sizing: border-box;
 }
 
@@ -1484,35 +1481,30 @@ img { display: block; max-width: 100%; }
 .send-btn { width: 50px; border-radius: var(--r-md); padding: 0; font-size: 16px; }
 
 /* Fullscreen video */
+/* early fullscreen base — neutralised; v10 orientation blocks handle layout */
 #video-panel:fullscreen,
 #video-panel:-webkit-full-screen,
 #video-panel:-moz-full-screen {
   display: flex;
   flex-direction: column;
-  background: #0d1117;
-  padding: 10px 12px 12px;
-  gap: 10px;
+  background: #000;
+  padding: 0;
+  gap: 0;
   position: fixed;
   inset: 0;
   z-index: 200;
   box-sizing: border-box;
   overflow: hidden;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-start;
 }
 #video-panel:fullscreen .video-controls,
 #video-panel:-webkit-full-screen .video-controls,
 #video-panel:-moz-full-screen .video-controls {
+  display: flex;
   position: static;
-  width: min(100%, calc((100vh - 110px) * 2));
-  margin-top: auto;
-  background: rgba(13,17,23,.75);
-  padding: 10px 14px;
-  border-radius: var(--r-md);
-  flex-wrap: nowrap;
-  justify-content: center;
-  gap: 8px;
-  z-index: 99;
+  width: 100vw;
+  margin-top: 0;
   box-sizing: border-box;
 }
 
@@ -1677,24 +1669,7 @@ img { display: block; max-width: 100%; }
     width: 100%;
     aspect-ratio: 1 / 1;
   }
-  /* Mobile fullscreen: still stacked (never side-by-side on small screen) */
-  #video-panel:fullscreen .video-feeds,
-  #video-panel:-webkit-full-screen .video-feeds,
-  #video-panel:-moz-full-screen .video-feeds {
-    flex: 1;
-    min-height: 0;
-    max-height: none;
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr 1fr;
-    gap: 2px;
-  }
-  #video-panel:fullscreen .video-wrapper,
-  #video-panel:-webkit-full-screen .video-wrapper,
-  #video-panel:-moz-full-screen .video-wrapper {
-    aspect-ratio: auto;
-    width: 100%;
-    height: 100%;
-  }
+  /* Mobile fullscreen layout handled by v10 orientation blocks */
   .video-controls {
     flex-direction: row;
     flex-wrap: wrap;
@@ -1981,6 +1956,7 @@ body.reveal-ready .scroll-reveal.in-view{
   flex: 0 0 auto;
 }
 
+/* v8 fullscreen base — neutralised; layout handled by orientation blocks in v10 */
 #video-panel:fullscreen,
 #video-panel:-webkit-full-screen,
 #video-panel:-moz-full-screen {
@@ -1988,30 +1964,30 @@ body.reveal-ready .scroll-reveal.in-view{
   height: 100vh;
   padding: 0;
   margin: 0;
-  align-items: center;
-  justify-content: center;
   background: #000;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
 }
 
 #video-panel:fullscreen .video-controls,
 #video-panel:-webkit-full-screen .video-controls,
 #video-panel:-moz-full-screen .video-controls {
-  display: none;
+  display: flex;
 }
 
 #video-panel:fullscreen .video-feeds,
 #video-panel:-webkit-full-screen .video-feeds,
 #video-panel:-moz-full-screen .video-feeds {
-  width: min(100vw, calc(100vh * 2));
-  height: min(100vh, calc(100vw / 2));
+  flex: 1;
+  width: 100vw;
+  height: 100%;
   max-width: none;
   max-height: none;
-  margin-inline: auto;
-  aspect-ratio: 2 / 1;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr;
-  gap: 4px;
+  aspect-ratio: unset;
+  gap: 0;
 }
 
 #video-panel:fullscreen .video-wrapper,
@@ -2074,13 +2050,6 @@ body.reveal-ready .scroll-reveal.in-view{
     font-size: 12px;
   }
 
-  #video-panel:fullscreen .video-feeds,
-  #video-panel:-webkit-full-screen .video-feeds,
-  #video-panel:-moz-full-screen .video-feeds {
-    width: 100vw;
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr 1fr;
-  }
 }
 
 @media (orientation: portrait) {
