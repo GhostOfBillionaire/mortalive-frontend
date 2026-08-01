@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-01-video-layout-fix'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-07-28-synthetic-video'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -86,7 +86,8 @@ function prepareVideoElement(videoEl) {
   videoEl.style.maxHeight = '100%';
   videoEl.style.minWidth = '0';
   videoEl.style.minHeight = '0';
-  // Crop videos to fit square container without stretching
+  // Preserve the camera's native aspect ratio so portrait/landscape feeds
+  // fit inside the frame without stretching or cropping the page.
   videoEl.style.objectFit = 'contain';
   videoEl.style.objectPosition = 'center center';
   videoEl.style.background = '#000';
@@ -99,16 +100,6 @@ function prepareVideoElement(videoEl) {
 
 function prepareVideoSurfaces() {
   ['vid-local', 'vid-remote', 'lobby-cam-preview', 'perm-video'].forEach((id) => prepareVideoElement($(id)));
-}
-
-function syncVideoLayoutState() {
-  const body = document.body;
-  if (!body) return;
-  const compact = isCompactViewport();
-  const fullscreen = !!document.fullscreenElement;
-  body.classList.toggle('mortalive-video-compact', compact);
-  body.classList.toggle('mortalive-video-fullscreen', fullscreen);
-  body.classList.toggle('mortalive-video-compact-fullscreen', compact && fullscreen);
 }
 
 function syncLocalCameraPreview() {
@@ -776,11 +767,16 @@ function isFullscreenVideoMode() {
   return !!(panel && fs && (fs === panel || panel.contains(fs)));
 }
 
+function syncVideoLayoutState() {
+  const isPhoneFullscreen = isCompactViewport() && isFullscreenVideoMode();
+  document.body.classList.toggle('phone-video-fullscreen', isPhoneFullscreen);
+}
+
 function applyVideoLayout() {
-  // Keep the page locked to the container size, and let the video fit
-  // inside it instead of letting the video determine the page layout.
-  syncVideoLayoutState();
+  // Layout is now CSS-driven. The JS only keeps the video surfaces ready and
+  // toggles the phone fullscreen class so chat can be hidden on mobile only.
   prepareVideoSurfaces();
+  syncVideoLayoutState();
 }
 
 function toggleVideoLayout() {
@@ -1474,7 +1470,6 @@ function initGlobalDefaults() {
   bootProgressState();
   setActiveMode(S.mode);
   updateOnlineCount();
-  syncVideoLayoutState();
   applyVideoLayout();
   refreshLaunchpadCopy();
   setPrimaryButtonsEnabled(false);
