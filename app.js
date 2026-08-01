@@ -86,10 +86,10 @@ function prepareVideoElement(videoEl) {
   videoEl.style.maxHeight = '100%';
   videoEl.style.minWidth = '0';
   videoEl.style.minHeight = '0';
-  videoEl.style.objectFit = 'contain';
+  // Crop videos to fit square container without stretching
+  videoEl.style.objectFit = 'cover';
   videoEl.style.objectPosition = 'center center';
   videoEl.style.background = '#000';
-  videoEl.style.aspectRatio = 'auto';
   if (videoEl.parentElement) {
     videoEl.parentElement.style.overflow = 'hidden';
     videoEl.parentElement.style.minWidth = '0';
@@ -755,15 +755,9 @@ function syncVideoPanelButton(forcedLayout) {
   if (!btn) return;
   const layout = forcedLayout || getEffectiveVideoLayout();
   const isHorizontal = layout === 'horizontal';
-  
-  // On phone, hint fullscreen instead of toggle
-  if (isCompactViewport()) {
-    btn.textContent = 'Fullscreen';
-    btn.title = 'Tap to enter fullscreen (then swipe to toggle layout)';
-  } else {
-    btn.textContent = isHorizontal ? 'Layout: Side' : 'Layout: Stack';
-    btn.title = isHorizontal ? 'Switch to stacked layout' : 'Switch to side-by-side layout';
-  }
+  btn.textContent = isHorizontal ? 'Layout: Side' : 'Layout: Stack';
+  btn.title = isHorizontal ? 'Switch to stacked layout' : 'Switch to side-by-side layout';
+  btn.disabled = isCompactViewport();
 }
 
 function isFullscreenVideoMode() {
@@ -776,39 +770,48 @@ function applyVideoLayout() {
   const feeds = $('video-feeds');
   const panel = $('video-panel');
   
-  // On phone/compact: stay horizontal by default, only force vertical when fullscreen is manually activated
-  const layout = isFullscreenVideoMode() ? 'vertical' : getEffectiveVideoLayout();
   prepareVideoSurfaces();
   
   if (feeds) {
-    feeds.classList.toggle('layout-horizontal', layout === 'horizontal');
-    feeds.classList.toggle('layout-vertical', layout === 'vertical');
+    // Desktop fullscreen: side-by-side squares
+    // Desktop non-fullscreen: always stacked squares
+    // Mobile: always stacked squares
+    const isFullscreen = isFullscreenVideoMode();
+    const isDesktop = !isCompactViewport();
     
-    // Constrain video feeds height to prevent chat section from disappearing on desktop
-    // On desktop: max 65vh, on mobile: max 50vh (respects fullscreen mode when active)
-    const maxHeight = isCompactViewport() ? '50vh' : '65vh';
-    feeds.style.maxHeight = maxHeight;
-    feeds.style.overflow = 'hidden';
+    if (isFullscreen && isDesktop) {
+      // Desktop fullscreen: show side-by-side
+      feeds.classList.add('layout-horizontal');
+      feeds.classList.remove('layout-vertical');
+    } else {
+      // Default: always stacked (desktop normal, mobile any)
+      feeds.classList.add('layout-vertical');
+      feeds.classList.remove('layout-horizontal');
+    }
   }
   
-  if (panel) {
-    panel.style.maxHeight = isCompactViewport() ? '60vh' : '70vh';
-    panel.style.overflow = 'hidden';
+  if (panel && S.mode === 'video' && panel.classList.contains('visible')) {
+    // Ensure video wrappers are square (1:1)
+    const wrappers = panel.querySelectorAll('.video-wrapper');
+    wrappers.forEach((wrapper) => {
+      wrapper.style.aspectRatio = '1';
+    });
   }
   
-  syncVideoPanelButton(layout);
+  // Don't sync button label for layout toggle - it's confusing now
 }
 
 function toggleVideoLayout() {
-  // Compact viewports stay horizontal (unless fullscreen), can't toggle
   if (isCompactViewport()) {
-    toast('On mobile, swipe fullscreen to change layout', '📱');
+    S.videoLayout = 'vertical';
+    applyVideoLayout();
+    toast('Phone stays in stacked layout', '📱');
     return;
   }
   S.videoLayout = getEffectiveVideoLayout() === 'horizontal' ? 'vertical' : 'horizontal';
   localStorage.setItem('mortalive_video_layout', S.videoLayout);
   applyVideoLayout();
-  toast(S.videoLayout === 'horizontal' ? 'Camera layout: side-by-side' : 'Camera layout: stacked', '🎬');
+  toast(S.videoLayout === 'horizontal' ? 'Camera layout set to side-by-side' : 'Camera layout set to stacked', '🎬');
 }
 
 function setActiveMode(mode) {
@@ -1706,6 +1709,7 @@ async function startWebRTC() {
     const localVid = $('vid-local');
     const noVideo = $('no-video-ph');
     const txt = $('ph-txt');
+    
     if (localVid) {
       prepareVideoElement(localVid);
       localVid.srcObject = S.localStream;
@@ -1881,6 +1885,7 @@ async function beginSyntheticMatch() {
 
   // Show the prerecorded video in the remote slot.
   const remoteVid = $('vid-remote');
+  
   if (remoteVid) {
     prepareVideoElement(remoteVid);
     // Clear any old srcObject (real WebRTC stream) first.
@@ -1910,7 +1915,10 @@ async function beginSyntheticMatch() {
   const noVideo = $('no-video-ph');
   const panel   = $('video-panel');
   if (noVideo) noVideo.style.display = 'none';
-  if (panel)   panel.classList.add('visible', 'has-remote');
+  if (panel) {
+    panel.classList.add('visible', 'has-remote');
+    applyVideoLayout();
+  }
 
   const q = $('quality-bar');
   if (q) q.style.display = 'none'; // no quality stats for pre-recorded
@@ -2089,6 +2097,7 @@ function beginChat() {
   setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`);
 
   const panel = $('video-panel');
+  
   applyVideoLayout();
   if (S.mode === 'video') {
     if (panel) panel.classList.add('visible');
