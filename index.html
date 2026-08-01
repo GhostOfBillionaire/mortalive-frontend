@@ -1408,7 +1408,7 @@ img { display: block; max-width: 100%; }
 .vc-btn.active { border-color: var(--primary); color: var(--primary); background: var(--primary-alpha); }
 .vc-btn.off    { border-color: rgba(220,38,38,.26); color: var(--danger); background: rgba(220,38,38,.06); }
 
-/* #btn-skip-fs visibility is managed by .fs-bottom-bar container (display:none in normal, flex in fullscreen) */
+#btn-skip-fs { display: none; }
 
 .chat-panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .chat-messages {
@@ -1480,7 +1480,79 @@ img { display: block; max-width: 100%; }
 .chat-input input:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(26,110,245,.10); }
 .send-btn { width: 50px; border-radius: var(--r-md); padding: 0; font-size: 16px; }
 
-/* Fullscreen video — base display only; layout handled by v11 JS-class blocks */
+/* ── Fullscreen bottom bar (v12 — app.js driven) ── */
+.fs-controls {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: auto;
+  background: rgba(13,17,23,.96);
+  border-top: 1px solid rgba(255,255,255,.12);
+  padding: 12px 16px;
+  z-index: 200;
+  width: 100vw;
+  box-sizing: border-box;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.fs-controls.visible {
+  display: flex;
+}
+.fs-next-btn {
+  height: 42px;
+  padding: 0 20px;
+  border-radius: var(--r-full);
+  border: 1.5px solid rgba(255,255,255,.24);
+  background: rgba(255,255,255,.12);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--dur-fast);
+  flex-shrink: 0;
+}
+.fs-next-btn:hover {
+  background: rgba(255,255,255,.20);
+  border-color: rgba(255,255,255,.45);
+}
+.fs-emoji-btns {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.fs-emoji-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,.20);
+  background: rgba(255,255,255,.12);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--dur-fast);
+  flex-shrink: 0;
+}
+.fs-emoji-btn:hover {
+  background: rgba(255,255,255,.24);
+  border-color: rgba(255,255,255,.45);
+  transform: scale(1.1);
+}
+.fs-emoji-btn.off {
+  opacity: 0.5;
+  border-color: rgba(220,38,38,.4);
+  background: rgba(220,38,38,.15);
+}
+
+/* Fullscreen video */
+/* early fullscreen base — neutralised; v10 orientation blocks handle layout */
 #video-panel:fullscreen,
 #video-panel:-webkit-full-screen,
 #video-panel:-moz-full-screen {
@@ -1489,10 +1561,34 @@ img { display: block; max-width: 100%; }
   background: #000;
   padding: 0;
   gap: 0;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
   box-sizing: border-box;
   overflow: hidden;
   align-items: stretch;
   justify-content: flex-start;
+}
+#video-panel:fullscreen .video-controls,
+#video-panel:-webkit-full-screen .video-controls,
+#video-panel:-moz-full-screen .video-controls {
+  display: flex;
+  position: static;
+  width: 100vw;
+  margin-top: 0;
+  box-sizing: border-box;
+}
+
+#video-panel:fullscreen #btn-skip-fs,
+#video-panel:-webkit-full-screen #btn-skip-fs,
+#video-panel:-moz-full-screen #btn-skip-fs {
+  display: inline-flex;
+}
+
+#video-panel:fullscreen .video-controls #btn-skip-fs,
+#video-panel:-webkit-full-screen .video-controls #btn-skip-fs,
+#video-panel:-moz-full-screen .video-controls #btn-skip-fs {
+  display: inline-flex;
 }
 
 /* ── Modal / overlay / toast ────────────────────────── */
@@ -1915,7 +2011,7 @@ body.reveal-ready .scroll-reveal.in-view{
   min-height: 200px;
 }
 
-#pg-chat.active #vc-normal {
+#pg-chat.active .video-controls {
   flex-wrap: nowrap;
   justify-content: flex-start;
   overflow-x: auto;
@@ -1923,15 +2019,56 @@ body.reveal-ready .scroll-reveal.in-view{
   scrollbar-width: none;
 }
 
-#pg-chat.active #vc-normal::-webkit-scrollbar {
+#pg-chat.active .video-controls::-webkit-scrollbar {
   display: none;
 }
 
-#pg-chat.active #vc-normal .vc-btn {
+#pg-chat.active .video-controls .vc-btn {
   flex: 0 0 auto;
 }
 
-/* v8 fullscreen — reduced to non-grid properties only; grid layout handled by v11 */
+/* v8 fullscreen base — neutralised; layout handled by orientation blocks in v10 */
+#video-panel:fullscreen,
+#video-panel:-webkit-full-screen,
+#video-panel:-moz-full-screen {
+  width: 100vw;
+  height: 100vh;
+  padding: 0;
+  margin: 0;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+#video-panel:fullscreen .video-controls,
+#video-panel:-webkit-full-screen .video-controls,
+#video-panel:-moz-full-screen .video-controls {
+  display: flex;
+}
+
+#video-panel:fullscreen .video-feeds,
+#video-panel:-webkit-full-screen .video-feeds,
+#video-panel:-moz-full-screen .video-feeds {
+  flex: 1;
+  width: 100vw;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  aspect-ratio: unset;
+  gap: 0;
+}
+
+#video-panel:fullscreen .video-wrapper,
+#video-panel:-webkit-full-screen .video-wrapper,
+#video-panel:-moz-full-screen .video-wrapper {
+  aspect-ratio: auto;
+  width: 100%;
+  height: 100%;
+}
+
 #video-panel:fullscreen #vid-remote,
 #video-panel:fullscreen #vid-local,
 #video-panel:-webkit-full-screen #vid-remote,
@@ -1955,7 +2092,6 @@ body.reveal-ready .scroll-reveal.in-view{
     gap: 10px;
   }
 
-  /* Mobile normal view: stacked (portrait) or landscape handled by orientation blocks */
   #pg-chat.active .video-feeds {
     width: 100%;
     max-height: 40vh;
@@ -1970,14 +2106,14 @@ body.reveal-ready .scroll-reveal.in-view{
     height: auto;
   }
 
-  #pg-chat.active #vc-normal {
+  #pg-chat.active .video-controls {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
     overflow: visible;
   }
 
-  #pg-chat.active #vc-normal .vc-btn {
+  #pg-chat.active .video-controls .vc-btn {
     width: 100%;
     min-width: 0;
     min-height: 40px;
@@ -2005,15 +2141,21 @@ body.reveal-ready .scroll-reveal.in-view{
     min-width: 0;
   }
 
-  /* video-feeds grid for portrait overridden by v11 block below */
+  #pg-chat.active .video-feeds {
+    width: 100%;
+    max-height: 40vh;
+    aspect-ratio: 1 / 2;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
 
-  #pg-chat.active #vc-normal {
+  #pg-chat.active .video-controls {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
   }
 
-  #pg-chat.active #vc-normal .vc-btn {
+  #pg-chat.active .video-controls .vc-btn {
     width: 100%;
     min-width: 0;
     min-height: 40px;
@@ -2021,9 +2163,15 @@ body.reveal-ready .scroll-reveal.in-view{
     font-size: 12px;
   }
 }
-/* ===== Video layout v11 — JS-class-based fullscreen orientation ===== */
+/* ===== Video/fullscreen spacing patch — superseded by v10 below ===== */
 
-/* --- LANDSCAPE DESKTOP (non-fullscreen): left-column, two tiles stacked --- */
+/* portrait fullscreen handled by v10 orientation:portrait block below */
+
+/* ===== Video layout fix v10 — orientation-aware, all 4 issues ===== */
+
+/* --- LANDSCAPE DESKTOP: left-column video panel, two square tiles stacked ---
+   Issue 1 fix: constrain feed height so both tiles fit without overflowing.
+   Issue 2 fix: fullscreen feeds stay true side-by-side squares with controls. */
 @media (orientation: landscape) and (min-width: 721px) {
   #pg-chat.active .video-panel {
     align-self: stretch;
@@ -2035,6 +2183,7 @@ body.reveal-ready .scroll-reveal.in-view{
   #pg-chat.active .video-feeds {
     width: 100%;
     max-width: none;
+    /* Height capped: both tiles (aspect 1/2 total) must fit with controls below */
     max-height: calc(100% - 58px);
     aspect-ratio: 1 / 2;
     grid-template-columns: 1fr;
@@ -2049,18 +2198,74 @@ body.reveal-ready .scroll-reveal.in-view{
     height: 100%;
   }
 
-  #pg-chat.active #vc-normal {
+  #pg-chat.active .video-controls {
     flex-shrink: 0;
     margin-top: 8px;
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
   }
-  #pg-chat.active #vc-normal::-webkit-scrollbar { display: none; }
-  #pg-chat.active #vc-normal .vc-btn { flex: 0 0 auto; }
+  #pg-chat.active .video-controls::-webkit-scrollbar { display: none; }
+  #pg-chat.active .video-controls .vc-btn { flex: 0 0 auto; }
+
+  /* Issue 2: Landscape fullscreen — side-by-side (2 columns), full screen, controls at bottom */
+  #video-panel:fullscreen,
+  #video-panel:-webkit-full-screen,
+  #video-panel:-moz-full-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0;
+    gap: 0;
+    background: #000;
+    width: 100vw;
+    height: 100vh;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds {
+    flex: 1;
+    height: 100%;
+    width: 100vw;
+    max-width: none;
+    max-height: none;
+    aspect-ratio: unset;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr;
+    gap: 0;
+  }
+
+  #video-panel:fullscreen .video-wrapper,
+  #video-panel:-webkit-full-screen .video-wrapper,
+  #video-panel:-moz-full-screen .video-wrapper {
+    aspect-ratio: auto;
+    width: 100%;
+    height: 100%;
+  }
+
+  #video-panel:fullscreen .video-controls,
+  #video-panel:-webkit-full-screen .video-controls,
+  #video-panel:-moz-full-screen .video-controls {
+    display: flex;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    background: rgba(13,17,23,.95);
+    padding: 12px 16px;
+    width: 100vw;
+    box-sizing: border-box;
+    border-top: 1px solid rgba(255,255,255,.08);
+  }
 }
 
-/* --- PORTRAIT (all widths, non-fullscreen): stacked tiles --- */
+/* --- PORTRAIT (all widths): video panel sizes to content, never stretches.
+   Issue 3 fix: align-self auto + height auto prevents panel from stretching
+   and consuming the chat area. Feeds stay 2:1 (side-by-side squares). */
 @media (orientation: portrait) {
   #pg-chat.active .video-panel {
     align-self: auto;
@@ -2071,7 +2276,7 @@ body.reveal-ready .scroll-reveal.in-view{
   #pg-chat.active .video-feeds {
     width: 100%;
     max-width: none;
-    max-height: 36vh;
+    max-height: 40vh;
     aspect-ratio: 1 / 2;
     grid-template-columns: 1fr;
     grid-template-rows: 1fr 1fr;
@@ -2083,153 +2288,63 @@ body.reveal-ready .scroll-reveal.in-view{
     height: auto;
   }
 
-  #pg-chat.active #vc-normal {
+  #pg-chat.active .video-controls {
     margin-top: 0;
   }
-}
 
-/* ── Fullscreen bottom bar (hidden in normal mode) ── */
-.fs-bottom-bar {
-  display: none;
-}
+  /* Issue 4: Portrait fullscreen — stacked (1 column up/down), full screen, controls at bottom */
+  #video-panel:fullscreen,
+  #video-panel:-webkit-full-screen,
+  #video-panel:-moz-full-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 0;
+    gap: 0;
+    background: #000;
+    width: 100vw;
+    height: 100vh;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
 
-/* ── Fullscreen base styles — shared ── */
-#video-panel:fullscreen,
-#video-panel:-webkit-full-screen,
-#video-panel:-moz-full-screen {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  padding: 0;
-  gap: 0;
-  background: #000;
-  width: 100vw;
-  height: 100vh;
-  box-sizing: border-box;
-  overflow: hidden;
-}
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds {
+    flex: 1;
+    width: 100vw;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    aspect-ratio: unset;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 0;
+  }
 
-/* Hide normal controls in fullscreen */
-#video-panel:fullscreen #vc-normal,
-#video-panel:-webkit-full-screen #vc-normal,
-#video-panel:-moz-full-screen #vc-normal {
-  display: none;
-}
+  #video-panel:fullscreen .video-wrapper,
+  #video-panel:-webkit-full-screen .video-wrapper,
+  #video-panel:-moz-full-screen .video-wrapper {
+    aspect-ratio: auto;
+    width: 100%;
+    height: 100%;
+  }
 
-/* Show fullscreen bottom bar in fullscreen */
-#video-panel:fullscreen .fs-bottom-bar,
-#video-panel:-webkit-full-screen .fs-bottom-bar,
-#video-panel:-moz-full-screen .fs-bottom-bar {
-  display: flex;
-  flex-shrink: 0;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  background: rgba(13,17,23,.95);
-  padding: 10px 16px;
-  width: 100vw;
-  box-sizing: border-box;
-  border-top: 1px solid rgba(255,255,255,.10);
-}
-
-/* "Next" button — text label, bottom left */
-.fs-next-btn {
-  height: 42px;
-  padding: 0 20px;
-  border-radius: var(--r-full);
-  border: 1.5px solid rgba(255,255,255,.22);
-  background: rgba(255,255,255,.10);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: .02em;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background var(--dur-fast), border-color var(--dur-fast);
-  flex-shrink: 0;
-}
-.fs-next-btn:hover {
-  background: rgba(255,255,255,.20);
-  border-color: rgba(255,255,255,.40);
-}
-
-/* Emoji action buttons row — bottom right */
-.fs-action-btns {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.fs-vc-btn {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(255,255,255,.18);
-  background: rgba(255,255,255,.10);
-  color: #fff;
-  font-size: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background var(--dur-fast), border-color var(--dur-fast), transform var(--dur-fast) var(--ease-spring);
-  flex-shrink: 0;
-}
-.fs-vc-btn:hover {
-  background: rgba(255,255,255,.22);
-  border-color: rgba(255,255,255,.40);
-  transform: scale(1.08);
-}
-.fs-vc-btn.off {
-  border-color: rgba(220,38,38,.5);
-  background: rgba(220,38,38,.18);
-}
-
-/* Fullscreen video feeds — shared base */
-#video-panel:fullscreen .video-feeds,
-#video-panel:-webkit-full-screen .video-feeds,
-#video-panel:-moz-full-screen .video-feeds {
-  flex: 1;
-  width: 100vw;
-  max-width: none;
-  max-height: none;
-  aspect-ratio: unset;
-  gap: 0;
-  min-height: 0;
-}
-
-#video-panel:fullscreen .video-wrapper,
-#video-panel:-webkit-full-screen .video-wrapper,
-#video-panel:-moz-full-screen .video-wrapper {
-  aspect-ratio: auto;
-  width: 100%;
-  height: 100%;
-}
-
-/* ── FULLSCREEN LANDSCAPE: side-by-side (JS adds .fs-landscape) ── */
-#video-panel.fs-landscape:fullscreen .video-feeds,
-#video-panel.fs-landscape:-webkit-full-screen .video-feeds,
-#video-panel.fs-landscape:-moz-full-screen .video-feeds {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr;
-}
-
-/* ── FULLSCREEN PORTRAIT: up-and-down (JS adds .fs-portrait) ── */
-#video-panel.fs-portrait:fullscreen .video-feeds,
-#video-panel.fs-portrait:-webkit-full-screen .video-feeds,
-#video-panel.fs-portrait:-moz-full-screen .video-feeds {
-  grid-template-columns: 1fr;
-  grid-template-rows: 1fr 1fr;
-}
-
-/* Default fullscreen grid (landscape) — overridden by .fs-portrait class via JS */
-#video-panel:fullscreen .video-feeds,
-#video-panel:-webkit-full-screen .video-feeds,
-#video-panel:-moz-full-screen .video-feeds {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr;
+  #video-panel:fullscreen .video-controls,
+  #video-panel:-webkit-full-screen .video-controls,
+  #video-panel:-moz-full-screen .video-controls {
+    display: flex;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    background: rgba(13,17,23,.95);
+    padding: 12px 16px;
+    width: 100vw;
+    box-sizing: border-box;
+    border-top: 1px solid rgba(255,255,255,.08);
+  }
 }
 </style>
 </head>
@@ -2757,22 +2872,21 @@ body.reveal-ready .scroll-reveal.in-view{
           </div>
         </div>
 
-        <!-- Normal (non-fullscreen) controls -->
-        <div class="video-controls" id="vc-normal">
+        <div class="video-controls">
           <button class="vc-btn" id="vc-mic" title="Mute microphone">🎤 Mic</button>
           <button class="vc-btn" id="vc-cam" title="Toggle camera">📷 Cam</button>
           <button class="vc-btn" id="vc-flip" title="Flip camera">🔄 Flip</button>
           <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶ Full</button>
         </div>
 
-        <!-- Fullscreen-only bottom bar -->
-        <div class="fs-bottom-bar" id="fs-bottom-bar">
+        <!-- Fullscreen bottom bar (hidden by default, shown via JS) -->
+        <div class="fs-controls" id="fs-controls">
           <button class="fs-next-btn" id="btn-skip-fs" title="Next" onclick="document.getElementById('btn-skip')?.click()">Next</button>
-          <div class="fs-action-btns">
-            <button class="fs-vc-btn" id="fs-vc-mic" title="Mute microphone" onclick="document.getElementById('vc-mic')?.click()">🎤</button>
-            <button class="fs-vc-btn" id="fs-vc-cam" title="Toggle camera" onclick="document.getElementById('vc-cam')?.click()">📷</button>
-            <button class="fs-vc-btn" id="fs-vc-flip" title="Flip camera" onclick="document.getElementById('vc-flip')?.click()">🔄</button>
-            <button class="fs-vc-btn" id="fs-vc-exit" title="Exit fullscreen" onclick="document.exitFullscreen?.()">⛶</button>
+          <div class="fs-emoji-btns">
+            <button class="fs-emoji-btn" id="fs-mic" onclick="document.getElementById('vc-mic')?.click()" title="Mic">🎤</button>
+            <button class="fs-emoji-btn" id="fs-cam" onclick="document.getElementById('vc-cam')?.click()" title="Cam">📷</button>
+            <button class="fs-emoji-btn" id="fs-flip" onclick="document.getElementById('vc-flip')?.click()" title="Flip">🔄</button>
+            <button class="fs-emoji-btn" id="fs-exit" onclick="document.exitFullscreen?.() || document.webkitExitFullscreen?.() || document.mozCancelFullScreen?.()" title="Exit">⛶</button>
           </div>
         </div>
       </div><!-- /video-panel -->
@@ -2931,59 +3045,6 @@ body.reveal-ready .scroll-reveal.in-view{
   } else {
     initReveal();
   }
-})();
-</script>
-
-<script>
-/* ===== Fullscreen orientation class logic (v11) =====
-   Applies .fs-landscape or .fs-portrait to #video-panel
-   when fullscreen is active, so CSS grid layout is correct
-   regardless of browser quirks with @media orientation + :fullscreen. */
-(function () {
-  var panel = document.getElementById('video-panel');
-  if (!panel) return;
-
-  function applyFsOrientation() {
-    var isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
-    if (!isFs) {
-      panel.classList.remove('fs-landscape', 'fs-portrait');
-      return;
-    }
-    // Use screen dimensions (reliable in fullscreen, even on mobile)
-    var isLandscape = window.screen.width > window.screen.height || window.innerWidth > window.innerHeight;
-    panel.classList.toggle('fs-landscape', isLandscape);
-    panel.classList.toggle('fs-portrait', !isLandscape);
-  }
-
-  document.addEventListener('fullscreenchange', applyFsOrientation);
-  document.addEventListener('webkitfullscreenchange', applyFsOrientation);
-  document.addEventListener('mozfullscreenchange', applyFsOrientation);
-  // Re-check if device rotates while in fullscreen
-  window.addEventListener('resize', function () {
-    if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement) {
-      applyFsOrientation();
-    }
-  });
-  if (screen.orientation) {
-    screen.orientation.addEventListener('change', applyFsOrientation);
-  }
-
-  // Sync .off class from normal vc-btn to fullscreen emoji buttons
-  var syncMap = {
-    'vc-mic': 'fs-vc-mic',
-    'vc-cam': 'fs-vc-cam',
-  };
-  var obs = new MutationObserver(function () {
-    Object.keys(syncMap).forEach(function (srcId) {
-      var src = document.getElementById(srcId);
-      var dst = document.getElementById(syncMap[srcId]);
-      if (src && dst) dst.classList.toggle('off', src.classList.contains('off'));
-    });
-  });
-  Object.keys(syncMap).forEach(function (srcId) {
-    var el = document.getElementById(srcId);
-    if (el) obs.observe(el, { attributes: true, attributeFilter: ['class'] });
-  });
 })();
 </script>
 
