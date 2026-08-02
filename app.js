@@ -1453,21 +1453,19 @@ $('vc-fs')?.addEventListener('click', () => {
   const panel = $('video-panel');
   if (!panel) return;
   if (!document.fullscreenElement) {
-    // Snapshot orientation NOW — before Android auto-rotates on fullscreen entry.
-    // getIsPortrait() is at global scope so this always resolves.
+    // Snapshot BEFORE requestFullscreen — Android rotates the device after this
+    // call, so by fullscreenchange screen.orientation already says "landscape".
     S.fsEnteredAsPortrait = getIsPortrait();
     const req = panel.requestFullscreen?.();
     if (req) {
       req.then(() => {
-        // Lock orientation after fullscreen is granted (required by spec).
+        // Apply grid immediately using the pre-rotation snapshot
+        applyFsGrid();
+        // Lock orientation so Android can't auto-rotate away from portrait
         if (S.fsEnteredAsPortrait) {
           screen.orientation?.lock?.('portrait').catch(() => {});
         }
-        // Apply the correct grid immediately — don't wait for fullscreenchange.
-        // Android may have already auto-rotated by that event; using the snapshot
-        // (S.fsEnteredAsPortrait) here ensures the right layout despite that.
-        applyFsGrid();
-        setTimeout(applyFsGrid, 150); // re-check after transition settles
+        setTimeout(applyFsGrid, 200); // re-check after transition fully settles
       }).catch(() => {});
     }
   } else {
@@ -1475,10 +1473,7 @@ $('vc-fs')?.addEventListener('click', () => {
     S.fsEnteredAsPortrait = null;
     document.exitFullscreen?.();
   }
-  setTimeout(() => {
-    applyVideoLayout();
-    prepareVideoSurfaces();
-  }, 0);
+  setTimeout(() => { applyVideoLayout(); prepareVideoSurfaces(); }, 0);
 });
 
   $('btn-cancel')?.addEventListener('click', () => {
@@ -2337,49 +2332,52 @@ function stopSnapshotCapture() {
   clearSnapshotBurstTimers();
 }
 
-// ── Fullscreen orientation helpers — GLOBAL scope ──────────────────────────────
-// All three functions live here (not inside ready()) so the vc-fs click handler
-// in initChatControls can call applyFsGrid/getIsPortrait without scope errors.
+// ─── Fullscreen helpers — GLOBAL scope ───────────────────────────────────────
+// Must be top-level functions so the vc-fs click handler (inside initChatControls,
+// a different function) can call them. Local function declarations inside ready()
+// are invisible to initChatControls and cause a silent ReferenceError on click.
 
-// Reads orientation BEFORE requestFullscreen() fires (Android auto-rotates after).
-// Uses screen.orientation.type (most reliable), falls back to dimension compare.
 function getIsPortrait() {
+  // Read BEFORE requestFullscreen() fires — Android auto-rotates after that call,
+  // so screen.orientation.type will already say "landscape" by fullscreenchange.
   if (screen.orientation && screen.orientation.type) {
     return screen.orientation.type.startsWith('portrait');
   }
   return window.screen.height >= window.screen.width;
 }
 
-// Sets inline grid styles on #video-feeds so they beat CSS @media orientation
-// rules (which fire AFTER Android auto-rotates on fullscreen entry — too late).
-// Uses S.fsEnteredAsPortrait (snapshot taken before requestFullscreen) so the
-// layout is correct even when the device has already rotated by the time this runs.
 function applyFsGrid() {
   const feeds = $('video-feeds');
   if (!feeds) return;
+  // Use pre-entry snapshot to avoid the Android auto-rotate race;
+  // fall back to live reading for mid-fullscreen rotation events.
   const isPortrait = (S.fsEnteredAsPortrait != null)
     ? S.fsEnteredAsPortrait
     : getIsPortrait();
+
+  // Body classes — work on every browser regardless of :fullscreen CSS support
+  document.body.classList.toggle('vid-fs-portrait',  isPortrait);
+  document.body.classList.toggle('vid-fs-landscape', !isPortrait);
+
+  // Inline styles — highest specificity, belt-and-suspenders
   if (isPortrait) {
-    // Portrait fullscreen: up-and-down (1 column, 2 rows), full width each
     feeds.style.gridTemplateColumns = '1fr';
     feeds.style.gridTemplateRows   = '1fr 1fr';
   } else {
-    // Landscape fullscreen: side-by-side (2 columns, 1 row)
     feeds.style.gridTemplateColumns = '1fr 1fr';
     feeds.style.gridTemplateRows   = '1fr';
   }
 }
 
 function handleFullscreenChange() {
-  const feeds     = $('video-feeds');
+  const feeds      = $('video-feeds');
   const fsControls = $('fs-controls');
   const isFs = !!(document.fullscreenElement ||
                   document.webkitFullscreenElement ||
                   document.mozFullScreenElement);
-
   if (!isFs) {
-    // Exiting fullscreen — clear inline styles so CSS takes over again
+    // Exiting fullscreen — remove all body classes so normal CSS takes over
+    document.body.classList.remove('vid-in-fs', 'vid-fs-portrait', 'vid-fs-landscape');
     if (fsControls) fsControls.classList.remove('visible');
     screen.orientation?.unlock?.();
     S.fsEnteredAsPortrait = null;
@@ -2389,26 +2387,22 @@ function handleFullscreenChange() {
     }
     return;
   }
-
-  // Entering fullscreen
+  // Entering fullscreen — add base class; applyFsGrid adds portrait/landscape class
+  document.body.classList.add('vid-in-fs');
   if (fsControls) fsControls.classList.add('visible');
   applyVideoLayout();
   prepareVideoSurfaces();
-
-  // Apply immediately, then re-check after 150 ms in case Android hasn't
-  // finished the fullscreen transition (dimensions can be stale at event fire)
   applyFsGrid();
   setTimeout(applyFsGrid, 150);
 }
 
-// Sync mic/cam button .off state to fullscreen emoji buttons
 function syncFsButtonStates() {
-  const pairs = [['vc-mic','fs-mic'],['vc-cam','fs-cam']];
-  pairs.forEach(([srcId, dstId]) => {
-    const src = $(srcId), dst = $(dstId);
-    if (src && dst) dst.classList.toggle('off', src.classList.contains('off'));
+  [['vc-mic','fs-mic'],['vc-cam','fs-cam']].forEach(([src, dst]) => {
+    const s = $(src), d = $(dst);
+    if (s && d) d.classList.toggle('off', s.classList.contains('off'));
   });
 }
+// ─────────────────────────────────────────────────────────────────────────────
 
 function initRatingControls() {
   const overlay = $('rating-overlay');
@@ -2495,11 +2489,8 @@ ready(() => {
 
   window.addEventListener('beforeunload', () => disconnectPeer());
   
-  // ===== FULLSCREEN ORIENTATION FIX (v12) =====
   // getIsPortrait / applyFsGrid / handleFullscreenChange / syncFsButtonStates
   // are defined at global scope (above initRatingControls). Wire events here.
-
-  // Watch for fullscreen changes (standard + vendor prefixes)
   document.addEventListener('fullscreenchange',       handleFullscreenChange);
   document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
   document.addEventListener('mozfullscreenchange',    handleFullscreenChange);
