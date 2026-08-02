@@ -1551,7 +1551,8 @@ img { display: block; max-width: 100%; }
   background: rgba(220,38,38,.15);
 }
 
-/* Fullscreen video — base: panel fills screen, video-controls hidden, fs-controls shown via JS */
+/* Fullscreen video */
+/* early fullscreen base — neutralised; v10 orientation blocks handle layout */
 #video-panel:fullscreen,
 #video-panel:-webkit-full-screen,
 #video-panel:-moz-full-screen {
@@ -1568,11 +1569,22 @@ img { display: block; max-width: 100%; }
   align-items: stretch;
   justify-content: flex-start;
 }
-/* Always hide the normal video-controls bar in fullscreen — fs-controls is the sole bar */
 #video-panel:fullscreen .video-controls,
 #video-panel:-webkit-full-screen .video-controls,
 #video-panel:-moz-full-screen .video-controls {
-  display: none !important;
+  display: none;
+}
+
+#video-panel:fullscreen #btn-skip-fs,
+#video-panel:-webkit-full-screen #btn-skip-fs,
+#video-panel:-moz-full-screen #btn-skip-fs {
+  display: inline-flex;
+}
+
+#video-panel:fullscreen .video-controls #btn-skip-fs,
+#video-panel:-webkit-full-screen .video-controls #btn-skip-fs,
+#video-panel:-moz-full-screen .video-controls #btn-skip-fs {
+  display: inline-flex;
 }
 
 /* ── Modal / overlay / toast ────────────────────────── */
@@ -2030,7 +2042,7 @@ body.reveal-ready .scroll-reveal.in-view{
 #video-panel:fullscreen .video-controls,
 #video-panel:-webkit-full-screen .video-controls,
 #video-panel:-moz-full-screen .video-controls {
-  display: none !important;
+  display: none;
 }
 
 #video-panel:fullscreen .video-feeds,
@@ -2234,7 +2246,7 @@ body.reveal-ready .scroll-reveal.in-view{
   #video-panel:fullscreen .video-controls,
   #video-panel:-webkit-full-screen .video-controls,
   #video-panel:-moz-full-screen .video-controls {
-    display: none !important;
+    display: none;
   }
 }
 
@@ -2284,9 +2296,6 @@ body.reveal-ready .scroll-reveal.in-view{
     overflow: hidden;
   }
 
-  /* Portrait fullscreen feeds: stacked (1 column, 2 rows), each fills 50% of screen height.
-     grid-template-columns/rows are also set by JS (applyFsGrid) via inline style so they
-     win over CSS on Android where the device auto-rotates after requestFullscreen fires. */
   #video-panel:fullscreen .video-feeds,
   #video-panel:-webkit-full-screen .video-feeds,
   #video-panel:-moz-full-screen .video-feeds {
@@ -2296,7 +2305,6 @@ body.reveal-ready .scroll-reveal.in-view{
     max-width: none;
     max-height: none;
     aspect-ratio: unset;
-    /* CSS portrait default — JS inline style overrides this on Android */
     grid-template-columns: 1fr;
     grid-template-rows: 1fr 1fr;
     gap: 0;
@@ -2310,12 +2318,39 @@ body.reveal-ready .scroll-reveal.in-view{
     height: 100%;
   }
 
-  /* Always hide normal controls in fullscreen — fs-controls is the sole button bar */
   #video-panel:fullscreen .video-controls,
   #video-panel:-webkit-full-screen .video-controls,
   #video-panel:-moz-full-screen .video-controls {
-    display: none !important;
+    display: none;
   }
+}
+
+/* ── Body-class fullscreen overrides (v13) ──────────────────────────────────
+   These work on every mobile browser regardless of :fullscreen CSS support.
+   JS adds/removes these classes in handleFullscreenChange() and applyFsGrid(). */
+
+/* Hide the normal control bar; show only the fs-controls emoji bar */
+body.vid-in-fs .video-controls {
+  display: none !important;
+}
+body.vid-in-fs #fs-controls {
+  display: flex !important;
+}
+
+/* Portrait fullscreen: stack videos top-to-bottom */
+body.vid-in-fs.vid-fs-portrait #video-panel .video-feeds {
+  grid-template-columns: 1fr !important;
+  grid-template-rows:    1fr 1fr !important;
+  aspect-ratio:          unset !important;
+  max-height:            none !important;
+}
+
+/* Landscape fullscreen: videos side by side */
+body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
+  grid-template-columns: 1fr 1fr !important;
+  grid-template-rows:    1fr !important;
+  aspect-ratio:          unset !important;
+  max-height:            none !important;
 }
 </style>
 </head>
