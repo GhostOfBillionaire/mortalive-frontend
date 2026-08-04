@@ -1013,15 +1013,48 @@ function requestCameraPermission() {
     });
 }
 
+// Supabase client — initialized in cry.html as window.sb
+const sb = window.sb;
+
+// Holds the in-progress forgot-password OTP request (the email it was
+// sent to) so the verify step knows what to check the code against.
+// OTP is used exclusively for password reset now — login and signup
+// are password-based.
+let _otpContext = null; // { email }
+let _resendCooldownTimer = null;
+
+// Shared 60s cooldown across both "send a code" entry points in the
+// forgot-password flow (the initial send and the resend button).
+// Client-side check that surfaces instantly as a toast instead of
+// waiting on a round trip to Supabase's own rate-limit error.
+const OTP_COOLDOWN_MS = 60 * 1000;
+let _lastOtpRequestAt = 0;
+
 function initAuthControls() {
   const tabLogin  = $('tab-login');
   const tabSignup = $('tab-signup');
   const loginForm  = $('auth-login-form');
   const signupForm = $('auth-signup-form');
   const forgotForm = $('auth-forgot-form');
+  const otpForm    = $('auth-otp-form');
+  const resetForm  = $('auth-reset-form');
+
+  // Holds the verified session/user from the forgot-password OTP step,
+  // so btn-reset-submit knows who to set the new password for without
+  // asking them to log in again immediately after verifying the code.
+  let _pendingResetUser = null;
+
+  function hideForgotFlow() {
+    clearInterval(_resendCooldownTimer);
+    _otpContext = null;
+    _pendingResetUser = null;
+    if (forgotForm) forgotForm.style.display = 'none';
+    if (otpForm)    otpForm.style.display    = 'none';
+    if (resetForm)  resetForm.style.display  = 'none';
+  }
 
   function showAuthTab(which) {
-    if (forgotForm) forgotForm.style.display = 'none';
+    hideForgotFlow();
     if (which === 'login') {
       if (loginForm) loginForm.style.display = '';
       if (signupForm) signupForm.style.display = 'none';
@@ -1046,6 +1079,43 @@ function initAuthControls() {
     el.textContent = msg;
   }
 
+  function friendlyAuthError(error) {
+    const msg = (error?.message || '').toLowerCase();
+    if (msg.includes('rate limit') || msg.includes('too many')) {
+      return 'Too many attempts — please wait a moment and try again.';
+    }
+    if (msg.includes('invalid login credentials')) {
+      return 'Incorrect email or password.';
+    }
+    if (msg.includes('email not confirmed')) {
+      return 'Please confirm your email first — check your inbox for the link we sent.';
+    }
+    if (msg.includes('user already registered') || msg.includes('already registered')) {
+      return 'An account with that email already exists — try logging in instead.';
+    }
+    if (msg.includes('invalid') && msg.includes('token')) {
+      return 'That code is incorrect or has expired. Please try again.';
+    }
+    if (msg.includes('expired')) {
+      return 'That code has expired. Send a new one.';
+    }
+    return error?.message || 'Something went wrong. Please try again.';
+  }
+
+  // Returns true (and shows a toast + inline error) if a code was sent
+  // less than 60s ago from either the "send code" or "resend" button.
+  // Callers should bail out immediately when this returns true.
+  function blockIfOnCooldown(errorTargetId) {
+    const remaining = OTP_COOLDOWN_MS - (Date.now() - _lastOtpRequestAt);
+    if (remaining > 0) {
+      const secs = Math.ceil(remaining / 1000);
+      toast(`Please wait ${secs}s before requesting another code`, '⏳');
+      setError(errorTargetId, `You can request a new code in ${secs}s.`);
+      return true;
+    }
+    return false;
+  }
+
   function afterAuthSuccess(token, username, crockroachScore, userId) {
     S.authToken   = token;
     S.username    = username;
@@ -1060,30 +1130,72 @@ function initAuthControls() {
     enterLobby();
   }
 
-  $('btn-login')?.addEventListener('click', async () => {
-    const username = ($('login-username')?.value || '').trim();
-    const password = $('login-password')?.value || '';
-    setError('login-error', null);
-    if (!username || !password) { setError('login-error', 'Enter your username and password.'); return; }
+  // Toggles a password field between hidden (•••) and plain text.
+  // Shared by the login, signup, and reset-password fields.
+  function wireupPasswordToggle(inputId, btnId) {
+    const input = $(inputId);
+    const btn   = $(btnId);
+    if (!input || !btn) return;
+    btn.addEventListener('click', () => {
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      btn.textContent = showing ? '👁️' : '🙈';
+      btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+    });
+  }
+  wireupPasswordToggle('login-password',  'btn-login-pw-toggle');
+  wireupPasswordToggle('signup-password', 'btn-signup-pw-toggle');
+  wireupPasswordToggle('reset-password',  'btn-reset-pw-toggle');
 
+  // ── Log in with email + password ──
+  $('btn-login')?.addEventListener('click', async () => {
+    const email    = ($('login-email')?.value    || '').trim();
+    const password = $('login-password')?.value  || '';
+    setError('login-error', null);
+    setError('login-info', null);
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+      setError('login-error', 'Enter a valid email address.');
+      return;
+    }
+    if (!password) {
+      setError('login-error', 'Enter your password.');
+      return;
+    }
+    const btn = $('btn-login');
+    if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
     try {
-      const res = await fetch(`${SERVER_URL}/api/login`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      const data = await res.json();
-      if (!res.ok) { setError('login-error', data.error || 'Login failed.'); return; }
-      afterAuthSuccess(data.token, data.username, data.crockroachScore, data.userId);
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) {
+        setError('login-error', friendlyAuthError(error));
+        return;
+      }
+      const user = data?.user;
+      const session = data?.session;
+      if (!session || !user) {
+        setError('login-error', 'Login succeeded but no session was returned. Try again.');
+        return;
+      }
+      const profile = await fetchUserProfile(user.id);
+      const username =
+        profile?.username ||
+        user.user_metadata?.username ||
+        user.email?.split('@')[0] ||
+        'User';
+      const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
+      afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
     } catch (e) {
-      setError('login-error', 'Could not reach the server. Try again in a moment.');
+      setError('login-error', 'Could not reach Supabase. Try again in a moment.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Sign in →'; }
     }
   });
 
+  // ── Sign up with email + password ──
   $('btn-signup')?.addEventListener('click', async () => {
     const username = ($('signup-username')?.value || '').trim();
+    const fullName = ($('signup-fullname')?.value || '').trim();
     const email    = ($('signup-email')?.value    || '').trim();
     const password = $('signup-password')?.value  || '';
-    const confirm  = $('signup-confirm')?.value   || '';
     const terms    = $('signup-terms');
     setError('signup-error', null);
 
@@ -1091,12 +1203,12 @@ function initAuthControls() {
       setError('signup-error', 'Username must be 3–24 characters: letters, numbers, underscore only.');
       return;
     }
-    if (password.length < 6) {
-      setError('signup-error', 'Password must be at least 6 characters.');
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+      setError('signup-error', 'Enter a valid email address.');
       return;
     }
-    if (confirm && password !== confirm) {
-      setError('signup-error', 'Passwords do not match.');
+    if (password.length < 8) {
+      setError('signup-error', 'Password must be at least 8 characters.');
       return;
     }
     if (terms && !terms.checked) {
@@ -1104,43 +1216,248 @@ function initAuthControls() {
       return;
     }
 
+    const btn = $('btn-signup');
+    if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
     try {
-      const res = await fetch(`${SERVER_URL}/api/signup`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, email: email || null })
+      const { data, error } = await sb.auth.signUp({
+        email,
+        password,
+        options: {
+          // Picked up by the handle_new_user() DB trigger to populate
+          // the public.accounts row.
+          data: { username, full_name: fullName }
+        }
       });
-      const data = await res.json();
-      if (!res.ok) { setError('signup-error', data.error || 'Could not create account.'); return; }
-      afterAuthSuccess(data.token, data.username, data.crockroachScore, data.userId);
+      if (error) {
+        setError('signup-error', friendlyAuthError(error));
+        return;
+      }
+
+      const user    = data?.user;
+      const session = data?.session;
+
+      if (session && user) {
+        // Email confirmation is off in your Supabase project — session
+        // comes back immediately, so log them straight in.
+        const profile = await fetchUserProfile(user.id);
+        const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
+        afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
+      } else {
+        // Normal case: Supabase requires email confirmation before a
+        // session is issued. They'll get a confirmation link by email;
+        // clicking it establishes the session automatically the next
+        // time this page loads (Supabase's client detects it).
+        toast('Check your email to confirm your account!', '📩');
+        showAuthTab('login');
+        setError('login-error', null);
+        setError('login-info', `We sent a confirmation link to ${email}. Click it, then log in here.`);
+      }
     } catch (e) {
-      setError('signup-error', 'Could not reach the server. Try again in a moment.');
+      setError('signup-error', 'Could not reach Supabase. Try again in a moment.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Create account →'; }
     }
   });
 
+  // ── Forgot password: show the "request a code" step ──
   $('btn-forgot')?.addEventListener('click', () => {
     if (loginForm) loginForm.style.display = 'none';
     if (forgotForm) forgotForm.style.display = '';
+    setError('forgot-error', null);
+    const forgotEmail = $('forgot-email');
+    const loginEmail  = $('login-email');
+    if (forgotEmail && loginEmail?.value) forgotEmail.value = loginEmail.value;
   });
   $('btn-forgot-back')?.addEventListener('click', () => {
-    if (forgotForm) forgotForm.style.display = 'none';
+    hideForgotFlow();
     showAuthTab('login');
   });
-  $('btn-forgot-submit')?.addEventListener('click', async () => {
+
+  // ── Forgot password step 1: send the 6-digit code ──
+  $('btn-forgot-send')?.addEventListener('click', async () => {
     const email = ($('forgot-email')?.value || '').trim();
-    const msgEl = $('forgot-message');
-    if (!email) return;
+    setError('forgot-error', null);
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+      setError('forgot-error', 'Enter a valid email address.');
+      return;
+    }
+    if (blockIfOnCooldown('forgot-error')) return;
+
+    const btn = $('btn-forgot-send');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
     try {
-      const res = await fetch(`${SERVER_URL}/api/forgot-password`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
+      const { error } = await sb.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: false }
       });
-      const data = await res.json();
-      if (msgEl) {
-        msgEl.style.display = 'block';
-        msgEl.textContent = data.message || 'If an account exists for that email, a reset link will be sent soon.';
+      if (error) {
+        setError('forgot-error', friendlyAuthError(error));
+        return;
       }
+      _lastOtpRequestAt = Date.now();
+      toast('Code sent — check your email!', '📩');
+      _otpContext = { email };
+      showOtpStep(email);
     } catch (e) {
-      if (msgEl) { msgEl.style.display = 'block'; msgEl.textContent = 'Could not reach the server.'; }
+      setError('forgot-error', 'Could not reach Supabase. Try again in a moment.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Send code →'; }
+    }
+  });
+
+  function showOtpStep(email) {
+    if (forgotForm) forgotForm.style.display = 'none';
+    if (otpForm)    otpForm.style.display    = '';
+    if (resetForm)  resetForm.style.display  = 'none';
+    const display = $('otp-email-display');
+    if (display) display.textContent = `Code sent to ${email}`;
+    setError('otp-error', null);
+    const codeInput = $('otp-code');
+    if (codeInput) { codeInput.value = ''; codeInput.focus(); }
+    startResendCooldown(60);
+  }
+
+  function startResendCooldown(seconds) {
+    const btn = $('btn-otp-resend');
+    if (!btn) return;
+    let remaining = seconds;
+    btn.disabled = true;
+    btn.textContent = `Resend in ${remaining}s`;
+    clearInterval(_resendCooldownTimer);
+    _resendCooldownTimer = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(_resendCooldownTimer);
+        btn.disabled = false;
+        btn.textContent = 'Resend code';
+      } else {
+        btn.textContent = `Resend in ${remaining}s`;
+      }
+    }, 1000);
+  }
+
+  // ── Forgot password step 2: verify the code, then move to step 3 ──
+  $('btn-otp-verify')?.addEventListener('click', async () => {
+    const code = ($('otp-code')?.value || '').trim();
+    setError('otp-error', null);
+    if (!_otpContext?.email) {
+      setError('otp-error', 'Session expired — please start again.');
+      return;
+    }
+    if (!/^\d{6}$/.test(code)) {
+      setError('otp-error', 'Enter the 6-digit code from your email.');
+      return;
+    }
+
+    const btn = $('btn-otp-verify');
+    if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
+    try {
+      const { data, error } = await sb.auth.verifyOtp({
+        email: _otpContext.email,
+        token: code,
+        type: 'email'
+      });
+      if (error) {
+        setError('otp-error', friendlyAuthError(error));
+        return;
+      }
+
+      const session = data?.session;
+      const user    = data?.user || session?.user;
+      if (!session || !user) {
+        setError('otp-error', 'Verification succeeded but no session was returned. Try again.');
+        return;
+      }
+
+      // Code confirmed identity — now let them pick a new password
+      // instead of logging straight in.
+      clearInterval(_resendCooldownTimer);
+      _pendingResetUser = { user, session };
+      if (otpForm)   otpForm.style.display   = 'none';
+      if (resetForm) resetForm.style.display = '';
+      setError('reset-error', null);
+      const pw = $('reset-password');
+      if (pw) { pw.value = ''; pw.focus(); }
+    } catch (e) {
+      setError('otp-error', 'Could not reach Supabase. Try again in a moment.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Verify code →'; }
+    }
+  });
+
+  // ── Resend the code to the same email ──
+  $('btn-otp-resend')?.addEventListener('click', async () => {
+    if (!_otpContext?.email) return;
+    setError('otp-error', null);
+    // The button is already disabled by startResendCooldown()'s own timer
+    // for the normal case; this is a defense-in-depth check against the
+    // same shared 60s window used by the "send code" button.
+    if (blockIfOnCooldown('otp-error')) return;
+    try {
+      const { error } = await sb.auth.signInWithOtp({
+        email: _otpContext.email,
+        options: { shouldCreateUser: false }
+      });
+      if (error) {
+        setError('otp-error', friendlyAuthError(error));
+        return;
+      }
+      _lastOtpRequestAt = Date.now();
+      toast('Code sent — check your email!', '📩');
+      startResendCooldown(60);
+    } catch (e) {
+      setError('otp-error', 'Could not reach Supabase. Try again in a moment.');
+    }
+  });
+
+  // ── Back to the "request a code" step ──
+  $('btn-otp-back')?.addEventListener('click', () => {
+    clearInterval(_resendCooldownTimer);
+    _otpContext = null;
+    _pendingResetUser = null;
+    if (otpForm) otpForm.style.display = 'none';
+    if (forgotForm) forgotForm.style.display = '';
+  });
+
+  // ── Forgot password step 3: set the new password ──
+  $('btn-reset-submit')?.addEventListener('click', async () => {
+    const newPassword = $('reset-password')?.value || '';
+    setError('reset-error', null);
+    if (!_pendingResetUser?.session) {
+      setError('reset-error', 'Session expired — please start again.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError('reset-error', 'Password must be at least 8 characters.');
+      return;
+    }
+
+    const btn = $('btn-reset-submit');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+      const { data, error } = await sb.auth.updateUser({ password: newPassword });
+      if (error) {
+        setError('reset-error', friendlyAuthError(error));
+        return;
+      }
+      const user    = data?.user || _pendingResetUser.user;
+      const session = _pendingResetUser.session;
+      const profile = await fetchUserProfile(user.id);
+      const username =
+        profile?.username ||
+        user.user_metadata?.username ||
+        user.email?.split('@')[0] ||
+        'User';
+      const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
+
+      _otpContext = null;
+      _pendingResetUser = null;
+      toast('Password updated!', '✅');
+      afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
+    } catch (e) {
+      setError('reset-error', 'Could not reach Supabase. Try again in a moment.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Set new password →'; }
     }
   });
 
@@ -1164,27 +1481,57 @@ function initAuthControls() {
   if (guestInput && S.guestName) guestInput.value = S.guestName;
 }
 
-// If a session token is already stored, validate it on load and skip
-// straight past the auth screen into the lobby on success.
+// Fetches the row from public.accounts for the given auth user id.
+// Uses select('*') rather than named columns so this doesn't break if
+// your accounts table's column names differ slightly from the defaults
+// assumed here (username, full_name, crockroach_score).
+async function fetchUserProfile(userId) {
+  try {
+    const { data, error } = await sb
+      .from('accounts')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    if (error) {
+      console.warn('fetchUserProfile:', error.message);
+      return null;
+    }
+    return data;
+  } catch (e) {
+    console.warn('fetchUserProfile failed:', e);
+    return null;
+  }
+}
+
+// If a Supabase session already exists (page reload / return visit), log
+// the user in automatically and skip past the auth screen.
 // The promise is cached so calling tryAutoLogin() a second time
 // (from proceedPastLanding) just awaits the same in-flight request.
 let _autoLoginPromise = null;
 async function tryAutoLogin() {
   if (_autoLoginPromise) return _autoLoginPromise;
   _autoLoginPromise = (async () => {
-    if (!S.authToken) return false;
     try {
-      const res = await fetch(`${SERVER_URL}/api/me`, {
-        headers: { Authorization: `Bearer ${S.authToken}` }
-      });
-      if (!res.ok) throw new Error('invalid session');
-      const data = await res.json();
-      S.username    = data.username;
-      S.userId      = data.userId || null;
-      S.crockroachScore = data.crockroachScore;
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) throw new Error('no session');
+
+      const profile = await fetchUserProfile(session.user.id);
+      const username =
+        profile?.username ||
+        session.user.user_metadata?.username ||
+        session.user.email?.split('@')[0] ||
+        'User';
+      const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
+
+      S.authToken   = session.access_token;
+      S.username    = username;
+      S.userId      = session.user.id;
+      S.crockroachScore = crockroachScore;
       S.isGuest     = false;
-      if (data.userId) localStorage.setItem('mortalive_user_id', data.userId);
-      syncAuthProgress(data.crockroachScore);
+      localStorage.setItem('mortalive_token',    S.authToken);
+      localStorage.setItem('mortalive_username', S.username);
+      localStorage.setItem('mortalive_user_id',  S.userId);
+      syncAuthProgress(crockroachScore);
       return true;
     } catch (e) {
       S.authToken = null;
@@ -1198,6 +1545,22 @@ async function tryAutoLogin() {
   return _autoLoginPromise;
 }
 
+// Keep S.* in sync if the Supabase session changes in another tab, or
+// expires/gets revoked while this tab is open.
+sb.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_OUT') {
+    S.authToken   = null;
+    S.username    = null;
+    S.userId      = null;
+    S.crockroachScore = null;
+    S.isGuest     = true;
+    _autoLoginPromise = null;
+    localStorage.removeItem('mortalive_token');
+    localStorage.removeItem('mortalive_username');
+    localStorage.removeItem('mortalive_user_id');
+  }
+});
+
 function initLandingActions() {
   const continueBtn = $('btn-enter') || $('btn-start');
 
@@ -1205,13 +1568,13 @@ function initLandingActions() {
     S.pendingAction = null;
     // tryAutoLogin() was kicked off in the background at page load; this
     // just waits on that same result if it hasn't resolved yet.
-    const loggedIn = S.authToken ? await tryAutoLogin() : false;
+    const loggedIn = await tryAutoLogin();
     if (loggedIn) {
       enterLobby();
     } else {
       showPage('pg-auth');
       $('tab-login')?.click();
-      $('login-username')?.focus?.();
+      $('login-email')?.focus?.();
     }
   }
 
@@ -1248,15 +1611,12 @@ function initPermissionControls() {
 }
 
 function initLobbyControls() {
-  $('btn-switch-account')?.addEventListener('click', () => { showPage('pg-auth'); $('tab-login')?.click(); $('login-username')?.focus?.(); });
+  $('btn-switch-account')?.addEventListener('click', () => { showPage('pg-auth'); $('tab-login')?.click(); $('login-email')?.focus?.(); });
   $('score-pill-btn')?.addEventListener('click', openProgressSheet);
 
   $('btn-logout')?.addEventListener('click', async () => {
     try {
-      await fetch(`${SERVER_URL}/api/logout`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${S.authToken}` }
-      });
+      await sb.auth.signOut();
     } catch (e) {}
     S.authToken   = null;
     S.username    = null;
@@ -1272,7 +1632,7 @@ function initLobbyControls() {
     updateProgressText();
     showPage('pg-auth');
     $('tab-login')?.click();
-    $('login-username')?.focus?.();
+    $('login-email')?.focus?.();
   });
 
   const modeToggle = $('mode-toggle');
