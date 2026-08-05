@@ -1016,38 +1016,44 @@ function requestCameraPermission() {
 // Supabase client — initialized in cry.html as window.sb
 const sb = window.sb;
 
-// Holds the in-progress forgot-password OTP request (the email it was
-// sent to) so the verify step knows what to check the code against.
-// OTP is used exclusively for password reset now — login and signup
-// are password-based.
-let _otpContext = null; // { email }
+// Holds the in-progress OTP request (which email it was sent to, and
+// whether we're mid-signup or mid-password-reset) so the verify step
+// knows what to check the code against and what to do once it's valid.
+let _otpContext = null; // { mode: 'signup' | 'reset', email }
 let _resendCooldownTimer = null;
 
-// Shared 60s cooldown across both "send a code" entry points in the
-// forgot-password flow (the initial send and the resend button).
-// Client-side check that surfaces instantly as a toast instead of
-// waiting on a round trip to Supabase's own rate-limit error.
+// Shared 60s cooldown across every "send a code" entry point (signup's
+// "Create account", forgot-password's "Send code", and the OTP screen's
+// "Resend code"). Client-side check that surfaces instantly as a toast
+// instead of waiting on a round trip to Supabase's own rate-limit error.
 const OTP_COOLDOWN_MS = 60 * 1000;
 let _lastOtpRequestAt = 0;
 
 function initAuthControls() {
+  const tabGuest  = $('tab-guest');
   const tabLogin  = $('tab-login');
   const tabSignup = $('tab-signup');
+  const guestForm  = $('auth-guest-form');
   const loginForm  = $('auth-login-form');
   const signupForm = $('auth-signup-form');
   const forgotForm = $('auth-forgot-form');
   const otpForm    = $('auth-otp-form');
   const resetForm  = $('auth-reset-form');
 
-  // Holds the verified session/user from the forgot-password OTP step,
-  // so btn-reset-submit knows who to set the new password for without
-  // asking them to log in again immediately after verifying the code.
+  // Holds the verified session/user from an OTP verify — used by the
+  // "set new password" step (forgot-password flow only; signup verifies
+  // and logs straight in without this).
   let _pendingResetUser = null;
+  // Holds the password the person typed on the signup form, from the
+  // moment we send the OTP until it's verified and we can call
+  // updateUser({ password }) to actually set it.
+  let _pendingSignupPassword = null;
 
   function hideForgotFlow() {
     clearInterval(_resendCooldownTimer);
     _otpContext = null;
     _pendingResetUser = null;
+    _pendingSignupPassword = null;
     if (forgotForm) forgotForm.style.display = 'none';
     if (otpForm)    otpForm.style.display    = 'none';
     if (resetForm)  resetForm.style.display  = 'none';
@@ -1055,19 +1061,15 @@ function initAuthControls() {
 
   function showAuthTab(which) {
     hideForgotFlow();
-    if (which === 'login') {
-      if (loginForm) loginForm.style.display = '';
-      if (signupForm) signupForm.style.display = 'none';
-      tabLogin?.classList.add('active');
-      tabSignup?.classList.remove('active');
-    } else {
-      if (loginForm) loginForm.style.display = 'none';
-      if (signupForm) signupForm.style.display = '';
-      tabSignup?.classList.add('active');
-      tabLogin?.classList.remove('active');
-    }
+    if (guestForm)  guestForm.style.display  = which === 'guest'  ? '' : 'none';
+    if (loginForm)  loginForm.style.display  = which === 'login'  ? '' : 'none';
+    if (signupForm) signupForm.style.display = which === 'signup' ? '' : 'none';
+    tabGuest?.classList.toggle('active',  which === 'guest');
+    tabLogin?.classList.toggle('active',  which === 'login');
+    tabSignup?.classList.toggle('active', which === 'signup');
   }
 
+  tabGuest?.addEventListener('click', () => showAuthTab('guest'));
   tabLogin?.addEventListener('click', () => showAuthTab('login'));
   tabSignup?.addEventListener('click', () => showAuthTab('signup'));
 
@@ -1152,7 +1154,6 @@ function initAuthControls() {
     const email    = ($('login-email')?.value    || '').trim();
     const password = $('login-password')?.value  || '';
     setError('login-error', null);
-    setError('login-info', null);
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
       setError('login-error', 'Enter a valid email address.');
       return;
@@ -1261,7 +1262,9 @@ function initAuthControls() {
     }
   });
 
-  // ── Sign up with email + password ──
+  // ── Sign up: validate fields, then verify identity via a 6-digit
+  // emailed code (instead of a confirmation link) before actually
+  // creating the account with the password they chose. ──
   $('btn-signup')?.addEventListener('click', async () => {
     const username = ($('signup-username')?.value || '').trim();
     const fullName = ($('signup-fullname')?.value || '').trim();
@@ -1291,14 +1294,15 @@ function initAuthControls() {
       setError('signup-error', 'Please agree to the Terms of Service and Privacy Policy.');
       return;
     }
+    if (blockIfOnCooldown('signup-error')) return;
 
     const btn = $('btn-signup');
-    if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending code…'; }
     try {
-      const { data, error } = await sb.auth.signUp({
+      const { error } = await sb.auth.signInWithOtp({
         email,
-        password,
         options: {
+          shouldCreateUser: true,
           // Picked up by the handle_new_user() DB trigger to populate
           // the public.accounts row.
           data: { username, full_name: fullName }
@@ -1308,26 +1312,13 @@ function initAuthControls() {
         setError('signup-error', friendlyAuthError(error));
         return;
       }
-
-      const user    = data?.user;
-      const session = data?.session;
-
-      if (session && user) {
-        // Email confirmation is off in your Supabase project — session
-        // comes back immediately, so log them straight in.
-        const profile = await fetchUserProfile(user.id);
-        const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
-        afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
-      } else {
-        // Normal case: Supabase requires email confirmation before a
-        // session is issued. They'll get a confirmation link by email;
-        // clicking it establishes the session automatically the next
-        // time this page loads (Supabase's client detects it).
-        toast('Check your email to confirm your account!', '📩');
-        showAuthTab('login');
-        setError('login-error', null);
-        setError('login-info', `We sent a confirmation link to ${email}. Click it, then log in here.`);
-      }
+      _lastOtpRequestAt = Date.now();
+      toast('Code sent — check your email!', '📩');
+      // Held onto until the code is verified, then used to actually set
+      // their password via updateUser() — see btn-otp-verify below.
+      _pendingSignupPassword = password;
+      _otpContext = { mode: 'signup', email };
+      showOtpStep(email);
     } catch (e) {
       setError('signup-error', 'Could not reach Supabase. Try again in a moment.');
     } finally {
@@ -1372,7 +1363,7 @@ function initAuthControls() {
       }
       _lastOtpRequestAt = Date.now();
       toast('Code sent — check your email!', '📩');
-      _otpContext = { email };
+      _otpContext = { mode: 'reset', email };
       showOtpStep(email);
     } catch (e) {
       setError('forgot-error', 'Could not reach Supabase. Try again in a moment.');
@@ -1382,6 +1373,9 @@ function initAuthControls() {
   });
 
   function showOtpStep(email) {
+    if (guestForm)  guestForm.style.display  = 'none';
+    if (loginForm)  loginForm.style.display  = 'none';
+    if (signupForm) signupForm.style.display = 'none';
     if (forgotForm) forgotForm.style.display = 'none';
     if (otpForm)    otpForm.style.display    = '';
     if (resetForm)  resetForm.style.display  = 'none';
@@ -1445,8 +1439,34 @@ function initAuthControls() {
         return;
       }
 
-      // Code confirmed identity — now let them pick a new password
-      // instead of logging straight in.
+      if (_otpContext.mode === 'signup') {
+        // Identity confirmed — set the password they chose on the
+        // signup form, then log them straight in. No separate
+        // "set new password" step needed; we already have it.
+        clearInterval(_resendCooldownTimer);
+        const password = _pendingSignupPassword;
+        _otpContext = null;
+        _pendingSignupPassword = null;
+        try {
+          if (password) await sb.auth.updateUser({ password });
+        } catch (pwErr) {
+          console.warn('Could not set chosen password after signup verify:', pwErr);
+          // Not fatal — they're verified and logged in either way; they
+          // can set a password later via "Forgot password?" if this failed.
+        }
+        const profile = await fetchUserProfile(user.id);
+        const username =
+          profile?.username ||
+          user.user_metadata?.username ||
+          user.email?.split('@')[0] ||
+          'User';
+        const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
+        afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
+        return;
+      }
+
+      // Reset-password mode: code confirmed identity — now let them
+      // pick a new password instead of logging straight in.
       clearInterval(_resendCooldownTimer);
       _pendingResetUser = { user, session };
       if (otpForm)   otpForm.style.display   = 'none';
@@ -1472,7 +1492,7 @@ function initAuthControls() {
     try {
       const { error } = await sb.auth.signInWithOtp({
         email: _otpContext.email,
-        options: { shouldCreateUser: false }
+        options: { shouldCreateUser: _otpContext.mode === 'signup' }
       });
       if (error) {
         setError('otp-error', friendlyAuthError(error));
@@ -1486,13 +1506,20 @@ function initAuthControls() {
     }
   });
 
-  // ── Back to the "request a code" step ──
+  // ── Back to the previous step (signup form, or the forgot-password
+  // "request a code" step, depending on how we got here) ──
   $('btn-otp-back')?.addEventListener('click', () => {
     clearInterval(_resendCooldownTimer);
+    const mode = _otpContext?.mode;
     _otpContext = null;
     _pendingResetUser = null;
+    _pendingSignupPassword = null;
     if (otpForm) otpForm.style.display = 'none';
-    if (forgotForm) forgotForm.style.display = '';
+    if (mode === 'signup') {
+      if (signupForm) signupForm.style.display = '';
+    } else {
+      if (forgotForm) forgotForm.style.display = '';
+    }
   });
 
   // ── Forgot password step 3: set the new password ──
