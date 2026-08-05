@@ -1190,6 +1190,77 @@ function initAuthControls() {
     }
   });
 
+  // ── Live username availability check (Instagram-style) ──
+  // Requires a `is_username_taken(p_username text) returns boolean` RPC
+  // function in Supabase (SECURITY DEFINER) — see setup notes. Plain
+  // client-side SELECT against public.accounts won't work once RLS is
+  // locked down to "users can only see their own row", since an
+  // anonymous signup has no row yet to be "their own".
+  let _usernameCheckTimer = null;
+  let _usernameCheckToken = 0; // guards against out-of-order async replies
+  let _usernameCheck = { username: null, available: null }; // available: null=unknown, true/false=result for `username`
+
+  function setUsernameStatus(state, msg) {
+    const el = $('signup-username-status');
+    if (!el) return;
+    el.className = 'username-status' + (state ? ` username-status-${state}` : '');
+    el.textContent = msg || '';
+    el.style.display = msg ? 'flex' : 'none';
+  }
+
+  async function checkUsernameAvailability(username) {
+    const myToken = ++_usernameCheckToken;
+    setUsernameStatus('pending', 'Checking availability…');
+    try {
+      const { data, error } = await sb.rpc('is_username_taken', { p_username: username });
+      if (myToken !== _usernameCheckToken) return; // a newer keystroke superseded this check
+      if (error) {
+        // RPC missing/misconfigured, or a network hiccup — fail open.
+        // The DB's unique constraint on accounts.username (see setup
+        // notes) is the real backstop against duplicates either way.
+        console.warn('is_username_taken check failed:', error.message);
+        _usernameCheck = { username, available: null };
+        setUsernameStatus(null, '');
+        return;
+      }
+      const taken = !!data;
+      _usernameCheck = { username, available: !taken };
+      setUsernameStatus(
+        taken ? 'bad' : 'ok',
+        taken ? '✕ That username is taken — try another.' : '✓ Username is available'
+      );
+    } catch (e) {
+      if (myToken !== _usernameCheckToken) return;
+      _usernameCheck = { username, available: null };
+      setUsernameStatus(null, '');
+    }
+  }
+
+  const usernameInput = $('signup-username');
+  usernameInput?.addEventListener('input', () => {
+    const val = usernameInput.value.trim();
+    clearTimeout(_usernameCheckTimer);
+    _usernameCheckToken++; // invalidate any in-flight check immediately
+    if (!val) {
+      setUsernameStatus(null, '');
+      return;
+    }
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(val)) {
+      setUsernameStatus('bad', '3–24 characters: letters, numbers, underscore only.');
+      return;
+    }
+    _usernameCheckTimer = setTimeout(() => checkUsernameAvailability(val), 450);
+  });
+  // Catches the case where someone types then tabs/clicks away fast
+  // enough that the debounce timer hasn't fired yet.
+  usernameInput?.addEventListener('blur', () => {
+    const val = usernameInput.value.trim();
+    if (/^[a-zA-Z0-9_]{3,24}$/.test(val) && _usernameCheck.username !== val) {
+      clearTimeout(_usernameCheckTimer);
+      checkUsernameAvailability(val);
+    }
+  });
+
   // ── Sign up with email + password ──
   $('btn-signup')?.addEventListener('click', async () => {
     const username = ($('signup-username')?.value || '').trim();
@@ -1201,6 +1272,11 @@ function initAuthControls() {
 
     if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
       setError('signup-error', 'Username must be 3–24 characters: letters, numbers, underscore only.');
+      return;
+    }
+    if (_usernameCheck.username === username && _usernameCheck.available === false) {
+      setError('signup-error', 'That username is taken — please choose a different one.');
+      $('signup-username')?.focus();
       return;
     }
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
