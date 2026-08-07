@@ -180,11 +180,16 @@ img { display: block; max-width: 100%; }
 .sakura-topbar .brand-sub {
   margin-top: 2px;
 }
-.topbar-logo {
-  width: 136px;
-  height: 136px;
-  border-radius: 10px;
-  object-fit: contain;
+.topbar-logo{
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    max-width: 36px;
+    max-height: 36px;
+    object-fit: contain;
+    display: block;
+    flex-shrink: 0;
 }
 
 .topbar-wordmark{
