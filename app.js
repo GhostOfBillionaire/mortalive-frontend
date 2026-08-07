@@ -1016,6 +1016,15 @@ function requestCameraPermission() {
 // Supabase client — initialized in cry.html as window.sb
 const sb = window.sb;
 
+// Captured synchronously, before Supabase's client has a chance to
+// parse/strip the URL — tells "just followed a confirmation link"
+// apart from "ordinary page load with an already-persisted session".
+// Only used to gate the link-based sign-in fallback below; never
+// touched again after this.
+const _arrivedViaAuthRedirect = /access_token=|refresh_token=|[?&]code=/.test(
+  window.location.hash + window.location.search
+);
+
 // Holds the in-progress OTP request (which email it was sent to, and
 // whether we're mid-signup or mid-password-reset) so the verify step
 // knows what to check the code against and what to do once it's valid.
@@ -1048,6 +1057,13 @@ function initAuthControls() {
   // moment we send the OTP until it's verified and we can call
   // updateUser({ password }) to actually set it.
   let _pendingSignupPassword = null;
+  // Set true for the duration of any Supabase call we already handle
+  // manually (password login, typed-code verify) so the global
+  // onAuthStateChange listener below — which exists to catch sign-ins
+  // that happen with no button click at all, i.e. the email's
+  // "Confirm & continue" button — doesn't also try to process the
+  // exact same sign-in a second time.
+  let _suppressAutoSignedIn = false;
 
   function hideForgotFlow() {
     clearInterval(_resendCooldownTimer);
@@ -1164,6 +1180,7 @@ function initAuthControls() {
     }
     const btn = $('btn-login');
     if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
+    _suppressAutoSignedIn = true;
     try {
       const { data, error } = await sb.auth.signInWithPassword({ email, password });
       if (error) {
@@ -1187,6 +1204,7 @@ function initAuthControls() {
     } catch (e) {
       setError('login-error', 'Could not reach Supabase. Try again in a moment.');
     } finally {
+      _suppressAutoSignedIn = false;
       if (btn) { btn.disabled = false; btn.textContent = 'Sign in →'; }
     }
   });
@@ -1305,7 +1323,11 @@ function initAuthControls() {
           shouldCreateUser: true,
           // Picked up by the handle_new_user() DB trigger to populate
           // the public.accounts row.
-          data: { username, full_name: fullName }
+          data: { username, full_name: fullName },
+          // So the email's "Confirm & continue" button lands back on
+          // this exact page instead of whatever Site URL is configured
+          // in the Supabase dashboard.
+          emailRedirectTo: window.location.href
         }
       });
       if (error) {
@@ -1355,7 +1377,7 @@ function initAuthControls() {
     try {
       const { error } = await sb.auth.signInWithOtp({
         email,
-        options: { shouldCreateUser: false }
+        options: { shouldCreateUser: false, emailRedirectTo: window.location.href }
       });
       if (error) {
         setError('forgot-error', friendlyAuthError(error));
@@ -1421,6 +1443,7 @@ function initAuthControls() {
 
     const btn = $('btn-otp-verify');
     if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
+    _suppressAutoSignedIn = true;
     try {
       const { data, error } = await sb.auth.verifyOtp({
         email: _otpContext.email,
@@ -1477,6 +1500,7 @@ function initAuthControls() {
     } catch (e) {
       setError('otp-error', 'Could not reach Supabase. Try again in a moment.');
     } finally {
+      _suppressAutoSignedIn = false;
       if (btn) { btn.disabled = false; btn.textContent = 'Verify code →'; }
     }
   });
@@ -1492,7 +1516,10 @@ function initAuthControls() {
     try {
       const { error } = await sb.auth.signInWithOtp({
         email: _otpContext.email,
-        options: { shouldCreateUser: _otpContext.mode === 'signup' }
+        options: {
+          shouldCreateUser: _otpContext.mode === 'signup',
+          emailRedirectTo: window.location.href
+        }
       });
       if (error) {
         setError('otp-error', friendlyAuthError(error));
@@ -1582,6 +1609,84 @@ function initAuthControls() {
 
   const guestInput = $('guest-name');
   if (guestInput && S.guestName) guestInput.value = S.guestName;
+
+  // ── Handles a sign-in that happened with no button click on THIS
+  // page — i.e. someone clicked the "Confirm & continue" button in the
+  // email instead of typing the 6-digit code. Reached two ways:
+  //  1. Same browser, a DIFFERENT tab than the one showing the OTP
+  //     screen (the common case — email links usually open a new tab).
+  //     Supabase's client syncs sessions across tabs of the same origin
+  //     automatically, so this tab's onAuthStateChange fires too, and
+  //     _pendingSignupPassword is still sitting in this tab's memory
+  //     since it never navigated away.
+  //  2. This exact tab, reloaded fresh by following the link directly
+  //     (memory is wiped by the navigation — no password to fall back
+  //     on, so we ask for one via the same screen used for password
+  //     reset).
+  async function handleLinkBasedSignIn(user, session) {
+    if (_pendingSignupPassword) {
+      const password = _pendingSignupPassword;
+      clearInterval(_resendCooldownTimer);
+      _otpContext = null;
+      _pendingSignupPassword = null;
+      try {
+        await sb.auth.updateUser({ password });
+      } catch (pwErr) {
+        console.warn('Could not set chosen password after link-based confirm:', pwErr);
+      }
+      const profile = await fetchUserProfile(user.id);
+      const username =
+        profile?.username ||
+        user.user_metadata?.username ||
+        user.email?.split('@')[0] ||
+        'User';
+      const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
+      afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
+      return;
+    }
+
+    // No password in memory. Only treat this as "just followed a
+    // confirmation link" if the URL this page loaded with actually
+    // looks like a Supabase auth redirect — never on an ordinary
+    // revisit where a session simply already existed.
+    if (!_arrivedViaAuthRedirect || S.authToken) return;
+
+    showPage('pg-auth');
+    if (guestForm)  guestForm.style.display  = 'none';
+    if (loginForm)  loginForm.style.display  = 'none';
+    if (signupForm) signupForm.style.display = 'none';
+    if (forgotForm) forgotForm.style.display = 'none';
+    if (otpForm)    otpForm.style.display    = 'none';
+    if (resetForm)  resetForm.style.display  = '';
+    clearInterval(_resendCooldownTimer);
+    _otpContext = null;
+    _pendingResetUser = { user, session };
+    setError('reset-error', null);
+    toast('Email confirmed — set a password to finish.', '✅');
+    const pw = $('reset-password');
+    if (pw) { pw.value = ''; pw.focus(); }
+  }
+
+  // Keep S.* in sync if the Supabase session changes in another tab, or
+  // expires/gets revoked while this tab is open — and catch sign-ins
+  // that happen via the email's link button rather than a click here.
+  sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_OUT') {
+      S.authToken   = null;
+      S.username    = null;
+      S.userId      = null;
+      S.crockroachScore = null;
+      S.isGuest     = true;
+      _autoLoginPromise = null;
+      localStorage.removeItem('mortalive_token');
+      localStorage.removeItem('mortalive_username');
+      localStorage.removeItem('mortalive_user_id');
+      return;
+    }
+    if (event === 'SIGNED_IN' && session && !_suppressAutoSignedIn) {
+      handleLinkBasedSignIn(session.user, session);
+    }
+  });
 }
 
 // Fetches the row from public.accounts for the given auth user id.
@@ -1647,22 +1752,6 @@ async function tryAutoLogin() {
   })();
   return _autoLoginPromise;
 }
-
-// Keep S.* in sync if the Supabase session changes in another tab, or
-// expires/gets revoked while this tab is open.
-sb.auth.onAuthStateChange((event) => {
-  if (event === 'SIGNED_OUT') {
-    S.authToken   = null;
-    S.username    = null;
-    S.userId      = null;
-    S.crockroachScore = null;
-    S.isGuest     = true;
-    _autoLoginPromise = null;
-    localStorage.removeItem('mortalive_token');
-    localStorage.removeItem('mortalive_username');
-    localStorage.removeItem('mortalive_user_id');
-  }
-});
 
 function initLandingActions() {
   const continueBtn = $('btn-enter') || $('btn-start');
