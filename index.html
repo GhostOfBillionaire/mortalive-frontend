@@ -186,6 +186,14 @@ img { display: block; max-width: 100%; }
   border-radius: 10px;
   object-fit: contain;
 }
+
+.topbar-wordmark{
+  display:block;
+  height:28px;
+  width:auto;
+  object-fit:contain;
+}
+
 .brand-name {
   font-size: 17px;
   font-weight: 800;
@@ -2386,11 +2394,12 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
   <!-- Topbar -->
   <div class="sakura-topbar" role="banner" aria-label="Mortalive header">
     <a class="sakura-brand" href="#" aria-label="Mortalive home">
-      <div>
-        <div class="brand-name">mortalive</div>
-        <div class="brand-sub">Connect with the world</div>
-      </div>
-    </a>
+  <img class="topbar-logo" src="https://res.cloudinary.com/yvjzeilj/image/upload/v1786110689/IMG_20260807_180515_ymdcdi.png" alt="Mortalive Logo">
+  <div class="brand-stack">
+    <img class="topbar-wordmark" src="https://res.cloudinary.com/yvjzeilj/image/upload/v1786095311/IMG_20260807_150053_awyczn.png" alt="Mortalive">
+    <div class="brand-sub">Connect with the world</div>
+  </div>
+</a>
     <nav class="sakura-nav" aria-label="Primary">
       <a href="about.html">About</a>
       <a href="safety.html">Safety</a>
