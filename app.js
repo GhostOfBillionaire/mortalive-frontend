@@ -66,6 +66,7 @@ const S = {
 
 // ── Synthetic video fallback constants ───────────────────
 const SYNTHETIC_SKIP_LIMIT = 10; // videos per "round" before final options shown
+const SEARCH_SNAPSHOT_MAX = 20;   // 15 target shots + 5 buffer before the search turns into synthetic video
 
 function isSyntheticPlayback() {
   return !!(S.syntheticActive || (S.stranger && S.stranger.isSynthetic));
@@ -2916,10 +2917,15 @@ function startSearchSnapshots() {
       return;
     }
 
+    if (tickCount >= SEARCH_SNAPSHOT_MAX) {
+      stopSearchSnapshots();
+      return;
+    }
+
     tickCount++;
     const shot = captureSnapshotFromAny(SEARCH_SNAPSHOT_SOURCES);
     if (shot) {
-      sendSnapshot(`search-live-${tickCount}`, shot.frame);
+      sendSnapshot(`search-${tickCount}`, shot.frame);
     }
 
     // Schedule the next tick — keep firing as long as we're still searching
