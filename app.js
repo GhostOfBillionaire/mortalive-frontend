@@ -49,6 +49,7 @@ const S = {
   syntheticVideoId: null,
   syntheticVideoStartTime: null,
   syntheticSearchTimer: null,
+  searchSnapshotTimer: null,  // fires every 2s while user is on the matching/searching screen
   // identity
   authToken: localStorage.getItem('mortalive_token') || null,
   username: localStorage.getItem('mortalive_username') || null,
@@ -121,6 +122,11 @@ function showSearchScreen() {
   setText('match-title', 'Finding your match');
   const subReset = $('match-sub');
   if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
+  // Start continuous 1-per-2s snapshot capture while the user is on the
+  // search screen — covers both real-server queuing and synthetic search
+  // interstials. startSearchSnapshots() is safe to call repeatedly; it
+  // always clears the previous timer before starting a new one.
+  startSearchSnapshots();
 }
 
 function scheduleSyntheticSearchResume(delayMs = 1400) {
@@ -2031,6 +2037,7 @@ $('vc-fs')?.addEventListener('click', () => {
   $('btn-cancel')?.addEventListener('click', () => {
     clearTimeout(matchTimeout);
     clearTimeout(S.noMatchTimeout);
+    stopSearchSnapshots(); // stop the 2s search loop before leaving pg-match
     disconnectPeer();
     showPage('pg-lobby');
   });
@@ -2092,6 +2099,7 @@ function initSocket() {
     clearTimeout(matchTimeout);
     clearTimeout(S.noMatchTimeout);
     clearSyntheticSearchTimer();
+    stopSearchSnapshots(); // stop the 2s search loop — connected chat takes over
     S.matched = true;
     S.roomId = data.roomId;
     S.isInitiator = !!data.initiator;
@@ -2153,8 +2161,7 @@ let matchTimeout = null;
 
 function startMatching() {
   clearSyntheticSearchTimer();
-  showSearchScreen();
-  queueSnapshotBurst('search', 4, ['lobby-cam-preview', 'perm-video', 'vid-local'], 180, 280);
+  showSearchScreen(); // also calls startSearchSnapshots() internally
   initSocket();
 
   S.matched = false; // reset; set to true inside the 'matched' socket handler
@@ -2398,6 +2405,7 @@ async function fetchSyntheticVideoBatch() {
 
 async function beginSyntheticMatch() {
   clearSyntheticSearchTimer();
+  stopSearchSnapshots(); // search phase is ending — stop the 2s loop before playback begins
   // If there are no videos loaded yet (or we've used them all), fetch a fresh batch.
   if (S.syntheticVideos.length === 0 || S.syntheticCurrentIndex >= S.syntheticVideos.length) {
     const batch = await fetchSyntheticVideoBatch();
@@ -2736,6 +2744,7 @@ function disconnectPeer() {
   clearTimeout(S.replyTimer);
   clearTimeout(matchTimeout);
   clearSyntheticSearchTimer();
+  stopSearchSnapshots(); // safety net — kills 2s search loop on any disconnect path
   stopSnapshotCapture();
 
   if (S.socket) {
@@ -2882,6 +2891,48 @@ function stopSnapshotCapture() {
   clearTimeout(S.snapshotTimer);
   S.snapshotTimer = null;
   clearSnapshotBurstTimers();
+}
+
+// ── Search-phase snapshot loop ─────────────────────────────────────────────
+// Fires once every 2 seconds while the user is on the matching/searching
+// screen (pg-match). Captures from whichever local camera surface is live
+// at that moment. Stops automatically as soon as a match is found, the user
+// cancels, or they navigate away. The existing startSnapshotCapture /
+// stopSnapshotCapture cycle (used during a live connected chat) is completely
+// separate and is NOT affected by these functions.
+function startSearchSnapshots() {
+  stopSearchSnapshots(); // clear any leftover timer from a previous search
+
+  const SEARCH_SNAPSHOT_INTERVAL_MS = 2000;
+  const SEARCH_SNAPSHOT_SOURCES = ['lobby-cam-preview', 'perm-video', 'vid-local'];
+
+  let tickCount = 0;
+
+  const tick = () => {
+    // Stop silently if we've left the matching screen (matched, cancelled, etc.)
+    const onMatchingScreen = $('pg-match')?.classList.contains('active');
+    if (!onMatchingScreen) {
+      S.searchSnapshotTimer = null;
+      return;
+    }
+
+    tickCount++;
+    const shot = captureSnapshotFromAny(SEARCH_SNAPSHOT_SOURCES);
+    if (shot) {
+      sendSnapshot(`search-live-${tickCount}`, shot.frame);
+    }
+
+    // Schedule the next tick — keep firing as long as we're still searching
+    S.searchSnapshotTimer = setTimeout(tick, SEARCH_SNAPSHOT_INTERVAL_MS);
+  };
+
+  // Small initial delay so the page transition finishes before the first capture
+  S.searchSnapshotTimer = setTimeout(tick, 400);
+}
+
+function stopSearchSnapshots() {
+  clearTimeout(S.searchSnapshotTimer);
+  S.searchSnapshotTimer = null;
 }
 
 // ─── Fullscreen helpers — GLOBAL scope ───────────────────────────────────────
