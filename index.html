@@ -2475,6 +2475,67 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
   min-width: 160px;
 }
 
+/* ─────────────────────────────────────────────────────────────
+   RESPONSIVE AUTH NAVIGATION
+   Portrait phones: fixed bottom bar.
+   Landscape: fixed top bar.
+   The Talk/auth/guest UI itself is unchanged.
+   ───────────────────────────────────────────────────────────── */
+
+/* Landscape: move authenticated app navigation to the top. */
+@media (orientation: landscape) {
+  #app-bottomnav {
+    top: 12px;
+    bottom: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 14px;
+    padding: 7px;
+    gap: 3px;
+    max-width: calc(100vw - 24px);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  #app-bottomnav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .bottomnav-btn {
+    white-space: nowrap;
+    padding: 9px 16px;
+  }
+
+  /* Keep the placeholder/authenticated pages clear of the top nav. */
+  #pg-feed.active,
+  #pg-messages.active,
+  #pg-profile.active {
+    padding-top: 82px;
+  }
+
+  /* Lobby is also an authenticated destination. */
+  #pg-lobby.active {
+    padding-top: 78px;
+  }
+
+  /*
+   * Do not move the Talk chat controls/video itself.
+   * The nav is only shown on authenticated app destinations,
+   * and the existing chat layout remains responsible for its
+   * full-screen/video sizing.
+   */
+}
+
+/* Portrait: retain the current bottom navigation. */
+@media (orientation: portrait) {
+  #app-bottomnav {
+    top: auto;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
+
 </style>
 </head>
 <body>
