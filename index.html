@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive — Connect with the world</title>
-  <!-- Social and share preview metadata -->
+  <!-- Social/share preview metadata -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Mortalive">
   <meta property="og:title" content="Mortalive — Natural social connection">
@@ -2449,13 +2449,6 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
   flex-wrap: wrap;
   margin-top: 22px;
 }
-
-/* Guest shell: Talk only — hide option bars/tabs for logged-out visitors. */
-body.guest-shell .sakura-nav,
-body.guest-shell #app-bottomnav {
-  display: none !important;
-}
-
 #app-bottomnav {
   position: fixed;
   left: 50%;
@@ -2592,18 +2585,6 @@ body.guest-shell #app-bottomnav {
 </style>
 </head>
 <body>
-
-<script>
-  (function () {
-    try {
-      var hasToken = !!localStorage.getItem('mortalive_token');
-      if (!hasToken) document.body.classList.add('guest-shell');
-    } catch (e) {
-      document.body.classList.add('guest-shell');
-    }
-  })();
-</script>
-
 
 <!-- ═══════════════════ LANDING ═══════════════════ -->
 <section id="pg-land" class="page active">
@@ -3440,7 +3421,7 @@ body.guest-shell #app-bottomnav {
 
     // Guests get Talk only. The navigation is not merely disabled:
     // it is completely removed from the visible UI for guest sessions.
-    if (isGuest || document.body.classList.contains('guest-shell')) {
+    if (isGuest) {
       nav.style.display = 'none';
       nav.setAttribute('aria-hidden', 'true');
       nav.querySelectorAll('.bottomnav-btn').forEach((btn) => {
@@ -3462,14 +3443,12 @@ body.guest-shell #app-bottomnav {
   const originalShowPage = window.showPage;
   if (typeof originalShowPage === 'function') {
     window.showPage = function (id) {
-      if ((window.S && window.S.isGuest) || document.body.classList.contains('guest-shell')) {
-        if (['pg-feed', 'pg-messages', 'pg-profile'].includes(id)) {
-          id = 'pg-auth';
-          setTimeout(() => {
-            const tabLogin = document.getElementById('tab-login');
-            if (tabLogin) tabLogin.click();
-          }, 0);
-        }
+      if (window.S && window.S.isGuest && ['pg-feed', 'pg-messages', 'pg-profile'].includes(id)) {
+        id = 'pg-auth';
+        setTimeout(() => {
+          const tabLogin = document.getElementById('tab-login');
+          if (tabLogin) tabLogin.click();
+        }, 0);
       }
 
       originalShowPage(id);
@@ -3510,7 +3489,7 @@ body.guest-shell #app-bottomnav {
     if (active) syncBottomNav(active.id);
   });
 
-  // Defensive fallback: if a guest session is restored after app startup,
+  // Defensive hidden fallback: if a guest session is restored after app startup,
   // remove the authenticated navigation without waiting for a click.
   const guestNavGuard = window.setInterval(() => {
     const active = document.querySelector('.page.active');
