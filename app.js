@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-07-28-synthetic-video'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-09-talk-only'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -684,7 +684,25 @@ function ready(fn) {
   }
 }
 
+// Phase 1 app boundary: only the landing/auth/permission/Talk pages are
+// shipped in this build. Feed, Messages and Profile are intentionally not
+// part of the guest or authenticated shell yet. When those pages are added
+// later, extend this allowlist in one place instead of exposing hidden pages
+// through ad-hoc navigation.
+const TALK_PAGE_IDS = new Set([
+  'pg-land',
+  'pg-auth',
+  'pg-perm',
+  'pg-lobby',
+  'pg-match',
+  'pg-chat'
+]);
+
 function showPage(id) {
+  if (!TALK_PAGE_IDS.has(id)) {
+    console.warn('[Mortalive] Blocked navigation to non-Talk page:', id);
+    return;
+  }
   document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
   const page = $(id);
   if (page) page.classList.add('active');
