@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive — Connect with the world</title>
+  <!-- Social/share preview metadata -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Mortalive">
+  <meta property="og:title" content="Mortalive — Natural social connection">
+  <meta property="og:description" content="Connect with strangers worldwide in seconds. Private by default, fast by design.">
+  <meta property="og:url" content="https://mortalive.com/">
+  <meta property="og:image" content="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png">
+  <meta property="og:image:alt" content="Mortalive">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Mortalive — Natural social connection">
+  <meta name="twitter:description" content="Connect with strangers worldwide in seconds. Private by default, fast by design.">
+  <meta name="twitter:image" content="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Playfair+Display:ital,wght@1,600;1,700;1,800&display=swap" rel="stylesheet">
@@ -2436,6 +2449,13 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
   flex-wrap: wrap;
   margin-top: 22px;
 }
+
+/* Guest shell: Talk only — hide option bars/tabs for logged-out visitors. */
+body.guest-shell .sakura-nav,
+body.guest-shell #app-bottomnav {
+  display: none !important;
+}
+
 #app-bottomnav {
   position: fixed;
   left: 50%;
@@ -2573,6 +2593,18 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
 </head>
 <body>
 
+<script>
+  (function () {
+    try {
+      var hasToken = !!localStorage.getItem('mortalive_token');
+      if (!hasToken) document.body.classList.add('guest-shell');
+    } catch (e) {
+      document.body.classList.add('guest-shell');
+    }
+  })();
+</script>
+
+
 <!-- ═══════════════════ LANDING ═══════════════════ -->
 <section id="pg-land" class="page active">
 <div class="wrap landing-shell">
@@ -2605,7 +2637,7 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
     <p class="hero-sub">
       Connect with strangers worldwide in seconds.
       Private by default, fast by design, always in your control.
-    </p>
+    </p style="color:#fff !important;">
 
     <!-- Stats row -->
     <div class="hero-stats">
@@ -2627,7 +2659,7 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
         <span class="consent-box" aria-hidden="true"></span>
         <span class="consent-text">
           <span class="consent-lead">By continuing</span> you agree to Mortalive's
-          <a href="terms.html">terms</a> and
+          <a href="terms.html" style="color:#fff !important;">terms</a> and
           <a href="privacy.html">privacy</a> policy.
         </span>
       </label>
@@ -3408,7 +3440,7 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
 
     // Guests get Talk only. The navigation is not merely disabled:
     // it is completely removed from the visible UI for guest sessions.
-    if (isGuest) {
+    if (isGuest || document.body.classList.contains('guest-shell')) {
       nav.style.display = 'none';
       nav.setAttribute('aria-hidden', 'true');
       nav.querySelectorAll('.bottomnav-btn').forEach((btn) => {
@@ -3430,12 +3462,14 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
   const originalShowPage = window.showPage;
   if (typeof originalShowPage === 'function') {
     window.showPage = function (id) {
-      if (window.S && window.S.isGuest && ['pg-feed', 'pg-messages', 'pg-profile'].includes(id)) {
-        id = 'pg-auth';
-        setTimeout(() => {
-          const tabLogin = document.getElementById('tab-login');
-          if (tabLogin) tabLogin.click();
-        }, 0);
+      if ((window.S && window.S.isGuest) || document.body.classList.contains('guest-shell')) {
+        if (['pg-feed', 'pg-messages', 'pg-profile'].includes(id)) {
+          id = 'pg-auth';
+          setTimeout(() => {
+            const tabLogin = document.getElementById('tab-login');
+            if (tabLogin) tabLogin.click();
+          }, 0);
+        }
       }
 
       originalShowPage(id);
