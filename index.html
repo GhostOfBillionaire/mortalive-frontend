@@ -131,7 +131,6 @@ img { display: block; max-width: 100%; }
     width: 100%;
     background-position: center top;
     background-size: cover;
-    opacity: .18;
     -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
     mask-image:         linear-gradient(to bottom, black 60%, transparent 100%);
   }
@@ -2536,6 +2535,40 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
   }
 }
 
+/* Dark film over the landing background image only.
+   The existing background image/fade remains untouched underneath. */
+#pg-land {
+  isolation: isolate;
+}
+
+#pg-land::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: min(100vh, 900px);
+  z-index: 0;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.60);
+  -webkit-mask-image: linear-gradient(to bottom, black 78%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 78%, transparent 100%);
+}
+
+@media (max-width: 900px) {
+  #pg-land::after {
+    height: min(100vh, 980px);
+    -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+    mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+  }
+}
+
+/* Keep all actual landing content above the film. */
+#pg-land > * {
+  position: relative;
+  z-index: 1;
+}
+
 </style>
 </head>
 <body>
@@ -3173,7 +3206,7 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
   </div>
 </section>
 
-<nav id="app-bottomnav" aria-label="Authenticated navigation">
+<nav id="app-bottomnav" aria-label="Authenticated navigation" aria-hidden="true">
   <button class="bottomnav-btn" type="button" data-bottom-page="pg-lobby">Talk</button>
   <button class="bottomnav-btn" type="button" data-bottom-page="pg-feed">Feed</button>
   <button class="bottomnav-btn" type="button" data-bottom-page="pg-messages">Messages</button>
@@ -3372,10 +3405,24 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
     if (!nav) return;
 
     const isGuest = !!(window.S && window.S.isGuest);
-    const showNav = !isGuest && AUTH_PAGES.has(pageId);
+
+    // Guests get Talk only. The navigation is not merely disabled:
+    // it is completely removed from the visible UI for guest sessions.
+    if (isGuest) {
+      nav.style.display = 'none';
+      nav.setAttribute('aria-hidden', 'true');
+      nav.querySelectorAll('.bottomnav-btn').forEach((btn) => {
+        btn.setAttribute('tabindex', '-1');
+      });
+      return;
+    }
+
+    const showNav = AUTH_PAGES.has(pageId);
     nav.style.display = showNav ? 'flex' : 'none';
+    nav.setAttribute('aria-hidden', showNav ? 'false' : 'true');
 
     nav.querySelectorAll('.bottomnav-btn').forEach((btn) => {
+      btn.setAttribute('tabindex', showNav ? '0' : '-1');
       btn.classList.toggle('active', btn.dataset.bottomPage === pageId);
     });
   }
@@ -3421,6 +3468,20 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
     const active = document.querySelector('.page.active');
     if (active) syncBottomNav(active.id);
   });
+
+  // Auth/session changes can happen without showPage() being called.
+  // Re-sync the navigation whenever the app's public state changes.
+  window.addEventListener('mortalive-auth-state', () => {
+    const active = document.querySelector('.page.active');
+    if (active) syncBottomNav(active.id);
+  });
+
+  // Defensive fallback: if a guest session is restored after app startup,
+  // remove the authenticated navigation without waiting for a click.
+  const guestNavGuard = window.setInterval(() => {
+    const active = document.querySelector('.page.active');
+    if (active) syncBottomNav(active.id);
+  }, 1000);
 })();
 </script>
 
