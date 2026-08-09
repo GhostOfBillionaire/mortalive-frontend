@@ -2462,7 +2462,8 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
   margin-top: 22px;
 }
 
-/* Guest shell: Talk only — hide option bars/tabs for logged-out visitors. */
+/* Guest shell: Talk only — hide option bars/tabs/topbar for logged-out visitors. */
+body.guest-shell .sakura-topbar,
 body.guest-shell .sakura-nav,
 body.guest-shell #app-bottomnav {
   display: none !important;
@@ -4021,24 +4022,21 @@ body.guest-shell #app-bottomnav {
   // Expose for other parts of the app
   window.syncProfileUI = syncProfileUI;
 
-  // Sync profile UI whenever the page becomes visible
-  const originalShowPage = window.showPage;
-  if (typeof originalShowPage === 'function') {
-    window.showPage = function(pageId) {
-      originalShowPage(pageId);
-      if (pageId === 'pg-profile') {
-        setTimeout(syncProfileUI, 100);
-      }
-    };
-  }
-
-  // Also watch for visibility changes
+  // Sync profile UI whenever visibility changes
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
       const activePage = document.querySelector('.page.active');
       if (activePage && activePage.id === 'pg-profile') {
         syncProfileUI();
       }
+    }
+  });
+
+  // Sync on page show event
+  window.addEventListener('pageshow', () => {
+    const activePage = document.querySelector('.page.active');
+    if (activePage && activePage.id === 'pg-profile') {
+      syncProfileUI();
     }
   });
 })();
@@ -4183,23 +4181,47 @@ body.guest-shell #app-bottomnav {
 
       originalShowPage(id);
       syncBottomNav(id);
+      
+      // Sync profile if navigating to profile page
+      if (id === 'pg-profile' && typeof window.syncProfileUI === 'function') {
+        setTimeout(window.syncProfileUI, 50);
+      }
     };
   }
 
   document.addEventListener('click', (ev) => {
-    const btn = ev.target.closest?.('[data-bottom-page]');
+    // Find the button with data-bottom-page attribute
+    const btn = ev.target.closest('[data-bottom-page]');
     if (!btn) return;
-    ev.preventDefault?.();
+    
+    ev.preventDefault();
+    ev.stopPropagation();
+    
     const target = btn.dataset.bottomPage;
-    if (window.S && window.S.isGuest && ['pg-feed', 'pg-messages', 'pg-profile'].includes(target)) {
-      window.showPage?.('pg-auth');
-      setTimeout(() => {
-        const tabLogin = document.getElementById('tab-login');
-        if (tabLogin) tabLogin.click();
-      }, 0);
-      return;
+    
+    // Redirect guests to auth
+    if ((window.S && window.S.isGuest) || document.body.classList.contains('guest-shell')) {
+      if (['pg-feed', 'pg-messages', 'pg-profile'].includes(target)) {
+        if (typeof window.showPage === 'function') {
+          window.showPage('pg-auth');
+        }
+        setTimeout(() => {
+          const tabLogin = document.getElementById('tab-login');
+          if (tabLogin) tabLogin.click();
+        }, 0);
+        return;
+      }
     }
-    window.showPage?.(target);
+    
+    // Authenticated users: navigate to page
+    if (typeof window.showPage === 'function') {
+      window.showPage(target);
+      
+      // Sync profile UI if navigating to profile page
+      if (target === 'pg-profile' && typeof window.syncProfileUI === 'function') {
+        setTimeout(window.syncProfileUI, 50);
+      }
+    }
   });
 
   document.addEventListener('DOMContentLoaded', () => {
