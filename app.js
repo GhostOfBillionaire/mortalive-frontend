@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-09-talk-only'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-11-nav-isolation'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -63,6 +63,9 @@ const S = {
   progress: null,
   profile: null
 };
+
+// EXPLICIT GLOBAL BINDING: Allows index.html inline scripts to accurately read the guest state
+window.S = S;
 
 // ── Synthetic video fallback constants ───────────────────
 const SYNTHETIC_SKIP_LIMIT = 10; // videos per "round" before final options shown
@@ -648,7 +651,9 @@ function ensureProgressSheet() {
     'color:#fff'
   ].join(';');
 
-
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+  return overlay;
 }
 
 function openProgressSheet() {
@@ -684,21 +689,30 @@ function ready(fn) {
   }
 }
 
-// Phase 1 app boundary: only the landing/auth/permission/Talk pages are
-// shipped in this build. Feed, Messages and Profile are intentionally not
-// part of the guest or authenticated shell yet. When those pages are added
-// later, extend this allowlist in one place instead of exposing hidden pages
-// through ad-hoc navigation.
+// Phase 1 app boundary: Now extended to include the Coming Soon pages
 const TALK_PAGE_IDS = new Set([
   'pg-land',
   'pg-auth',
   'pg-perm',
   'pg-lobby',
   'pg-match',
-  'pg-chat'
+  'pg-chat',
+  'pg-feed',
+  'pg-messages',
+  'pg-profile'
 ]);
 
 function showPage(id) {
+  // Enforce Guest Isolation - Redirect to auth if guest attempts to view locked tabs
+  if (S.isGuest && ['pg-feed', 'pg-messages', 'pg-profile'].includes(id)) {
+    toast('Sign in to access this page', '🔒');
+    id = 'pg-auth';
+    setTimeout(() => {
+      const tabLogin = $('tab-login');
+      if (tabLogin) tabLogin.click();
+    }, 0);
+  }
+
   if (!TALK_PAGE_IDS.has(id)) {
     console.warn('[Mortalive] Blocked navigation to non-Talk page:', id);
     return;
@@ -707,6 +721,9 @@ function showPage(id) {
   const page = $(id);
   if (page) page.classList.add('active');
   window.scrollTo(0, 0);
+
+  // Emit state event so UI triggers nav update
+  window.dispatchEvent(new CustomEvent('mortalive-auth-state'));
 }
 
 function toast(msg, icon = '✅') {
@@ -734,15 +751,6 @@ function setText(id, value) {
   if (el) el.textContent = value;
 }
 
-/* ── FIX: this used to do `el.className = 'cbd ' + state`, which wiped out
-   the base ".dot" / ".conn-dot" class entirely and replaced it with a
-   class ("cbd ...") that doesn't exist anywhere in the CSS. That meant the
-   connection status dots on the matching page and in the chat topbar never
-   actually changed color — "connecting" / "connected" / "failed" were being
-   set as the *only* class instead of being added alongside the real one.
-   Now each dot keeps its base class and only toggles state on top of it,
-   matching the .dot.connecting/.connected/.failed and
-   .conn-dot.connecting/.connected/.failed rules in the stylesheet. */
 function setCallStatus(state, label) {
   const connDot = $('conn-dot');
   if (connDot) connDot.className = `dot ${state}`;
@@ -754,10 +762,6 @@ function setCallStatus(state, label) {
   });
 }
 
-/* ── FIX: previously only updated #online-n (lobby) and #match-count
-   (matching page), so the "2,847 online now" pill on the landing page
-   hero (#online-n-hero) just sat frozen forever instead of ticking up/down
-   with the rest of the site. Now every matching id gets updated together. */
 function updateOnlineCount() {
   ['online-n', 'online-n-hero', 'online-count', 'online-users'].forEach((id) => {
     const el = $(id);
@@ -931,6 +935,7 @@ function updateIdentityDisplay() {
   }
 
   updateProgressText();
+  window.dispatchEvent(new CustomEvent('mortalive-auth-state'));
 }
 
 
@@ -1038,7 +1043,7 @@ function requestCameraPermission() {
     });
 }
 
-// Supabase client — initialized in cry.html as window.sb
+// Supabase client — initialized in index.html as window.sb
 const sb = window.sb;
 
 // Captured synchronously, before Supabase's client has a chance to
