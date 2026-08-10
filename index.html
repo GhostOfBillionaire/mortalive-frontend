@@ -3411,16 +3411,15 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
-  const HIDDEN_PAGES = new Set(['pg-land', 'pg-auth', 'pg-perm', 'pg-match']);
-
+  
   function syncBottomNav(pageId) {
     const nav = document.getElementById('app-bottomnav');
     if (!nav) return;
 
+    // Strict guard checking the explicit window export created in app.js
     const isGuest = !!(window.S && window.S.isGuest);
 
-    // Guests get Talk only. The navigation is not merely disabled:
-    // it is completely removed from the visible UI for guest sessions.
+    // GUESTS MUST NOT SEE THE NAVIGATION TABS AT ALL
     if (isGuest) {
       nav.style.display = 'none';
       nav.setAttribute('aria-hidden', 'true');
@@ -3440,38 +3439,25 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
     });
   }
 
-  const originalShowPage = window.showPage;
-  if (typeof originalShowPage === 'function') {
-    window.showPage = function (id) {
-      if (window.S && window.S.isGuest && ['pg-feed', 'pg-messages', 'pg-profile'].includes(id)) {
-        id = 'pg-auth';
-        setTimeout(() => {
-          const tabLogin = document.getElementById('tab-login');
-          if (tabLogin) tabLogin.click();
-        }, 0);
-      }
-
-      originalShowPage(id);
-      syncBottomNav(id);
-    };
-  }
-
   document.addEventListener('click', (ev) => {
-    const btn = ev.target.closest?.('[data-bottom-page]');
+    const btn = ev.target.closest('[data-bottom-page]');
     if (!btn) return;
-    ev.preventDefault?.();
+    ev.preventDefault();
     const target = btn.dataset.bottomPage;
+    
+    // Aggressive click interceptor for guests
     if (window.S && window.S.isGuest && ['pg-feed', 'pg-messages', 'pg-profile'].includes(target)) {
-      window.showPage?.('pg-auth');
+      if(window.showPage) window.showPage('pg-auth');
       setTimeout(() => {
         const tabLogin = document.getElementById('tab-login');
         if (tabLogin) tabLogin.click();
       }, 0);
       return;
     }
-    window.showPage?.(target);
+    if(window.showPage) window.showPage(target);
   });
 
+  // Standard lifecycle hooks
   document.addEventListener('DOMContentLoaded', () => {
     const active = document.querySelector('.page.active');
     if (active) syncBottomNav(active.id);
@@ -3482,19 +3468,21 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
     if (active) syncBottomNav(active.id);
   });
 
-  // Auth/session changes can happen without showPage() being called.
-  // Re-sync the navigation whenever the app's public state changes.
   window.addEventListener('mortalive-auth-state', () => {
     const active = document.querySelector('.page.active');
     if (active) syncBottomNav(active.id);
   });
 
-  // Defensive hidden fallback: if a guest session is restored after app startup,
-  // remove the authenticated navigation without waiting for a click.
-  const guestNavGuard = window.setInterval(() => {
-    const active = document.querySelector('.page.active');
-    if (active) syncBottomNav(active.id);
-  }, 1000);
+  // Defensive guard loop: strictly forces the UI clear if a guest session overrides it.
+  setInterval(() => {
+    if (window.S && window.S.isGuest) {
+      const nav = document.getElementById('app-bottomnav');
+      if (nav && nav.style.display !== 'none') {
+        nav.style.display = 'none';
+      }
+    }
+  }, 500);
+
 })();
 </script>
 
