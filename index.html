@@ -2835,7 +2835,7 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
           <button class="btn btn-ghost auth-tab" id="tab-signup" type="button">Sign up</button>
         </div>
 
-        <div id="auth-guest-form" class="auth-guest-panel">
+        <div id="auth-guest-panel" class="auth-guest-panel">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
             <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1786095311/IMG_20260807_150053_awyczn.png"
                  alt="" style="width:28px;height:28px;border-radius:8px;object-fit:contain;">
@@ -3411,7 +3411,7 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
-  
+
   function syncBottomNav(pageId) {
     const nav = document.getElementById('app-bottomnav');
     if (!nav) return;
@@ -3444,7 +3444,7 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
     if (!btn) return;
     ev.preventDefault();
     const target = btn.dataset.bottomPage;
-    
+
     // Aggressive click interceptor for guests
     if (window.S && window.S.isGuest && ['pg-feed', 'pg-messages', 'pg-profile'].includes(target)) {
       if(window.showPage) window.showPage('pg-auth');
