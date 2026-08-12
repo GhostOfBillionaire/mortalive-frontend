@@ -5,7 +5,8 @@ export async function onRequest(context) {
     url.hostname === "invitation.mortalive.com" &&
     url.pathname === "/"
   ) {
-    const invitationUrl = new URL("/_invitation.html", url);
+    const invitationUrl = new URL(url);
+    invitationUrl.pathname = "/invitation";
 
     return context.env.ASSETS.fetch(
       new Request(invitationUrl, context.request)
