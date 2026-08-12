@@ -98,16 +98,6 @@
   
   .field textarea { resize: vertical; min-height: 80px; }
 
-  .field-hint {
-    min-height: 16px;
-    font-size: 12px;
-    line-height: 1.35;
-    color: var(--on-surface-3);
-  }
-  .field-hint.checking { color: var(--on-surface-3); }
-  .field-hint.available { color: #188038; }
-  .field-hint.taken, .field-hint.invalid, .field-hint.error { color: #c5221f; }
-
   /* File Upload Styling */
   .file-upload-wrapper {
     border: 2px dashed var(--border-strong);
@@ -214,30 +204,45 @@
   }
   .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(26,110,245,.36); }
 
-  /* OTP Input Styling */
-  .otp-container {
-    display: flex; gap: 10px; justify-content: center; margin: 20px 0;
+  /* Signup / OTP styles aligned with the live index.html signup flow */
+  .username-status {
+    font-size: 12px;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 16px;
   }
-  .otp-input {
-    width: 45px; height: 55px;
-    font-size: 24px; font-weight: 700;
+  .username-status-pending { color: var(--on-surface-3); }
+  .username-status-ok { color: #16a34a; }
+  .username-status-bad { color: #dc2626; }
+  .help-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11.5px;
+    color: var(--on-surface-3);
+  }
+  .otp-input-single {
+    letter-spacing: .35em;
+    font-size: 20px !important;
     text-align: center;
-    border: 2px solid var(--border-strong);
-    border-radius: 12px;
-    background: var(--surface);
-    outline: none;
-    transition: all var(--dur-fast);
+    font-weight: 700;
   }
-  .otp-input:focus {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 4px rgba(26,110,245,.15);
-    transform: translateY(-2px);
+  .otp-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
   }
+  .otp-actions .btn { flex: 1; }
 
-  /* Slide Page Animation */
+  /* Flow screens must participate in the card's height. The previous
+     absolute 100% layout collapsed when the form was hidden, which made
+     the OTP controls appear as a ~1px strip on some deployments. */
   .slide-page {
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
+    position: relative;
+    width: 100%;
+    min-height: 420px;
     background: rgba(255,255,255,.96);
     backdrop-filter: blur(24px);
     z-index: 10;
@@ -251,6 +256,35 @@
   .slide-page.active {
     display: flex;
     animation: slideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .modal-screen {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    z-index: 1000 !important;
+    margin: 0 !important;
+    padding: 24px !important;
+    background: rgba(8,14,28,.52) !important;
+    backdrop-filter: blur(12px) !important;
+    align-items: center;
+    justify-content: center;
+    transform: none;
+  }
+  .modal-screen.active { display: flex !important; }
+  .modal-screen > .header,
+  .modal-screen > .field,
+  .modal-screen > .notice-box,
+  .modal-screen > .btn {
+    width: min(460px, 100%);
+  }
+  .modal-screen > .header,
+  .modal-screen > .field,
+  .modal-screen > .notice-box,
+  .modal-screen > .btn {
+    margin-left: auto;
+    margin-right: auto;
   }
   @keyframes slideIn {
     to { opacity: 1; transform: translateX(0); }
@@ -322,8 +356,8 @@
     <!-- Standard Fields -->
     <div class="field">
       <label>Username</label>
-      <input type="text" id="reg-username" placeholder="Choose a unique username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="24">
-      <div id="username-availability" class="field-hint" aria-live="polite"></div>
+      <input type="text" id="reg-username" placeholder="3–24 chars: letters, numbers, _" autocomplete="username" maxlength="24">
+      <div id="reg-username-status" class="username-status" style="display:none;"></div>
     </div>
     
     <div class="field">
@@ -431,35 +465,32 @@
     <button id="btn-register" class="btn btn-primary" style="margin-top: 8px;">Register & Continue →</button>
   </div>
 
-  <!-- OTP Verification Section -->
+  <!-- OTP Verification Section — same shape as the live signup OTP flow -->
   <div id="otp-state" class="slide-page">
     <div class="header">
       <div style="font-size: 40px; margin-bottom: 12px;">📬</div>
       <h2>Verify Email</h2>
-      <p>Enter the 6-digit code sent to <strong id="otp-email-display"></strong>.</p>
-      <div class="notice-box" style="margin-top: 10px; margin-bottom: 0;">
-        Check your inbox (and spam/junk) for the code.
-      </div>
-    </div>
-    
-    <div class="otp-container">
-      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
-      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
-      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
-      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
-      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
-      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
+      <p>Enter the 6-digit code sent to your email.</p>
     </div>
 
-    <div class="inline-error" id="err-otp"></div>
-    <button id="btn-verify" class="btn btn-primary">Verify & Continue →</button>
-    <p style="text-align: center; margin-top: 16px; font-size: 13px; color: var(--on-surface-3);">
-      Didn't receive code? <a href="#" id="btn-resend" style="color: var(--primary); font-weight: 600;">Resend</a>
-    </p>
+    <div class="field">
+      <label for="otp-code">Enter the 6-digit code</label>
+      <input id="otp-code" class="otp-input-single" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="000000">
+      <div class="help-row">
+        <span id="otp-email-display" style="color:var(--on-surface-3);"></span>
+      </div>
+    </div>
+
+    <div id="err-otp" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
+    <button class="btn btn-primary" id="btn-verify" style="margin-top:8px;">Verify code →</button>
+    <div class="otp-actions">
+      <button class="btn btn-ghost" id="btn-resend" type="button">Resend code</button>
+      <button class="btn btn-ghost" id="btn-otp-back" type="button">← Back</button>
+    </div>
   </div>
 
   <!-- Minimal mail-check popup -->
-  <div id="mail-check-modal" class="slide-page" style="z-index: 25; display: none;">
+  <div id="mail-check-modal" class="slide-page modal-screen" style="z-index: 25; display: none;">
     <div class="header">
       <div style="font-size: 40px; margin-bottom: 12px;">📬</div>
       <h2>Check your email</h2>
@@ -472,7 +503,7 @@
   </div>
 
   <!-- Post-verification next-step popup -->
-  <div id="post-verify-modal" class="slide-page" style="z-index: 20; display: none;">
+  <div id="post-verify-modal" class="slide-page modal-screen" style="z-index: 20; display: none;">
     <div class="header">
       <div style="font-size: 40px; margin-bottom: 12px;">✅</div>
       <h2>Email verified</h2>
@@ -594,8 +625,6 @@
   const detailsField     = document.getElementById('dynamic-details-field');
   const detailsLabel     = document.getElementById('details-label');
   const detailsInput     = document.getElementById('reg-details');
-  const usernameInput    = document.getElementById('reg-username');
-  const usernameAvailability = document.getElementById('username-availability');
   const cvField          = document.getElementById('cv-upload-field');
   const siteField        = document.getElementById('business-site-field');
   const sparkSection     = document.getElementById('spark-section');
@@ -617,6 +646,7 @@
   const mailCheckModal     = document.getElementById('mail-check-modal');
   const mailCheckEmail     = document.getElementById('mail-check-email');
   const mailCheckOk        = document.getElementById('btn-mail-check-ok');
+  const otpEmailDisplay    = document.getElementById('otp-email-display');
   const postVerifyModal    = document.getElementById('post-verify-modal');
   const nextFeedBtn        = document.getElementById('next-feed-btn');
   const nextProfileBtn     = document.getElementById('next-profile-btn');
@@ -725,12 +755,7 @@
   }
 
   function revealOtpState() {
-    hideMailCheckModal();
-    const otpState = document.getElementById('otp-state');
-    document.getElementById('form-state').style.display = 'none';
-    otpState.classList.add('active');
-    otpState.style.display = 'flex';
-    setTimeout(() => document.querySelector('.otp-input').focus(), 100);
+    showOtpState(userData?.email || mailCheckEmail?.textContent || '');
   }
 
   function setPostVerifyDestination(destination) {
@@ -945,79 +970,71 @@
   updateUploadCopy();
   setPostVerifyDestination('profile');
 
-  // ── LIVE USERNAME AVAILABILITY ───────────────────────────────────────────
-  // Mirrors the registration RPC, but runs while the user types.
+  // ── Live username availability — same RPC-driven behavior as index.html/app.js ──
   let _usernameCheckTimer = null;
-  let _usernameCheckSeq = 0;
+  let _usernameCheckToken = 0;
+  let _usernameCheck = { username: null, available: null };
 
-  function setUsernameAvailability(state, message) {
-    if (!usernameAvailability) return;
-    usernameAvailability.className = `field-hint ${state || ''}`.trim();
-    usernameAvailability.textContent = message || '';
+  function setUsernameStatus(state, msg) {
+    const el = document.getElementById('reg-username-status');
+    if (!el) return;
+    el.className = 'username-status' + (state ? ` username-status-${state}` : '');
+    el.textContent = msg || '';
+    el.style.display = msg ? 'flex' : 'none';
   }
 
-  async function checkUsernameAvailabilityLive() {
-    const username = usernameInput?.value.trim() || '';
-    const seq = ++_usernameCheckSeq;
-
-    if (_usernameCheckTimer) {
-      clearTimeout(_usernameCheckTimer);
-      _usernameCheckTimer = null;
-    }
-
-    if (!username) {
-      setUsernameAvailability('', '');
-      return;
-    }
-
-    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
-      setUsernameAvailability(
-        'invalid',
-        'Use 3–24 letters, numbers, or underscores.'
-      );
-      return;
-    }
-
-    setUsernameAvailability('checking', 'Checking availability…');
-
-    _usernameCheckTimer = setTimeout(async () => {
-      try {
-        const { data: taken, error } = await sb.rpc('is_username_taken', {
-          p_username: username
-        });
-
-        // Ignore a response for an older username value.
-        if (seq !== _usernameCheckSeq) return;
-
-        if (error) {
-          console.warn('[username-check]', error.message);
-          setUsernameAvailability(
-            'error',
-            'Could not check right now. We’ll check again when you continue.'
-          );
-          return;
-        }
-
-        if (taken) {
-          setUsernameAvailability('taken', '✕ Username is taken — try another.');
-        } else {
-          setUsernameAvailability('available', '✓ Username is available.');
-        }
-      } catch (error) {
-        if (seq !== _usernameCheckSeq) return;
-        console.warn('[username-check]', error);
-        setUsernameAvailability(
-          'error',
-          'Could not check right now. We’ll check again when you continue.'
-        );
+  async function checkUsernameAvailability(username) {
+    const myToken = ++_usernameCheckToken;
+    setUsernameStatus('pending', 'Checking availability…');
+    try {
+      const { data, error } = await sb.rpc('is_username_taken', { p_username: username });
+      if (myToken !== _usernameCheckToken) return;
+      if (error) {
+        console.warn('[register] is_username_taken:', error.message);
+        _usernameCheck = { username, available: null };
+        setUsernameStatus('bad', 'Could not check availability — try again.');
+        return;
       }
-    }, 450);
+      const taken = !!data;
+      _usernameCheck = { username, available: !taken };
+      setUsernameStatus(
+        taken ? 'bad' : 'ok',
+        taken ? '✕ That username is taken — try another.' : '✓ Username is available'
+      );
+    } catch (e) {
+      if (myToken !== _usernameCheckToken) return;
+      _usernameCheck = { username, available: null };
+      setUsernameStatus('bad', 'Could not check availability — try again.');
+    }
   }
 
-  usernameInput?.addEventListener('input', checkUsernameAvailabilityLive);
-  usernameInput?.addEventListener('blur', checkUsernameAvailabilityLive);
+  const usernameInput = document.getElementById('reg-username');
+  usernameInput?.addEventListener('input', () => {
+    const val = usernameInput.value.trim();
+    clearTimeout(_usernameCheckTimer);
+    _usernameCheckToken++;
+    if (!val) {
+      _usernameCheck = { username: null, available: null };
+      setUsernameStatus(null, '');
+      return;
+    }
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(val)) {
+      _usernameCheck = { username: val, available: false };
+      setUsernameStatus('bad', '3–24 characters: letters, numbers, underscore only.');
+      return;
+    }
+    _usernameCheckTimer = setTimeout(() => checkUsernameAvailability(val), 450);
+  });
 
-  // ── REGISTER — check username, then send real OTP via Supabase ─────────────
+  usernameInput?.addEventListener('blur', () => {
+    const val = usernameInput.value.trim();
+    if (/^[a-zA-Z0-9_]{3,24}$/.test(val) && _usernameCheck.username !== val) {
+      clearTimeout(_usernameCheckTimer);
+      checkUsernameAvailability(val);
+    }
+  });
+
+  // ── REGISTER — same Supabase OTP send path as the live index signup ────────
   document.getElementById('btn-register').addEventListener('click', async () => {
     const username = document.getElementById('reg-username').value.trim();
     const email    = document.getElementById('reg-email').value.trim();
@@ -1030,52 +1047,59 @@
 
     setError('err-register', '');
 
-    if (!username) return setError('err-register', 'Please enter a username.');
-    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) return setError('err-register', 'Username must be 3–24 characters: letters, numbers, underscore only.');
-    if (!email || !/^\S+@\S+\.\S+$/.test(email)) return setError('err-register', 'Please enter a valid email address.');
-    if (password.length < 8) return setError('err-register', 'Password must be at least 8 characters.');
-    if (!dob) return setError('err-register', 'Please enter your date of birth.');
-    if (ageInvalid) return setError('err-register', 'You must be at least 13 years old to join Mortalive.');
-    if (countWords(sparkWish) > MAX_SPARK_WORDS) return setError('err-register', `Spark is limited to ${MAX_SPARK_WORDS} words per post.`);
-    if (bio.length > MAX_BIO_CHARS) return setError('err-register', `Profile bio is limited to ${MAX_BIO_CHARS} characters.`);
-    if (!terms) return setError('err-register', 'Please agree to the Terms of Service.');
-
-    // Instagram-style availability check. The RPC is the public read path;
-    // the usernames table's unique constraint is the final authority.
-    try {
-      const { data: taken, error: usernameErr } = await sb.rpc('is_username_taken', {
-        p_username: username
-      });
-      if (usernameErr) {
-        console.warn('[register] username availability:', usernameErr.message);
-        return setError('err-register', 'Could not check username availability. Please try again.');
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
+      return setError('err-register', 'Username must be 3–24 characters: letters, numbers, underscore only.');
+    }
+    if (_usernameCheck.username === username && _usernameCheck.available === false) {
+      setError('err-register', 'That username is taken — please choose a different one.');
+      usernameInput?.focus();
+      return;
+    }
+    if (_usernameCheck.username !== username || _usernameCheck.available !== true) {
+      await checkUsernameAvailability(username);
+      if (_usernameCheck.username !== username || _usernameCheck.available !== true) {
+        return setError('err-register', 'Please choose an available username before continuing.');
       }
-      if (taken) {
-        return setError('err-register', 'That username is taken — please choose another.');
-      }
-    } catch (e) {
-      return setError('err-register', 'Could not check username availability. Please try again.');
+    }
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+      return setError('err-register', 'Please enter a valid email address.');
+    }
+    if (password.length < 8) {
+      return setError('err-register', 'Password must be at least 8 characters.');
+    }
+    if (!dob) {
+      return setError('err-register', 'Please enter your date of birth.');
+    }
+    if (ageInvalid) {
+      return setError('err-register', 'You must be at least 13 years old to join Mortalive.');
+    }
+    if (countWords(sparkWish) > MAX_SPARK_WORDS) {
+      return setError('err-register', `Spark is limited to ${MAX_SPARK_WORDS} words per post.`);
+    }
+    if (bio.length > MAX_BIO_CHARS) {
+      return setError('err-register', `Profile bio is limited to ${MAX_BIO_CHARS} characters.`);
+    }
+    if (!terms) {
+      return setError('err-register', 'Please agree to the Terms of Service.');
     }
 
-    // 60-second cooldown between OTP sends
     const coolRemaining = 60000 - (Date.now() - _lastOtpAt);
     if (coolRemaining > 0) {
       return setError('err-register', `Please wait ${Math.ceil(coolRemaining / 1000)}s before requesting another code.`);
     }
 
-    // Save all form data in memory until the email identity is verified.
     userData = {
       username,
       email,
       password,
-      accountType:  currentType,
+      accountType: currentType,
       dob,
-      details:      detailsInput.value.trim(),
+      details: detailsInput.value.trim(),
       bio,
       businessSite: document.getElementById('reg-business-site').value.trim(),
-      marketing:    document.getElementById('reg-marketing').checked,
+      marketing: document.getElementById('reg-marketing').checked,
       spark: {
-        wish:     sparkWish,
+        wish: sparkWish,
         isPublic: document.getElementById('spark-public').checked
       },
       interests: Array.from(document.querySelectorAll('.interest-checkbox:checked')).map(c => c.value),
@@ -1083,7 +1107,8 @@
     };
 
     const btn = document.getElementById('btn-register');
-    btn.disabled = true; btn.textContent = 'Sending code…';
+    btn.disabled = true;
+    btn.textContent = 'Sending code…';
 
     try {
       const { error } = await sb.auth.signInWithOtp({
@@ -1098,168 +1123,213 @@
         }
       });
 
-      if (error) { setError('err-register', friendlyError(error)); return; }
+      if (error) {
+        setError('err-register', friendlyError(error));
+        return;
+      }
 
       _lastOtpAt = Date.now();
+      try {
+        sessionStorage.setItem('mortalive_invitation_signup', JSON.stringify({
+          email,
+          username,
+          accountType: currentType,
+          dob
+        }));
+      } catch {}
 
-      document.getElementById('otp-email-display').textContent = email;
       showMailCheckModal(email);
-
     } catch (e) {
-      setError('err-register', 'Could not reach the server — try again in a moment.');
+      setError('err-register', 'Could not reach Supabase. Try again in a moment.');
     } finally {
-      btn.disabled = false; btn.textContent = 'Register & Continue →';
+      btn.disabled = false;
+      btn.textContent = 'Register & Continue →';
     }
   });
 
-  // ── OTP input UX (unchanged from original) ────────────────────────────────
-  const otpInputs = document.querySelectorAll('.otp-input');
-  otpInputs.forEach((input, index) => {
-    input.addEventListener('input', (e) => {
-      // Handle paste of full 6-digit code
-      if (e.target.value.length > 1) {
-        const digits = e.target.value.replace(/\D/g, '').slice(0, 6);
-        otpInputs.forEach((inp, i) => { inp.value = digits[i] || ''; });
-        (otpInputs[digits.length - 1] || otpInputs[5]).focus();
-        return;
+  // ── OTP UI — same single 6-digit input used by index.html/app.js ─────────
+  const otpCodeInput = document.getElementById('otp-code');
+  const btnOtpVerify = document.getElementById('btn-verify');
+  const btnOtpResend = document.getElementById('btn-resend');
+  const btnOtpBack = document.getElementById('btn-otp-back');
+  let _resendCooldownTimer = null;
+  let _suppressAutoSignedIn = false;
+
+  function showOtpState(email) {
+    hideMailCheckModal();
+    document.getElementById('form-state').style.display = 'none';
+    const otpState = document.getElementById('otp-state');
+    otpState.style.display = 'flex';
+    void otpState.offsetWidth;
+    otpState.classList.add('active');
+    if (otpEmailDisplay) otpEmailDisplay.textContent = `Code sent to ${email}`;
+    setError('err-otp', null);
+    if (otpCodeInput) {
+      otpCodeInput.value = '';
+      otpCodeInput.focus();
+    }
+    startResendCooldown(60);
+  }
+
+  function startResendCooldown(seconds) {
+    if (!btnOtpResend) return;
+    let remaining = seconds;
+    btnOtpResend.disabled = true;
+    btnOtpResend.textContent = `Resend in ${remaining}s`;
+    clearInterval(_resendCooldownTimer);
+    _resendCooldownTimer = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(_resendCooldownTimer);
+        btnOtpResend.disabled = false;
+        btnOtpResend.textContent = 'Resend code';
+      } else {
+        btnOtpResend.textContent = `Resend in ${remaining}s`;
       }
-      if (e.target.value.length === 1 && index < 5) otpInputs[index + 1].focus();
-    });
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace' && !e.target.value && index > 0) otpInputs[index - 1].focus();
-    });
+    }, 1000);
+  }
+
+  otpCodeInput?.addEventListener('input', () => {
+    otpCodeInput.value = otpCodeInput.value.replace(/\D/g, '').slice(0, 6);
   });
 
-  // ── Resend link ───────────────────────────────────────────────────────────
-  document.getElementById('btn-resend').addEventListener('click', async (e) => {
-    e.preventDefault();
-    if (!userData.email) return;
+  otpCodeInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      btnOtpVerify?.click();
+    }
+  });
 
-    const coolRemaining = 60000 - (Date.now() - _lastOtpAt);
-    if (coolRemaining > 0) {
-      setError('err-otp', `Please wait ${Math.ceil(coolRemaining / 1000)}s before resending.`);
+  btnOtpBack?.addEventListener('click', () => {
+    clearInterval(_resendCooldownTimer);
+    hideMailCheckModal();
+    const otpState = document.getElementById('otp-state');
+    otpState.classList.remove('active');
+    otpState.style.display = 'none';
+    document.getElementById('form-state').style.display = 'block';
+    setError('err-otp', null);
+  });
+
+  btnOtpResend?.addEventListener('click', async () => {
+    if (!userData.email) return;
+    if (btnOtpResend.disabled) return;
+
+    setError('err-otp', null);
+    btnOtpResend.disabled = true;
+    btnOtpResend.textContent = 'Sending…';
+
+    try {
+      const { error } = await sb.auth.signInWithOtp({
+        email: userData.email,
+        options: {
+          shouldCreateUser: true,
+          data: {
+            username: userData.username,
+            account_type: userData.accountType
+          },
+          emailRedirectTo: window.location.href
+        }
+      });
+
+      if (error) {
+        setError('err-otp', friendlyError(error));
+        btnOtpResend.disabled = false;
+        btnOtpResend.textContent = 'Resend code';
+        return;
+      }
+
+      _lastOtpAt = Date.now();
+      startResendCooldown(60);
+    } catch (e) {
+      setError('err-otp', 'Could not reach Supabase. Try again in a moment.');
+      btnOtpResend.disabled = false;
+      btnOtpResend.textContent = 'Resend code';
+    }
+  });
+
+  async function completeVerifiedSignup(user, session) {
+    const password = userData.password;
+    if (!password || !user?.id || !session) {
+      throw new Error('Verification succeeded, but the signup session could not be completed.');
+    }
+
+    const { data: passwordData, error: passwordError } = await sb.auth.updateUser({
+      password
+    });
+    if (passwordError) throw new Error(friendlyError(passwordError));
+
+    const { data: reserved, error: reserveError } = await sb.rpc('reserve_username', {
+      p_user_id: user.id,
+      p_username: userData.username
+    });
+    if (reserveError) throw new Error(`Could not reserve that username: ${reserveError.message}`);
+    if (reserved !== true) throw new Error('That username was just taken — please choose another one.');
+
+    const { data: metadataData, error: metadataError } = await sb.auth.updateUser({
+      data: {
+        username: userData.username,
+        account_type: userData.accountType,
+        date_of_birth: userData.dob,
+        details: userData.details,
+        bio: userData.bio,
+        business_site: userData.businessSite,
+        marketing_opt_in: userData.marketing,
+        interests: userData.interests
+      }
+    });
+    if (metadataError) throw new Error(friendlyError(metadataError));
+
+    _verifiedUser = metadataData?.user || passwordData?.user || user;
+    _verifiedSession = passwordData?.session || metadataData?.session || session;
+
+    clearInterval(_resendCooldownTimer);
+    try { sessionStorage.removeItem('mortalive_invitation_signup'); } catch {}
+
+    const otpState = document.getElementById('otp-state');
+    otpState.classList.remove('active');
+    otpState.style.display = 'none';
+    openPostVerifyModal();
+  }
+
+  btnOtpVerify?.addEventListener('click', async () => {
+    const code = (otpCodeInput?.value || '').trim();
+    setError('err-otp', null);
+
+    if (!userData?.email) {
+      setError('err-otp', 'Session expired — please start again.');
+      return;
+    }
+    if (!/^\d{6}$/.test(code)) {
+      setError('err-otp', 'Enter the 6-digit code from your email.');
       return;
     }
 
-    const link = document.getElementById('btn-resend');
-    link.textContent = 'Sending…';
-
-    const { error } = await sb.auth.signInWithOtp({
-      email: userData.email,
-      options: {
-        shouldCreateUser: true,
-        data: { username: userData.username, account_type: userData.accountType },
-        emailRedirectTo: window.location.href
-      }
-    });
-
-    if (!error) {
-      _lastOtpAt = Date.now();
-      setError('err-otp', '');
-      link.textContent = 'Resent ✓';
-      setTimeout(() => { link.textContent = 'Resend'; }, 3000);
-    } else {
-      setError('err-otp', friendlyError(error));
-      link.textContent = 'Resend';
-    }
-  });
-
-  // ── VERIFY OTP — real Supabase check, then set password ──────────────────
-  document.getElementById('btn-verify').addEventListener('click', async () => {
-    let code = '';
-    otpInputs.forEach(input => { code += input.value; });
-
-    setError('err-otp', '');
-    if (code.length !== 6) { setError('err-otp', 'Please enter the full 6-digit code.'); return; }
-
-    const btn = document.getElementById('btn-verify');
-    btn.disabled = true; btn.textContent = 'Verifying…';
+    btnOtpVerify.disabled = true;
+    btnOtpVerify.textContent = 'Verifying…';
+    _suppressAutoSignedIn = true;
 
     try {
       const { data, error } = await sb.auth.verifyOtp({
         email: userData.email,
         token: code,
-        type:  'email'
+        type: 'email'
       });
-
-      if (error) { setError('err-otp', friendlyError(error)); return; }
+      if (error) throw new Error(friendlyError(error));
 
       const session = data?.session;
-      const user    = data?.user || session?.user;
+      const user = data?.user || session?.user;
       if (!session || !user) {
-        setError('err-otp', 'Verification succeeded but no session was returned — please try again.');
-        return;
+        throw new Error('Verification succeeded but no session was returned. Try again.');
       }
 
-      // Set the password the user chose on the signup form.
-      // This is required because the main app logs in with email + password.
-      const { error: passwordError } = await sb.auth.updateUser({
-        password: userData.password
-      });
-      if (passwordError) {
-        setError('err-otp', friendlyError(passwordError));
-        return;
-      }
-
-      // Reserve the username after the email identity is verified.
-      // The database unique constraint is the final race-condition guard.
-      const { data: reserved, error: reserveError } = await sb.rpc('reserve_username', {
-        p_user_id: user.id,
-        p_username: userData.username
-      });
-      if (reserveError) {
-        console.error('[register] reserve_username:', reserveError.message);
-        await sb.auth.signOut();
-        setError('err-otp', 'Could not reserve that username. Please try again.');
-        document.getElementById('otp-state').classList.remove('active');
-        document.getElementById('otp-state').style.display = 'none';
-        document.getElementById('form-state').style.display = 'block';
-        return;
-      }
-      if (reserved !== true) {
-        await sb.auth.signOut();
-        setError('err-register', 'That username was just taken — please choose another.');
-        document.getElementById('otp-state').classList.remove('active');
-        document.getElementById('otp-state').style.display = 'none';
-        document.getElementById('form-state').style.display = 'block';
-        return;
-      }
-
-      // Store the complete invitation profile in Supabase Auth metadata.
-      const { data: updatedUserData, error: metadataError } = await sb.auth.updateUser({
-        data: {
-          username: userData.username,
-          account_type: userData.accountType,
-          date_of_birth: userData.dob,
-          details: userData.details,
-          bio: userData.bio,
-          business_site: userData.businessSite,
-          marketing_opt_in: userData.marketing,
-          interests: userData.interests
-        }
-      });
-      if (metadataError) {
-        await sb.auth.signOut();
-        setError('err-otp', friendlyError(metadataError));
-        document.getElementById('otp-state').classList.remove('active');
-        document.getElementById('otp-state').style.display = 'none';
-        document.getElementById('form-state').style.display = 'block';
-        return;
-      }
-
-      // Keep the refreshed Auth user/session for the final submit step.
-      _verifiedUser    = updatedUserData?.user || user;
-      _verifiedSession = session;
-
-      // After the 6-digit code is confirmed, ask for the next destination.
-      document.getElementById('otp-state').classList.remove('active');
-      document.getElementById('otp-state').style.display = 'none';
-      openPostVerifyModal();
-
+      await completeVerifiedSignup(user, session);
     } catch (e) {
-      setError('err-otp', 'Could not reach the server — try again.');
+      console.error('[invitation] OTP verify:', e);
+      setError('err-otp', e?.message || 'Could not verify the code. Try again.');
     } finally {
-      btn.disabled = false; btn.textContent = 'Verify & Continue →';
+      _suppressAutoSignedIn = false;
+      btnOtpVerify.disabled = false;
+      btnOtpVerify.textContent = 'Verify code →';
     }
   });
 
@@ -1358,34 +1428,44 @@
     }
   });
 
-  // ── Email-link fallback (user clicked "Confirm" button in the email) ───────
-  // Supabase fires SIGNED_IN when the confirmation link is followed in any tab.
+  // ── Email-link confirmation — mirrors the signup confirmation path in index/app ──
   sb.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN' && session) {
-      const arrivedViaLink = /access_token=|refresh_token=|[?&]code=/.test(
-        window.location.hash + window.location.search
-      );
-      if (!arrivedViaLink) return;
-      // Store session so btn-finish can use it when the user gets to that step
-      _verifiedUser    = session.user;
-      _verifiedSession = session;
-      // If password is still held in memory, set it now
-      if (userData.password) {
-        try {
-          await sb.auth.updateUser({
-            password: userData.password,
-            data: {
-              username: userData.username,
-              account_type: userData.accountType,
-              date_of_birth: userData.dob,
-              details: userData.details,
-              bio: userData.bio,
-              business_site: userData.businessSite,
-              marketing_opt_in: userData.marketing,
-              interests: userData.interests
-            }
-          });
-        } catch {}
+    if (event !== 'SIGNED_IN' || !session || _suppressAutoSignedIn) return;
+
+    const arrivedViaLink = /access_token=|refresh_token=|[?&]code=/.test(
+      window.location.hash + window.location.search
+    );
+    if (!arrivedViaLink) return;
+
+    // Same-tab / another-tab confirmation can sync through Supabase auth.
+    if (!userData?.email) {
+      try {
+        const pending = JSON.parse(sessionStorage.getItem('mortalive_invitation_signup') || 'null');
+        if (pending?.email && pending.email === session.user?.email) {
+          userData = {
+            ...userData,
+            username: pending.username || session.user.user_metadata?.username || '',
+            email: pending.email,
+            accountType: pending.accountType || session.user.user_metadata?.account_type || 'private',
+            dob: pending.dob || session.user.user_metadata?.date_of_birth || '',
+            password: userData.password || ''
+          };
+        }
+      } catch {}
+    }
+
+    _verifiedUser = session.user;
+    _verifiedSession = session;
+
+    // If the original invitation tab is still open, its password remains in memory,
+    // matching the main app's link-confirmation behavior. If this is a fresh tab and
+    // the password is unavailable, don't invent or weaken the credential flow.
+    if (userData?.password) {
+      try {
+        await completeVerifiedSignup(session.user, session);
+      } catch (e) {
+        console.error('[invitation] Link confirmation:', e);
+        setError('err-register', e?.message || 'Email confirmed, but setup could not be completed. Return to the invitation tab and try again.');
       }
     }
   });
