@@ -1073,7 +1073,7 @@
       // If this invitation tab already has a session for the same email,
       // do not send another OTP. The account already exists.
       if (sessionEmail && sessionEmail === normalizedEmail) {
-        window.location.href = `https://mortalive.com/index.html?signup=1&email=${encodeURIComponent(normalizedEmail)}`;
+        window.location.href = `https://mortalive.com/?signin=1&email=${encodeURIComponent(normalizedEmail)}`;
         return true;
       }
 
@@ -1095,7 +1095,7 @@
       }
 
       if (exists === true) {
-        window.location.href = `https://mortalive.com/index.html?signup=1&email=${encodeURIComponent(normalizedEmail)}`;
+        window.location.href = `https://mortalive.com/?signin=1&email=${encodeURIComponent(normalizedEmail)}`;
         return true;
       }
 
