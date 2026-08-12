@@ -247,6 +247,22 @@
   }
 
   /* Inline error */
+  #reg-dob.invalid-age {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 4px rgba(220,38,38,.10);
+    background: rgba(220,38,38,.04);
+  }
+  #age-status.age-invalid {
+    color: var(--danger);
+    font-weight: 700;
+  }
+  #next-feed-btn.selected,
+  #next-profile-btn.selected {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-alpha);
+  }
+
   .inline-error {
     background: rgba(220,38,38,.08);
     border: 1px solid rgba(220,38,38,.22);
@@ -285,10 +301,6 @@
       <p>Join the global community and set up your identity</p>
     </div>
 
-    <div class="notice-box">
-      <strong>📧 Note:</strong> You will receive a verification code at the address provided below. Enter it on the next screen to confirm your email.
-    </div>
-
     <!-- 4-Way Account Type Toggles -->
     <div class="auth-tabs" id="account-type-tabs">
       <button type="button" class="auth-tab active" data-type="private">Private</button>
@@ -313,20 +325,26 @@
       <input type="password" id="reg-password" placeholder="At least 8 characters" autocomplete="new-password">
     </div>
     
+    <div class="field" id="dob-field">
+      <label for="reg-dob">Date of Birth</label>
+      <input type="date" id="reg-dob" max="2026-08-12" autocomplete="bday">
+      <div id="age-status" style="font-size: 12px; color: var(--on-surface-3); min-height: 16px;"></div>
+    </div>
+    
     <!-- Dynamic Details Field -->
     <div class="field" id="dynamic-details-field" style="display: none;">
       <label id="details-label">Details</label>
       <input type="text" id="reg-details" placeholder="Enter details...">
     </div>
 
-    <!-- CV Upload -->
+    <!-- CV / business document upload -->
     <div class="field" id="cv-upload-field" style="display: none;">
-      <label>Upload CV / Portfolio (Optional)</label>
+      <label id="upload-purpose-label">Upload CV / Portfolio (Optional)</label>
       <div class="file-upload-wrapper" onclick="document.getElementById('reg-cv').click()">
-        <input type="file" id="reg-cv" accept=".pdf,.doc,.docx" onchange="handleFileSelect(this)">
+        <input type="file" id="reg-cv" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onchange="handleFileSelect(this)">
         <label class="file-upload-label">
           <strong>Click to upload</strong> or drag and drop<br>
-          <span style="font-size: 11px; opacity: 0.8;">PDF, DOC, DOCX (Max 15MB)</span>
+          <span id="upload-types-label" style="font-size: 11px; opacity: 0.8;">PDF, DOC, DOCX, JPG, PNG (Max 15MB)</span>
         </label>
         <div id="cv-file-info" class="file-info"></div>
       </div>
@@ -370,6 +388,7 @@
       <div class="field" style="margin-bottom: 0;">
         <label>Make a Wish</label>
         <textarea id="spark-wish" placeholder="What feature do you wish Mortalive had?"></textarea>
+        <div id="spark-wish-count" style="font-size: 11px; color: var(--on-surface-3); margin-top: 6px; text-align: right;">0 / 400 words</div>
         <div class="toggle-row">
           <span class="toggle-label">Make this wish public?</span>
           <label class="switch">
@@ -382,7 +401,8 @@
 
     <div class="field">
       <label>Profile Bio (Optional)</label>
-      <textarea id="reg-bio" placeholder="Tell the world a bit about yourself..."></textarea>
+      <textarea id="reg-bio" maxlength="500" placeholder="Tell the world a bit about yourself..."></textarea>
+      <div id="bio-count" style="font-size: 11px; color: var(--on-surface-3); margin-top: 6px; text-align: right;">0 / 500 characters</div>
     </div>
 
     <!-- Compliance -->
@@ -405,7 +425,10 @@
     <div class="header">
       <div style="font-size: 40px; margin-bottom: 12px;">📬</div>
       <h2>Verify Email</h2>
-      <p>We sent a 6-digit code to <strong id="otp-email-display"></strong></p>
+      <p>Enter the 6-digit code sent to <strong id="otp-email-display"></strong>.</p>
+      <div class="notice-box" style="margin-top: 10px; margin-bottom: 0;">
+        Check your inbox (and spam/junk) for the code.
+      </div>
     </div>
     
     <div class="otp-container">
@@ -424,6 +447,53 @@
     </p>
   </div>
 
+  <!-- Minimal mail-check popup -->
+  <div id="mail-check-modal" class="slide-page" style="z-index: 25; display: none;">
+    <div class="header">
+      <div style="font-size: 40px; margin-bottom: 12px;">📬</div>
+      <h2>Check your email</h2>
+      <p>A 6-digit verification code was sent to <strong id="mail-check-email"></strong>.</p>
+    </div>
+    <div class="notice-box" style="margin-top: 10px;">
+      Please check your inbox and spam/junk folder, then enter the code here.
+    </div>
+    <button id="btn-mail-check-ok" class="btn btn-primary">I’ve checked — enter code →</button>
+  </div>
+
+  <!-- Post-verification next-step popup -->
+  <div id="post-verify-modal" class="slide-page" style="z-index: 20; display: none;">
+    <div class="header">
+      <div style="font-size: 40px; margin-bottom: 12px;">✅</div>
+      <h2>Email verified</h2>
+      <p>Choose where you want Mortalive to take you after setup.</p>
+    </div>
+
+    <div class="field" style="margin-bottom: 10px;">
+      <label>Next stop</label>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <button type="button" class="btn btn-ghost" id="next-feed-btn">Feed</button>
+        <button type="button" class="btn btn-ghost" id="next-profile-btn">Profile</button>
+      </div>
+      <div id="next-destination-status" style="font-size: 11px; color: var(--on-surface-3); margin-top: 7px;">You can change this later.</div>
+    </div>
+
+    <div class="field" style="margin-bottom: 18px;">
+      <div class="toggle-row" style="margin-top: 0;">
+        <span class="toggle-label">Try 1:1 Talk after setup?</span>
+        <label class="switch">
+          <input type="checkbox" id="post-verify-talk">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="notice-box" style="margin-top: 4px;">
+      You can still finish your profile and Spark wish before going to your selected destination.
+    </div>
+
+    <button id="btn-post-verify-continue" class="btn btn-primary">Continue setup →</button>
+  </div>
+
   <!-- Spark Wish Slide Page -->
   <div id="wish-state" class="slide-page">
     <div class="header">
@@ -435,6 +505,7 @@
     <div class="field">
       <label>Your Wish</label>
       <textarea id="final-wish" placeholder="I wish Mortalive had..." style="min-height: 120px; font-size: 16px;"></textarea>
+      <div id="final-wish-count" style="font-size: 11px; color: var(--on-surface-3); margin-top: 6px; text-align: right;">0 / 400 words</div>
       <div class="toggle-row">
         <span class="toggle-label">Make this wish public?</span>
         <label class="switch">
@@ -460,7 +531,7 @@
       <strong>Welcome aboard!</strong><br><br>
       You can check back the profile as we will notify you via email, by the time we are setting things up feel free to use our 1:1 talk feature meeting random people around the globe.
     </div>
-    <a href="index.html#lobby" class="btn btn-primary">Try 1:1 Talk →</a>
+    <a href="https://mortalive.com/index.html#lobby" class="btn btn-primary">Try 1:1 Talk →</a>
   </div>
 </div>
 
@@ -491,6 +562,21 @@
   let _verifiedUser    = null;
   let _verifiedSession = null;
   let _lastOtpAt       = 0;  // timestamp of last OTP send (cooldown guard)
+  let _postVerifyDestination = 'profile';
+  let _postVerifyTryTalk = false;
+  const MAX_SPARK_WORDS = 400;
+  const MAX_BIO_CHARS = 500;
+  const MAX_DOB = '2026-08-12';
+  const DOCUMENT_BUCKET = 'mortalive-documents';
+  const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
+  const ALLOWED_DOCUMENT_MIMES = new Set([
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'image/jpeg',
+    'image/png'
+  ]);
+  let _selectedUploadFile = null;
 
   // ── DOM refs (unchanged from original) ────────────────────────────────────
   const tabs             = document.querySelectorAll('.auth-tab');
@@ -504,6 +590,167 @@
   const btnAddLink       = document.getElementById('btn-add-link');
   const linkCountDisplay = document.getElementById('link-count-display');
   const linkMaxDisplay   = document.getElementById('link-max-display');
+  const dobInput          = document.getElementById('reg-dob');
+  const ageStatus         = document.getElementById('age-status');
+  const bioInput          = document.getElementById('reg-bio');
+  const bioCount          = document.getElementById('bio-count');
+  const sparkWishInput    = document.getElementById('spark-wish');
+  const sparkWishCount    = document.getElementById('spark-wish-count');
+  const finalWishInput    = document.getElementById('final-wish');
+  const finalWishCount    = document.getElementById('final-wish-count');
+  const uploadPurposeLabel = document.getElementById('upload-purpose-label');
+  const uploadTypesLabel   = document.getElementById('upload-types-label');
+  const uploadInput        = document.getElementById('reg-cv');
+  const mailCheckModal     = document.getElementById('mail-check-modal');
+  const mailCheckEmail     = document.getElementById('mail-check-email');
+  const mailCheckOk        = document.getElementById('btn-mail-check-ok');
+  const postVerifyModal    = document.getElementById('post-verify-modal');
+  const nextFeedBtn        = document.getElementById('next-feed-btn');
+  const nextProfileBtn     = document.getElementById('next-profile-btn');
+  const nextDestinationStatus = document.getElementById('next-destination-status');
+  const postVerifyTalk     = document.getElementById('post-verify-talk');
+  const postVerifyContinue = document.getElementById('btn-post-verify-continue');
+
+  function calculateAge(dobString) {
+    if (!dobString) return null;
+    const dob = new Date(`${dobString}T00:00:00`);
+    if (Number.isNaN(dob.getTime())) return null;
+
+    const today = new Date();
+    if (dob > today) return -1;
+
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) age--;
+    return age;
+  }
+
+  function syncAgeState() {
+    if (!dobInput || !ageStatus) return false;
+    const dob = dobInput.value;
+    dobInput.max = MAX_DOB;
+
+    if (!dob) {
+      dobInput.classList.remove('invalid-age');
+      ageStatus.className = '';
+      ageStatus.textContent = '';
+      return false;
+    }
+
+    const age = calculateAge(dob);
+    if (age === null) {
+      dobInput.classList.add('invalid-age');
+      ageStatus.className = 'age-invalid';
+      ageStatus.textContent = 'Please enter a valid date of birth.';
+      return true;
+    }
+    if (age < 13) {
+      dobInput.classList.add('invalid-age');
+      ageStatus.className = 'age-invalid';
+      ageStatus.textContent = 'You must be at least 13 years old to join Mortalive.';
+      return true;
+    }
+
+    dobInput.classList.remove('invalid-age');
+    ageStatus.className = '';
+    ageStatus.textContent = `Age: ${age}`;
+    return false;
+  }
+
+  function countWords(text) {
+    const clean = String(text || '').trim();
+    return clean ? clean.split(/\s+/).length : 0;
+  }
+
+  function enforceWordLimit(input, counter, label) {
+    if (!input || !counter) return 0;
+    const words = countWords(input.value);
+    if (words > MAX_SPARK_WORDS) {
+      input.value = input.value.trim().split(/\s+/).slice(0, MAX_SPARK_WORDS).join(' ');
+    }
+    const finalWords = countWords(input.value);
+    counter.textContent = `${finalWords} / ${MAX_SPARK_WORDS} words`;
+    counter.style.color = finalWords >= MAX_SPARK_WORDS ? 'var(--danger)' : 'var(--on-surface-3)';
+    if (label) counter.title = `${label}: maximum ${MAX_SPARK_WORDS} words`;
+    return finalWords;
+  }
+
+  function syncBioCounter() {
+    if (!bioInput || !bioCount) return;
+    if (bioInput.value.length > MAX_BIO_CHARS) {
+      bioInput.value = bioInput.value.slice(0, MAX_BIO_CHARS);
+    }
+    bioCount.textContent = `${bioInput.value.length} / ${MAX_BIO_CHARS} characters`;
+    bioCount.style.color = bioInput.value.length >= MAX_BIO_CHARS ? 'var(--danger)' : 'var(--on-surface-3)';
+  }
+
+  function updateUploadCopy() {
+    if (!uploadPurposeLabel || !uploadTypesLabel || !uploadInput) return;
+    if (currentType === 'business') {
+      uploadPurposeLabel.textContent = 'Upload Catalogues / Cards to Hire / Company Criteria Documents (Optional)';
+      uploadTypesLabel.textContent = 'PDF, DOC, DOCX, JPG, PNG (Max 15MB)';
+      uploadInput.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
+    } else {
+      uploadPurposeLabel.textContent = 'Upload CV / Portfolio (Optional)';
+      uploadTypesLabel.textContent = 'PDF, DOC, DOCX, JPG, PNG (Max 15MB)';
+      uploadInput.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
+    }
+  }
+
+  function showMailCheckModal(email) {
+    if (!mailCheckModal) return;
+    if (mailCheckEmail) mailCheckEmail.textContent = email || '';
+    mailCheckModal.style.display = 'flex';
+    void mailCheckModal.offsetWidth;
+    mailCheckModal.classList.add('active');
+  }
+
+  function hideMailCheckModal() {
+    if (!mailCheckModal) return;
+    mailCheckModal.classList.remove('active');
+    mailCheckModal.style.display = 'none';
+  }
+
+  function revealOtpState() {
+    hideMailCheckModal();
+    const otpState = document.getElementById('otp-state');
+    document.getElementById('form-state').style.display = 'none';
+    otpState.classList.add('active');
+    otpState.style.display = 'flex';
+    setTimeout(() => document.querySelector('.otp-input').focus(), 100);
+  }
+
+  function setPostVerifyDestination(destination) {
+    _postVerifyDestination = destination === 'feed' ? 'feed' : 'profile';
+    nextFeedBtn?.classList.toggle('selected', _postVerifyDestination === 'feed');
+    nextProfileBtn?.classList.toggle('selected', _postVerifyDestination === 'profile');
+    if (nextDestinationStatus) {
+      nextDestinationStatus.textContent = _postVerifyDestination === 'feed'
+        ? 'After setup, open your Feed.'
+        : 'After setup, open your Profile.';
+    }
+  }
+
+  function openPostVerifyModal() {
+    if (!postVerifyModal) return;
+    setPostVerifyDestination(_postVerifyDestination);
+    if (postVerifyTalk) postVerifyTalk.checked = _postVerifyTryTalk;
+    postVerifyModal.style.display = 'flex';
+    void postVerifyModal.offsetWidth;
+    postVerifyModal.classList.add('active');
+  }
+
+  function closePostVerifyModal() {
+    if (!postVerifyModal) return;
+    postVerifyModal.classList.remove('active');
+    postVerifyModal.style.display = 'none';
+  }
+
+  function getPostSetupUrl() {
+    const base = 'https://mortalive.com/index.html';
+    if (_postVerifyTryTalk) return `${base}#lobby`;
+    return `${base}#${_postVerifyDestination}`;
+  }
 
   // ── Helper: show inline error ─────────────────────────────────────────────
   function setError(id, msg) {
@@ -543,6 +790,7 @@
       cvField.style.display      = c.showCV    ? 'flex'  : 'none';
       siteField.style.display    = c.showSite  ? 'flex'  : 'none';
       sparkSection.style.display = c.showSpark ? 'block' : 'none';
+      updateUploadCopy();
 
       linkCount = 0;
       linksContainer.innerHTML = '';
@@ -550,28 +798,92 @@
     });
   });
 
-  // ── File upload validation (unchanged from original) ──────────────────────
+  // ── File upload validation / staging ─────────────────────────────────────
   function handleFileSelect(input) {
-    const file = input.files[0];
+    const file = input.files?.[0] || null;
     const info = document.getElementById('cv-file-info');
-    if (file) {
-      const validTypes = [
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-      ];
-      const maxSize = 15 * 1024 * 1024;
-      if (!validTypes.includes(file.type)) {
-        alert('Invalid file type. Please upload PDF, DOC, or DOCX.');
-        input.value = ''; info.textContent = ''; return;
-      }
-      if (file.size > maxSize) {
-        alert('File size exceeds 15MB limit.');
-        input.value = ''; info.textContent = ''; return;
-      }
+    _selectedUploadFile = null;
+    if (!file) {
+      if (info) info.textContent = '';
+      return;
+    }
+
+    const mime = file.type || '';
+    const extOk = /\.(pdf|doc|docx|jpe?g|png)$/i.test(file.name || '');
+    const mimeOk = ALLOWED_DOCUMENT_MIMES.has(mime);
+
+    if (!mimeOk && !extOk) {
+      alert('Invalid file type. Please upload PDF, DOC, DOCX, JPG, or PNG.');
+      input.value = '';
+      if (info) info.textContent = '';
+      return;
+    }
+
+    if (file.size > MAX_DOCUMENT_BYTES) {
+      alert('File size exceeds the 15MB limit.');
+      input.value = '';
+      if (info) info.textContent = '';
+      return;
+    }
+
+    _selectedUploadFile = file;
+    if (info) {
       info.textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
       info.style.color = 'var(--primary)';
     }
+  }
+
+  function safeFileName(name) {
+    const clean = String(name || 'document')
+      .trim()
+      .replace(/[^a-zA-Z0-9._-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 100);
+    return clean || 'document';
+  }
+
+  async function uploadSelectedDocument(uid) {
+    const file = _selectedUploadFile;
+    if (!file) return null;
+
+    if (!uid || !file) throw new Error('No verified user or document selected.');
+    if (file.size > MAX_DOCUMENT_BYTES) throw new Error('The selected document exceeds 15MB.');
+    if (!ALLOWED_DOCUMENT_MIMES.has(file.type) && !/\.(pdf|doc|docx|jpe?g|png)$/i.test(file.name || '')) {
+      throw new Error('The selected document type is not supported.');
+    }
+
+    const extension = (file.name.split('.').pop() || 'bin').toLowerCase();
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const objectPath = `${uid}/invitation-${stamp}-${crypto.randomUUID()}.${extension}`;
+
+    const { data, error } = await sb.storage
+      .from(DOCUMENT_BUCKET)
+      .upload(objectPath, file, {
+        cacheControl: '3600',
+        contentType: file.type || 'application/octet-stream',
+        upsert: false
+      });
+
+    if (error) throw new Error(`Document upload failed: ${error.message}`);
+
+    const documentKind = currentType === 'business' ? 'business_documents' : 'cv_portfolio';
+    const { error: metadataError } = await sb.from('user_documents').insert({
+      user_id: uid,
+      document_kind: documentKind,
+      storage_path: data?.path || objectPath,
+      original_name: safeFileName(file.name),
+      mime_type: file.type || 'application/octet-stream',
+      size_bytes: file.size
+    });
+
+    if (metadataError) {
+      // Best-effort cleanup so an orphaned object is not left behind.
+      await sb.storage.from(DOCUMENT_BUCKET).remove([data?.path || objectPath]);
+      throw new Error(`Document record failed: ${metadataError.message}`);
+    }
+
+    return { path: data?.path || objectPath, kind: documentKind };
   }
 
   // ── Dynamic links (unchanged from original) ───────────────────────────────
@@ -593,12 +905,43 @@
     btnAddLink.style.display = linkCount >= config[currentType].maxLinks ? 'none' : 'inline-flex';
   }
 
+  dobInput?.addEventListener('input', syncAgeState);
+  dobInput?.addEventListener('change', syncAgeState);
+  bioInput?.addEventListener('input', syncBioCounter);
+  sparkWishInput?.addEventListener('input', () => enforceWordLimit(sparkWishInput, sparkWishCount, 'Spark wish'));
+  finalWishInput?.addEventListener('input', () => enforceWordLimit(finalWishInput, finalWishCount, 'Final wish'));
+  mailCheckOk?.addEventListener('click', revealOtpState);
+  nextFeedBtn?.addEventListener('click', () => setPostVerifyDestination('feed'));
+  nextProfileBtn?.addEventListener('click', () => setPostVerifyDestination('profile'));
+  postVerifyTalk?.addEventListener('change', () => {
+    _postVerifyTryTalk = !!postVerifyTalk.checked;
+  });
+  postVerifyContinue?.addEventListener('click', () => {
+    _postVerifyTryTalk = !!postVerifyTalk?.checked;
+    closePostVerifyModal();
+    const wishPage = document.getElementById('wish-state');
+    wishPage.style.display = 'flex';
+    void wishPage.offsetWidth;
+    wishPage.classList.add('active');
+  });
+
+  syncAgeState();
+  syncBioCounter();
+  enforceWordLimit(sparkWishInput, sparkWishCount, 'Spark wish');
+  enforceWordLimit(finalWishInput, finalWishCount, 'Final wish');
+  updateUploadCopy();
+  setPostVerifyDestination('profile');
+
   // ── REGISTER — check username, then send real OTP via Supabase ─────────────
   document.getElementById('btn-register').addEventListener('click', async () => {
     const username = document.getElementById('reg-username').value.trim();
     const email    = document.getElementById('reg-email').value.trim();
     const password = document.getElementById('reg-password').value;
     const terms    = document.getElementById('reg-terms').checked;
+    const dob      = dobInput?.value || '';
+    const ageInvalid = syncAgeState();
+    const bio        = (bioInput?.value || '').trim();
+    const sparkWish  = (sparkWishInput?.value || '').trim();
 
     setError('err-register', '');
 
@@ -606,6 +949,10 @@
     if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) return setError('err-register', 'Username must be 3–24 characters: letters, numbers, underscore only.');
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) return setError('err-register', 'Please enter a valid email address.');
     if (password.length < 8) return setError('err-register', 'Password must be at least 8 characters.');
+    if (!dob) return setError('err-register', 'Please enter your date of birth.');
+    if (ageInvalid) return setError('err-register', 'You must be at least 13 years old to join Mortalive.');
+    if (countWords(sparkWish) > MAX_SPARK_WORDS) return setError('err-register', `Spark is limited to ${MAX_SPARK_WORDS} words per post.`);
+    if (bio.length > MAX_BIO_CHARS) return setError('err-register', `Profile bio is limited to ${MAX_BIO_CHARS} characters.`);
     if (!terms) return setError('err-register', 'Please agree to the Terms of Service.');
 
     // Instagram-style availability check. The RPC is the public read path;
@@ -637,15 +984,17 @@
       email,
       password,
       accountType:  currentType,
+      dob,
       details:      detailsInput.value.trim(),
-      bio:          document.getElementById('reg-bio').value.trim(),
+      bio,
       businessSite: document.getElementById('reg-business-site').value.trim(),
       marketing:    document.getElementById('reg-marketing').checked,
       spark: {
-        wish:     document.getElementById('spark-wish').value.trim(),
+        wish:     sparkWish,
         isPublic: document.getElementById('spark-public').checked
       },
-      interests: Array.from(document.querySelectorAll('.interest-checkbox:checked')).map(c => c.value)
+      interests: Array.from(document.querySelectorAll('.interest-checkbox:checked')).map(c => c.value),
+      documentFile: _selectedUploadFile
     };
 
     const btn = document.getElementById('btn-register');
@@ -668,12 +1017,8 @@
 
       _lastOtpAt = Date.now();
 
-      // Switch to OTP slide
-      document.getElementById('form-state').style.display = 'none';
-      const otpState = document.getElementById('otp-state');
-      otpState.classList.add('active');
       document.getElementById('otp-email-display').textContent = email;
-      setTimeout(() => document.querySelector('.otp-input').focus(), 100);
+      showMailCheckModal(email);
 
     } catch (e) {
       setError('err-register', 'Could not reach the server — try again in a moment.');
@@ -800,6 +1145,7 @@
         data: {
           username: userData.username,
           account_type: userData.accountType,
+          date_of_birth: userData.dob,
           details: userData.details,
           bio: userData.bio,
           business_site: userData.businessSite,
@@ -820,13 +1166,10 @@
       _verifiedUser    = updatedUserData?.user || user;
       _verifiedSession = session;
 
-      // Move to wish slide
+      // After the 6-digit code is confirmed, ask for the next destination.
       document.getElementById('otp-state').classList.remove('active');
       document.getElementById('otp-state').style.display = 'none';
-      const wishPage = document.getElementById('wish-state');
-      wishPage.style.display = 'flex';
-      void wishPage.offsetWidth;
-      wishPage.classList.add('active');
+      openPostVerifyModal();
 
     } catch (e) {
       setError('err-otp', 'Could not reach the server — try again.');
@@ -837,6 +1180,8 @@
 
   // ── FINAL SUBMIT — writes all data to Supabase, then redirects ────────────
   document.getElementById('btn-finish').addEventListener('click', async () => {
+    enforceWordLimit(finalWishInput, finalWishCount, 'Final wish');
+    syncBioCounter();
     const finalWish = document.getElementById('final-wish').value.trim();
     const isPublic  = document.getElementById('final-wish-public').checked;
 
@@ -854,10 +1199,19 @@
     try {
       const uid = _verifiedUser.id;
 
+      if (countWords(finalWish) > MAX_SPARK_WORDS) {
+        throw new Error(`Spark is limited to ${MAX_SPARK_WORDS} words per post.`);
+      }
+
       // 1. Username + profile data were saved in Supabase Auth during OTP verification.
       //    Continue with the invitation-only application data below.
 
-      // 2. Save social links (if any were added)
+      // 2. Upload optional CV/portfolio/business document if selected.
+      if (userData.documentFile) {
+        await uploadSelectedDocument(uid);
+      }
+
+      // 3. Save social links (if any were added)
       const linkEntries = document.querySelectorAll('#links-container .link-entry');
       const links = [];
       linkEntries.forEach((row, i) => {
@@ -870,7 +1224,7 @@
         if (linksErr) throw new Error(`Could not save social links: ${linksErr.message}`);
       }
 
-      // 3. Save in-form Spark wish (typed before OTP)
+      // 4. Save in-form Spark wish (typed before OTP)
       if (userData.spark?.wish) {
         const { error: sparkErr } = await sb.from('wishes').insert({
           user_id:  uid,
@@ -881,7 +1235,7 @@
         if (sparkErr) throw new Error(`Could not save Spark wish: ${sparkErr.message}`);
       }
 
-      // 4. Save final wish (typed on the wish slide)
+      // 5. Save final wish (typed on the wish slide)
       if (finalWish) {
         const { error: wishErr } = await sb.from('wishes').insert({
           user_id:  uid,
@@ -892,20 +1246,24 @@
         if (wishErr) throw new Error(`Could not save final wish: ${wishErr.message}`);
       }
 
-      // 5. Seed localStorage with the same keys app.js / lobby-boot.js expect
+      // 6. Seed localStorage with the same keys app.js / lobby-boot.js expect
       localStorage.setItem('mortalive_token',    _verifiedSession.access_token);
       localStorage.setItem('mortalive_username', userData.username);
       localStorage.setItem('mortalive_user_id',  uid);
       localStorage.removeItem('mortalive_guest_name');
+      _selectedUploadFile = null;
 
-      // 6. Show success screen
+      // 7. Show success screen
       document.getElementById('wish-state').classList.remove('active');
       document.getElementById('wish-state').style.display = 'none';
       document.getElementById('success-state').style.display = 'block';
       document.querySelector('.card').scrollTop = 0;
 
       // Auto-redirect to Talk lobby after a short pause
-      setTimeout(() => { window.location.href = 'index.html#lobby'; }, 2200);
+      const destinationUrl = getPostSetupUrl();
+      const successLink = document.querySelector('#success-state a.btn-primary');
+      if (successLink) successLink.href = destinationUrl;
+      setTimeout(() => { window.location.href = destinationUrl; }, 2200);
 
     } catch (e) {
       console.error('[register] finish error:', e);
@@ -928,7 +1286,21 @@
       _verifiedSession = session;
       // If password is still held in memory, set it now
       if (userData.password) {
-        try { await sb.auth.updateUser({ password: userData.password }); } catch {}
+        try {
+          await sb.auth.updateUser({
+            password: userData.password,
+            data: {
+              username: userData.username,
+              account_type: userData.accountType,
+              date_of_birth: userData.dob,
+              details: userData.details,
+              bio: userData.bio,
+              business_site: userData.businessSite,
+              marketing_opt_in: userData.marketing,
+              interests: userData.interests
+            }
+          });
+        } catch {}
       }
     }
   });
