@@ -1240,11 +1240,8 @@ function initAuthControls() {
   });
 
   // ── Live username availability check (Instagram-style) ──
-  // Requires a `is_username_taken(p_username text) returns boolean` RPC
-  // function in Supabase (SECURITY DEFINER) — see setup notes. Plain
-  // client-side SELECT against public.accounts won't work once RLS is
-  // locked down to "users can only see their own row", since an
-  // anonymous signup has no row yet to be "their own".
+  // The public RPC checks the dedicated username registry. The registry's
+  // unique constraint is the final authority when the account is committed.
   let _usernameCheckTimer = null;
   let _usernameCheckToken = 0; // guards against out-of-order async replies
   let _usernameCheck = { username: null, available: null }; // available: null=unknown, true/false=result for `username`
@@ -1264,12 +1261,11 @@ function initAuthControls() {
       const { data, error } = await sb.rpc('is_username_taken', { p_username: username });
       if (myToken !== _usernameCheckToken) return; // a newer keystroke superseded this check
       if (error) {
-        // RPC missing/misconfigured, or a network hiccup — fail open.
-        // The DB's unique constraint on accounts.username (see setup
-        // notes) is the real backstop against duplicates either way.
+        // Do not fail open. The signup button requires a successful
+        // availability check before sending the OTP.
         console.warn('is_username_taken check failed:', error.message);
         _usernameCheck = { username, available: null };
-        setUsernameStatus(null, '');
+        setUsernameStatus('bad', 'Could not check username right now. Try again.');
         return;
       }
       const taken = !!data;
@@ -1330,6 +1326,29 @@ function initAuthControls() {
       $('signup-username')?.focus();
       return;
     }
+
+    // Always re-check on submit so a stale availability result can never
+    // bypass the server-side username registry.
+    try {
+      const { data: taken, error: usernameErr } = await sb.rpc('is_username_taken', {
+        p_username: username
+      });
+      if (usernameErr) {
+        setError('signup-error', 'Could not check username availability. Please try again.');
+        return;
+      }
+      if (taken) {
+        _usernameCheck = { username, available: false };
+        setUsernameStatus('bad', '✕ That username is taken — try another.');
+        setError('signup-error', 'That username is taken — please choose a different one.');
+        $('signup-username')?.focus();
+        return;
+      }
+      _usernameCheck = { username, available: true };
+    } catch (e) {
+      setError('signup-error', 'Could not check username availability. Please try again.');
+      return;
+    }
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
       setError('signup-error', 'Enter a valid email address.');
       return;
@@ -1351,8 +1370,8 @@ function initAuthControls() {
         email,
         options: {
           shouldCreateUser: true,
-          // Picked up by the handle_new_user() DB trigger to populate
-          // the public.accounts row.
+          // Stored in Supabase Auth metadata and reserved in public.usernames
+          // after the OTP is verified.
           data: { username, full_name: fullName },
           // So the email's "Confirm & continue" button lands back on
           // this exact page instead of whatever Site URL is configured
@@ -1493,28 +1512,46 @@ function initAuthControls() {
       }
 
       if (_otpContext.mode === 'signup') {
-        // Identity confirmed — set the password they chose on the
-        // signup form, then log them straight in. No separate
-        // "set new password" step needed; we already have it.
+        // Identity confirmed — set the password they chose on the signup form.
         clearInterval(_resendCooldownTimer);
         const password = _pendingSignupPassword;
+        const requestedUsername = user.user_metadata?.username || '';
+
+        if (password) {
+          const { error: passwordError } = await sb.auth.updateUser({ password });
+          if (passwordError) {
+            setError('otp-error', friendlyAuthError(passwordError));
+            return;
+          }
+        }
+
+        // Atomically reserve the username after authentication exists.
+        const { data: reserved, error: reserveError } = await sb.rpc('reserve_username', {
+          p_user_id: user.id,
+          p_username: requestedUsername
+        });
+
+        if (reserveError || reserved !== true) {
+          console.warn('reserve_username failed:', reserveError?.message || 'username unavailable');
+          await sb.auth.signOut();
+          _otpContext = null;
+          _pendingSignupPassword = null;
+          if (otpForm) otpForm.style.display = 'none';
+          if (signupForm) signupForm.style.display = '';
+          setError('signup-error', 'That username was just taken — please choose another and try again.');
+          setUsernameStatus('bad', '✕ That username is taken — try another.');
+          const input = $('signup-username');
+          if (input) input.focus();
+          return;
+        }
+
         _otpContext = null;
         _pendingSignupPassword = null;
-        try {
-          if (password) await sb.auth.updateUser({ password });
-        } catch (pwErr) {
-          console.warn('Could not set chosen password after signup verify:', pwErr);
-          // Not fatal — they're verified and logged in either way; they
-          // can set a password later via "Forgot password?" if this failed.
-        }
-        const profile = await fetchUserProfile(user.id);
         const username =
-          profile?.username ||
           user.user_metadata?.username ||
           user.email?.split('@')[0] ||
           'User';
-        const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
-        afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
+        afterAuthSuccess(session.access_token, username, 0, user.id);
         return;
       }
 
@@ -1719,22 +1756,37 @@ function initAuthControls() {
   });
 }
 
-// Fetches the row from public.accounts for the given auth user id.
-// Uses select('*') rather than named columns so this doesn't break if
-// your accounts table's column names differ slightly from the defaults
-// assumed here (username, full_name, crockroach_score).
+// Fetch the authenticated user's application profile from Supabase Auth
+// metadata. Authentication identity stays in auth.users; no public.accounts
+// table is required for the current app.
 async function fetchUserProfile(userId) {
   try {
-    const { data, error } = await sb
-      .from('accounts')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    const { data: { user }, error } = await sb.auth.getUser();
     if (error) {
       console.warn('fetchUserProfile:', error.message);
       return null;
     }
-    return data;
+    if (!user || user.id !== userId) {
+      console.warn('fetchUserProfile: user mismatch');
+      return null;
+    }
+
+    return {
+      id: user.id,
+      email: user.email || null,
+      phone: user.phone || null,
+      username: user.user_metadata?.username || null,
+      full_name: user.user_metadata?.full_name || null,
+      account_type: user.user_metadata?.account_type || 'private',
+      details: user.user_metadata?.details || '',
+      bio: user.user_metadata?.bio || '',
+      business_site: user.user_metadata?.business_site || '',
+      marketing_opt_in: !!user.user_metadata?.marketing_opt_in,
+      interests: Array.isArray(user.user_metadata?.interests)
+        ? user.user_metadata.interests
+        : [],
+      crockroach_score: 0
+    };
   } catch (e) {
     console.warn('fetchUserProfile failed:', e);
     return null;
