@@ -98,6 +98,16 @@
   
   .field textarea { resize: vertical; min-height: 80px; }
 
+  .field-hint {
+    min-height: 16px;
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--on-surface-3);
+  }
+  .field-hint.checking { color: var(--on-surface-3); }
+  .field-hint.available { color: #188038; }
+  .field-hint.taken, .field-hint.invalid, .field-hint.error { color: #c5221f; }
+
   /* File Upload Styling */
   .file-upload-wrapper {
     border: 2px dashed var(--border-strong);
@@ -312,7 +322,8 @@
     <!-- Standard Fields -->
     <div class="field">
       <label>Username</label>
-      <input type="text" id="reg-username" placeholder="Choose a unique username" autocomplete="username">
+      <input type="text" id="reg-username" placeholder="Choose a unique username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="24">
+      <div id="username-availability" class="field-hint" aria-live="polite"></div>
     </div>
     
     <div class="field">
@@ -583,6 +594,8 @@
   const detailsField     = document.getElementById('dynamic-details-field');
   const detailsLabel     = document.getElementById('details-label');
   const detailsInput     = document.getElementById('reg-details');
+  const usernameInput    = document.getElementById('reg-username');
+  const usernameAvailability = document.getElementById('username-availability');
   const cvField          = document.getElementById('cv-upload-field');
   const siteField        = document.getElementById('business-site-field');
   const sparkSection     = document.getElementById('spark-section');
@@ -931,6 +944,78 @@
   enforceWordLimit(finalWishInput, finalWishCount, 'Final wish');
   updateUploadCopy();
   setPostVerifyDestination('profile');
+
+  // ── LIVE USERNAME AVAILABILITY ───────────────────────────────────────────
+  // Mirrors the registration RPC, but runs while the user types.
+  let _usernameCheckTimer = null;
+  let _usernameCheckSeq = 0;
+
+  function setUsernameAvailability(state, message) {
+    if (!usernameAvailability) return;
+    usernameAvailability.className = `field-hint ${state || ''}`.trim();
+    usernameAvailability.textContent = message || '';
+  }
+
+  async function checkUsernameAvailabilityLive() {
+    const username = usernameInput?.value.trim() || '';
+    const seq = ++_usernameCheckSeq;
+
+    if (_usernameCheckTimer) {
+      clearTimeout(_usernameCheckTimer);
+      _usernameCheckTimer = null;
+    }
+
+    if (!username) {
+      setUsernameAvailability('', '');
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
+      setUsernameAvailability(
+        'invalid',
+        'Use 3–24 letters, numbers, or underscores.'
+      );
+      return;
+    }
+
+    setUsernameAvailability('checking', 'Checking availability…');
+
+    _usernameCheckTimer = setTimeout(async () => {
+      try {
+        const { data: taken, error } = await sb.rpc('is_username_taken', {
+          p_username: username
+        });
+
+        // Ignore a response for an older username value.
+        if (seq !== _usernameCheckSeq) return;
+
+        if (error) {
+          console.warn('[username-check]', error.message);
+          setUsernameAvailability(
+            'error',
+            'Could not check right now. We’ll check again when you continue.'
+          );
+          return;
+        }
+
+        if (taken) {
+          setUsernameAvailability('taken', '✕ Username is taken — try another.');
+        } else {
+          setUsernameAvailability('available', '✓ Username is available.');
+        }
+      } catch (error) {
+        if (seq !== _usernameCheckSeq) return;
+        console.warn('[username-check]', error);
+        setUsernameAvailability(
+          'error',
+          'Could not check right now. We’ll check again when you continue.'
+        );
+      }
+    }, 450);
+  }
+
+  usernameInput?.addEventListener('input', checkUsernameAvailabilityLive);
+  usernameInput?.addEventListener('blur', checkUsernameAvailabilityLive);
 
   // ── REGISTER — check username, then send real OTP via Supabase ─────────────
   document.getElementById('btn-register').addEventListener('click', async () => {
