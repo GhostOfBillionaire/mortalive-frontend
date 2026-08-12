@@ -497,7 +497,7 @@
       <p>A 6-digit verification code was sent to <strong id="mail-check-email"></strong>.</p>
     </div>
     <div class="notice-box" style="margin-top: 10px;">
-      Please check your inbox and spam/junk folder, then enter the code here.
+      Check your email
     </div>
     <button id="btn-mail-check-ok" class="btn btn-primary">I’ve checked — enter code →</button>
   </div>
@@ -1034,6 +1034,55 @@
     }
   });
 
+  // ── Existing-email guard ─────────────────────────────────────────────────
+  // Invitation onboarding is only for new accounts. If the email already
+  // belongs to a Mortalive Auth user, send them to the normal signup/auth
+  // surface on index.html instead of sending another OTP from the invitation.
+  async function redirectExistingEmailToMainSignup(email) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail) return false;
+
+    try {
+      const { data: sessionData } = await sb.auth.getSession();
+      const sessionEmail = sessionData?.session?.user?.email?.trim().toLowerCase() || '';
+
+      // If this invitation tab already has a session for the same email,
+      // do not send another OTP. The account already exists.
+      if (sessionEmail && sessionEmail === normalizedEmail) {
+        window.location.href = `https://mortalive.com/index.html?signup=1&email=${encodeURIComponent(normalizedEmail)}`;
+        return true;
+      }
+
+      // If another account is already signed in, don't silently switch identity.
+      if (sessionEmail && sessionEmail !== normalizedEmail) {
+        setError('err-register', `You're already signed in as ${sessionEmail}. Use that account or open the invitation in a signed-out window.`);
+        return true;
+      }
+
+      // Authoritative existence check against auth.users through the RPC.
+      const { data: exists, error } = await sb.rpc('is_email_registered', {
+        p_email: normalizedEmail
+      });
+
+      if (error) {
+        console.warn('[register] is_email_registered:', error.message);
+        setError('err-register', 'Could not verify this email right now. Please try again.');
+        return true;
+      }
+
+      if (exists === true) {
+        window.location.href = `https://mortalive.com/index.html?signup=1&email=${encodeURIComponent(normalizedEmail)}`;
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      console.warn('[register] existing-email check failed:', e);
+      setError('err-register', 'Could not verify this email right now. Please try again.');
+      return true;
+    }
+  }
+
   // ── REGISTER — same Supabase OTP send path as the live index signup ────────
   document.getElementById('btn-register').addEventListener('click', async () => {
     const username = document.getElementById('reg-username').value.trim();
@@ -1064,6 +1113,11 @@
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
       return setError('err-register', 'Please enter a valid email address.');
     }
+
+    // Existing Mortalive accounts must use the normal signup/auth surface.
+    // This prevents invitation.html from sending another OTP to an existing user.
+    if (await redirectExistingEmailToMainSignup(email)) return;
+
     if (password.length < 8) {
       return setError('err-register', 'Password must be at least 8 characters.');
     }
