@@ -3486,5 +3486,42 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
 })();
 </script>
 
+  <script>
+(function () {
+  const params = new URLSearchParams(window.location.search);
+
+  if (params.get('signin') !== '1') return;
+
+  const email = (params.get('email') || '').trim();
+
+  function openSigninFromInvitation() {
+    const loginTab = document.getElementById('tab-login');
+    const loginEmail = document.getElementById('login-email');
+
+    if (!loginTab) return;
+
+    // Use the existing MORTALIVE auth UI.
+    loginTab.click();
+
+    // Pre-fill the email supplied by invitation.html.
+    if (loginEmail && email) {
+      loginEmail.value = email;
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener(
+      'DOMContentLoaded',
+      openSigninFromInvitation,
+      { once: true }
+    );
+  } else {
+    openSigninFromInvitation();
+  }
+})();
+</script>
+
+  
+
 </body>
 </html>
