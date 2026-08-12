@@ -205,6 +205,27 @@
   .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(26,110,245,.36); }
 
   /* Signup / OTP styles aligned with the live index.html signup flow */
+  /* Password field — same wrapper/toggle styling as index.html signup */
+  .password-input-wrap { position: relative; }
+  .password-input-wrap input { padding-right: 44px; }
+  .pw-toggle-btn {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 8px;
+    border-radius: var(--r-sm);
+    color: var(--on-surface-3);
+    opacity: .75;
+    transition: opacity var(--dur-fast), background var(--dur-fast);
+  }
+  .pw-toggle-btn:hover { opacity: 1; background: rgba(0,0,0,.04); }
+
   .username-status {
     font-size: 12px;
     margin-top: 2px;
@@ -367,7 +388,10 @@
 
     <div class="field">
       <label>Password</label>
-      <input type="password" id="reg-password" placeholder="At least 8 characters" autocomplete="new-password">
+      <div class="password-input-wrap">
+        <input type="password" id="reg-password" placeholder="At least 8 characters" autocomplete="new-password">
+        <button type="button" class="pw-toggle-btn" id="btn-reg-pw-toggle" aria-label="Show password">👁️</button>
+      </div>
     </div>
     
     <div class="field" id="dob-field">
@@ -1083,6 +1107,20 @@
     }
   }
 
+  // Password visibility — same behavior as index.html/app.js signup.
+  function wireupPasswordToggle(inputId, btnId) {
+    const input = document.getElementById(inputId);
+    const btn = document.getElementById(btnId);
+    if (!input || !btn) return;
+    btn.addEventListener('click', () => {
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      btn.textContent = showing ? '👁️' : '🙈';
+      btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+    });
+  }
+  wireupPasswordToggle('reg-password', 'btn-reg-pw-toggle');
+
   // ── REGISTER — same Supabase OTP send path as the live index signup ────────
   document.getElementById('btn-register').addEventListener('click', async () => {
     const username = document.getElementById('reg-username').value.trim();
@@ -1220,8 +1258,18 @@
     setError('err-otp', null);
     if (otpCodeInput) {
       otpCodeInput.value = '';
-      otpCodeInput.focus();
     }
+
+    // Register & Continue changes the screen; always bring the new OTP
+    // controls to the top so Verify & Continue is immediately visible.
+    const card = document.querySelector('.card');
+    if (card) card.scrollTo({ top: 0, behavior: 'instant' });
+    window.scrollTo({ top: 0, behavior: 'instant' });
+
+    if (otpCodeInput) {
+      setTimeout(() => otpCodeInput.focus(), 80);
+    }
+
     startResendCooldown(60);
   }
 
