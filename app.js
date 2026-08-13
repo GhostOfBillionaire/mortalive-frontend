@@ -1107,15 +1107,15 @@ function initAuthControls() {
 
   function showAuthTab(which) {
     hideForgotFlow();
-    if (guestForm)  guestForm.style.display  = which === 'guest'  ? '' : 'none';
+    // GUEST REMOVED: No longer part of auth tabs
     if (loginForm)  loginForm.style.display  = which === 'login'  ? '' : 'none';
     if (signupForm) signupForm.style.display = which === 'signup' ? '' : 'none';
-    tabGuest?.classList.toggle('active',  which === 'guest');
     tabLogin?.classList.toggle('active',  which === 'login');
     tabSignup?.classList.toggle('active', which === 'signup');
   }
 
-  tabGuest?.addEventListener('click', () => showAuthTab('guest'));
+  // GUEST is NOT part of auth tabs — it has its own dedicated button
+  // tabGuest?.addEventListener('click', () => showAuthTab('guest'));  // REMOVED
   tabLogin?.addEventListener('click', () => showAuthTab('login'));
   tabSignup?.addEventListener('click', () => showAuthTab('signup'));
 
@@ -1629,6 +1629,22 @@ function initAuthControls() {
     S.crockroachScore = null;
     S.isGuest     = true;
     S.guestName   = name.slice(0, 24) || `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
+    updateProgressText();
+    localStorage.removeItem('mortalive_token');
+    localStorage.removeItem('mortalive_username');
+    localStorage.removeItem('mortalive_user_id');
+    localStorage.setItem('mortalive_guest_name', S.guestName);
+    enterLobby();
+  });
+
+  // Dedicated guest button on landing page — NOT part of auth form
+  $('btn-guest-toggle')?.addEventListener('click', () => {
+    S.authToken   = null;
+    S.username    = null;
+    S.userId      = null;
+    S.crockroachScore = null;
+    S.isGuest     = true;
+    S.guestName   = `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
     updateProgressText();
     localStorage.removeItem('mortalive_token');
     localStorage.removeItem('mortalive_username');
