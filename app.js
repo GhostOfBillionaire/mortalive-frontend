@@ -1730,17 +1730,21 @@ async function fetchUserProfile(userId) {
       .from('accounts')
       .select('*')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
+
     if (error) {
-      console.warn('fetchUserProfile:', error.message);
+      console.warn('[Profile] accounts lookup:', error.message);
       return null;
     }
-    return data;
+
+    return data || null;
   } catch (e) {
-    console.warn('fetchUserProfile failed:', e);
+    console.warn('[Profile] accounts lookup failed:', e);
     return null;
   }
 }
+
+
 
 // If a Supabase session already exists (page reload / return visit), log
 // the user in automatically and skip past the auth screen.
@@ -1752,17 +1756,15 @@ async function tryAutoLogin() {
 
   _autoLoginPromise = (async () => {
     try {
-      // Supabase Auth is the source of truth. LocalStorage is cache/display
-      // state and must never be used to decide whether the user is logged in.
+      // Supabase Auth is the only authentication authority.
       const { data: sessionData, error: sessionError } =
         await sb.auth.getSession();
       const session = sessionData?.session;
 
       if (sessionError || !session?.access_token || !session.user?.id) {
-        throw new Error(sessionError?.message || 'no valid session');
+        throw new Error(sessionError?.message || 'no valid Supabase session');
       }
 
-      // Verify that this browser currently holds a real Supabase user session.
       const { data: userData, error: userError } =
         await sb.auth.getUser(session.access_token);
       const user = userData?.user;
@@ -1771,13 +1773,21 @@ async function tryAutoLogin() {
         throw new Error(userError?.message || 'invalid Supabase session');
       }
 
-      // accounts is profile enrichment only. A profile-row problem cannot
-      // downgrade a valid Auth session to Guest.
+      // Commit authenticated state BEFORE any optional profile/UI work.
+      S.authToken = session.access_token;
+      S.userId = user.id;
+      S.isGuest = false;
+
+      localStorage.setItem('mortalive_token', S.authToken);
+      localStorage.setItem('mortalive_user_id', S.userId);
+      localStorage.removeItem('mortalive_guest_name');
+
+      // Profile enrichment is best-effort. It must never invalidate Auth.
       let profile = null;
       try {
         profile = await fetchUserProfile(user.id);
       } catch (profileError) {
-        console.warn('[Auth] accounts profile lookup failed:', profileError);
+        console.warn('[Profile] accounts enrichment failed:', profileError);
       }
 
       const username =
@@ -1791,20 +1801,23 @@ async function tryAutoLogin() {
         profile?.crockroachScore ??
         (Number(user.user_metadata?.crockroach_score) || 0);
 
-      S.authToken = session.access_token;
       S.username = username;
-      S.userId = user.id;
       S.crockroachScore = crockroachScore;
-      S.isGuest = false;
 
-      localStorage.setItem('mortalive_token', S.authToken);
       localStorage.setItem('mortalive_username', S.username);
-      localStorage.setItem('mortalive_user_id', S.userId);
-      localStorage.removeItem('mortalive_guest_name');
 
-      syncAuthProgress(crockroachScore);
+      // UI/progress enrichment is also non-auth-critical.
+      try {
+        syncAuthProgress(crockroachScore);
+        updateIdentityDisplay();
+        updateProgressText();
+      } catch (uiError) {
+        console.warn('[Auth] UI hydration warning:', uiError);
+      }
+
       return true;
     } catch (e) {
+      // Only a genuinely missing/invalid Supabase session may produce Guest.
       console.warn('[Auth] No valid Supabase session:', e?.message || e);
 
       S.authToken = null;
@@ -3139,9 +3152,8 @@ ready(() => {
   initChatControls();
   initRatingControls();
 
-  // Decide the initial page only after Supabase restores/verifies the
-  // current browser session. Never show authenticated Talk from localStorage
-  // before that check completes.
+  // Initial routing waits for the real Supabase session result.
+  // The landing checkmark only gates the Continue button; it is not auth state.
   const fromInvitationWithLogin = window.location.hash === '#login';
   const entryParams = new URLSearchParams(window.location.search);
   const invitationSignIn = entryParams.get('signin') === '1';
@@ -3149,22 +3161,20 @@ ready(() => {
 
   tryAutoLogin().then((loggedIn) => {
     if (loggedIn) {
-      // This is the critical fix: the lobby is entered AFTER S.isGuest and
-      // S.username have been populated from the verified Supabase session.
+      // Session and identity are hydrated BEFORE enterLobby paints the UI.
       enterLobby();
       return;
     }
 
     if (fromInvitationWithLogin || invitationSignIn) {
       showPage('pg-auth');
+
       setTimeout(() => {
         const tabLogin = document.getElementById('tab-login');
         if (tabLogin) tabLogin.click();
 
         const loginEmail = document.getElementById('login-email');
-        if (loginEmail && invitationEmail) {
-          loginEmail.value = invitationEmail;
-        }
+        if (loginEmail && invitationEmail) loginEmail.value = invitationEmail;
 
         loginEmail?.focus?.();
       }, 0);
@@ -3173,7 +3183,7 @@ ready(() => {
       return;
     }
 
-    // First-time / signed-out visitor stays on the landing page.
+    // No authenticated session: first-time/signed-out visitor sees landing.
     if ($('pg-land')) showPage('pg-land');
   });
 
