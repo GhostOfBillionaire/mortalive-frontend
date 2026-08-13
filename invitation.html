@@ -1070,16 +1070,10 @@
       const { data: sessionData } = await sb.auth.getSession();
       const sessionEmail = sessionData?.session?.user?.email?.trim().toLowerCase() || '';
 
-      // If this invitation tab already has a session for the same email,
-      // do not send another OTP. The account already exists.
-      if (sessionEmail && sessionEmail === normalizedEmail) {
-        window.location.href = `https://mortalive.com/?signin=1&email=${encodeURIComponent(normalizedEmail)}`;
-        return true;
-      }
-
-      // If another account is already signed in, don't silently switch identity.
-      if (sessionEmail && sessionEmail !== normalizedEmail) {
-        setError('err-register', `You're already signed in as ${sessionEmail}. Use that account or open the invitation in a signed-out window.`);
+      // Any legitimate active session in this browser already identifies the user.
+      // Do not send another OTP or silently switch identities; go directly to Talk.
+      if (sessionEmail) {
+        window.location.href = 'https://mortalive.com/index.html#lobby';
         return true;
       }
 
@@ -1095,7 +1089,7 @@
       }
 
       if (exists === true) {
-        window.location.href = `https://mortalive.com/?signin=1&email=${encodeURIComponent(normalizedEmail)}`;
+        window.location.href = `https://mortalive.com/index.html?signin=1&email=${encodeURIComponent(normalizedEmail)}`;
         return true;
       }
 
