@@ -1224,38 +1224,64 @@ function initAuthControls() {
       if (error) {
         const msg = error.message.toLowerCase();
         
-        // Intelligent fallback: If Supabase says invalid credentials or unconfirmed,
-        // we can silently try to send an OTP. If it succeeds, the account exists but was 
-        // unverified (or they just typed the wrong password, which is fine to reset this way).
+        // Intelligent fallback UI:
+        // Supabase intentionally obscures "wrong password" vs "unverified account" 
+        // to prevent email enumeration. We show the user the standard error, but
+        // embed an interactive link that lets THEM explicitly trigger a verification OTP.
         if (msg.includes('invalid login credentials') || msg.includes('email not confirmed')) {
-          const { error: otpErr } = await sb.auth.signInWithOtp({
-            email,
-            options: { shouldCreateUser: false, emailRedirectTo: window.location.href }
-          });
-          
-          // If otpErr is null, the email definitely exists in Supabase.
-          if (!otpErr) {
-            _lastOtpRequestAt = Date.now();
+          const errEl = $('login-error');
+          if (errEl) {
+            errEl.style.display = 'block';
+            errEl.innerHTML = `Incorrect email or password.<br>
+              <div style="margin-top:6px;padding-top:6px;border-top:1px solid #fecaca;font-size:12.5px;">
+                Account unverified? <a href="#" id="jump-to-verify" style="color:#b42318;font-weight:bold;text-decoration:underline;">Send verification code</a>
+              </div>`;
             
-            // We use 'signup' mode so when they type the OTP, it silently sets their 
-            // password to the one they just typed into the login box.
-            _otpContext = { mode: 'signup', source: 'login', email };
-            _pendingSignupPassword = password; 
-            
-            showOtpStep(email);
-            
-            // Dynamically alter the text of the OTP screen so they understand why they are here
-            const otpLabel = document.querySelector('#auth-otp-form label[for="otp-code"]');
-            if (otpLabel) {
-              otpLabel.textContent = 'Account unverified or incorrect password. Enter code:';
+            const jumpBtn = $('jump-to-verify');
+            if (jumpBtn) {
+              jumpBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                jumpBtn.textContent = 'Sending code...';
+                jumpBtn.style.pointerEvents = 'none';
+                
+                // Trigger the "forgot password" OTP send (shouldCreateUser: false)
+                // If the email exists, Supabase sends it. If it doesn't, Supabase stays silent.
+                await sb.auth.signInWithOtp({
+                  email,
+                  options: { shouldCreateUser: false, emailRedirectTo: window.location.href }
+                });
+                
+                _lastOtpRequestAt = Date.now();
+                // Pass mode: 'signup' so btn-otp-verify sets the password when verified
+                _otpContext = { mode: 'signup', source: 'login', email };
+                _pendingSignupPassword = password; 
+                
+                // Slide to the OTP step
+                if (guestForm)  guestForm.style.display  = 'none';
+                if (loginForm)  loginForm.style.display  = 'none';
+                if (signupForm) signupForm.style.display = 'none';
+                if (forgotForm) forgotForm.style.display = 'none';
+                if (otpForm)    otpForm.style.display    = '';
+                if (resetForm)  resetForm.style.display  = 'none';
+                
+                const display = $('otp-email-display');
+                if (display) display.textContent = `Code sent to ${email}`;
+                
+                // Make the OTP screen dynamically act as an email verifier instead of password reset
+                const otpLabel = document.querySelector('#auth-otp-form label[for="otp-code"]');
+                if (otpLabel) otpLabel.textContent = 'Account unverified. Enter the 6-digit code:';
+                
+                setError('otp-error', null);
+                const codeInput = $('otp-code');
+                if (codeInput) { codeInput.value = ''; codeInput.focus(); }
+                startResendCooldown(60);
+              });
             }
-            
-            toast('Action required: Please verify your email.', '📩');
-            return;
           }
+          return;
         }
 
-        // If we get here, the email didn't exist or there was a hard error.
+        // Fallback for other login errors (e.g. network)
         setError('login-error', friendlyAuthError(error));
         return;
       }
@@ -1484,7 +1510,7 @@ function initAuthControls() {
 
     // Reset the label text back to default in case it was modified by the login fallback
     const otpLabel = document.querySelector('#auth-otp-form label[for="otp-code"]');
-    if (otpLabel) {
+    if (otpLabel && _otpContext?.source !== 'login') {
       otpLabel.textContent = 'Enter the 6-digit code';
     }
 
