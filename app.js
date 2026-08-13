@@ -1225,7 +1225,6 @@ function initAuthControls() {
         return;
       }
       const profile = await fetchUserProfile(user.id);
-      S.profile = profile || S.profile || {};
       const username =
         profile?.username ||
         user.user_metadata?.username ||
@@ -1727,45 +1726,18 @@ function initAuthControls() {
 // assumed here (username, full_name, crockroach_score).
 async function fetchUserProfile(userId) {
   try {
-    // Profile data lives in public.accounts. Use maybeSingle() so a missing
-    // row is distinguishable from an authenticated-session failure.
     const { data, error } = await sb
       .from('accounts')
       .select('*')
       .eq('id', userId)
-      .maybeSingle();
-
+      .single();
     if (error) {
-      console.warn('[Profile] accounts lookup:', error.message);
+      console.warn('fetchUserProfile:', error.message);
+      return null;
     }
-
-    const profile = data || {};
-
-    // Keep the complete profile available to the rest of the app.
-    S.profile = profile;
-
-    // Username is globally owned by public.usernames as well. If the
-    // accounts row does not have it yet, use the canonical username row.
-    if (!profile.username) {
-      try {
-        const { data: usernameRow, error: usernameError } = await sb
-          .from('usernames')
-          .select('username')
-          .eq('user_id', userId)
-          .maybeSingle();
-
-        if (!usernameError && usernameRow?.username) {
-          profile.username = usernameRow.username;
-        }
-      } catch (usernameErr) {
-        console.warn('[Profile] usernames lookup:', usernameErr);
-      }
-    }
-
-    return Object.keys(profile).length ? profile : null;
+    return data;
   } catch (e) {
-    console.warn('[Profile] fetchUserProfile failed:', e);
-    S.profile = null;
+    console.warn('fetchUserProfile failed:', e);
     return null;
   }
 }
@@ -1780,29 +1752,27 @@ async function tryAutoLogin() {
 
   _autoLoginPromise = (async () => {
     try {
-      // Supabase Auth is the source of truth. localStorage values are only
-      // cached UI state and never decide whether the user is authenticated.
+      // Supabase Auth is the source of truth. LocalStorage is cache/display
+      // state and must never be used to decide whether the user is logged in.
       const { data: sessionData, error: sessionError } =
         await sb.auth.getSession();
       const session = sessionData?.session;
 
       if (sessionError || !session?.access_token || !session.user?.id) {
-        throw new Error(sessionError?.message || 'no valid Supabase session');
+        throw new Error(sessionError?.message || 'no valid session');
       }
 
-      // Verify the session belongs to a real Supabase user in this browser.
+      // Verify that this browser currently holds a real Supabase user session.
       const { data: userData, error: userError } =
         await sb.auth.getUser(session.access_token);
       const user = userData?.user;
 
       if (userError || !user || user.id !== session.user.id) {
-        throw new Error(
-          userError?.message || 'Supabase session verification failed'
-        );
+        throw new Error(userError?.message || 'invalid Supabase session');
       }
 
-      // public.accounts is profile data, not authentication authority.
-      // A missing/failed profile lookup must not downgrade a valid session.
+      // accounts is profile enrichment only. A profile-row problem cannot
+      // downgrade a valid Auth session to Guest.
       let profile = null;
       try {
         profile = await fetchUserProfile(user.id);
@@ -1826,7 +1796,6 @@ async function tryAutoLogin() {
       S.userId = user.id;
       S.crockroachScore = crockroachScore;
       S.isGuest = false;
-      S.profile = profile || S.profile || {};
 
       localStorage.setItem('mortalive_token', S.authToken);
       localStorage.setItem('mortalive_username', S.username);
@@ -1834,11 +1803,8 @@ async function tryAutoLogin() {
       localStorage.removeItem('mortalive_guest_name');
 
       syncAuthProgress(crockroachScore);
-      updateIdentityDisplay();
-      updateProgressText();
       return true;
     } catch (e) {
-      // Only a missing/invalid Supabase session may produce Guest state.
       console.warn('[Auth] No valid Supabase session:', e?.message || e);
 
       S.authToken = null;
@@ -3173,30 +3139,24 @@ ready(() => {
   initChatControls();
   initRatingControls();
 
-  // Decide the initial page only after Supabase finishes restoring and
-  // verifying the browser's real session. Never infer authentication from
-  // localStorage alone.
+  // Decide the initial page only after Supabase restores/verifies the
+  // current browser session. Never show authenticated Talk from localStorage
+  // before that check completes.
+  const fromInvitationWithLogin = window.location.hash === '#login';
   const entryParams = new URLSearchParams(window.location.search);
-  const fromInvitationWithLogin =
-    window.location.hash === '#login' ||
-    entryParams.get('signin') === '1';
-  const returnedToLobby =
-    window.location.hash === '#lobby';
-
+  const invitationSignIn = entryParams.get('signin') === '1';
   const invitationEmail = (entryParams.get('email') || '').trim();
 
   tryAutoLogin().then((loggedIn) => {
     if (loggedIn) {
-      // Any valid existing session gets the authenticated Talk experience.
-      // This covers refreshes, direct visits, and invitation redirects.
+      // This is the critical fix: the lobby is entered AFTER S.isGuest and
+      // S.username have been populated from the verified Supabase session.
       enterLobby();
       return;
     }
 
-    if (fromInvitationWithLogin) {
-      // Existing account coming from invitation.html → Login UI.
+    if (fromInvitationWithLogin || invitationSignIn) {
       showPage('pg-auth');
-
       setTimeout(() => {
         const tabLogin = document.getElementById('tab-login');
         if (tabLogin) tabLogin.click();
@@ -3213,14 +3173,7 @@ ready(() => {
       return;
     }
 
-    // An unauthenticated #lobby URL must not fake a logged-in lobby.
-    // Send it through the normal landing/auth flow instead.
-    if (returnedToLobby) {
-      if ($('pg-land')) showPage('pg-land');
-      return;
-    }
-
-    // First visit / signed-out visitor → normal landing page.
+    // First-time / signed-out visitor stays on the landing page.
     if ($('pg-land')) showPage('pg-land');
   });
 
