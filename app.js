@@ -1752,7 +1752,8 @@ async function tryAutoLogin() {
 
   _autoLoginPromise = (async () => {
     try {
-      // Supabase Auth is the source of truth. localStorage values are cache only.
+      // Supabase Auth is the source of truth. localStorage values are only
+      // cached UI state and never decide whether the user is authenticated.
       const { data: sessionData, error: sessionError } =
         await sb.auth.getSession();
       const session = sessionData?.session;
@@ -1761,7 +1762,7 @@ async function tryAutoLogin() {
         throw new Error(sessionError?.message || 'no valid Supabase session');
       }
 
-      // Verify the current browser session with Supabase Auth.
+      // Verify the session belongs to a real Supabase user in this browser.
       const { data: userData, error: userError } =
         await sb.auth.getUser(session.access_token);
       const user = userData?.user;
@@ -1772,13 +1773,13 @@ async function tryAutoLogin() {
         );
       }
 
-      // accounts only enriches the authenticated session. A missing/failed
-      // profile row must never turn a real Supabase login into Guest.
+      // public.accounts is profile data, not authentication authority.
+      // A missing/failed profile lookup must not downgrade a valid session.
       let profile = null;
       try {
         profile = await fetchUserProfile(user.id);
-      } catch (profileErr) {
-        console.warn('[Auth] accounts profile lookup failed:', profileErr);
+      } catch (profileError) {
+        console.warn('[Auth] accounts profile lookup failed:', profileError);
       }
 
       const username =
@@ -1804,9 +1805,10 @@ async function tryAutoLogin() {
       localStorage.removeItem('mortalive_guest_name');
 
       syncAuthProgress(crockroachScore);
+      updateIdentityDisplay();
       return true;
     } catch (e) {
-      // Only failure/absence of the real Supabase session may produce Guest.
+      // Only a missing/invalid Supabase session may produce Guest state.
       console.warn('[Auth] No valid Supabase session:', e?.message || e);
 
       S.authToken = null;
@@ -3141,23 +3143,28 @@ ready(() => {
   initChatControls();
   initRatingControls();
 
-  // Authentication routing is decided only after Supabase confirms the
-  // current browser session. localStorage never proves login.
+  // Decide the initial page only after Supabase finishes restoring and
+  // verifying the browser's real session. Never infer authentication from
+  // localStorage alone.
   const entryParams = new URLSearchParams(window.location.search);
   const fromInvitationWithLogin =
     window.location.hash === '#login' ||
     entryParams.get('signin') === '1';
+  const returnedToLobby =
+    window.location.hash === '#lobby';
+
   const invitationEmail = (entryParams.get('email') || '').trim();
 
   tryAutoLogin().then((loggedIn) => {
     if (loggedIn) {
-      // Legitimate active Supabase session → skip landing and enter Talk.
+      // Any valid existing session gets the authenticated Talk experience.
+      // This covers refreshes, direct visits, and invitation redirects.
       enterLobby();
       return;
     }
 
     if (fromInvitationWithLogin) {
-      // Existing account coming from invitation.html → existing Login UI.
+      // Existing account coming from invitation.html → Login UI.
       showPage('pg-auth');
 
       setTimeout(() => {
@@ -3165,7 +3172,9 @@ ready(() => {
         if (tabLogin) tabLogin.click();
 
         const loginEmail = document.getElementById('login-email');
-        if (loginEmail && invitationEmail) loginEmail.value = invitationEmail;
+        if (loginEmail && invitationEmail) {
+          loginEmail.value = invitationEmail;
+        }
 
         loginEmail?.focus?.();
       }, 0);
@@ -3174,7 +3183,14 @@ ready(() => {
       return;
     }
 
-    // No valid Supabase session → normal landing / Guest entry.
+    // An unauthenticated #lobby URL must not fake a logged-in lobby.
+    // Send it through the normal landing/auth flow instead.
+    if (returnedToLobby) {
+      if ($('pg-land')) showPage('pg-land');
+      return;
+    }
+
+    // First visit / signed-out visitor → normal landing page.
     if ($('pg-land')) showPage('pg-land');
   });
 
