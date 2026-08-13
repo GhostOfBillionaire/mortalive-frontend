@@ -1107,25 +1107,12 @@ function initAuthControls() {
 
   function showAuthTab(which) {
     hideForgotFlow();
-
-    const modes = [
-      [tabGuest, guestForm, which === 'guest'],
-      [tabLogin, loginForm, which === 'login'],
-      [tabSignup, signupForm, which === 'signup']
-    ];
-
-    // Exactly one of Guest / Log in / Sign up is visible at a time.
-    modes.forEach(([tab, panel, active]) => {
-      if (tab) {
-        tab.classList.toggle('active', active);
-        tab.setAttribute('aria-selected', active ? 'true' : 'false');
-      }
-
-      if (panel) {
-        panel.hidden = !active;
-        panel.style.display = active ? '' : 'none';
-      }
-    });
+    if (guestForm)  guestForm.style.display  = which === 'guest'  ? '' : 'none';
+    if (loginForm)  loginForm.style.display  = which === 'login'  ? '' : 'none';
+    if (signupForm) signupForm.style.display = which === 'signup' ? '' : 'none';
+    tabGuest?.classList.toggle('active',  which === 'guest');
+    tabLogin?.classList.toggle('active',  which === 'login');
+    tabSignup?.classList.toggle('active', which === 'signup');
   }
 
   tabGuest?.addEventListener('click', () => showAuthTab('guest'));
@@ -1736,10 +1723,12 @@ function initAuthControls() {
 async function fetchUserProfile(userId, accessToken = null) {
   const { data, error } = await sb.auth.getUser(accessToken || undefined);
   const user = data?.user;
+
   if (error || !user || user.id !== userId) {
     console.warn('fetchUserProfile:', error?.message || 'User not found');
     return null;
   }
+
   return {
     id: user.id,
     email: user.email || null,
@@ -1751,7 +1740,9 @@ async function fetchUserProfile(userId, accessToken = null) {
     bio: user.user_metadata?.bio || '',
     business_site: user.user_metadata?.business_site || '',
     marketing_opt_in: !!user.user_metadata?.marketing_opt_in,
-    interests: Array.isArray(user.user_metadata?.interests) ? user.user_metadata.interests : [],
+    interests: Array.isArray(user.user_metadata?.interests)
+      ? user.user_metadata.interests
+      : [],
     crockroach_score: 0
   };
 }
@@ -1763,43 +1754,71 @@ async function fetchUserProfile(userId, accessToken = null) {
 let _autoLoginPromise = null;
 async function tryAutoLogin() {
   if (_autoLoginPromise) return _autoLoginPromise;
+
   _autoLoginPromise = (async () => {
     try {
       const { data: sessionData, error: sessionError } = await sb.auth.getSession();
       const session = sessionData?.session;
-      if (sessionError || !session?.access_token) throw new Error(sessionError?.message || 'no session');
 
-      const { data: userData, error: userError } = await sb.auth.getUser(session.access_token);
+      if (sessionError || !session?.access_token) {
+        throw new Error(sessionError?.message || 'no session');
+      }
+
+      const { data: userData, error: userError } =
+        await sb.auth.getUser(session.access_token);
+
       const verifiedUser = userData?.user;
-      if (userError || !verifiedUser || verifiedUser.id !== session.user.id) {
+
+      if (
+        userError ||
+        !verifiedUser ||
+        verifiedUser.id !== session.user.id
+      ) {
         throw new Error(userError?.message || 'invalid session');
       }
 
-      const profile = await fetchUserProfile(verifiedUser.id, session.access_token);
-      const username = profile?.username || verifiedUser.user_metadata?.username || verifiedUser.email?.split('@')[0] || 'User';
+      const profile = await fetchUserProfile(
+        verifiedUser.id,
+        session.access_token
+      );
+
+      const username =
+        profile?.username ||
+        verifiedUser.user_metadata?.username ||
+        verifiedUser.email?.split('@')[0] ||
+        'User';
 
       S.authToken = session.access_token;
       S.username = username;
       S.userId = verifiedUser.id;
       S.isGuest = false;
+
       localStorage.setItem('mortalive_token', S.authToken);
       localStorage.setItem('mortalive_username', S.username);
       localStorage.setItem('mortalive_user_id', S.userId);
+
       syncAuthProgress(profile?.crockroach_score ?? 0);
       return true;
     } catch (e) {
-      console.warn('[Auth] No valid Supabase session:', e?.message || e);
+      console.warn(
+        '[Auth] No valid Supabase session:',
+        e?.message || e
+      );
+
       S.authToken = null;
       S.username = null;
       S.userId = null;
       S.crockroachScore = null;
       S.isGuest = true;
+
       localStorage.removeItem('mortalive_token');
       localStorage.removeItem('mortalive_username');
       localStorage.removeItem('mortalive_user_id');
+
       return false;
     }
   })();
+
   return _autoLoginPromise;
 }
 
@@ -3118,7 +3137,8 @@ ready(() => {
   initChatControls();
   initRatingControls();
 
-  // Entry routing: valid Supabase session -> Talk; invitation signin -> Login.
+  // Valid Supabase session -> Talk.
+  // Invitation signin route -> existing Login tab when no valid session exists.
   const entryParams = new URLSearchParams(window.location.search);
   const signInFromInvitation = entryParams.get('signin') === '1';
   const signInEmail = (entryParams.get('email') || '').trim();
@@ -3131,10 +3151,14 @@ ready(() => {
 
     if (signInFromInvitation) {
       showPage('pg-auth');
+
       const tabLogin = $('tab-login');
       if (tabLogin) tabLogin.click();
+
       const loginEmail = $('login-email');
-      if (loginEmail && signInEmail) loginEmail.value = signInEmail;
+      if (loginEmail && signInEmail) {
+        loginEmail.value = signInEmail;
+      }
       return;
     }
 
