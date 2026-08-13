@@ -1115,6 +1115,7 @@ function initAuthControls() {
     tabSignup?.classList.toggle('active', which === 'signup');
   }
 
+  // Wire up auth tabs — guest is back as a proper tab
   tabGuest?.addEventListener('click', () => showAuthTab('guest'));
   tabLogin?.addEventListener('click', () => showAuthTab('login'));
   tabSignup?.addEventListener('click', () => showAuthTab('signup'));
@@ -3098,10 +3099,37 @@ ready(() => {
   initChatControls();
   initRatingControls();
 
-  if ($('pg-land')) showPage('pg-land');
+  // Check if user is coming from invitation.html with #login hash
+  const fromInvitationWithLogin = window.location.hash === '#login';
+  
+  // Check if user is already logged in
+  const storedToken = localStorage.getItem('mortalive_token');
+  const storedUsername = localStorage.getItem('mortalive_username');
+  const storedUserId = localStorage.getItem('mortalive_user_id');
+  const isStoredSession = !!(storedToken && storedUsername && storedUserId);
 
-  // Validate any stored session token in the background.
-  tryAutoLogin();
+  // Initialize page based on auth state
+  if (isStoredSession) {
+    // User is logged in — go directly to Talk page
+    showPage('pg-lobby');
+    // Validate the session in the background
+    tryAutoLogin();
+  } else if (fromInvitationWithLogin) {
+    // User just signed up via invitation.html — show login form
+    showPage('pg-auth');
+    setTimeout(() => {
+      const tabLogin = document.getElementById('tab-login');
+      if (tabLogin) tabLogin.click();
+      document.getElementById('login-email')?.focus?.();
+    }, 0);
+    // Clean the hash so back button works naturally
+    history.replaceState(null, '', window.location.pathname);
+  } else {
+    // New user or guest — show landing page
+    if ($('pg-land')) showPage('pg-land');
+    // Validate any stored session token in the background
+    tryAutoLogin();
+  }
 
   // Preload the synthetic video batch silently so it's ready the instant
   // a user hits the 20-second no-match timeout — avoids an extra fetch delay.
