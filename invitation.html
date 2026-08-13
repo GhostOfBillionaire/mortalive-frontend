@@ -1354,29 +1354,29 @@
     });
     if (passwordError) throw new Error(friendlyError(passwordError));
 
-    const { data: reserved, error: reserveError } = await sb.rpc('reserve_username', {
-      p_user_id: user.id,
-      p_username: userData.username
-    });
-    if (reserveError) throw new Error(`Could not reserve that username: ${reserveError.message}`);
-    if (reserved !== true) throw new Error('That username was just taken — please choose another one.');
-
-    const { data: metadataData, error: metadataError } = await sb.auth.updateUser({
-      data: {
+    // Save profile data to public.accounts table
+    // The on_auth_user_created trigger already created the row with username + account_type from user_metadata.
+    // We update it now with the full profile data.
+    const { data: profileData, error: profileError } = await sb
+      .from('accounts')
+      .update({
         username: userData.username,
         account_type: userData.accountType,
-        date_of_birth: userData.dob,
-        details: userData.details,
-        bio: userData.bio,
-        business_site: userData.businessSite,
-        marketing_opt_in: userData.marketing,
-        interests: userData.interests
-      }
-    });
-    if (metadataError) throw new Error(friendlyError(metadataError));
+        display_name: userData.displayName || '',
+        bio: userData.bio || '',
+        details: userData.details || '',
+        website: userData.businessSite || '',
+        marketing_opt_in: Boolean(userData.marketing),
+        interests: userData.interests || []
+      })
+      .eq('id', user.id)
+      .select()
+      .single();
+    
+    if (profileError) throw new Error(`Could not save profile: ${profileError.message}`);
 
-    _verifiedUser = metadataData?.user || passwordData?.user || user;
-    _verifiedSession = passwordData?.session || metadataData?.session || session;
+    _verifiedUser = passwordData?.user || user;
+    _verifiedSession = passwordData?.session || session;
 
     clearInterval(_resendCooldownTimer);
     try { sessionStorage.removeItem('mortalive_invitation_signup'); } catch {}
