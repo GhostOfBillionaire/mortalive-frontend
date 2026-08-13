@@ -257,9 +257,7 @@
   }
   .otp-actions .btn { flex: 1; }
 
-  /* Flow screens must participate in the card's height. The previous
-     absolute 100% layout collapsed when the form was hidden, which made
-     the OTP controls appear as a ~1px strip on some deployments. */
+  /* Flow screens must participate in the card's height. */
   .slide-page {
     position: relative;
     width: 100%;
@@ -489,7 +487,7 @@
     <button id="btn-register" class="btn btn-primary" style="margin-top: 8px;">Register & Continue →</button>
   </div>
 
-  <!-- OTP Verification Section — same shape as the live signup OTP flow -->
+  <!-- OTP Verification Section — skips intermediate popup -->
   <div id="otp-state" class="slide-page">
     <div class="header">
       <div style="font-size: 40px; margin-bottom: 12px;">📬</div>
@@ -511,19 +509,6 @@
       <button class="btn btn-ghost" id="btn-resend" type="button">Resend code</button>
       <button class="btn btn-ghost" id="btn-otp-back" type="button">← Back</button>
     </div>
-  </div>
-
-  <!-- Minimal mail-check popup -->
-  <div id="mail-check-modal" class="slide-page modal-screen" style="z-index: 25; display: none;">
-    <div class="header">
-      <div style="font-size: 40px; margin-bottom: 12px;">📬</div>
-      <h2>Check your email</h2>
-      <p>A 6-digit verification code was sent to <strong id="mail-check-email"></strong>.</p>
-    </div>
-    <div class="notice-box" style="margin-top: 10px;">
-      Check your email
-    </div>
-    <button id="btn-mail-check-ok" class="btn btn-primary">I’ve checked — enter code →</button>
   </div>
 
   <!-- Post-verification next-step popup -->
@@ -601,18 +586,18 @@
   </div>
 </div>
 
-<!-- Supabase SDK — same version used in index.html -->
+<!-- Supabase SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-  // ── Supabase client (same credentials as index.html) ──────────────────────
+  // ── Supabase client ──────────────────────
   const SUPABASE_URL      = 'https://ctsmtblfuqynzfxafwly.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0c210YmxmdXF5bnpmeGFmd2x5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNjE0NTIsImV4cCI6MjA5NjkzNzQ1Mn0.8Yty23I6OmkJmJUG_nKQcoKJwRgjs27OdLptgH8R7dI';
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { detectSessionInUrl: true }
   });
 
-  // ── Account-type config (unchanged from original) ─────────────────────────
+  // ── Account-type config ─────────────────────────
   const config = {
     private:      { showDetails: false, label: '',              placeholder: '',                      showCV: false, showSite: false, showSpark: true,  maxLinks: 5 },
     professional: { showDetails: true,  label: 'Job Title',     placeholder: 'e.g. Product Designer', showCV: true,  showSite: false, showSpark: true,  maxLinks: 8 },
@@ -624,10 +609,10 @@
   let linkCount   = 0;
   let userData    = {};
 
-  // Session stored after OTP verify — used by btn-finish
+  // Session stored after OTP verify
   let _verifiedUser    = null;
   let _verifiedSession = null;
-  let _lastOtpAt       = 0;  // timestamp of last OTP send (cooldown guard)
+  let _lastOtpAt       = 0; 
   let _postVerifyDestination = 'profile';
   let _postVerifyTryTalk = false;
   const MAX_SPARK_WORDS = 400;
@@ -644,7 +629,7 @@
   ]);
   let _selectedUploadFile = null;
 
-  // ── DOM refs (unchanged from original) ────────────────────────────────────
+  // ── DOM refs ────────────────────────────────────
   const tabs             = document.querySelectorAll('.auth-tab');
   const detailsField     = document.getElementById('dynamic-details-field');
   const detailsLabel     = document.getElementById('details-label');
@@ -667,9 +652,6 @@
   const uploadPurposeLabel = document.getElementById('upload-purpose-label');
   const uploadTypesLabel   = document.getElementById('upload-types-label');
   const uploadInput        = document.getElementById('reg-cv');
-  const mailCheckModal     = document.getElementById('mail-check-modal');
-  const mailCheckEmail     = document.getElementById('mail-check-email');
-  const mailCheckOk        = document.getElementById('btn-mail-check-ok');
   const otpEmailDisplay    = document.getElementById('otp-email-display');
   const postVerifyModal    = document.getElementById('post-verify-modal');
   const nextFeedBtn        = document.getElementById('next-feed-btn');
@@ -764,24 +746,6 @@
     }
   }
 
-  function showMailCheckModal(email) {
-    if (!mailCheckModal) return;
-    if (mailCheckEmail) mailCheckEmail.textContent = email || '';
-    mailCheckModal.style.display = 'flex';
-    void mailCheckModal.offsetWidth;
-    mailCheckModal.classList.add('active');
-  }
-
-  function hideMailCheckModal() {
-    if (!mailCheckModal) return;
-    mailCheckModal.classList.remove('active');
-    mailCheckModal.style.display = 'none';
-  }
-
-  function revealOtpState() {
-    showOtpState(userData?.email || mailCheckEmail?.textContent || '');
-  }
-
   function setPostVerifyDestination(destination) {
     _postVerifyDestination = destination === 'feed' ? 'feed' : 'profile';
     nextFeedBtn?.classList.toggle('selected', _postVerifyDestination === 'feed');
@@ -808,12 +772,6 @@
     postVerifyModal.style.display = 'none';
   }
 
-  function getPostSetupUrl() {
-    const base = 'https://mortalive.com/index.html';
-    if (_postVerifyTryTalk) return `${base}#lobby`;
-    return `${base}#${_postVerifyDestination}`;
-  }
-
   // ── Helper: show inline error ─────────────────────────────────────────────
   function setError(id, msg) {
     const el = document.getElementById(id);
@@ -831,7 +789,7 @@
     return err?.message || 'Something went wrong — please try again.';
   }
 
-  // ── Account-type tab switching (unchanged from original) ──────────────────
+  // ── Account-type tab switching ──────────────────
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
       tabs.forEach(t => t.classList.remove('active'));
@@ -940,7 +898,6 @@
     });
 
     if (metadataError) {
-      // Best-effort cleanup so an orphaned object is not left behind.
       await sb.storage.from(DOCUMENT_BUCKET).remove([data?.path || objectPath]);
       throw new Error(`Document record failed: ${metadataError.message}`);
     }
@@ -948,7 +905,7 @@
     return { path: data?.path || objectPath, kind: documentKind };
   }
 
-  // ── Dynamic links (unchanged from original) ───────────────────────────────
+  // ── Dynamic links ───────────────────────────────
   btnAddLink.addEventListener('click', () => {
     const max = config[currentType].maxLinks;
     if (linkCount >= max) return;
@@ -972,7 +929,6 @@
   bioInput?.addEventListener('input', syncBioCounter);
   sparkWishInput?.addEventListener('input', () => enforceWordLimit(sparkWishInput, sparkWishCount, 'Spark wish'));
   finalWishInput?.addEventListener('input', () => enforceWordLimit(finalWishInput, finalWishCount, 'Final wish'));
-  mailCheckOk?.addEventListener('click', revealOtpState);
   nextFeedBtn?.addEventListener('click', () => setPostVerifyDestination('feed'));
   nextProfileBtn?.addEventListener('click', () => setPostVerifyDestination('profile'));
   postVerifyTalk?.addEventListener('change', () => {
@@ -994,7 +950,7 @@
   updateUploadCopy();
   setPostVerifyDestination('profile');
 
-  // ── Live username availability — same RPC-driven behavior as index.html/app.js ──
+  // ── Live username availability ──
   let _usernameCheckTimer = null;
   let _usernameCheckToken = 0;
   let _usernameCheck = { username: null, available: null };
@@ -1059,9 +1015,6 @@
   });
 
   // ── Existing-email guard ─────────────────────────────────────────────────
-  // Invitation onboarding is only for new accounts. If the email already
-  // belongs to a Mortalive Auth user, send them to the normal signup/auth
-  // surface on index.html instead of sending another OTP from the invitation.
   async function redirectExistingEmailToMainSignup(email) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
     if (!normalizedEmail) return false;
@@ -1070,14 +1023,11 @@
       const { data: sessionData } = await sb.auth.getSession();
       const sessionEmail = sessionData?.session?.user?.email?.trim().toLowerCase() || '';
 
-      // Any legitimate active session in this browser already identifies the user.
-      // Do not send another OTP or silently switch identities; go directly to Talk.
       if (sessionEmail) {
         window.location.href = 'https://mortalive.com/index.html#lobby';
         return true;
       }
 
-      // Authoritative existence check against auth.users through the RPC.
       const { data: exists, error } = await sb.rpc('is_email_registered', {
         p_email: normalizedEmail
       });
@@ -1101,7 +1051,7 @@
     }
   }
 
-  // Password visibility — same behavior as index.html/app.js signup.
+  // Password visibility
   function wireupPasswordToggle(inputId, btnId) {
     const input = document.getElementById(inputId);
     const btn = document.getElementById(btnId);
@@ -1115,7 +1065,7 @@
   }
   wireupPasswordToggle('reg-password', 'btn-reg-pw-toggle');
 
-  // ── REGISTER — same Supabase OTP send path as the live index signup ────────
+  // ── REGISTER ────────
   document.getElementById('btn-register').addEventListener('click', async () => {
     const username = document.getElementById('reg-username').value.trim();
     const email    = document.getElementById('reg-email').value.trim();
@@ -1146,8 +1096,6 @@
       return setError('err-register', 'Please enter a valid email address.');
     }
 
-    // Existing Mortalive accounts must use the normal signup/auth surface.
-    // This prevents invitation.html from sending another OTP to an existing user.
     if (await redirectExistingEmailToMainSignup(email)) return;
 
     if (password.length < 8) {
@@ -1224,7 +1172,7 @@
         }));
       } catch {}
 
-      showMailCheckModal(email);
+      showOtpState(email);
     } catch (e) {
       setError('err-register', 'Could not reach Supabase. Try again in a moment.');
     } finally {
@@ -1233,7 +1181,7 @@
     }
   });
 
-  // ── OTP UI — same single 6-digit input used by index.html/app.js ─────────
+  // ── OTP UI ─────────
   const otpCodeInput = document.getElementById('otp-code');
   const btnOtpVerify = document.getElementById('btn-verify');
   const btnOtpResend = document.getElementById('btn-resend');
@@ -1242,7 +1190,6 @@
   let _suppressAutoSignedIn = false;
 
   function showOtpState(email) {
-    hideMailCheckModal();
     document.getElementById('form-state').style.display = 'none';
     const otpState = document.getElementById('otp-state');
     otpState.style.display = 'flex';
@@ -1254,8 +1201,6 @@
       otpCodeInput.value = '';
     }
 
-    // Register & Continue changes the screen; always bring the new OTP
-    // controls to the top so Verify & Continue is immediately visible.
     const card = document.querySelector('.card');
     if (card) card.scrollTo({ top: 0, behavior: 'instant' });
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -1298,7 +1243,6 @@
 
   btnOtpBack?.addEventListener('click', () => {
     clearInterval(_resendCooldownTimer);
-    hideMailCheckModal();
     const otpState = document.getElementById('otp-state');
     otpState.classList.remove('active');
     otpState.style.display = 'none';
@@ -1354,9 +1298,6 @@
     });
     if (passwordError) throw new Error(friendlyError(passwordError));
 
-    // Save profile data to public.accounts table
-    // The on_auth_user_created trigger already created the row with username + account_type from user_metadata.
-    // We update it now with the full profile data.
     const { data: profileData, error: profileError } = await sb
       .from('accounts')
       .update({
@@ -1429,7 +1370,7 @@
     }
   });
 
-  // ── FINAL SUBMIT — writes all data to Supabase, then redirects ────────────
+  // ── FINAL SUBMIT ────────────
   document.getElementById('btn-finish').addEventListener('click', async () => {
     enforceWordLimit(finalWishInput, finalWishCount, 'Final wish');
     syncBioCounter();
@@ -1454,15 +1395,10 @@
         throw new Error(`Spark is limited to ${MAX_SPARK_WORDS} words per post.`);
       }
 
-      // 1. Username + profile data were saved in Supabase Auth during OTP verification.
-      //    Continue with the invitation-only application data below.
-
-      // 2. Upload optional CV/portfolio/business document if selected.
       if (userData.documentFile) {
         await uploadSelectedDocument(uid);
       }
 
-      // 3. Save social links (if any were added)
       const linkEntries = document.querySelectorAll('#links-container .link-entry');
       const links = [];
       linkEntries.forEach((row, i) => {
@@ -1475,7 +1411,6 @@
         if (linksErr) throw new Error(`Could not save social links: ${linksErr.message}`);
       }
 
-      // 4. Save in-form Spark wish (typed before OTP)
       if (userData.spark?.wish) {
         const { error: sparkErr } = await sb.from('wishes').insert({
           user_id:  uid,
@@ -1486,7 +1421,6 @@
         if (sparkErr) throw new Error(`Could not save Spark wish: ${sparkErr.message}`);
       }
 
-      // 5. Save final wish (typed on the wish slide)
       if (finalWish) {
         const { error: wishErr } = await sb.from('wishes').insert({
           user_id:  uid,
@@ -1497,21 +1431,17 @@
         if (wishErr) throw new Error(`Could not save final wish: ${wishErr.message}`);
       }
 
-      // 6. Seed localStorage with the same keys app.js / lobby-boot.js expect
       localStorage.setItem('mortalive_token',    _verifiedSession.access_token);
       localStorage.setItem('mortalive_username', userData.username);
       localStorage.setItem('mortalive_user_id',  uid);
       localStorage.removeItem('mortalive_guest_name');
       _selectedUploadFile = null;
 
-      // 7. Show success screen
       document.getElementById('wish-state').classList.remove('active');
       document.getElementById('wish-state').style.display = 'none';
       document.getElementById('success-state').style.display = 'block';
       document.querySelector('.card').scrollTop = 0;
 
-      // Auto-redirect to index.html with #login hash to show login form
-      // The app.js initialization will detect this hash and show the login form
       const destinationUrl = 'index.html#login';
       const successLink = document.querySelector('#success-state a.btn-primary');
       if (successLink) successLink.href = destinationUrl;
@@ -1525,7 +1455,7 @@
     }
   });
 
-  // ── Email-link confirmation — mirrors the signup confirmation path in index/app ──
+  // ── Email-link confirmation ──
   sb.auth.onAuthStateChange(async (event, session) => {
     if (event !== 'SIGNED_IN' || !session || _suppressAutoSignedIn) return;
 
@@ -1534,7 +1464,6 @@
     );
     if (!arrivedViaLink) return;
 
-    // Same-tab / another-tab confirmation can sync through Supabase auth.
     if (!userData?.email) {
       try {
         const pending = JSON.parse(sessionStorage.getItem('mortalive_invitation_signup') || 'null');
@@ -1554,9 +1483,6 @@
     _verifiedUser = session.user;
     _verifiedSession = session;
 
-    // If the original invitation tab is still open, its password remains in memory,
-    // matching the main app's link-confirmation behavior. If this is a fresh tab and
-    // the password is unavailable, don't invent or weaken the credential flow.
     if (userData?.password) {
       try {
         await completeVerifiedSignup(session.user, session);
