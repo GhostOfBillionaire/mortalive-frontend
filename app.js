@@ -1749,38 +1749,80 @@ async function fetchUserProfile(userId) {
 let _autoLoginPromise = null;
 async function tryAutoLogin() {
   if (_autoLoginPromise) return _autoLoginPromise;
+
   _autoLoginPromise = (async () => {
     try {
-      const { data: { session } } = await sb.auth.getSession();
-      if (!session) throw new Error('no session');
+      // Supabase Auth is the source of truth. localStorage values are cache only.
+      const { data: sessionData, error: sessionError } =
+        await sb.auth.getSession();
+      const session = sessionData?.session;
 
-      const profile = await fetchUserProfile(session.user.id);
+      if (sessionError || !session?.access_token || !session.user?.id) {
+        throw new Error(sessionError?.message || 'no valid Supabase session');
+      }
+
+      // Verify the current browser session with Supabase Auth.
+      const { data: userData, error: userError } =
+        await sb.auth.getUser(session.access_token);
+      const user = userData?.user;
+
+      if (userError || !user || user.id !== session.user.id) {
+        throw new Error(
+          userError?.message || 'Supabase session verification failed'
+        );
+      }
+
+      // accounts only enriches the authenticated session. A missing/failed
+      // profile row must never turn a real Supabase login into Guest.
+      let profile = null;
+      try {
+        profile = await fetchUserProfile(user.id);
+      } catch (profileErr) {
+        console.warn('[Auth] accounts profile lookup failed:', profileErr);
+      }
+
       const username =
         profile?.username ||
-        session.user.user_metadata?.username ||
-        session.user.email?.split('@')[0] ||
+        user.user_metadata?.username ||
+        user.email?.split('@')[0] ||
         'User';
-      const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
 
-      S.authToken   = session.access_token;
-      S.username    = username;
-      S.userId      = session.user.id;
+      const crockroachScore =
+        profile?.crockroach_score ??
+        profile?.crockroachScore ??
+        (Number(user.user_metadata?.crockroach_score) || 0);
+
+      S.authToken = session.access_token;
+      S.username = username;
+      S.userId = user.id;
       S.crockroachScore = crockroachScore;
-      S.isGuest     = false;
-      localStorage.setItem('mortalive_token',    S.authToken);
+      S.isGuest = false;
+
+      localStorage.setItem('mortalive_token', S.authToken);
       localStorage.setItem('mortalive_username', S.username);
-      localStorage.setItem('mortalive_user_id',  S.userId);
+      localStorage.setItem('mortalive_user_id', S.userId);
+      localStorage.removeItem('mortalive_guest_name');
+
       syncAuthProgress(crockroachScore);
       return true;
     } catch (e) {
+      // Only failure/absence of the real Supabase session may produce Guest.
+      console.warn('[Auth] No valid Supabase session:', e?.message || e);
+
       S.authToken = null;
-      S.isGuest   = true;
+      S.username = null;
+      S.userId = null;
+      S.crockroachScore = null;
+      S.isGuest = true;
+
       localStorage.removeItem('mortalive_token');
       localStorage.removeItem('mortalive_username');
       localStorage.removeItem('mortalive_user_id');
+
       return false;
     }
   })();
+
   return _autoLoginPromise;
 }
 
@@ -3099,37 +3141,42 @@ ready(() => {
   initChatControls();
   initRatingControls();
 
-  // Check if user is coming from invitation.html with #login hash
-  const fromInvitationWithLogin = window.location.hash === '#login';
-  
-  // Check if user is already logged in
-  const storedToken = localStorage.getItem('mortalive_token');
-  const storedUsername = localStorage.getItem('mortalive_username');
-  const storedUserId = localStorage.getItem('mortalive_user_id');
-  const isStoredSession = !!(storedToken && storedUsername && storedUserId);
+  // Authentication routing is decided only after Supabase confirms the
+  // current browser session. localStorage never proves login.
+  const entryParams = new URLSearchParams(window.location.search);
+  const fromInvitationWithLogin =
+    window.location.hash === '#login' ||
+    entryParams.get('signin') === '1';
+  const invitationEmail = (entryParams.get('email') || '').trim();
 
-  // Initialize page based on auth state
-  if (isStoredSession) {
-    // User is logged in — go directly to Talk page
-    showPage('pg-lobby');
-    // Validate the session in the background
-    tryAutoLogin();
-  } else if (fromInvitationWithLogin) {
-    // User just signed up via invitation.html — show login form
-    showPage('pg-auth');
-    setTimeout(() => {
-      const tabLogin = document.getElementById('tab-login');
-      if (tabLogin) tabLogin.click();
-      document.getElementById('login-email')?.focus?.();
-    }, 0);
-    // Clean the hash so back button works naturally
-    history.replaceState(null, '', window.location.pathname);
-  } else {
-    // New user or guest — show landing page
+  tryAutoLogin().then((loggedIn) => {
+    if (loggedIn) {
+      // Legitimate active Supabase session → skip landing and enter Talk.
+      enterLobby();
+      return;
+    }
+
+    if (fromInvitationWithLogin) {
+      // Existing account coming from invitation.html → existing Login UI.
+      showPage('pg-auth');
+
+      setTimeout(() => {
+        const tabLogin = document.getElementById('tab-login');
+        if (tabLogin) tabLogin.click();
+
+        const loginEmail = document.getElementById('login-email');
+        if (loginEmail && invitationEmail) loginEmail.value = invitationEmail;
+
+        loginEmail?.focus?.();
+      }, 0);
+
+      history.replaceState(null, '', window.location.pathname);
+      return;
+    }
+
+    // No valid Supabase session → normal landing / Guest entry.
     if ($('pg-land')) showPage('pg-land');
-    // Validate any stored session token in the background
-    tryAutoLogin();
-  }
+  });
 
   // Preload the synthetic video batch silently so it's ready the instant
   // a user hits the 20-second no-match timeout — avoids an extra fetch delay.
