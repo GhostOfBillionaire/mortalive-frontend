@@ -1225,6 +1225,7 @@ function initAuthControls() {
         return;
       }
       const profile = await fetchUserProfile(user.id);
+      S.profile = profile || S.profile || {};
       const username =
         profile?.username ||
         user.user_metadata?.username ||
@@ -1726,18 +1727,45 @@ function initAuthControls() {
 // assumed here (username, full_name, crockroach_score).
 async function fetchUserProfile(userId) {
   try {
+    // Profile data lives in public.accounts. Use maybeSingle() so a missing
+    // row is distinguishable from an authenticated-session failure.
     const { data, error } = await sb
       .from('accounts')
       .select('*')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
+
     if (error) {
-      console.warn('fetchUserProfile:', error.message);
-      return null;
+      console.warn('[Profile] accounts lookup:', error.message);
     }
-    return data;
+
+    const profile = data || {};
+
+    // Keep the complete profile available to the rest of the app.
+    S.profile = profile;
+
+    // Username is globally owned by public.usernames as well. If the
+    // accounts row does not have it yet, use the canonical username row.
+    if (!profile.username) {
+      try {
+        const { data: usernameRow, error: usernameError } = await sb
+          .from('usernames')
+          .select('username')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (!usernameError && usernameRow?.username) {
+          profile.username = usernameRow.username;
+        }
+      } catch (usernameErr) {
+        console.warn('[Profile] usernames lookup:', usernameErr);
+      }
+    }
+
+    return Object.keys(profile).length ? profile : null;
   } catch (e) {
-    console.warn('fetchUserProfile failed:', e);
+    console.warn('[Profile] fetchUserProfile failed:', e);
+    S.profile = null;
     return null;
   }
 }
@@ -1798,6 +1826,7 @@ async function tryAutoLogin() {
       S.userId = user.id;
       S.crockroachScore = crockroachScore;
       S.isGuest = false;
+      S.profile = profile || S.profile || {};
 
       localStorage.setItem('mortalive_token', S.authToken);
       localStorage.setItem('mortalive_username', S.username);
@@ -1806,6 +1835,7 @@ async function tryAutoLogin() {
 
       syncAuthProgress(crockroachScore);
       updateIdentityDisplay();
+      updateProgressText();
       return true;
     } catch (e) {
       // Only a missing/invalid Supabase session may produce Guest state.
