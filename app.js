@@ -1222,34 +1222,55 @@ function initAuthControls() {
         const msg = error.message.toLowerCase();
         let isUnverified = msg.includes('email not confirmed');
         let resendSuccess = false;
+        let rateLimited = false;
 
         // Probe: if invalid credentials, check if the account is actually unverified
+        // (An OTP-created account has no password yet, so signInWithPassword always returns invalid)
         if (msg.includes('invalid login credentials')) {
           const { error: probeError } = await sb.auth.resend({
             type: 'signup',
             email,
             options: { emailRedirectTo: window.location.href }
           });
+          
           if (!probeError) {
             isUnverified = true;
             resendSuccess = true;
+          } else {
+            const pMsg = probeError.message.toLowerCase();
+            // Rate limit implies the account is unverified and an OTP was recently sent
+            if (pMsg.includes('rate limit') || pMsg.includes('seconds') || pMsg.includes('too many')) {
+              isUnverified = true;
+              rateLimited = true;
+            }
           }
         }
 
         if (isUnverified) {
-          if (!resendSuccess) {
-            await sb.auth.resend({
+          if (!resendSuccess && !rateLimited) {
+            const { error: resendErr } = await sb.auth.resend({
               type: 'signup',
               email,
               options: { emailRedirectTo: window.location.href }
             });
+            if (resendErr) {
+               const rMsg = resendErr.message.toLowerCase();
+               if (rMsg.includes('rate limit') || rMsg.includes('seconds') || rMsg.includes('too many')) {
+                   rateLimited = true;
+               }
+            }
           }
           
           _lastOtpRequestAt = Date.now();
           _otpContext = { mode: 'signup', source: 'login', email };
           _pendingSignupPassword = password; // Will set this password once verified
           showOtpStep(email);
-          toast('Account not verified. Code sent to your email.', '📩');
+          
+          if (rateLimited) {
+            toast('Code already sent recently. Check your email.', '⏳');
+          } else {
+            toast('Account not verified. Code sent to your email.', '📩');
+          }
           return;
         }
 
