@@ -1118,8 +1118,6 @@ function initAuthControls() {
   tabGuest?.addEventListener('click', () => showAuthTab('guest'));
   tabLogin?.addEventListener('click', () => showAuthTab('login'));
   tabSignup?.addEventListener('click', () => showAuthTab('signup'));
-  // Default authentication screen: Log in.
-  showAuthTab('login');
 
   function setError(id, msg) {
     const el = $(id);
@@ -1722,38 +1720,33 @@ function initAuthControls() {
 }
 
 // Reads the authenticated Supabase user's profile metadata.
-// Authentication remains fully owned by Supabase Auth; there is no
-// dependency on the legacy public.accounts table.
 async function fetchUserProfile(userId, accessToken = null) {
-  try {
-    const { data, error } = await sb.auth.getUser(accessToken || undefined);
-    const user = data?.user;
-    if (error || !user || user.id !== userId) {
-      console.warn('fetchUserProfile:', error?.message || 'User not found');
-      return null;
-    }
-    return {
-      id: user.id,
-      email: user.email || null,
-      phone: user.phone || null,
-      username: user.user_metadata?.username || null,
-      full_name: user.user_metadata?.full_name || null,
-      account_type: user.user_metadata?.account_type || 'private',
-      details: user.user_metadata?.details || '',
-      bio: user.user_metadata?.bio || '',
-      business_site: user.user_metadata?.business_site || '',
-      marketing_opt_in: !!user.user_metadata?.marketing_opt_in,
-      interests: Array.isArray(user.user_metadata?.interests) ? user.user_metadata.interests : [],
-      crockroach_score: 0
-    };
-  } catch (e) {
-    console.warn('fetchUserProfile failed:', e);
+  const { data, error } = await sb.auth.getUser(accessToken || undefined);
+  const user = data?.user;
+  if (error || !user || user.id !== userId) {
+    console.warn('fetchUserProfile:', error?.message || 'User not found');
     return null;
   }
+  return {
+    id: user.id,
+    email: user.email || null,
+    phone: user.phone || null,
+    username: user.user_metadata?.username || null,
+    full_name: user.user_metadata?.full_name || null,
+    account_type: user.user_metadata?.account_type || 'private',
+    details: user.user_metadata?.details || '',
+    bio: user.user_metadata?.bio || '',
+    business_site: user.user_metadata?.business_site || '',
+    marketing_opt_in: !!user.user_metadata?.marketing_opt_in,
+    interests: Array.isArray(user.user_metadata?.interests) ? user.user_metadata.interests : [],
+    crockroach_score: 0
+  };
 }
 
-// Validate the current browser's Supabase session with Supabase Auth.
-// A localStorage token alone is never treated as proof of login.
+// If a Supabase session already exists (page reload / return visit), log
+// the user in automatically and skip past the auth screen.
+// The promise is cached so calling tryAutoLogin() a second time
+// (from proceedPastLanding) just awaits the same in-flight request.
 let _autoLoginPromise = null;
 async function tryAutoLogin() {
   if (_autoLoginPromise) return _autoLoginPromise;
@@ -1771,17 +1764,15 @@ async function tryAutoLogin() {
 
       const profile = await fetchUserProfile(verifiedUser.id, session.access_token);
       const username = profile?.username || verifiedUser.user_metadata?.username || verifiedUser.email?.split('@')[0] || 'User';
-      const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
 
       S.authToken = session.access_token;
       S.username = username;
       S.userId = verifiedUser.id;
-      S.crockroachScore = crockroachScore;
       S.isGuest = false;
       localStorage.setItem('mortalive_token', S.authToken);
       localStorage.setItem('mortalive_username', S.username);
       localStorage.setItem('mortalive_user_id', S.userId);
-      syncAuthProgress(crockroachScore);
+      syncAuthProgress(profile?.crockroach_score ?? 0);
       return true;
     } catch (e) {
       console.warn('[Auth] No valid Supabase session:', e?.message || e);
@@ -3114,8 +3105,7 @@ ready(() => {
   initChatControls();
   initRatingControls();
 
-  // Entry routing: a legitimate Supabase session always bypasses the landing page.
-  // The invitation signin route is handled only when no valid session exists.
+  // Entry routing: valid Supabase session -> Talk; invitation signin -> Login.
   const entryParams = new URLSearchParams(window.location.search);
   const signInFromInvitation = entryParams.get('signin') === '1';
   const signInEmail = (entryParams.get('email') || '').trim();
@@ -3128,13 +3118,14 @@ ready(() => {
 
     if (signInFromInvitation) {
       showPage('pg-auth');
-      $('tab-login')?.click();
+      const tabLogin = $('tab-login');
+      if (tabLogin) tabLogin.click();
       const loginEmail = $('login-email');
       if (loginEmail && signInEmail) loginEmail.value = signInEmail;
       return;
     }
 
-    if ($('pg-land')) showPage('pg-land');
+    showPage('pg-land');
   });
 
   // Preload the synthetic video batch silently so it's ready the instant
