@@ -2830,8 +2830,32 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
       </div>
       <div class="auth-card-inner">
         <div class="auth-tabs">
+          <button class="btn btn-ghost auth-tab active" id="tab-guest" type="button">Guest</button>
           <button class="btn btn-ghost auth-tab" id="tab-login" type="button">Log in</button>
           <button class="btn btn-ghost auth-tab" id="tab-signup" type="button">Sign up</button>
+        </div>
+
+        <div id="auth-guest-panel" class="auth-guest-panel">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+            <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1786095311/IMG_20260807_150053_awyczn.png"
+                 alt="" style="width:28px;height:28px;border-radius:8px;object-fit:contain;">
+            <span style="font-size:13px;font-weight:700;color:var(--on-surface-3);letter-spacing:.04em;text-transform:uppercase;">Guest path</span>
+          </div>
+          <h2>Choose how to start.</h2>
+          <p>Continue as a guest for instant access, or log in to keep your crockroach Score, badges and weekly rank.</p>
+          <div class="field" style="margin-top:16px;">
+            <label for="guest-name">Display name (optional)</label>
+            <input id="guest-name" type="text" maxlength="24"
+                   placeholder="Pick a name for this session" autocomplete="off">
+            <div class="help-row">
+              <span>No account needed</span>
+              <span>Guests don't earn crockroach Score</span>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-wide" id="btn-continue-guest" style="margin-top:14px;">
+            Continue as guest →
+          </button>
+          <p class="auth-note" style="margin-top:10px;">Fastest option — no sign-up, no wait.</p>
         </div>
 
         <div id="auth-login-form" style="display:none;">
