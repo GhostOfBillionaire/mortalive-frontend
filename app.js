@@ -1224,39 +1224,38 @@ function initAuthControls() {
       if (error) {
         const msg = error.message.toLowerCase();
         
-        // Probe: Is this account actually just unverified?
+        // Intelligent fallback: If Supabase says invalid credentials or unconfirmed,
+        // we can silently try to send an OTP. If it succeeds, the account exists but was 
+        // unverified (or they just typed the wrong password, which is fine to reset this way).
         if (msg.includes('invalid login credentials') || msg.includes('email not confirmed')) {
-          const { error: resendErr } = await sb.auth.resend({
-            type: 'signup',
+          const { error: otpErr } = await sb.auth.signInWithOtp({
             email,
-            options: { emailRedirectTo: window.location.href }
+            options: { shouldCreateUser: false, emailRedirectTo: window.location.href }
           });
           
-          // If resendErr is null, it means the user exists but is unverified, and we just sent an OTP!
-          // Alternatively, if we hit a rate limit, they are also unverified but requested too many codes recently.
-          if (!resendErr || resendErr.message.toLowerCase().includes('rate limit') || resendErr.message.toLowerCase().includes('too many')) {
-            
+          // If otpErr is null, the email definitely exists in Supabase.
+          if (!otpErr) {
             _lastOtpRequestAt = Date.now();
+            
+            // We use 'signup' mode so when they type the OTP, it silently sets their 
+            // password to the one they just typed into the login box.
             _otpContext = { mode: 'signup', source: 'login', email };
-            _pendingSignupPassword = password; // Save the password to apply after verify
+            _pendingSignupPassword = password; 
             
             showOtpStep(email);
             
-            if (!resendErr) {
-              toast('Account unverified. New code sent to your email!', '📩');
-            } else {
-              toast('Account unverified. Please check your email for the code.', '⏳');
+            // Dynamically alter the text of the OTP screen so they understand why they are here
+            const otpLabel = document.querySelector('#auth-otp-form label[for="otp-code"]');
+            if (otpLabel) {
+              otpLabel.textContent = 'Account unverified or incorrect password. Enter code:';
             }
-            return; // Stop here, we transitioned successfully to OTP!
+            
+            toast('Action required: Please verify your email.', '📩');
+            return;
           }
-          
-          // If resendErr exists and is NOT a rate limit (e.g. "User not found" or "User already verified"),
-          // it genuinely is a bad password or non-existent account.
-          setError('login-error', 'Incorrect email or password.');
-          return;
         }
 
-        // Fallback for other login errors (e.g. network)
+        // If we get here, the email didn't exist or there was a hard error.
         setError('login-error', friendlyAuthError(error));
         return;
       }
@@ -1475,11 +1474,20 @@ function initAuthControls() {
     if (forgotForm) forgotForm.style.display = 'none';
     if (otpForm)    otpForm.style.display    = '';
     if (resetForm)  resetForm.style.display  = 'none';
+    
     const display = $('otp-email-display');
     if (display) display.textContent = `Code sent to ${email}`;
     setError('otp-error', null);
+    
     const codeInput = $('otp-code');
     if (codeInput) { codeInput.value = ''; codeInput.focus(); }
+
+    // Reset the label text back to default in case it was modified by the login fallback
+    const otpLabel = document.querySelector('#auth-otp-form label[for="otp-code"]');
+    if (otpLabel) {
+      otpLabel.textContent = 'Enter the 6-digit code';
+    }
+
     startResendCooldown(60);
   }
 
@@ -1591,7 +1599,8 @@ function initAuthControls() {
       const { error } = await sb.auth.signInWithOtp({
         email: _otpContext.email,
         options: {
-          shouldCreateUser: _otpContext.mode === 'signup',
+          // Prevent accidentally registering the user if they came from the login fallback
+          shouldCreateUser: _otpContext.mode === 'signup' && _otpContext.source !== 'login',
           emailRedirectTo: window.location.href
         }
       });
@@ -3322,4 +3331,4 @@ ready(() => {
       // The 'connect' handler above will re-emit 'queue' once it lands.
     }
   });
-});s
+});
