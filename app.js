@@ -1,18 +1,18 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
- 
+
 const BUILD_TAG = 'mortalive-build-2026-08-11-nav-isolation'; // bump this string on every deploy to confirm cache is fresh
- 
+
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
   (location.hostname === 'localhost'
     ? 'http://localhost:3001'
     : 'https://mortalive-server.onrender.com');
- 
+
 console.log(`[Mortalive] ${BUILD_TAG} loaded`);
 console.log(`[Mortalive] SERVER_URL = ${SERVER_URL}`);
 console.log(`[Mortalive] Socket.io client ${typeof io === 'undefined' ? 'NOT LOADED ✗' : 'loaded ✓'}`);
- 
+
 const ICE_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -23,7 +23,7 @@ const ICE_CONFIG = {
     { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
   ]
 };
- 
+
 const S = {
   mode: 'video',
   interest: '',
@@ -63,23 +63,23 @@ const S = {
   progress: null,
   profile: null
 };
- 
+
 // EXPLICIT GLOBAL BINDING: Allows index.html inline scripts to accurately read the guest state
 window.S = S;
- 
+
 // ── Synthetic video fallback constants ───────────────────
 const SYNTHETIC_SKIP_LIMIT = 10; // videos per "round" before final options shown
 const SEARCH_SNAPSHOT_MAX = 20;   // 15 target shots + 5 buffer before the search turns into synthetic video
- 
+
 function isSyntheticPlayback() {
   return !!(S.syntheticActive || (S.stranger && S.stranger.isSynthetic));
 }
- 
+
 function clearSyntheticSearchTimer() {
   clearTimeout(S.syntheticSearchTimer);
   S.syntheticSearchTimer = null;
 }
- 
+
 function prepareVideoElement(videoEl) {
   if (!videoEl) return;
   videoEl.setAttribute('playsinline', '');
@@ -101,11 +101,11 @@ function prepareVideoElement(videoEl) {
     videoEl.parentElement.style.minHeight = '0';
   }
 }
- 
+
 function prepareVideoSurfaces() {
   ['vid-local', 'vid-remote', 'lobby-cam-preview', 'perm-video'].forEach((id) => prepareVideoElement($(id)));
 }
- 
+
 function syncLocalCameraPreview() {
   prepareVideoSurfaces();
   const localVid = $('vid-local');
@@ -118,7 +118,7 @@ function syncLocalCameraPreview() {
     if (panel && S.mode === 'video') panel.classList.add('visible');
   }
 }
- 
+
 function showSearchScreen() {
   showPage('pg-match');
   updateOnlineCount();
@@ -132,17 +132,17 @@ function showSearchScreen() {
   // always clears the previous timer before starting a new one.
   startSearchSnapshots();
 }
- 
+
 function scheduleSyntheticSearchResume(delayMs = 1400) {
   clearSyntheticSearchTimer();
   showSearchScreen();
- 
+
   S.syntheticSearchTimer = setTimeout(() => {
     S.syntheticSearchTimer = null;
- 
+
     const onMatchingScreen = $('pg-match')?.classList.contains('active');
     if (S.matched || !onMatchingScreen) return;
- 
+
     // If the socket is still connected, keep the queue alive and then
     // fall back to the next synthetic clip only after the search interstitial.
     if (S.socket && S.socket.connected) {
@@ -151,12 +151,12 @@ function scheduleSyntheticSearchResume(delayMs = 1400) {
       beginSyntheticMatch();
       return;
     }
- 
+
     // If the socket dropped, restart the search cleanly.
     startMatching();
   }, Math.max(650, delayMs));
 }
- 
+
 // AI bot responses used when user picks "Chat with AI" after exhausting videos
 const BOT_REPLIES = [
   "That's interesting — tell me more!",
@@ -175,7 +175,7 @@ const BOT_REPLIES = [
   "that's wild lol",
   "wait really? how long has that been going on?"
 ];
- 
+
 const autoReplies = [
   'haha fr though 😂',
   'okay that’s actually a good point',
@@ -199,7 +199,7 @@ const autoReplies = [
   'wait are you serious?'
 ];const PROGRESS_KEY = 'mortalive_progress_v3';
 const PROFILE_KEY = 'mortalive_profile_v3';
- 
+
 const PROGRESS_BADGES = [
   { id: 'rookie', label: 'Rookie', minScore: 0, minCompletions: 0, minStreak: 0 },
   { id: 'momentum', label: 'Momentum', minScore: 120, minCompletions: 3, minStreak: 1 },
@@ -209,7 +209,7 @@ const PROGRESS_BADGES = [
   { id: 'gold', label: 'Gold', minScore: 700, minCompletions: 28, minStreak: 6 },
   { id: 'top10', label: 'Top 10%', minScore: 980, minCompletions: 40, minStreak: 7 }
 ];
- 
+
 const PROFILE_THEMES = {
   aurora: {
     name: 'Aurora',
@@ -230,7 +230,7 @@ const PROFILE_THEMES = {
     frame: 'Signal Flame'
   }
 };
- 
+
 function loadJson(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
@@ -241,28 +241,28 @@ function loadJson(key, fallback) {
     return fallback;
   }
 }
- 
+
 function saveJson(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (e) {}
 }
- 
+
 function clampNum(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
- 
+
 function dayKey(date = new Date()) {
   return date.toISOString().slice(0, 10);
 }
- 
+
 function weekKey(date = new Date()) {
   const d = new Date(date.getTime());
   const day = d.getUTCDay() || 7;
   d.setUTCDate(d.getUTCDate() + 4 - day);
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 }
- 
+
 function defaultProgress() {
   return {
     baseScore: 0,
@@ -286,7 +286,7 @@ function defaultProgress() {
     lastSyncedAt: 0
   };
 }
- 
+
 function defaultProfile() {
   return {
     theme: 'aurora',
@@ -297,7 +297,7 @@ function defaultProfile() {
     pattern: 'mesh'
   };
 }
- 
+
 function loadProgress() {
   const stored = loadJson(PROGRESS_KEY, null);
   const progress = { ...defaultProgress(), ...(stored || {}) };
@@ -318,7 +318,7 @@ function loadProgress() {
   progress.avatarFrame = typeof progress.avatarFrame === 'string' ? progress.avatarFrame : 'halo';
   return progress;
 }
- 
+
 function loadProfile() {
   const stored = loadJson(PROFILE_KEY, null);
   const profile = { ...defaultProfile(), ...(stored || {}) };
@@ -330,29 +330,29 @@ function loadProfile() {
   if (typeof profile.pattern !== 'string') profile.pattern = 'mesh';
   return profile;
 }
- 
+
 function getProgressScore(progress = S.progress || defaultProgress()) {
   return (Number(progress.baseScore) || 0) + (Number(progress.bonusScore) || 0);
 }
- 
+
 function getCurrentProgress() {
   if (!S.progress) S.progress = loadProgress();
   return S.progress;
 }
- 
+
 function getCurrentProfile() {
   if (!S.profile) S.profile = loadProfile();
   return S.profile;
 }
- 
+
 function persistProgress() {
   saveJson(PROGRESS_KEY, getCurrentProgress());
 }
- 
+
 function persistProfile() {
   saveJson(PROFILE_KEY, getCurrentProfile());
 }
- 
+
 function computeWeeklyRank(progress) {
   const score = getProgressScore(progress);
   const completions = Number(progress.completions) || 0;
@@ -361,7 +361,7 @@ function computeWeeklyRank(progress) {
   const power = score * 1.1 + completions * 18 + streak * 22 + weeklyPoints * 0.8;
   return clampNum(Math.round(6200 / Math.max(42, power / 5)), 1, 9999);
 }
- 
+
 function computeTopPercentile(progress) {
   const score = getProgressScore(progress);
   const completions = Number(progress.completions) || 0;
@@ -370,20 +370,20 @@ function computeTopPercentile(progress) {
   const power = score + completions * 12 + streak * 20 + weeklyPoints * 0.9;
   return clampNum(Math.round(100 - power / 18), 1, 99);
 }
- 
+
 function computeGoalText(progress) {
   const score = getProgressScore(progress);
   const completions = Number(progress.completions) || 0;
   const streak = Number(progress.streak) || 0;
   const percentile = computeTopPercentile(progress);
- 
+
   if (score < 220) return `${220 - score} more points to unlock Bronze`;
   if (completions < 8) return `${8 - completions} more chats to unlock Bronze`;
   if (streak < 3) return `${3 - streak} more days to unlock a streak badge`;
   if (percentile > 10) return `Push for Top ${percentile > 25 ? '25' : '10'}%`;
   return 'You are close to a highlight card unlock';
 }
- 
+
 function computeUnlockedBadges(progress) {
   const score = getProgressScore(progress);
   const completions = Number(progress.completions) || 0;
@@ -392,7 +392,7 @@ function computeUnlockedBadges(progress) {
     return score >= badge.minScore && completions >= badge.minCompletions && streak >= badge.minStreak;
   }).map((badge) => badge.label);
 }
- 
+
 function updateDerivedProgress() {
   const progress = getCurrentProgress();
   const nowWeek = weekKey();
@@ -404,7 +404,7 @@ function updateDerivedProgress() {
   progress.badges = computeUnlockedBadges(progress);
   progress.topPercentile = computeTopPercentile(progress);
   progress.weeklyRank = computeWeeklyRank(progress);
- 
+
   const score = getProgressScore(progress);
   const profile = getCurrentProfile();
   if (score >= 700) {
@@ -430,7 +430,7 @@ function updateDerivedProgress() {
   persistProgress();
   persistProfile();
 }
- 
+
 function streakAdvanceOnCompletion(progress) {
   const today = dayKey();
   if (progress.lastCompletionDay === today) return false;
@@ -447,7 +447,7 @@ function streakAdvanceOnCompletion(progress) {
   progress.lastActiveDay = today;
   return true;
 }
- 
+
 function syncThemeHints() {
   const progress = getCurrentProgress();
   const profile = getCurrentProfile();
@@ -458,7 +458,7 @@ function syncThemeHints() {
   document.body.dataset.progressTheme = progress.profileTheme || profile.theme || 'aurora';
   document.body.dataset.progressTier = getProgressScore(progress) >= 700 ? 'gold' : getProgressScore(progress) >= 420 ? 'silver' : 'starter';
 }
- 
+
 function formatProgressLine(progress = getCurrentProgress()) {
   const score = getProgressScore(progress);
   const completions = Number(progress.completions) || 0;
@@ -476,12 +476,12 @@ function formatProgressLine(progress = getCurrentProgress()) {
     goal: computeGoalText(progress)
   };
 }
- 
+
 function updateProgressText() {
   const progress = getCurrentProgress();
   const profile = getCurrentProfile();
   const summary = formatProgressLine(progress);
- 
+
   const stats = {
     'progress-score': `${summary.score}`,
     'progress-streak': `${summary.streak} day${summary.streak === 1 ? '' : 's'}`,
@@ -494,12 +494,12 @@ function updateProgressText() {
     'progress-quote': profile.quote || progress.featuredQuote || '',
     'progress-pinned': profile.pinned || progress.pinnedNote || ''
   };
- 
+
   Object.entries(stats).forEach(([id, value]) => {
     const el = $(id);
     if (el && value !== undefined && value !== null) el.textContent = value;
   });
- 
+
   const scorePill = $('score-pill-btn');
   if (scorePill) {
     scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} crockroach Score · ${summary.badges} badges`;
@@ -507,10 +507,10 @@ function updateProgressText() {
       ? 'Guest sessions do not earn status'
       : `Top ${summary.percentile}% · #${summary.rank} weekly rank`;
   }
- 
+
   syncThemeHints();
 }
- 
+
 function syncAuthProgress(baseScore) {
   const progress = getCurrentProgress();
   const incoming = Number(baseScore);
@@ -520,25 +520,25 @@ function syncAuthProgress(baseScore) {
   updateDerivedProgress();
   updateProgressText();
 }
- 
+
 function bootProgressState() {
   S.progress = loadProgress();
   S.profile = loadProfile();
   updateDerivedProgress();
   updateProgressText();
 }
- 
+
 function awardProgress(kind, amount = 1, meta = {}) {
   const progress = getCurrentProgress();
   if (S.isGuest) return progress;
- 
+
   const delta = Number.isFinite(Number(amount)) ? Number(amount) : 1;
   const source = kind || 'activity';
   progress.bonusScore = Math.max(0, (Number(progress.bonusScore) || 0) + delta);
   progress.weeklyPoints = Math.max(0, (Number(progress.weeklyPoints) || 0) + delta);
   progress.totalMessages = Math.max(0, (Number(progress.totalMessages) || 0) + (meta.message ? 1 : 0));
   progress.lastActiveDay = dayKey();
- 
+
   if (meta.completion) {
     progress.completions = Math.max(0, (Number(progress.completions) || 0) + 1);
     progress.weeklyCompletions = Math.max(0, (Number(progress.weeklyCompletions) || 0) + 1);
@@ -547,19 +547,19 @@ function awardProgress(kind, amount = 1, meta = {}) {
     progress.bonusScore = Math.max(0, (Number(progress.bonusScore) || 0) + bonus);
     progress.weeklyPoints = Math.max(0, (Number(progress.weeklyPoints) || 0) + bonus);
   }
- 
+
   if (meta.streakReset) {
     progress.streak = 0;
   }
- 
+
   progress.badges = computeUnlockedBadges(progress);
   progress.topPercentile = computeTopPercentile(progress);
   progress.weeklyRank = computeWeeklyRank(progress);
   progress.lastSyncedAt = Date.now();
- 
+
   persistProgress();
   updateProgressText();
- 
+
   if (meta.completion) {
     const goal = computeGoalText(progress);
     if (source === 'chat_complete') {
@@ -570,31 +570,31 @@ function awardProgress(kind, amount = 1, meta = {}) {
   } else if (source === 'message' && (Number(progress.totalMessages) || 0) % 5 === 0) {
     toast(`+${delta} progress`, '✨');
   }
- 
+
   return progress;
 }
- 
+
 function finalizeChatProgress(reason = 'completed') {
   if (S.chatCounted) return;
   const started = S.chatStartedAt || Date.now();
   const durationMs = Math.max(0, Date.now() - started);
   S.chatStartedAt = null;
   S.chatCounted = true;
- 
+
   if (S.isGuest) return;
   if (reason !== 'completed' && reason !== 'peer-disconnected') return;
   if (durationMs < 6000) return;
- 
+
   awardProgress('chat_complete', 1, { completion: true, durationMs });
   // Tell feed.html to show the "just ended a chat — share something" banner.
   try { sessionStorage.setItem('mortalive_just_chatted', '1'); } catch (e) {}
 }
- 
+
 function resetChatProgress() {
   S.chatStartedAt = null;
   S.chatCounted = false;
 }
- 
+
 function copyProgressShareCard() {
   const progress = getCurrentProgress();
   const summary = formatProgressLine(progress);
@@ -606,7 +606,7 @@ function copyProgressShareCard() {
     `Top ${summary.percentile}% · #${summary.rank} weekly`,
     `Frame: ${profile.frame || 'Liquid Glass'}`
   ].join('\n');
- 
+
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(text).then(() => {
       progress.shareCount = (Number(progress.shareCount) || 0) + 1;
@@ -619,11 +619,11 @@ function copyProgressShareCard() {
   }
   return text;
 }
- 
+
 function ensureProgressSheet() {
   let overlay = $('progress-overlay');
   if (overlay) return overlay;
- 
+
   overlay = document.createElement('div');
   overlay.id = 'progress-overlay';
   overlay.style.cssText = [
@@ -637,7 +637,7 @@ function ensureProgressSheet() {
     'background:rgba(8,14,28,.58)',
     'backdrop-filter:blur(16px) saturate(130%)'
   ].join(';');
- 
+
   const panel = document.createElement('div');
   panel.style.cssText = [
     'width:min(720px,100%)',
@@ -650,12 +650,12 @@ function ensureProgressSheet() {
     'box-shadow:0 30px 80px rgba(0,0,0,.38)',
     'color:#fff'
   ].join(';');
- 
+
   overlay.appendChild(panel);
   document.body.appendChild(overlay);
   return overlay;
 }
- 
+
 function openProgressSheet() {
   if (S.isGuest) {
     toast('Sign in to view your status', '👤');
@@ -664,7 +664,7 @@ function openProgressSheet() {
   const overlay = ensureProgressSheet();
   updateDerivedProgress();
   updateProgressText();
- 
+
   const badgesWrap = overlay.querySelector('#progress-badges');
   if (badgesWrap) {
     const badges = getCurrentProgress().badges || [];
@@ -672,15 +672,15 @@ function openProgressSheet() {
       ? badges.map((badge) => `<span style="display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.15);font-size:13px;font-weight:700;">${badge}</span>`).join('')
       : '<span style="opacity:.75;">No badges yet</span>';
   }
- 
+
   overlay.style.display = 'flex';
 }
- 
- 
+
+
 function $(id) {
   return document.getElementById(id);
 }
- 
+
 function ready(fn) {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', fn, { once: true });
@@ -688,7 +688,7 @@ function ready(fn) {
     fn();
   }
 }
- 
+
 // Phase 1 app boundary: Now extended to include the Coming Soon pages
 const TALK_PAGE_IDS = new Set([
   'pg-land',
@@ -701,7 +701,7 @@ const TALK_PAGE_IDS = new Set([
   'pg-messages',
   'pg-profile'
 ]);
- 
+
 function showPage(id) {
   // Enforce Guest Isolation - Redirect to auth if guest attempts to view locked tabs
   if (S.isGuest && ['pg-feed', 'pg-messages', 'pg-profile'].includes(id)) {
@@ -712,7 +712,7 @@ function showPage(id) {
       if (tabLogin) tabLogin.click();
     }, 0);
   }
- 
+
   if (!TALK_PAGE_IDS.has(id)) {
     console.warn('[Mortalive] Blocked navigation to non-Talk page:', id);
     return;
@@ -721,11 +721,11 @@ function showPage(id) {
   const page = $(id);
   if (page) page.classList.add('active');
   window.scrollTo(0, 0);
- 
+
   // Emit state event so UI triggers nav update
   window.dispatchEvent(new CustomEvent('mortalive-auth-state'));
 }
- 
+
 function toast(msg, icon = '✅') {
   let root = $('toast-root');
   if (!root) {
@@ -740,17 +740,17 @@ function toast(msg, icon = '✅') {
   setTimeout(() => (el.style.opacity = '0'), 2400);
   setTimeout(() => el.remove(), 2800);
 }
- 
+
 function fmtTime() {
   const d = new Date();
   return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
- 
+
 function setText(id, value) {
   const el = $(id);
   if (el) el.textContent = value;
 }
- 
+
 function setCallStatus(state, label) {
   const connDot = $('conn-dot');
   if (connDot) connDot.className = `dot ${state}`;
@@ -761,7 +761,7 @@ function setCallStatus(state, label) {
     if (el) el.textContent = label;
   });
 }
- 
+
 function updateOnlineCount() {
   ['online-n', 'online-n-hero', 'online-count', 'online-users'].forEach((id) => {
     const el = $(id);
@@ -770,15 +770,15 @@ function updateOnlineCount() {
   const mc = $('match-count');
   if (mc) mc.textContent = S.onlineCount.toLocaleString();
 }
- 
+
 function isCompactViewport() {
   return window.matchMedia('(max-width: 720px)').matches;
 }
- 
+
 function getEffectiveVideoLayout() {
   return S.videoLayout === 'vertical' ? 'vertical' : 'horizontal';
 }
- 
+
 function syncVideoPanelButton(forcedLayout) {
   const btn = $('vc-layout');
   if (!btn) return;
@@ -788,13 +788,13 @@ function syncVideoPanelButton(forcedLayout) {
   btn.title = isHorizontal ? 'Switch to stacked layout' : 'Switch to side-by-side layout';
   btn.disabled = isCompactViewport();
 }
- 
+
 function isFullscreenVideoMode() {
   const panel = $('video-panel');
   const fs = document.fullscreenElement;
   return !!(panel && fs && (fs === panel || panel.contains(fs)));
 }
- 
+
 function applyVideoLayout() {
   // Layout is now entirely CSS-driven:
   //   Desktop normal     → 2 squares side by side (grid-template-columns: 1fr 1fr)
@@ -804,7 +804,7 @@ function applyVideoLayout() {
   // No class toggling needed — just ensure video surfaces are prepared.
   prepareVideoSurfaces();
 }
- 
+
 function toggleVideoLayout() {
   if (isCompactViewport()) {
     S.videoLayout = 'vertical';
@@ -817,7 +817,7 @@ function toggleVideoLayout() {
   applyVideoLayout();
   toast(S.videoLayout === 'horizontal' ? 'Camera layout set to side-by-side' : 'Camera layout set to stacked', '🎬');
 }
- 
+
 function setActiveMode(mode) {
   S.mode = mode === 'video' ? 'video' : 'text';
   document.querySelectorAll('.mode-btn').forEach((b) => {
@@ -826,7 +826,7 @@ function setActiveMode(mode) {
   const modeLabel = $('mode-label');
   if (modeLabel) modeLabel.textContent = S.mode === 'video' ? 'Video' : 'Text';
 }
- 
+
 function setPrimaryButtonsEnabled(enabled) {
   ['btn-enter', 'continue-btn', 'btn-start-text', 'btn-start-video', 'btn-start'].forEach((id) => {
     const btn = $(id);
@@ -835,29 +835,29 @@ function setPrimaryButtonsEnabled(enabled) {
     btn.classList.toggle('ready', enabled);
   });
 }
- 
+
 function updateConsentState() {
   // Real <input type="checkbox" id="landing-consent"> used in the current HTML
   const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
   const oldChecks = ['c1', 'c2', 'c3'].map((id) => $(id)).filter(Boolean);
- 
+
   if (terms) {
     setPrimaryButtonsEnabled(!!terms.checked);
     return;
   }
- 
+
   if (oldChecks.length === 3) {
     const all = oldChecks.every((box) => box.classList.contains('on'));
     setPrimaryButtonsEnabled(all);
     return;
   }
- 
+
   setPrimaryButtonsEnabled(true);
 }
- 
+
 function initConsentGate() {
   const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
- 
+
   if (terms) {
     const sync = () => updateConsentState();
     terms.addEventListener('change', sync);
@@ -866,7 +866,7 @@ function initConsentGate() {
     updateConsentState();
     return;
   }
- 
+
   const ids = ['c1', 'c2', 'c3'];
   const boxes = ids.map((id) => $(id));
   if (boxes.every(Boolean)) {
@@ -883,10 +883,10 @@ function initConsentGate() {
       });
     });
   }
- 
+
   updateConsentState();
 }
- 
+
 function startOnlineCounter() {
   if (S.onlineTimerStarted) return;
   S.onlineTimerStarted = true;
@@ -897,14 +897,14 @@ function startOnlineCounter() {
     updateOnlineCount();
   }, 3500);
 }
- 
+
 function ensureLobbyCameraPreview() {
   const preview = $('lobby-cam-preview');
   if (preview && S.localStream) preview.srcObject = S.localStream;
   const strip = $('cam-strip');
   if (strip) strip.style.display = S.localStream ? 'flex' : 'none';
 }
- 
+
 function enterLobby() {
   setActiveMode(S.mode);
   showPage('pg-lobby');
@@ -913,7 +913,7 @@ function enterLobby() {
   updateProgressText();
   updateIdentityDisplay();
 }
- 
+
 function updateIdentityDisplay() {
   const label = $('identity-label');
   const switchBtn = $('btn-switch-account');
@@ -921,7 +921,7 @@ function updateIdentityDisplay() {
   const scorePill = $('score-pill-btn');
   const progress = getCurrentProgress();
   const summary = formatProgressLine(progress);
- 
+
   if (!S.isGuest && S.username) {
     if (label) label.textContent = `Logged in as ${S.username} · 🧲 ${summary.score} crockroach Score · ${summary.streak} streak · #${summary.rank}`;
     if (switchBtn) switchBtn.style.display = 'none';
@@ -933,36 +933,36 @@ function updateIdentityDisplay() {
     if (logoutBtn) logoutBtn.style.display = 'none';
     if (scorePill) scorePill.style.display = 'none';
   }
- 
+
   updateProgressText();
   window.dispatchEvent(new CustomEvent('mortalive-auth-state'));
 }
- 
- 
+
+
 function refreshLaunchpadCopy() {
   // Intentionally left blank: landing page copy is owned by index.html.
   // app.js should only manage behavior, not overwrite UI text.
 }
- 
+
 function requestCameraPermission() {
   const btn = $('btn-allow');
   if (btn) {
     btn.disabled = true;
     btn.textContent = 'Waiting for browser permission…';
   }
- 
+
   return navigator.mediaDevices.getUserMedia({ video: true, audio: true })
     .then((stream) => {
       S.localStream = stream;
       S.camGranted = true;
- 
+
       const permVideo = $('perm-video');
       const permOverlay = $('perm-overlay');
       const permDot = $('perm-dot');
       const permStsTxt = $('perm-status-txt');
       const camLbl = $('cam-status-lbl');
       const micLbl = $('mic-status-lbl');
- 
+
       if (permVideo) permVideo.srcObject = stream;
       if (permOverlay) permOverlay.style.display = 'none';
       if (permDot) permDot.className = 'dot ok';
@@ -975,22 +975,22 @@ function requestCameraPermission() {
         micLbl.textContent = 'granted';
         micLbl.className = 'badge ok';
       }
- 
+
       if (btn) {
         btn.disabled = false;
         btn.textContent = 'Permissions granted';
       }
- 
+
       const lobbyPreview = $('lobby-cam-preview');
       if (lobbyPreview) lobbyPreview.srcObject = stream;
- 
+
       const camStrip = $('cam-strip');
       if (camStrip) camStrip.style.display = 'flex';
- 
+
       queueSnapshotBurst('permission', 2, ['perm-video', 'lobby-cam-preview', 'vid-local'], 140, 320);
- 
+
       showPage('pg-lobby');
- 
+
       if (S.pendingAction === 'match') {
         S.pendingAction = null;
         // Permission just succeeded because the user clicked "Find" while
@@ -1009,14 +1009,14 @@ function requestCameraPermission() {
     })
     .catch((err) => {
       console.warn('[Camera]', err.name, err.message);
- 
+
       const permDot = $('perm-dot');
       const permStsTxt = $('perm-status-txt');
       const camLbl = $('cam-status-lbl');
       const micLbl = $('mic-status-lbl');
       const permOverlay = $('perm-overlay');
       const overlayTxt = $('perm-overlay-txt');
- 
+
       if (permDot) permDot.className = 'dot bad';
       if (permStsTxt) permStsTxt.textContent = 'Permission denied';
       if (camLbl) {
@@ -1038,14 +1038,14 @@ function requestCameraPermission() {
             ? 'No camera was detected on this device.'
             : 'Permission was denied. Check browser settings and try again.';
       }
- 
+
       toast(err.name === 'NotFoundError' ? 'No camera detected' : 'Camera blocked', '⚠️');
     });
 }
- 
+
 // Supabase client — initialized in index.html as window.sb
 const sb = window.sb;
- 
+
 // Captured synchronously, before Supabase's client has a chance to
 // parse/strip the URL — tells "just followed a confirmation link"
 // apart from "ordinary page load with an already-persisted session".
@@ -1054,20 +1054,20 @@ const sb = window.sb;
 const _arrivedViaAuthRedirect = /access_token=|refresh_token=|[?&]code=/.test(
   window.location.hash + window.location.search
 );
- 
+
 // Holds the in-progress OTP request (which email it was sent to, and
 // whether we're mid-signup or mid-password-reset) so the verify step
 // knows what to check the code against and what to do once it's valid.
 let _otpContext = null; // { mode: 'signup' | 'reset', email }
 let _resendCooldownTimer = null;
- 
+
 // Shared 60s cooldown across every "send a code" entry point (signup's
 // "Create account", forgot-password's "Send code", and the OTP screen's
 // "Resend code"). Client-side check that surfaces instantly as a toast
 // instead of waiting on a round trip to Supabase's own rate-limit error.
 const OTP_COOLDOWN_MS = 60 * 1000;
 let _lastOtpRequestAt = 0;
- 
+
 function initAuthControls() {
   const tabGuest  = $('tab-guest');
   const tabLogin  = $('tab-login');
@@ -1078,7 +1078,7 @@ function initAuthControls() {
   const forgotForm = $('auth-forgot-form');
   const otpForm    = $('auth-otp-form');
   const resetForm  = $('auth-reset-form');
- 
+
   // Holds the verified session/user from an OTP verify — used by the
   // "set new password" step (forgot-password flow only; signup verifies
   // and logs straight in without this).
@@ -1094,7 +1094,7 @@ function initAuthControls() {
   // "Confirm & continue" button — doesn't also try to process the
   // exact same sign-in a second time.
   let _suppressAutoSignedIn = false;
- 
+
   function hideForgotFlow() {
     clearInterval(_resendCooldownTimer);
     _otpContext = null;
@@ -1104,7 +1104,7 @@ function initAuthControls() {
     if (otpForm)    otpForm.style.display    = 'none';
     if (resetForm)  resetForm.style.display  = 'none';
   }
- 
+
   function showAuthTab(which) {
     hideForgotFlow();
     if (guestForm)  guestForm.style.display  = which === 'guest'  ? '' : 'none';
@@ -1114,11 +1114,11 @@ function initAuthControls() {
     tabLogin?.classList.toggle('active',  which === 'login');
     tabSignup?.classList.toggle('active', which === 'signup');
   }
- 
+
   tabGuest?.addEventListener('click', () => showAuthTab('guest'));
   tabLogin?.addEventListener('click', () => showAuthTab('login'));
   tabSignup?.addEventListener('click', () => showAuthTab('signup'));
- 
+
   function setError(id, msg) {
     const el = $(id);
     if (!el) return;
@@ -1126,7 +1126,7 @@ function initAuthControls() {
     el.style.display = 'block';
     el.textContent = msg;
   }
- 
+
   function friendlyAuthError(error) {
     const msg = (error?.message || '').toLowerCase();
     if (msg.includes('rate limit') || msg.includes('too many')) {
@@ -1149,7 +1149,7 @@ function initAuthControls() {
     }
     return error?.message || 'Something went wrong. Please try again.';
   }
- 
+
   // Returns true (and shows a toast + inline error) if a code was sent
   // less than 60s ago from either the "send code" or "resend" button.
   // Callers should bail out immediately when this returns true.
@@ -1163,7 +1163,7 @@ function initAuthControls() {
     }
     return false;
   }
- 
+
   function afterAuthSuccess(token, username, crockroachScore, userId) {
     S.authToken   = token;
     S.username    = username;
@@ -1177,7 +1177,7 @@ function initAuthControls() {
     toast(`Welcome, ${username}!`, '🧲');
     enterLobby();
   }
- 
+
   // Toggles a password field between hidden (•••) and plain text.
   // Shared by the login, signup, and reset-password fields.
   function wireupPasswordToggle(inputId, btnId) {
@@ -1194,7 +1194,7 @@ function initAuthControls() {
   wireupPasswordToggle('login-password',  'btn-login-pw-toggle');
   wireupPasswordToggle('signup-password', 'btn-signup-pw-toggle');
   wireupPasswordToggle('reset-password',  'btn-reset-pw-toggle');
- 
+
   // ── Log in with email + password ──
   $('btn-login')?.addEventListener('click', async () => {
     const email    = ($('login-email')?.value    || '').trim();
@@ -1238,7 +1238,7 @@ function initAuthControls() {
       if (btn) { btn.disabled = false; btn.textContent = 'Sign in →'; }
     }
   });
- 
+
   // ── Live username availability check (Instagram-style) ──
   // Requires a `is_username_taken(p_username text) returns boolean` RPC
   // function in Supabase (SECURITY DEFINER) — see setup notes. Plain
@@ -1248,7 +1248,7 @@ function initAuthControls() {
   let _usernameCheckTimer = null;
   let _usernameCheckToken = 0; // guards against out-of-order async replies
   let _usernameCheck = { username: null, available: null }; // available: null=unknown, true/false=result for `username`
- 
+
   function setUsernameStatus(state, msg) {
     const el = $('signup-username-status');
     if (!el) return;
@@ -1256,7 +1256,7 @@ function initAuthControls() {
     el.textContent = msg || '';
     el.style.display = msg ? 'flex' : 'none';
   }
- 
+
   async function checkUsernameAvailability(username) {
     const myToken = ++_usernameCheckToken;
     setUsernameStatus('pending', 'Checking availability…');
@@ -1284,7 +1284,7 @@ function initAuthControls() {
       setUsernameStatus(null, '');
     }
   }
- 
+
   const usernameInput = $('signup-username');
   usernameInput?.addEventListener('input', () => {
     const val = usernameInput.value.trim();
@@ -1309,7 +1309,7 @@ function initAuthControls() {
       checkUsernameAvailability(val);
     }
   });
- 
+
   // ── Sign up: validate fields, then verify identity via a 6-digit
   // emailed code (instead of a confirmation link) before actually
   // creating the account with the password they chose. ──
@@ -1320,7 +1320,7 @@ function initAuthControls() {
     const password = $('signup-password')?.value  || '';
     const terms    = $('signup-terms');
     setError('signup-error', null);
- 
+
     if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
       setError('signup-error', 'Username must be 3–24 characters: letters, numbers, underscore only.');
       return;
@@ -1343,7 +1343,7 @@ function initAuthControls() {
       return;
     }
     if (blockIfOnCooldown('signup-error')) return;
- 
+
     const btn = $('btn-signup');
     if (btn) { btn.disabled = true; btn.textContent = 'Sending code…'; }
     try {
@@ -1377,7 +1377,7 @@ function initAuthControls() {
       if (btn) { btn.disabled = false; btn.textContent = 'Create account →'; }
     }
   });
- 
+
   // ── Forgot password: show the "request a code" step ──
   $('btn-forgot')?.addEventListener('click', () => {
     if (loginForm) loginForm.style.display = 'none';
@@ -1391,7 +1391,7 @@ function initAuthControls() {
     hideForgotFlow();
     showAuthTab('login');
   });
- 
+
   // ── Forgot password step 1: send the 6-digit code ──
   $('btn-forgot-send')?.addEventListener('click', async () => {
     const email = ($('forgot-email')?.value || '').trim();
@@ -1401,7 +1401,7 @@ function initAuthControls() {
       return;
     }
     if (blockIfOnCooldown('forgot-error')) return;
- 
+
     const btn = $('btn-forgot-send');
     if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
     try {
@@ -1423,7 +1423,7 @@ function initAuthControls() {
       if (btn) { btn.disabled = false; btn.textContent = 'Send code →'; }
     }
   });
- 
+
   function showOtpStep(email) {
     if (guestForm)  guestForm.style.display  = 'none';
     if (loginForm)  loginForm.style.display  = 'none';
@@ -1438,7 +1438,7 @@ function initAuthControls() {
     if (codeInput) { codeInput.value = ''; codeInput.focus(); }
     startResendCooldown(60);
   }
- 
+
   function startResendCooldown(seconds) {
     const btn = $('btn-otp-resend');
     if (!btn) return;
@@ -1457,7 +1457,7 @@ function initAuthControls() {
       }
     }, 1000);
   }
- 
+
   // ── Forgot password step 2: verify the code, then move to step 3 ──
   $('btn-otp-verify')?.addEventListener('click', async () => {
     const code = ($('otp-code')?.value || '').trim();
@@ -1470,7 +1470,7 @@ function initAuthControls() {
       setError('otp-error', 'Enter the 6-digit code from your email.');
       return;
     }
- 
+
     const btn = $('btn-otp-verify');
     if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
     _suppressAutoSignedIn = true;
@@ -1484,14 +1484,14 @@ function initAuthControls() {
         setError('otp-error', friendlyAuthError(error));
         return;
       }
- 
+
       const session = data?.session;
       const user    = data?.user || session?.user;
       if (!session || !user) {
         setError('otp-error', 'Verification succeeded but no session was returned. Try again.');
         return;
       }
- 
+
       if (_otpContext.mode === 'signup') {
         // Identity confirmed — set the password they chose on the
         // signup form, then log them straight in. No separate
@@ -1517,7 +1517,7 @@ function initAuthControls() {
         afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
         return;
       }
- 
+
       // Reset-password mode: code confirmed identity — now let them
       // pick a new password instead of logging straight in.
       clearInterval(_resendCooldownTimer);
@@ -1534,7 +1534,7 @@ function initAuthControls() {
       if (btn) { btn.disabled = false; btn.textContent = 'Verify code →'; }
     }
   });
- 
+
   // ── Resend the code to the same email ──
   $('btn-otp-resend')?.addEventListener('click', async () => {
     if (!_otpContext?.email) return;
@@ -1562,7 +1562,7 @@ function initAuthControls() {
       setError('otp-error', 'Could not reach Supabase. Try again in a moment.');
     }
   });
- 
+
   // ── Back to the previous step (signup form, or the forgot-password
   // "request a code" step, depending on how we got here) ──
   $('btn-otp-back')?.addEventListener('click', () => {
@@ -1578,7 +1578,7 @@ function initAuthControls() {
       if (forgotForm) forgotForm.style.display = '';
     }
   });
- 
+
   // ── Forgot password step 3: set the new password ──
   $('btn-reset-submit')?.addEventListener('click', async () => {
     const newPassword = $('reset-password')?.value || '';
@@ -1591,7 +1591,7 @@ function initAuthControls() {
       setError('reset-error', 'Password must be at least 8 characters.');
       return;
     }
- 
+
     const btn = $('btn-reset-submit');
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
     try {
@@ -1609,7 +1609,7 @@ function initAuthControls() {
         user.email?.split('@')[0] ||
         'User';
       const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
- 
+
       _otpContext = null;
       _pendingResetUser = null;
       toast('Password updated!', '✅');
@@ -1620,7 +1620,7 @@ function initAuthControls() {
       if (btn) { btn.disabled = false; btn.textContent = 'Set new password →'; }
     }
   });
- 
+
   $('btn-continue-guest')?.addEventListener('click', () => {
     const name = ($('guest-name')?.value || '').trim();
     S.authToken   = null;
@@ -1636,10 +1636,10 @@ function initAuthControls() {
     localStorage.setItem('mortalive_guest_name', S.guestName);
     enterLobby();
   });
- 
+
   const guestInput = $('guest-name');
   if (guestInput && S.guestName) guestInput.value = S.guestName;
- 
+
   // ── Handles a sign-in that happened with no button click on THIS
   // page — i.e. someone clicked the "Confirm & continue" button in the
   // email instead of typing the 6-digit code. Reached two ways:
@@ -1674,13 +1674,13 @@ function initAuthControls() {
       afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
       return;
     }
- 
+
     // No password in memory. Only treat this as "just followed a
     // confirmation link" if the URL this page loaded with actually
     // looks like a Supabase auth redirect — never on an ordinary
     // revisit where a session simply already existed.
     if (!_arrivedViaAuthRedirect || S.authToken) return;
- 
+
     showPage('pg-auth');
     if (guestForm)  guestForm.style.display  = 'none';
     if (loginForm)  loginForm.style.display  = 'none';
@@ -1696,7 +1696,7 @@ function initAuthControls() {
     const pw = $('reset-password');
     if (pw) { pw.value = ''; pw.focus(); }
   }
- 
+
   // Keep S.* in sync if the Supabase session changes in another tab, or
   // expires/gets revoked while this tab is open — and catch sign-ins
   // that happen via the email's link button rather than a click here.
@@ -1718,7 +1718,7 @@ function initAuthControls() {
     }
   });
 }
- 
+
 // Fetches the row from public.accounts for the given auth user id.
 // Uses select('*') rather than named columns so this doesn't break if
 // your accounts table's column names differ slightly from the defaults
@@ -1740,7 +1740,7 @@ async function fetchUserProfile(userId) {
     return null;
   }
 }
- 
+
 // If a Supabase session already exists (page reload / return visit), log
 // the user in automatically and skip past the auth screen.
 // The promise is cached so calling tryAutoLogin() a second time
@@ -1752,7 +1752,7 @@ async function tryAutoLogin() {
     try {
       const { data: { session } } = await sb.auth.getSession();
       if (!session) throw new Error('no session');
- 
+
       const profile = await fetchUserProfile(session.user.id);
       const username =
         profile?.username ||
@@ -1760,7 +1760,7 @@ async function tryAutoLogin() {
         session.user.email?.split('@')[0] ||
         'User';
       const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
- 
+
       S.authToken   = session.access_token;
       S.username    = username;
       S.userId      = session.user.id;
@@ -1782,10 +1782,10 @@ async function tryAutoLogin() {
   })();
   return _autoLoginPromise;
 }
- 
+
 function initLandingActions() {
   const continueBtn = $('btn-enter') || $('btn-start');
- 
+
   async function proceedPastLanding() {
     S.pendingAction = null;
     // tryAutoLogin() was kicked off in the background at page load; this
@@ -1799,12 +1799,12 @@ function initLandingActions() {
       $('login-email')?.focus?.();
     }
   }
- 
+
   if (continueBtn) {
     continueBtn.addEventListener('click', proceedPastLanding);
   }
 }
- 
+
 function initSetupBackButtons() {
   document.querySelectorAll('.setup-back').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -1813,11 +1813,11 @@ function initSetupBackButtons() {
     });
   });
 }
- 
+
 function initPermissionControls() {
   const btnAllow = $('btn-allow');
   if (btnAllow) btnAllow.addEventListener('click', requestCameraPermission);
- 
+
   const btnSkipCam = $('btn-skip-cam');
   if (btnSkipCam) {
     btnSkipCam.addEventListener('click', () => {
@@ -1831,11 +1831,11 @@ function initPermissionControls() {
     });
   }
 }
- 
+
 function initLobbyControls() {
   $('btn-switch-account')?.addEventListener('click', () => { showPage('pg-auth'); $('tab-login')?.click(); $('login-email')?.focus?.(); });
   $('score-pill-btn')?.addEventListener('click', openProgressSheet);
- 
+
   $('btn-logout')?.addEventListener('click', async () => {
     try {
       await sb.auth.signOut();
@@ -1856,14 +1856,14 @@ function initLobbyControls() {
     $('tab-login')?.click();
     $('login-email')?.focus?.();
   });
- 
+
   const modeToggle = $('mode-toggle');
   if (modeToggle) {
     modeToggle.addEventListener('click', (e) => {
       const btn = e.target.closest('.mode-btn');
       if (!btn) return;
       const newMode = btn.dataset.mode || 'text';
- 
+
       if (newMode === 'video' && !S.camGranted) {
         // FIX: this used to set S.pendingAction = 'match', which is the
         // code path meant for clicking "Find" — after granting permission
@@ -1877,18 +1877,18 @@ function initLobbyControls() {
         toast('Grant camera access to use video mode', '📹');
         return;
       }
- 
+
       setActiveMode(newMode);
     });
   }
- 
+
   const interestInput = $('interest-input');
   if (interestInput) {
     interestInput.addEventListener('input', () => {
       S.interest = interestInput.value.trim();
     });
   }
- 
+
   const chips = $('chips');
   if (chips) {
     chips.addEventListener('click', (e) => {
@@ -1899,7 +1899,7 @@ function initLobbyControls() {
       S.interest = chip.dataset.v || '';
     });
   }
- 
+
   const btnFind = $('btn-find');
   if (btnFind) {
     btnFind.addEventListener('click', () => {
@@ -1915,10 +1915,10 @@ function initLobbyControls() {
     });
   }
 }
- 
+
 function initChatControls() {
   $('btn-send')?.addEventListener('click', sendMsg);
- 
+
   const input = $('cin');
   if (input) {
     input.addEventListener('keydown', (e) => {
@@ -1928,17 +1928,17 @@ function initChatControls() {
       }
     });
   }
- 
+
   const handleNext = () => {
     clearTimeout(S.replyTimer);
- 
+
     if (S.syntheticActive) {
       // ── Synthetic video skip ──────────────────────────────
       S.syntheticSkipCount++;
       console.log(`[Synthetic] Skip #${S.syntheticSkipCount}/${SYNTHETIC_SKIP_LIMIT}`);
       logSession('end', { reason: 'skip_synthetic', roomId: S.roomId, videoId: S.syntheticVideoId });
       stopSyntheticVideo();
- 
+
       if (S.syntheticSkipCount >= SYNTHETIC_SKIP_LIMIT) {
         showSyntheticExhaustionMenu();
       } else {
@@ -1955,14 +1955,14 @@ function initChatControls() {
       setTimeout(startMatching, 800);
     }
   };
- 
+
   $('btn-skip')?.addEventListener('click', handleNext);
   $('btn-skip-fs')?.addEventListener('click', handleNext);
- 
+
   $('btn-end')?.addEventListener('click', () => {
     clearTimeout(S.replyTimer);
     clearSyntheticSearchTimer();
- 
+
     if (S.syntheticActive) {
       stopSyntheticVideo();
       logSession('end', { reason: 'ended_synthetic', roomId: S.roomId, videoId: S.syntheticVideoId });
@@ -1971,33 +1971,33 @@ function initChatControls() {
       logSession('end', { reason: 'ended', roomId: S.roomId });
       disconnectPeer();
     }
- 
+
     showPage('pg-lobby');
     updateIdentityDisplay();
   });
- 
+
   $('btn-toggle-video')?.addEventListener('click', () => {
     const panel = $('video-panel');
     if (!panel) return;
     const on = panel.classList.contains('visible');
- 
+
     if (on) {
       panel.classList.remove('visible');
       $('btn-toggle-video')?.classList.remove('active');
       return;
     }
- 
+
     if (!S.camGranted && S.mode === 'video') {
       S.pendingAction = 'match';
       showPage('pg-perm');
       toast('Grant camera access first', '📹');
       return;
     }
- 
+
     panel.classList.add('visible');
     $('btn-toggle-video')?.classList.add('active');
   });
- 
+
   $('vc-mic')?.addEventListener('click', () => {
     S.micMuted = !S.micMuted;
     if (S.localStream) S.localStream.getAudioTracks().forEach((t) => (t.enabled = !S.micMuted));
@@ -2008,7 +2008,7 @@ function initChatControls() {
     }
     toast(S.micMuted ? 'Mic muted' : 'Mic on', S.micMuted ? '🔇' : '🎤');
   });
- 
+
   $('vc-cam')?.addEventListener('click', () => {
     S.camOff = !S.camOff;
     if (S.localStream) S.localStream.getVideoTracks().forEach((t) => (t.enabled = !S.camOff));
@@ -2019,18 +2019,18 @@ function initChatControls() {
     }
     toast(S.camOff ? 'Camera off' : 'Camera on', S.camOff ? '🚫' : '📷');
   });
- 
+
   /* Layout toggle kept for future use
   $('vc-layout')?.addEventListener('click', toggleVideoLayout);
   */
- 
+
   $('vc-flip')?.addEventListener('click', () => {
     const v = $('vid-local');
     if (!v) return;
     const cur = v.style.transform || 'scaleX(-1)';
     v.style.transform = cur.includes('scaleX(-1)') ? 'scaleX(1)' : 'scaleX(-1)';
   });
- 
+
 $('vc-fs')?.addEventListener('click', () => {
   const panel = $('video-panel');
   if (!panel) return;
@@ -2057,7 +2057,7 @@ $('vc-fs')?.addEventListener('click', () => {
   }
   setTimeout(() => { applyVideoLayout(); prepareVideoSurfaces(); }, 0);
 });
- 
+
   $('btn-cancel')?.addEventListener('click', () => {
     clearTimeout(matchTimeout);
     clearTimeout(S.noMatchTimeout);
@@ -2065,10 +2065,10 @@ $('vc-fs')?.addEventListener('click', () => {
     disconnectPeer();
     showPage('pg-lobby');
   });
- 
- 
+
+
 }
- 
+
 function initGlobalDefaults() {
   bootProgressState();
   setActiveMode(S.mode);
@@ -2080,7 +2080,7 @@ function initGlobalDefaults() {
     setPrimaryButtonsEnabled(true);
   }
 }
- 
+
 function initSocket() {
   if (typeof io === 'undefined') {
     console.warn('[Mortalive] Socket.io client not loaded yet — retrying in 800ms before falling back to demo mode.');
@@ -2093,12 +2093,12 @@ function initSocket() {
     }, 800);
     return;
   }
- 
+
   if (S.socket && S.socket.connected) {
     S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
     return;
   }
- 
+
   S.socket = io(SERVER_URL, {
     transports: ['websocket', 'polling'],
     timeout: 6000,
@@ -2107,7 +2107,7 @@ function initSocket() {
     reconnectionDelay: 500,
     reconnectionDelayMax: 4000
   });
- 
+
   S.socket.on('connect', () => {
     // Fires on initial connect AND on every successful reconnect (e.g. a
     // mobile tab resuming after being backgrounded). Only re-announce to
@@ -2118,7 +2118,7 @@ function initSocket() {
     if (S.matched || !onMatchingScreen) return;
     S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
   });
- 
+
   S.socket.on('matched', async (data) => {
     clearTimeout(matchTimeout);
     clearTimeout(S.noMatchTimeout);
@@ -2136,7 +2136,7 @@ function initSocket() {
     beginChat();
     if (S.mode === 'video') await startWebRTC();
   });
- 
+
   S.socket.on('signal', async (data) => {
     if (!S.pc) return;
     try {
@@ -2166,34 +2166,34 @@ function initSocket() {
       console.error('[WebRTC signal]', e);
     }
   });
- 
+
   S.socket.on('peer-chat', ({ text }) => appendMsg(text, 'them'));
- 
+
   S.socket.on('peer-disconnected', () => {
     finalizeChatProgress('peer-disconnected');
     addSysLine('👋 Stranger disconnected');
     setCallStatus('failed', 'disconnected');
     hideRemoteVideo('Stranger disconnected');
   });
- 
+
   S.socket.on('connect_error', (err) => {
     console.log('[Socket] connect_error:', err.message);
   });
 }
- 
+
 let matchTimeout = null;
- 
+
 function startMatching() {
   clearSyntheticSearchTimer();
   showSearchScreen(); // also calls startSearchSnapshots() internally
   initSocket();
- 
+
   S.matched = false; // reset; set to true inside the 'matched' socket handler
- 
+
   clearTimeout(matchTimeout);
   clearTimeout(S.noMatchTimeout);
   S.connectFailed = false;
- 
+
   // Don't guess based on a fixed timer how long a handshake "should" take —
   // that's exactly what was racing the demo fallback against normal,
   // healthy connections on slower networks (a PC behind a stricter
@@ -2222,7 +2222,7 @@ function startMatching() {
   }
   S.socket?.on('connect_error', onConnectError);
   S._lastConnectErrorHandler = onConnectError;
- 
+
   // Absolute ceiling as a safety net only — generous enough that it should
   // never fire on a genuinely working connection, just catches the rare
   // case where something hangs with no error event at all.
@@ -2233,7 +2233,7 @@ function startMatching() {
       beginSyntheticMatch();
     }
   }, 20000);
- 
+
   // Once we ARE connected to the real server, if nobody else is in the
   // queue yet, start synthetic video automatically — no button, no dead end.
   S.noMatchTimeout = setTimeout(() => {
@@ -2245,19 +2245,19 @@ function startMatching() {
     // If still not connected, connect_error / ceiling timer handles it.
   }, 20000);
 }
- 
+
 function removeFromQueueSafely() {
   if (S.socket && S.socket.connected) {
     try { S.socket.emit('leave', { roomId: S.roomId }); } catch (e) {}
   }
 }
- 
+
 function hideRemoteVideo(message) {
   const remote = $('vid-remote');
   const noVideo = $('no-video-ph');
   const txt = $('ph-txt');
   const q = $('quality-bar');
- 
+
   if (remote) {
     // Stop any real WebRTC tracks (never stop our own local stream).
     try {
@@ -2279,14 +2279,14 @@ function hideRemoteVideo(message) {
   if (txt) txt.textContent = message || 'Waiting for video…';
   if (q) q.style.display = 'none';
 }
- 
+
 async function startWebRTC() {
   try {
     if (!S.localStream || !S.localStream.active) {
       S.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       S.camGranted = true;
     }
- 
+
     const localVid = $('vid-local');
     const noVideo = $('no-video-ph');
     const txt = $('ph-txt');
@@ -2299,12 +2299,12 @@ async function startWebRTC() {
     }
     if (noVideo) noVideo.style.display = 'none';
     if (txt) txt.textContent = "Waiting for stranger's camera…";
- 
+
     S.pc = new RTCPeerConnection(ICE_CONFIG);
     S.pendingCandidates = [];
- 
+
     S.localStream.getTracks().forEach((track) => S.pc.addTrack(track, S.localStream));
- 
+
     S.pc.ontrack = (event) => {
       const remoteVid = $('vid-remote');
       if (remoteVid) {
@@ -2317,7 +2317,7 @@ async function startWebRTC() {
         }
         remoteVid.style.display = 'block';
       }
- 
+
       if (noVideo) noVideo.style.display = 'none';
       const panel = $('video-panel');
       if (panel) panel.classList.add('visible', 'has-remote');
@@ -2326,7 +2326,7 @@ async function startWebRTC() {
       setCallStatus('connected', 'live');
       monitorQuality();
     };
- 
+
     S.pc.onicecandidate = ({ candidate }) => {
       if (candidate && S.socket && S.socket.connected) {
         S.socket.emit('signal', {
@@ -2337,7 +2337,7 @@ async function startWebRTC() {
         });
       }
     };
- 
+
     S.pc.oniceconnectionstatechange = () => {
       const st = S.pc.iceConnectionState;
       if (st === 'connected' || st === 'completed') {
@@ -2350,7 +2350,7 @@ async function startWebRTC() {
         setCallStatus('failed', 'reconnecting…');
       }
     };
- 
+
     if (S.isInitiator) {
       const offer = await S.pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: true });
       await S.pc.setLocalDescription(offer);
@@ -2371,7 +2371,7 @@ async function startWebRTC() {
     if (panel) panel.classList.remove('visible');
   }
 }
- 
+
 function monitorQuality() {
   if (!S.pc) return;
   const iv = setInterval(async () => {
@@ -2401,7 +2401,7 @@ function monitorQuality() {
     } catch (e) {}
   }, 4000);
 }
- 
+
 // ═══════════════════════════════════════════════════════════════════
 // SYNTHETIC VIDEO FALLBACK SYSTEM
 // Replaces the old demo mode entirely.
@@ -2409,7 +2409,7 @@ function monitorQuality() {
 // were real strangers. User can skip up to SYNTHETIC_SKIP_LIMIT times
 // before seeing the final options menu (AI chat / more videos / share).
 // ═══════════════════════════════════════════════════════════════════
- 
+
 async function fetchSyntheticVideoBatch() {
   try {
     const res = await fetch(`${SERVER_URL}/api/synthetic-videos?limit=${SYNTHETIC_SKIP_LIMIT}`);
@@ -2426,7 +2426,7 @@ async function fetchSyntheticVideoBatch() {
     return [];
   }
 }
- 
+
 async function beginSyntheticMatch() {
   clearSyntheticSearchTimer();
   stopSearchSnapshots(); // search phase is ending — stop the 2s loop before playback begins
@@ -2441,12 +2441,12 @@ async function beginSyntheticMatch() {
     S.syntheticVideos = batch;
     S.syntheticCurrentIndex = 0;
   }
- 
+
   const video = S.syntheticVideos[S.syntheticCurrentIndex];
   S.syntheticActive = true;
   S.syntheticVideoId = video.id;
   S.syntheticVideoStartTime = Date.now();
- 
+
   // Present them as a stranger — just like a real matched user.
   S.stranger = {
     name:      video.stranger_name  || 'Stream User',
@@ -2456,15 +2456,15 @@ async function beginSyntheticMatch() {
     isSynthetic: true
   };
   S.roomId = `synthetic-${video.id}-${Date.now()}`;
- 
+
   // Always show as video mode so the video element is visible.
   S.mode = 'video';
   setActiveMode('video');
- 
+
   // Standard chat setup — clears messages, shows peer name, switches to pg-chat.
   beginChat();
   syncLocalCameraPreview();
- 
+
   // Show the prerecorded video in the remote slot.
   const remoteVid = $('vid-remote');
   
@@ -2479,7 +2479,7 @@ async function beginSyntheticMatch() {
       console.warn('[Synthetic] Video play failed:', e.message);
       setText('ph-txt', 'Video could not load — click Next to try another.');
     });
- 
+
     // When the video ends naturally, show a search interstitial first and only
     // then resume with the next synthetic clip if nobody matched in time.
     remoteVid.onended = () => {
@@ -2493,7 +2493,7 @@ async function beginSyntheticMatch() {
       }
     };
   }
- 
+
   const noVideo = $('no-video-ph');
   const panel   = $('video-panel');
   if (noVideo) noVideo.style.display = 'none';
@@ -2501,14 +2501,14 @@ async function beginSyntheticMatch() {
     panel.classList.add('visible', 'has-remote');
     applyVideoLayout();
   }
- 
+
   const q = $('quality-bar');
   if (q) q.style.display = 'none'; // no quality stats for pre-recorded
- 
+
   setCallStatus('connected', 'video');
   logSession('start', { stranger: S.stranger.name, mode: 'video', roomId: S.roomId, isSynthetic: true });
 }
- 
+
 function stopSyntheticVideo() {
   S.syntheticActive = false;
   S.stranger = null;
@@ -2525,15 +2525,15 @@ function stopSyntheticVideo() {
   S.syntheticVideoId = null;
   S.syntheticVideoStartTime = null;
 }
- 
+
 function showSyntheticExhaustionMenu() {
   // Remove any existing instance first.
   document.getElementById('synthetic-exhaustion-overlay')?.remove();
- 
+
   const overlay = document.createElement('div');
   overlay.className = 'overlay open';
   overlay.id = 'synthetic-exhaustion-overlay';
- 
+
   overlay.innerHTML = `
     <div class="modal" style="width:min(480px,100%);text-align:center;">
       <div class="modal-ico">🎬</div>
@@ -2548,15 +2548,15 @@ function showSyntheticExhaustionMenu() {
         <button id="syn-btn-share" class="btn btn-ghost   btn-wide">🔗 Invite friends to Mortalive</button>
       </div>
     </div>`;
- 
+
   document.body.appendChild(overlay);
- 
+
   document.getElementById('syn-btn-ai')?.addEventListener('click', () => {
     overlay.remove();
     clearSyntheticSearchTimer();
     startBotChat();
   });
- 
+
   document.getElementById('syn-btn-more')?.addEventListener('click', () => {
     overlay.remove();
     clearSyntheticSearchTimer();
@@ -2566,24 +2566,24 @@ function showSyntheticExhaustionMenu() {
     S.syntheticVideos       = [];
     beginSyntheticMatch();
   });
- 
+
   document.getElementById('syn-btn-share')?.addEventListener('click', () => {
     overlay.remove();
     clearSyntheticSearchTimer();
     showShareOverlay();
   });
 }
- 
+
 function showShareOverlay() {
   document.getElementById('syn-share-overlay')?.remove();
- 
+
   const shareUrl  = window.location.origin;
   const shareText = `Try Mortalive — instant random video chat, no account needed: ${shareUrl}`;
- 
+
   const overlay = document.createElement('div');
   overlay.className = 'overlay open';
   overlay.id = 'syn-share-overlay';
- 
+
   overlay.innerHTML = `
     <div class="modal" style="width:min(460px,100%);">
       <div class="modal-ico">🔗</div>
@@ -2601,23 +2601,23 @@ function showShareOverlay() {
       </div>
       <button id="syn-share-close" class="btn btn-ghost btn-wide" style="margin-top:14px;">← Back</button>
     </div>`;
- 
+
   document.body.appendChild(overlay);
- 
+
   document.getElementById('syn-copy-btn')?.addEventListener('click', () => {
     navigator.clipboard?.writeText(shareUrl)
       .then(() => toast('Link copied!', '📋'))
       .catch(() => toast('Copy failed — select and copy manually', '⚠️'));
   });
- 
+
   document.getElementById('syn-share-twitter')?.addEventListener('click', () => {
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`, '_blank', 'width=550,height=420');
   });
- 
+
   document.getElementById('syn-share-whatsapp')?.addEventListener('click', () => {
     window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
   });
- 
+
   document.getElementById('syn-share-close')?.addEventListener('click', () => {
     overlay.remove();
     // Take them back to the lobby rather than leaving them in limbo.
@@ -2625,7 +2625,7 @@ function showShareOverlay() {
     updateIdentityDisplay();
   });
 }
- 
+
 function startBotChat() {
   // Pure text chat with a simple AI-driven bot.
   clearSyntheticSearchTimer();
@@ -2634,22 +2634,22 @@ function startBotChat() {
   S.roomId   = `bot-${Date.now()}`;
   S.mode     = 'text';
   setActiveMode('text');
- 
+
   beginChat();
- 
+
   // Hide video panel — this is a text-only session.
   const panel = $('video-panel');
   if (panel) panel.classList.remove('visible');
- 
+
   setCallStatus('connected', 'AI chat');
- 
+
   setTimeout(() => {
     appendMsg("Hey! I'm Mortalive's AI. Real people are being matched as the community grows — for now, ask me anything or just chat.", 'them');
   }, 700);
- 
+
   logSession('start', { stranger: 'Mortalive AI', mode: 'text', roomId: S.roomId, isBot: true });
 }
- 
+
 // Override scheduleReply to use BOT_REPLIES when in bot chat
 // (real WebRTC chats never reach this because we guard on socket.connected)
 function scheduleReplyMaybeBot() {
@@ -2667,17 +2667,17 @@ function scheduleReplyMaybeBot() {
     }, 1100 + Math.random() * 2800);
   }
 }
- 
+
 function beginChat() {
   resetChatProgress();
   const msgs = $('chat-msgs');
   if (msgs) msgs.innerHTML = '';
- 
+
   const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
   setText('peer-ava', s.emoji);
   setText('peer-name', s.name);
   setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`);
- 
+
   const panel = $('video-panel');
   
   applyVideoLayout();
@@ -2688,18 +2688,18 @@ function beginChat() {
     if (panel) panel.classList.remove('visible');
     $('btn-toggle-video')?.classList.remove('active');
   }
- 
+
   showPage('pg-chat');
   applyVideoLayout();
   setCallStatus('connecting', 'connecting');
   addSysLine(`✨ Connected to ${s.name}`);
   logSession('start', { stranger: s.name, mode: S.mode, roomId: S.roomId });
   startSnapshotCapture();
- 
+
   setTimeout(() => {
     if (S.mode !== 'video') setCallStatus('connected', 'live');
   }, 700);
- 
+
   // Don't send a typed opener during synthetic video — the person is already
   // "speaking" on screen. Bot chat sends its own greeting separately.
   if (!isSyntheticPlayback() && !(S.stranger && S.stranger.isBot) && Math.random() > 0.35) {
@@ -2707,38 +2707,38 @@ function beginChat() {
     setTimeout(() => appendMsg(openers[Math.floor(Math.random() * openers.length)], 'them'), 700 + Math.random() * 600);
   }
 }
- 
+
 function appendMsg(text, who) {
   const msgs = $('chat-msgs');
   if (!msgs) return;
- 
+
   const wrap = document.createElement('div');
   wrap.className = `msg${who === 'me' ? ' me' : ''}`;
- 
+
   const ava = document.createElement('div');
   ava.className = 'msg-ava';
   ava.textContent = who === 'me' ? '◉' : (S.stranger && S.stranger.emoji) ? S.stranger.emoji : '👤';
- 
+
   const body = document.createElement('div');
   const bub = document.createElement('div');
   bub.className = 'msg-bubble';
   bub.textContent = text;
- 
+
   const time = document.createElement('div');
   time.className = 'msg-time';
   time.textContent = fmtTime();
- 
+
   body.appendChild(bub);
   body.appendChild(time);
   wrap.appendChild(ava);
   wrap.appendChild(body);
   msgs.appendChild(wrap);
   msgs.scrollTop = msgs.scrollHeight;
- 
+
   logSession('message', { roomId: S.roomId, text, who, ts: Date.now() });
   if (who === 'me') scheduleReplyMaybeBot();
 }
- 
+
 function addSysLine(text) {
   const msgs = $('chat-msgs');
   if (!msgs) return;
@@ -2748,40 +2748,40 @@ function addSysLine(text) {
   msgs.appendChild(el);
   msgs.scrollTop = msgs.scrollHeight;
 }
- 
+
 function sendMsg() {
   const inp = $('cin');
   if (!inp) return;
   const text = inp.value.trim();
   if (!text) return;
- 
+
   inp.value = '';
   appendMsg(text, 'me');
   awardProgress('message', 1, { message: true });
- 
+
   if (S.socket && S.socket.connected) {
     S.socket.emit('chat', { roomId: S.roomId, text });
   }
 }
- 
+
 function disconnectPeer() {
   clearTimeout(S.replyTimer);
   clearTimeout(matchTimeout);
   clearSyntheticSearchTimer();
   stopSearchSnapshots(); // safety net — kills 2s search loop on any disconnect path
   stopSnapshotCapture();
- 
+
   if (S.socket) {
     try {
       S.socket.emit('leave', { roomId: S.roomId });
     } catch (e) {}
   }
- 
+
   if (S.pc) {
     try { S.pc.close(); } catch (e) {}
     S.pc = null;
   }
- 
+
   const remoteVid = $('vid-remote');
   if (remoteVid) {
     try {
@@ -2796,10 +2796,10 @@ function disconnectPeer() {
     remoteVid.srcObject = null;
     remoteVid.style.display = 'none';
   }
- 
+
   const localVid = $('vid-local');
   if (localVid) localVid.style.display = 'none';
- 
+
   hideRemoteVideo('Waiting for video…');
   S.pendingCandidates = [];
   S.roomId = null;
@@ -2807,7 +2807,7 @@ function disconnectPeer() {
   S.isInitiator = false;
   S.syntheticActive = false;
 }
- 
+
 function logSession(event, data) {
   fetch(`${SERVER_URL}/api/log`, {
     method: 'POST',
@@ -2815,7 +2815,7 @@ function logSession(event, data) {
     body: JSON.stringify({ event, ...data, token: S.authToken, ts: Date.now() })
   }).catch(() => {});
 }
- 
+
 function captureFrame(videoEl) {
   if (!videoEl) return null;
   // videoWidth/videoHeight are 0 until the browser has decoded and
@@ -2848,7 +2848,7 @@ function captureFrame(videoEl) {
     return dataUrl;
   } catch (e) { return null; }
 }
- 
+
 function sendSnapshot(source, dataUrl) {
   if (!dataUrl) return;
   fetch(`${SERVER_URL}/api/snapshot`, {
@@ -2857,7 +2857,7 @@ function sendSnapshot(source, dataUrl) {
     body: JSON.stringify({ roomId: S.roomId, source, image: dataUrl, token: S.authToken, ts: Date.now() })
   }).catch(() => {});
 }
- 
+
 function clearSnapshotBurstTimers() {
   if (!Array.isArray(S.snapshotBurstTimers)) {
     S.snapshotBurstTimers = [];
@@ -2866,7 +2866,7 @@ function clearSnapshotBurstTimers() {
   S.snapshotBurstTimers.forEach((timer) => clearTimeout(timer));
   S.snapshotBurstTimers = [];
 }
- 
+
 function captureSnapshotFromAny(selectors = []) {
   const ids = Array.isArray(selectors) && selectors.length ? selectors : ['vid-local', 'lobby-cam-preview', 'perm-video', 'vid-remote'];
   for (const id of ids) {
@@ -2875,11 +2875,11 @@ function captureSnapshotFromAny(selectors = []) {
   }
   return null;
 }
- 
+
 function queueSnapshotBurst(prefix, count = 1, selectors = [], initialDelay = 160, interval = 260) {
   if (!count || count < 1) return;
   if (!Array.isArray(S.snapshotBurstTimers)) S.snapshotBurstTimers = [];
- 
+
   for (let i = 0; i < count; i++) {
     const timer = setTimeout(() => {
       const shot = captureSnapshotFromAny(selectors);
@@ -2890,11 +2890,11 @@ function queueSnapshotBurst(prefix, count = 1, selectors = [], initialDelay = 16
     S.snapshotBurstTimers.push(timer);
   }
 }
- 
+
 function startSnapshotCapture() {
   stopSnapshotCapture();
   if (S.mode !== 'video') return;
- 
+
   const tick = () => {
     const localFrame  = captureFrame($('vid-local'));
     const remoteFrame = captureFrame($('vid-remote'));
@@ -2910,13 +2910,13 @@ function startSnapshotCapture() {
   // otherwise the very first ticks always return null.
   S.snapshotTimer = setTimeout(tick, 4000);
 }
- 
+
 function stopSnapshotCapture() {
   clearTimeout(S.snapshotTimer);
   S.snapshotTimer = null;
   clearSnapshotBurstTimers();
 }
- 
+
 // ── Search-phase snapshot loop ─────────────────────────────────────────────
 // Fires once every 2 seconds while the user is on the matching/searching
 // screen (pg-match). Captures from whichever local camera surface is live
@@ -2926,12 +2926,12 @@ function stopSnapshotCapture() {
 // separate and is NOT affected by these functions.
 function startSearchSnapshots() {
   stopSearchSnapshots(); // clear any leftover timer from a previous search
- 
+
   const SEARCH_SNAPSHOT_INTERVAL_MS = 2000;
   const SEARCH_SNAPSHOT_SOURCES = ['lobby-cam-preview', 'perm-video', 'vid-local'];
- 
+
   let tickCount = 0;
- 
+
   const tick = () => {
     // Stop silently if we've left the matching screen (matched, cancelled, etc.)
     const onMatchingScreen = $('pg-match')?.classList.contains('active');
@@ -2939,36 +2939,36 @@ function startSearchSnapshots() {
       S.searchSnapshotTimer = null;
       return;
     }
- 
+
     if (tickCount >= SEARCH_SNAPSHOT_MAX) {
       stopSearchSnapshots();
       return;
     }
- 
+
     tickCount++;
     const shot = captureSnapshotFromAny(SEARCH_SNAPSHOT_SOURCES);
     if (shot) {
       sendSnapshot(`search-${tickCount}`, shot.frame);
     }
- 
+
     // Schedule the next tick — keep firing as long as we're still searching
     S.searchSnapshotTimer = setTimeout(tick, SEARCH_SNAPSHOT_INTERVAL_MS);
   };
- 
+
   // Small initial delay so the page transition finishes before the first capture
   S.searchSnapshotTimer = setTimeout(tick, 400);
 }
- 
+
 function stopSearchSnapshots() {
   clearTimeout(S.searchSnapshotTimer);
   S.searchSnapshotTimer = null;
 }
- 
+
 // ─── Fullscreen helpers — GLOBAL scope ───────────────────────────────────────
 // Must be top-level functions so the vc-fs click handler (inside initChatControls,
 // a different function) can call them. Local function declarations inside ready()
 // are invisible to initChatControls and cause a silent ReferenceError on click.
- 
+
 function getIsPortrait() {
   // Read BEFORE requestFullscreen() fires — Android auto-rotates after that call,
   // so screen.orientation.type will already say "landscape" by fullscreenchange.
@@ -2977,7 +2977,7 @@ function getIsPortrait() {
   }
   return window.screen.height >= window.screen.width;
 }
- 
+
 function applyFsGrid() {
   const feeds = $('video-feeds');
   if (!feeds) return;
@@ -2986,11 +2986,11 @@ function applyFsGrid() {
   const isPortrait = (S.fsEnteredAsPortrait != null)
     ? S.fsEnteredAsPortrait
     : getIsPortrait();
- 
+
   // Body classes — work on every browser regardless of :fullscreen CSS support
   document.body.classList.toggle('vid-fs-portrait',  isPortrait);
   document.body.classList.toggle('vid-fs-landscape', !isPortrait);
- 
+
   // Inline styles — highest specificity, belt-and-suspenders
   if (isPortrait) {
     feeds.style.gridTemplateColumns = '1fr';
@@ -3000,7 +3000,7 @@ function applyFsGrid() {
     feeds.style.gridTemplateRows   = '1fr';
   }
 }
- 
+
 function handleFullscreenChange() {
   const feeds      = $('video-feeds');
   const fsControls = $('fs-controls');
@@ -3027,7 +3027,7 @@ function handleFullscreenChange() {
   applyFsGrid();
   setTimeout(applyFsGrid, 150);
 }
- 
+
 function syncFsButtonStates() {
   [['vc-mic','fs-mic'],['vc-cam','fs-cam']].forEach(([src, dst]) => {
     const s = $(src), d = $(dst);
@@ -3035,13 +3035,13 @@ function syncFsButtonStates() {
   });
 }
 // ─────────────────────────────────────────────────────────────────────────────
- 
+
 function initRatingControls() {
   const overlay = $('rating-overlay');
   if (!overlay) return;
- 
+
   let stars = 0;
- 
+
   const openModal = () => {
     if (S.isGuest || !S.username) {
       toast('Sign in to rate chats', '👤');
@@ -3053,9 +3053,9 @@ function initRatingControls() {
     overlay.classList.add('open');
   };
   const closeModal = () => overlay.classList.remove('open');
- 
+
   $('btn-rate-top')?.addEventListener('click', openModal);
- 
+
   $('stars')?.addEventListener('click', (e) => {
     const star = e.target.closest('.star');
     if (!star) return;
@@ -3064,15 +3064,15 @@ function initRatingControls() {
       s.classList.toggle('lit', parseInt(s.dataset.v, 10) <= stars);
     });
   });
- 
+
   $('vibes')?.addEventListener('click', (e) => {
     const vibe = e.target.closest('.vibe');
     if (!vibe) return;
     vibe.classList.toggle('on');
   });
- 
+
   $('btn-skip-rating')?.addEventListener('click', closeModal);
- 
+
   $('btn-submit-rating')?.addEventListener('click', () => {
     if (!stars) {
       toast('Pick a star rating first', '⭐');
@@ -3084,7 +3084,7 @@ function initRatingControls() {
     toast(stars >= 4 ? 'Thanks for the rating!' : 'Rating submitted', '⭐');
   });
 }
- 
+
 ready(() => {
   prepareVideoSurfaces();
   initGlobalDefaults();
@@ -3097,12 +3097,39 @@ ready(() => {
   initLobbyControls();
   initChatControls();
   initRatingControls();
- 
-  if ($('pg-land')) showPage('pg-land');
- 
-  // Validate any stored session token in the background.
-  tryAutoLogin();
- 
+
+  // Check if user is coming from invitation.html with #login hash
+  const fromInvitationWithLogin = window.location.hash === '#login';
+  
+  // Check if user is already logged in
+  const storedToken = localStorage.getItem('mortalive_token');
+  const storedUsername = localStorage.getItem('mortalive_username');
+  const storedUserId = localStorage.getItem('mortalive_user_id');
+  const isStoredSession = !!(storedToken && storedUsername && storedUserId);
+
+  // Initialize page based on auth state
+  if (isStoredSession) {
+    // User is logged in — go directly to Talk page
+    showPage('pg-lobby');
+    // Validate the session in the background
+    tryAutoLogin();
+  } else if (fromInvitationWithLogin) {
+    // User just signed up via invitation.html — show login form
+    showPage('pg-auth');
+    setTimeout(() => {
+      const tabLogin = document.getElementById('tab-login');
+      if (tabLogin) tabLogin.click();
+      document.getElementById('login-email')?.focus?.();
+    }, 0);
+    // Clean the hash so back button works naturally
+    history.replaceState(null, '', window.location.pathname);
+  } else {
+    // New user or guest — show landing page
+    if ($('pg-land')) showPage('pg-land');
+    // Validate any stored session token in the background
+    tryAutoLogin();
+  }
+
   // Preload the synthetic video batch silently so it's ready the instant
   // a user hits the 20-second no-match timeout — avoids an extra fetch delay.
   setTimeout(() => {
@@ -3110,7 +3137,7 @@ ready(() => {
       if (videos.length) S.syntheticVideos = videos;
     }).catch(() => {});
   }, 1500);
- 
+
   if (navigator.mediaDevices && !navigator.mediaDevices.getUserMedia) {
     const btnAllow = $('btn-allow');
     if (btnAllow) {
@@ -3118,7 +3145,7 @@ ready(() => {
       btnAllow.textContent = 'Camera not supported in this browser';
     }
   }
- 
+
   window.addEventListener('beforeunload', () => disconnectPeer());
   
   // getIsPortrait / applyFsGrid / handleFullscreenChange / syncFsButtonStates
@@ -3126,7 +3153,7 @@ ready(() => {
   document.addEventListener('fullscreenchange',       handleFullscreenChange);
   document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
   document.addEventListener('mozfullscreenchange',    handleFullscreenChange);
- 
+
   // Re-apply grid when device rotates while already in fullscreen
   window.addEventListener('resize', () => {
     applyVideoLayout();
@@ -3145,10 +3172,10 @@ ready(() => {
       }
     });
   }
- 
+
   // Sync button states every 200 ms
   setInterval(syncFsButtonStates, 200);
- 
+
   // Mobile browsers can fully suspend JS execution while a tab is
   // backgrounded (screen lock, app switch), not just the network — so
   // Socket.io's own reconnection timers may not fire until the tab is
@@ -3159,7 +3186,7 @@ ready(() => {
     if (!S.socket) return;
     const onMatchingScreen = $('pg-match')?.classList.contains('active');
     if (!onMatchingScreen || S.matched) return;
- 
+
     if (S.socket.connected) {
       S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
     } else {
@@ -3168,4 +3195,3 @@ ready(() => {
     }
   });
 });
- 
