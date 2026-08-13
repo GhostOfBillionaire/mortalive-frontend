@@ -922,8 +922,11 @@ function updateIdentityDisplay() {
   const progress = getCurrentProgress();
   const summary = formatProgressLine(progress);
 
-  if (!S.isGuest && S.username) {
-    if (label) label.textContent = `Logged in as ${S.username} · 🧲 ${summary.score} crockroach Score · ${summary.streak} streak · #${summary.rank}`;
+  // Use localStorage as a reliable fallback if S gets out of sync during load
+  const displayUsername = S.username || localStorage.getItem('mortalive_username');
+
+  if (!S.isGuest && displayUsername) {
+    if (label) label.textContent = `Logged in as ${displayUsername} · 🧲 ${summary.score} crockroach Score · ${summary.streak} streak · #${summary.rank}`;
     if (switchBtn) switchBtn.style.display = 'none';
     if (logoutBtn) logoutBtn.style.display = '';
     if (scorePill) scorePill.style.display = '';
@@ -1712,10 +1715,29 @@ function initAuthControls() {
       localStorage.removeItem('mortalive_token');
       localStorage.removeItem('mortalive_username');
       localStorage.removeItem('mortalive_user_id');
+      updateIdentityDisplay();
       return;
     }
-    if (event === 'SIGNED_IN' && session && !_suppressAutoSignedIn) {
-      handleLinkBasedSignIn(session.user, session);
+    
+    // Automatically catch when Supabase successfully loads a session (initial or token refresh)
+    if (['INITIAL_SESSION', 'SIGNED_IN', 'TOKEN_REFRESHED'].includes(event) && session) {
+      if (event === 'SIGNED_IN' && !_suppressAutoSignedIn) {
+        handleLinkBasedSignIn(session.user, session);
+      }
+      
+      // Keep S object synchronized with the valid Supabase session
+      if (session.access_token) {
+        S.authToken = session.access_token;
+        S.userId = session.user.id;
+        S.isGuest = false;
+        S.username = session.user.user_metadata?.username || localStorage.getItem('mortalive_username') || 'User';
+        
+        localStorage.setItem('mortalive_token', S.authToken);
+        localStorage.setItem('mortalive_user_id', S.userId);
+        
+        // Let the UI know state has resolved securely
+        updateIdentityDisplay();
+      }
     }
   });
 }
@@ -1819,6 +1841,9 @@ async function tryAutoLogin() {
     } catch (e) {
       // Only a genuinely missing/invalid Supabase session may produce Guest.
       console.warn('[Auth] No valid Supabase session:', e?.message || e);
+
+      // Clear the cached promise so future clicks can genuinely retry
+      _autoLoginPromise = null;
 
       S.authToken = null;
       S.username = null;
