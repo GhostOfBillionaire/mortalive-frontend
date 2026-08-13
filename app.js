@@ -1061,7 +1061,7 @@ const _arrivedViaAuthRedirect = /access_token=|refresh_token=|[?&]code=/.test(
 // Holds the in-progress OTP request (which email it was sent to, and
 // whether we're mid-signup or mid-password-reset) so the verify step
 // knows what to check the code against and what to do once it's valid.
-let _otpContext = null; // { mode: 'signup' | 'reset', email }
+let _otpContext = null; // { mode: 'signup' | 'reset', source: 'login'|null, email }
 let _resendCooldownTimer = null;
 
 // Shared 60s cooldown across every "send a code" entry point (signup's
@@ -1217,10 +1217,46 @@ function initAuthControls() {
     _suppressAutoSignedIn = true;
     try {
       const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      
       if (error) {
+        const msg = error.message.toLowerCase();
+        let isUnverified = msg.includes('email not confirmed');
+        let resendSuccess = false;
+
+        // Probe: if invalid credentials, check if the account is actually unverified
+        if (msg.includes('invalid login credentials')) {
+          const { error: probeError } = await sb.auth.resend({
+            type: 'signup',
+            email,
+            options: { emailRedirectTo: window.location.href }
+          });
+          if (!probeError) {
+            isUnverified = true;
+            resendSuccess = true;
+          }
+        }
+
+        if (isUnverified) {
+          if (!resendSuccess) {
+            await sb.auth.resend({
+              type: 'signup',
+              email,
+              options: { emailRedirectTo: window.location.href }
+            });
+          }
+          
+          _lastOtpRequestAt = Date.now();
+          _otpContext = { mode: 'signup', source: 'login', email };
+          _pendingSignupPassword = password; // Will set this password once verified
+          showOtpStep(email);
+          toast('Account not verified. Code sent to your email.', '📩');
+          return;
+        }
+
         setError('login-error', friendlyAuthError(error));
         return;
       }
+      
       const user = data?.user;
       const session = data?.session;
       if (!session || !user) {
@@ -1572,11 +1608,14 @@ function initAuthControls() {
   $('btn-otp-back')?.addEventListener('click', () => {
     clearInterval(_resendCooldownTimer);
     const mode = _otpContext?.mode;
+    const source = _otpContext?.source;
     _otpContext = null;
     _pendingResetUser = null;
     _pendingSignupPassword = null;
     if (otpForm) otpForm.style.display = 'none';
-    if (mode === 'signup') {
+    if (source === 'login') {
+      if (loginForm) loginForm.style.display = '';
+    } else if (mode === 'signup') {
       if (signupForm) signupForm.style.display = '';
     } else {
       if (forgotForm) forgotForm.style.display = '';
