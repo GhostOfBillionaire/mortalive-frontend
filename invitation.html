@@ -1510,8 +1510,9 @@
       document.getElementById('success-state').style.display = 'block';
       document.querySelector('.card').scrollTop = 0;
 
-      // Auto-redirect to Talk lobby after a short pause
-      const destinationUrl = getPostSetupUrl();
+      // Auto-redirect to index.html with #login hash to show login form
+      // The app.js initialization will detect this hash and show the login form
+      const destinationUrl = 'index.html#login';
       const successLink = document.querySelector('#success-state a.btn-primary');
       if (successLink) successLink.href = destinationUrl;
       setTimeout(() => { window.location.href = destinationUrl; }, 2200);
