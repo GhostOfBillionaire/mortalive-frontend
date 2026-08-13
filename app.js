@@ -1220,60 +1220,25 @@ function initAuthControls() {
       
       if (error) {
         const msg = error.message.toLowerCase();
-        let isUnverified = msg.includes('email not confirmed');
-        let resendSuccess = false;
-        let rateLimited = false;
-
-        // Probe: if invalid credentials, check if the account is actually unverified
-        // (An OTP-created account has no password yet, so signInWithPassword always returns invalid)
-        if (msg.includes('invalid login credentials')) {
-          const { error: probeError } = await sb.auth.resend({
-            type: 'signup',
-            email,
-            options: { emailRedirectTo: window.location.href }
-          });
-          
-          if (!probeError) {
-            isUnverified = true;
-            resendSuccess = true;
-          } else {
-            const pMsg = probeError.message.toLowerCase();
-            // Rate limit implies the account is unverified and an OTP was recently sent
-            if (pMsg.includes('rate limit') || pMsg.includes('seconds') || pMsg.includes('too many')) {
-              isUnverified = true;
-              rateLimited = true;
+        if (msg.includes('invalid login credentials') || msg.includes('email not confirmed')) {
+          const errEl = $('login-error');
+          if (errEl) {
+            errEl.style.display = 'block';
+            errEl.innerHTML = `Incorrect email or password.<br><div style="margin-top:6px;padding-top:6px;border-top:1px solid #fecaca;font-size:12.5px;">Account unverified? <a href="#" id="jump-to-signup" style="color:#b42318;font-weight:bold;text-decoration:underline;">Jump to Sign up</a> to resend code.</div>`;
+            
+            const jumpBtn = $('jump-to-signup');
+            if (jumpBtn) {
+              jumpBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                $('tab-signup')?.click();
+                if ($('signup-email')) $('signup-email').value = email;
+                if ($('signup-password')) $('signup-password').value = password;
+                setError('login-error', null);
+              });
             }
-          }
-        }
-
-        if (isUnverified) {
-          if (!resendSuccess && !rateLimited) {
-            const { error: resendErr } = await sb.auth.resend({
-              type: 'signup',
-              email,
-              options: { emailRedirectTo: window.location.href }
-            });
-            if (resendErr) {
-               const rMsg = resendErr.message.toLowerCase();
-               if (rMsg.includes('rate limit') || rMsg.includes('seconds') || rMsg.includes('too many')) {
-                   rateLimited = true;
-               }
-            }
-          }
-          
-          _lastOtpRequestAt = Date.now();
-          _otpContext = { mode: 'signup', source: 'login', email };
-          _pendingSignupPassword = password; // Will set this password once verified
-          showOtpStep(email);
-          
-          if (rateLimited) {
-            toast('Code already sent recently. Check your email.', '⏳');
-          } else {
-            toast('Account not verified. Code sent to your email.', '📩');
           }
           return;
         }
-
         setError('login-error', friendlyAuthError(error));
         return;
       }
