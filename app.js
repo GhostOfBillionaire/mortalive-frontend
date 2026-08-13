@@ -1107,12 +1107,25 @@ function initAuthControls() {
 
   function showAuthTab(which) {
     hideForgotFlow();
-    if (guestForm)  guestForm.style.display  = which === 'guest'  ? '' : 'none';
-    if (loginForm)  loginForm.style.display  = which === 'login'  ? '' : 'none';
-    if (signupForm) signupForm.style.display = which === 'signup' ? '' : 'none';
-    tabGuest?.classList.toggle('active',  which === 'guest');
-    tabLogin?.classList.toggle('active',  which === 'login');
-    tabSignup?.classList.toggle('active', which === 'signup');
+
+    const modes = [
+      [tabGuest, guestForm, which === 'guest'],
+      [tabLogin, loginForm, which === 'login'],
+      [tabSignup, signupForm, which === 'signup']
+    ];
+
+    // Exactly one of Guest / Log in / Sign up is visible at a time.
+    modes.forEach(([tab, panel, active]) => {
+      if (tab) {
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      }
+
+      if (panel) {
+        panel.hidden = !active;
+        panel.style.display = active ? '' : 'none';
+      }
+    });
   }
 
   tabGuest?.addEventListener('click', () => showAuthTab('guest'));
