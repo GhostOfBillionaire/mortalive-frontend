@@ -1107,15 +1107,15 @@ function initAuthControls() {
 
   function showAuthTab(which) {
     hideForgotFlow();
-    // GUEST REMOVED: No longer part of auth tabs
+    if (guestForm)  guestForm.style.display  = which === 'guest'  ? '' : 'none';
     if (loginForm)  loginForm.style.display  = which === 'login'  ? '' : 'none';
     if (signupForm) signupForm.style.display = which === 'signup' ? '' : 'none';
+    tabGuest?.classList.toggle('active',  which === 'guest');
     tabLogin?.classList.toggle('active',  which === 'login');
     tabSignup?.classList.toggle('active', which === 'signup');
   }
 
-  // GUEST is NOT part of auth tabs — it has its own dedicated button
-  // tabGuest?.addEventListener('click', () => showAuthTab('guest'));  // REMOVED
+  tabGuest?.addEventListener('click', () => showAuthTab('guest'));
   tabLogin?.addEventListener('click', () => showAuthTab('login'));
   tabSignup?.addEventListener('click', () => showAuthTab('signup'));
 
@@ -1629,22 +1629,6 @@ function initAuthControls() {
     S.crockroachScore = null;
     S.isGuest     = true;
     S.guestName   = name.slice(0, 24) || `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
-    updateProgressText();
-    localStorage.removeItem('mortalive_token');
-    localStorage.removeItem('mortalive_username');
-    localStorage.removeItem('mortalive_user_id');
-    localStorage.setItem('mortalive_guest_name', S.guestName);
-    enterLobby();
-  });
-
-  // Dedicated guest button on landing page — NOT part of auth form
-  $('btn-guest-toggle')?.addEventListener('click', () => {
-    S.authToken   = null;
-    S.username    = null;
-    S.userId      = null;
-    S.crockroachScore = null;
-    S.isGuest     = true;
-    S.guestName   = `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
     updateProgressText();
     localStorage.removeItem('mortalive_token');
     localStorage.removeItem('mortalive_username');
@@ -3114,37 +3098,10 @@ ready(() => {
   initChatControls();
   initRatingControls();
 
-  // Check if user is coming from invitation.html with #login hash
-  const fromInvitationWithLogin = window.location.hash === '#login';
-  
-  // Check if user is already logged in
-  const storedToken = localStorage.getItem('mortalive_token');
-  const storedUsername = localStorage.getItem('mortalive_username');
-  const storedUserId = localStorage.getItem('mortalive_user_id');
-  const isStoredSession = !!(storedToken && storedUsername && storedUserId);
+  if ($('pg-land')) showPage('pg-land');
 
-  // Initialize page based on auth state
-  if (isStoredSession) {
-    // User is logged in — go directly to Talk page
-    showPage('pg-lobby');
-    // Validate the session in the background
-    tryAutoLogin();
-  } else if (fromInvitationWithLogin) {
-    // User just signed up via invitation.html — show login form
-    showPage('pg-auth');
-    setTimeout(() => {
-      const tabLogin = document.getElementById('tab-login');
-      if (tabLogin) tabLogin.click();
-      document.getElementById('login-email')?.focus?.();
-    }, 0);
-    // Clean the hash so back button works naturally
-    history.replaceState(null, '', window.location.pathname);
-  } else {
-    // New user or guest — show landing page
-    if ($('pg-land')) showPage('pg-land');
-    // Validate any stored session token in the background
-    tryAutoLogin();
-  }
+  // Validate any stored session token in the background.
+  tryAutoLogin();
 
   // Preload the synthetic video batch silently so it's ready the instant
   // a user hits the 20-second no-match timeout — avoids an extra fetch delay.
