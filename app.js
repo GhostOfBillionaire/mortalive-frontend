@@ -1204,6 +1204,7 @@ function initAuthControls() {
     const email    = ($('login-email')?.value    || '').trim();
     const password = $('login-password')?.value  || '';
     setError('login-error', null);
+    
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
       setError('login-error', 'Enter a valid email address.');
       return;
@@ -1212,33 +1213,50 @@ function initAuthControls() {
       setError('login-error', 'Enter your password.');
       return;
     }
+
     const btn = $('btn-login');
     if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
     _suppressAutoSignedIn = true;
+    
     try {
       const { data, error } = await sb.auth.signInWithPassword({ email, password });
       
       if (error) {
         const msg = error.message.toLowerCase();
+        
+        // Probe: Is this account actually just unverified?
         if (msg.includes('invalid login credentials') || msg.includes('email not confirmed')) {
-          const errEl = $('login-error');
-          if (errEl) {
-            errEl.style.display = 'block';
-            errEl.innerHTML = `Incorrect email or password.<br><div style="margin-top:6px;padding-top:6px;border-top:1px solid #fecaca;font-size:12.5px;">Account unverified? <a href="#" id="jump-to-signup" style="color:#b42318;font-weight:bold;text-decoration:underline;">Jump to Sign up</a> to resend code.</div>`;
+          const { error: resendErr } = await sb.auth.resend({
+            type: 'signup',
+            email,
+            options: { emailRedirectTo: window.location.href }
+          });
+          
+          // If resendErr is null, it means the user exists but is unverified, and we just sent an OTP!
+          // Alternatively, if we hit a rate limit, they are also unverified but requested too many codes recently.
+          if (!resendErr || resendErr.message.toLowerCase().includes('rate limit') || resendErr.message.toLowerCase().includes('too many')) {
             
-            const jumpBtn = $('jump-to-signup');
-            if (jumpBtn) {
-              jumpBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                $('tab-signup')?.click();
-                if ($('signup-email')) $('signup-email').value = email;
-                if ($('signup-password')) $('signup-password').value = password;
-                setError('login-error', null);
-              });
+            _lastOtpRequestAt = Date.now();
+            _otpContext = { mode: 'signup', source: 'login', email };
+            _pendingSignupPassword = password; // Save the password to apply after verify
+            
+            showOtpStep(email);
+            
+            if (!resendErr) {
+              toast('Account unverified. New code sent to your email!', '📩');
+            } else {
+              toast('Account unverified. Please check your email for the code.', '⏳');
             }
+            return; // Stop here, we transitioned successfully to OTP!
           }
+          
+          // If resendErr exists and is NOT a rate limit (e.g. "User not found" or "User already verified"),
+          // it genuinely is a bad password or non-existent account.
+          setError('login-error', 'Incorrect email or password.');
           return;
         }
+
+        // Fallback for other login errors (e.g. network)
         setError('login-error', friendlyAuthError(error));
         return;
       }
@@ -1598,7 +1616,10 @@ function initAuthControls() {
     _otpContext = null;
     _pendingResetUser = null;
     _pendingSignupPassword = null;
+    
     if (otpForm) otpForm.style.display = 'none';
+    
+    // Route them back to the exact form they initiated the request from
     if (source === 'login') {
       if (loginForm) loginForm.style.display = '';
     } else if (mode === 'signup') {
@@ -3301,4 +3322,4 @@ ready(() => {
       // The 'connect' handler above will re-emit 'queue' once it lands.
     }
   });
-});
+});s
