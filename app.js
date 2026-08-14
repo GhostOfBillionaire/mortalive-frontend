@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-11-rpc-fix'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-11-cross-domain-routing'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -1466,20 +1466,11 @@ function initAuthControls() {
     if (forgotForm) forgotForm.style.display = 'none';
     if (otpForm)    otpForm.style.display    = '';
     if (resetForm)  resetForm.style.display  = 'none';
-    
     const display = $('otp-email-display');
     if (display) display.textContent = `Code sent to ${email}`;
     setError('otp-error', null);
-    
     const codeInput = $('otp-code');
     if (codeInput) { codeInput.value = ''; codeInput.focus(); }
-
-    // Reset the label text back to default in case it was modified by the login fallback
-    const otpLabel = document.querySelector('#auth-otp-form label[for="otp-code"]');
-    if (otpLabel && _otpContext?.source !== 'login') {
-      otpLabel.textContent = 'Enter the 6-digit code';
-    }
-
     startResendCooldown(60);
   }
 
@@ -1705,6 +1696,10 @@ function initAuthControls() {
   //     on, so we ask for one via the same screen used for password
   //     reset).
   async function handleLinkBasedSignIn(user, session) {
+    // Abort UI changes if this is just a cross-domain session transfer from invitation.mortalive.com
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('transfer') === '1') return;
+
     if (_pendingSignupPassword) {
       const password = _pendingSignupPassword;
       clearInterval(_resendCooldownTimer);
@@ -3232,8 +3227,10 @@ ready(() => {
 
   tryAutoLogin().then((loggedIn) => {
     if (loggedIn) {
-      // Session and identity are hydrated BEFORE enterLobby paints the UI.
-      const hash = window.location.hash.replace('#', '');
+      // Supabase strips auth hashes automatically, so we read the ?dest= param passed from the invitation subdomain
+      const urlParams = new URLSearchParams(window.location.search);
+      let targetPage = urlParams.get('dest') || window.location.hash.replace('#', '');
+      
       const validPages = {
         'lobby': 'pg-lobby',
         'feed': 'pg-feed',
@@ -3241,15 +3238,20 @@ ready(() => {
         'profile': 'pg-profile'
       };
 
-      if (hash && validPages[hash]) {
-        showPage(validPages[hash]);
-        if (hash === 'lobby') {
+      if (targetPage && validPages[targetPage]) {
+        showPage(validPages[targetPage]);
+        if (targetPage === 'lobby') {
           setActiveMode(S.mode);
           ensureLobbyCameraPreview();
         }
         updateDerivedProgress();
         updateProgressText();
         updateIdentityDisplay();
+        
+        // Clean up the URL so ?dest= and &transfer= don't linger in the address bar
+        if (urlParams.has('dest') || urlParams.has('transfer')) {
+            window.history.replaceState(null, '', window.location.pathname + '#' + targetPage);
+        }
       } else {
         enterLobby();
       }
