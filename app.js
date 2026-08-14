@@ -4013,7 +4013,7 @@ document.addEventListener('visibilitychange', () => {
   });
 });
 
-// Sync with app.js router
+// Sync with app.js router 
 window.addEventListener('mortalive-auth-state', () => {
   if ($('pg-profile')?.classList.contains('active')) {
     initProfilePage();
