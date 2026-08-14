@@ -719,6 +719,7 @@ function showPage(id) {
     console.warn('[Mortalive] Blocked navigation to non-Talk page:', id);
     return;
   }
+
   document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
   const page = $(id);
   if (page) page.classList.add('active');
@@ -726,6 +727,19 @@ function showPage(id) {
 
   // Emit state event so UI triggers nav update
   window.dispatchEvent(new CustomEvent('mortalive-auth-state'));
+
+  // Profile is backed by public.accounts/user_links in the latest build.
+  // Navigation can happen before asynchronous auth/profile hydration has
+  // finished, so explicitly retry hydration when entering the profile.
+  if (id === 'pg-profile' && !S.isGuest && S.userId) {
+    if (S.accountData) {
+      initProfilePage();
+    } else {
+      hydrateAccountData(S.userId, { rerender: true }).catch((error) => {
+        console.warn('[Profile] navigation hydration warning:', error);
+      });
+    }
+  }
 }
 
 function toast(msg, icon = '✅') {
@@ -1171,28 +1185,24 @@ function initAuthControls() {
   }
 
   function afterAuthSuccess(token, username, crockroachScore, userId) {
-    S.authToken   = token;
-    S.username    = username;
-    S.userId      = userId || null;
+    S.authToken = token;
+    S.username = username;
+    S.userId = userId || null;
     S.crockroachScore = crockroachScore;
-    S.isGuest     = false;
-    localStorage.setItem('mortalive_token',    token);
+    S.isGuest = false;
+
+    localStorage.setItem('mortalive_token', token);
     localStorage.setItem('mortalive_username', username);
     if (userId) localStorage.setItem('mortalive_user_id', userId);
-    
-    // Fetch profile data (bio, details) and links from Supabase immediately on login
+
+    // Centralized DB hydration prevents the profile from remaining empty
+    // when auth succeeds before accounts/user_links have finished loading.
     if (userId) {
-       fetchUserProfile(userId).then(p => { 
-           S.accountData = p; 
-           fetchUserLinks(userId).then(links => {
-               S.userLinks = links;
-               if ($('pg-profile') && $('pg-profile').classList.contains('active')) {
-                   initProfilePage(); 
-               }
-           });
-       });
+      hydrateAccountData(userId, { rerender: true }).catch((error) => {
+        console.warn('[Profile] post-auth hydration warning:', error);
+      });
     }
-    
+
     syncAuthProgress(crockroachScore);
     toast(`Welcome, ${username}!`, '🧲');
     enterLobby();
@@ -1770,44 +1780,63 @@ function initAuthControls() {
   // that happen via the email's link button rather than a click here.
   sb.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') {
-      S.authToken   = null;
-      S.username    = null;
-      S.userId      = null;
+      S.authToken = null;
+      S.username = null;
+      S.userId = null;
       S.accountData = null;
-      S.userLinks   = [];
+      S.userLinks = [];
       S.crockroachScore = null;
-      S.isGuest     = true;
+      S.isGuest = true;
+
       _autoLoginPromise = null;
+      _profileHydrationPromise = null;
+      _profileHydrationUserId = null;
+
       localStorage.removeItem('mortalive_token');
       localStorage.removeItem('mortalive_username');
       localStorage.removeItem('mortalive_user_id');
       updateIdentityDisplay();
       return;
     }
-    
-    // Automatically catch when Supabase successfully loads a session (initial or token refresh)
+
+    // Automatically catch when Supabase successfully loads a session (initial
+    // or token refresh) and keep the DB-backed profile in sync as well.
     if (['INITIAL_SESSION', 'SIGNED_IN', 'TOKEN_REFRESHED'].includes(event) && session) {
       if (event === 'SIGNED_IN' && !_suppressAutoSignedIn) {
         handleLinkBasedSignIn(session.user, session);
       }
-      
-      // Keep S object synchronized with the valid Supabase session
+
       if (session.access_token) {
+        const nextUserId = session.user.id;
+        const switchedUser = S.userId && S.userId !== nextUserId;
+
         S.authToken = session.access_token;
-        S.userId = session.user.id;
+        S.userId = nextUserId;
         S.isGuest = false;
-        S.username = session.user.user_metadata?.username || localStorage.getItem('mortalive_username') || 'User';
-        
+
+        if (switchedUser) {
+          S.accountData = null;
+          S.userLinks = [];
+        }
+
+        S.username =
+          session.user.user_metadata?.username ||
+          localStorage.getItem('mortalive_username') ||
+          S.username ||
+          'User';
+
         localStorage.setItem('mortalive_token', S.authToken);
         localStorage.setItem('mortalive_user_id', S.userId);
-        
-        // Let the UI know state has resolved securely
+
         updateIdentityDisplay();
+
+        hydrateAccountData(S.userId, { rerender: true }).catch((error) => {
+          console.warn('[Profile] auth-state hydration warning:', error);
+        });
       }
     }
   });
 }
-
 // Fetches the row from public.accounts for the given auth user id.
 async function fetchUserProfile(userId) {
   try {
@@ -1843,6 +1872,83 @@ async function fetchUserLinks(userId) {
   } catch (e) {
     return [];
   }
+}
+
+
+// Centralized profile hydration.
+// The latest build stores DB profile data separately from local progress.
+// This helper makes hydration deterministic across login, refresh,
+// direct profile navigation, and session changes.
+let _profileHydrationPromise = null;
+let _profileHydrationUserId = null;
+
+async function hydrateAccountData(userId, options = {}) {
+  const rerender = options.rerender !== false;
+
+  if (!userId || S.isGuest) return false;
+
+  // Reuse a request already in flight for the same authenticated user.
+  if (_profileHydrationPromise && _profileHydrationUserId === userId) {
+    return _profileHydrationPromise;
+  }
+
+  _profileHydrationUserId = userId;
+
+  let requestPromise;
+  requestPromise = (async () => {
+    try {
+      const [profile, links] = await Promise.all([
+        fetchUserProfile(userId),
+        fetchUserLinks(userId)
+      ]);
+
+      // Never apply data from an account that is no longer active.
+      if (S.userId !== userId || S.isGuest) return false;
+
+      S.accountData = profile || null;
+      S.userLinks = Array.isArray(links) ? links : [];
+
+      const dbUsername =
+        S.accountData?.username ||
+        S.username ||
+        localStorage.getItem('mortalive_username') ||
+        'User';
+
+      const dbScore =
+        S.accountData?.crockroach_score ??
+        S.accountData?.crockroachScore ??
+        S.crockroachScore ??
+        0;
+
+      S.username = dbUsername;
+      S.crockroachScore = dbScore;
+      localStorage.setItem('mortalive_username', dbUsername);
+
+      if (rerender && $('pg-profile')?.classList.contains('active')) {
+        initProfilePage();
+      }
+
+      return !!profile;
+    } catch (error) {
+      console.warn('[Profile] hydration failed:', error);
+
+      if (S.userId !== userId || S.isGuest) return false;
+
+      if (rerender && $('pg-profile')?.classList.contains('active')) {
+        initProfilePage();
+      }
+
+      return false;
+    } finally {
+      if (_profileHydrationPromise === requestPromise) {
+        _profileHydrationPromise = null;
+        _profileHydrationUserId = null;
+      }
+    }
+  })();
+
+  _profileHydrationPromise = requestPromise;
+  return requestPromise;
 }
 
 
@@ -3478,6 +3584,14 @@ function sanitizeHTML(str) {
 function initProfilePage() {
   if (S.isGuest) return;
 
+  // If profile navigation/rendering wins the race against DB hydration,
+  // fetch the account data now and let the hydration callback re-render.
+  if (!S.accountData && S.userId) {
+    hydrateAccountData(S.userId, { rerender: true }).catch((error) => {
+      console.warn('[Profile] render hydration warning:', error);
+    });
+  }
+
   const progress = getCurrentProgress();
   const summary = formatProgressLine(progress);
   const score = summary.score;
@@ -3770,11 +3884,16 @@ function bindProfileEvents() {
     if (e.target === e.currentTarget) e.currentTarget.classList.remove('active');
   });
 
-  $('btn-edit-save-inline')?.addEventListener('click', async () => {
+  // The current index.html uses id="btn-edit-save"; keep support for the
+  // older inline id as well so the JS remains compatible with both layouts.
+  const profileSaveButton = $('btn-edit-save') || $('btn-edit-save-inline');
+
+  profileSaveButton?.addEventListener('click', async () => {
     const newName = $('edit-display-name')?.value.trim() || '';
     const newBio = $('edit-bio')?.value.trim() || '';
     const newDetails = $('edit-details')?.value.trim() || '';
     const newWebsite = $('edit-website')?.value.trim() || '';
+    const newPassword = $('edit-new-password')?.value || '';
     const errEl = $('edit-error');
 
     const selectedInterests = Array.from(
@@ -3789,12 +3908,22 @@ function bindProfileEvents() {
       sort_order: idx
     }));
 
-    const btn = $('btn-edit-save-inline');
+    const btn = profileSaveButton;
     if(btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
     if(errEl) errEl.style.display = 'none';
 
     try {
-      // 1. Update Accounts Table
+      if (newPassword && newPassword.length < 8) {
+        throw new Error('Password must be at least 8 characters.');
+      }
+
+      // 1. Update password when one was supplied in the current profile modal.
+      if (newPassword) {
+        const { error: passwordErr } = await sb.auth.updateUser({ password: newPassword });
+        if (passwordErr) throw passwordErr;
+      }
+
+      // 2. Update Accounts Table
       const updatePayload = {
         display_name: newName,
         bio: newBio,
@@ -3817,14 +3946,14 @@ function bindProfileEvents() {
       const { error: dbErr } = await sb.from('accounts').update(updatePayload).eq('id', S.userId);
       if (dbErr) throw dbErr;
 
-      // 2. Update Links Table (delete all, insert new)
+      // 3. Update Links Table (delete all, insert new)
       await sb.from('user_links').delete().eq('user_id', S.userId);
       if (validLinks.length > 0) {
         const { error: linkErr } = await sb.from('user_links').insert(validLinks);
         if (linkErr) throw linkErr;
       }
 
-      // 3. Sync local S object
+      // 4. Sync local S object
       if (S.accountData) {
         S.accountData.display_name = newName;
         S.accountData.bio = newBio;
@@ -3836,7 +3965,8 @@ function bindProfileEvents() {
 
       toast('Profile updated!', '✅');
       toggleProfileEditMode();
-      initProfilePage(); 
+      if ($('edit-new-password')) $('edit-new-password').value = '';
+      initProfilePage();
     } catch (e) {
       if(errEl) { errEl.textContent = e.message || 'Could not save changes.'; errEl.style.display = 'block'; }
     } finally {
@@ -3869,6 +3999,19 @@ function bindProfileEvents() {
     }
   });
 }
+
+// Refresh the DB-backed profile after a tab becomes visible again.
+// This recovers from temporary network/query failures without changing
+// the rest of the application state.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (S.isGuest || !S.userId) return;
+  if (!$('pg-profile')?.classList.contains('active')) return;
+
+  hydrateAccountData(S.userId, { rerender: true }).catch((error) => {
+    console.warn('[Profile] visibility hydration warning:', error);
+  });
+});
 
 // Sync with app.js router
 window.addEventListener('mortalive-auth-state', () => {
