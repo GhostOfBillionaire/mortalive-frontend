@@ -486,7 +486,7 @@
     </div>
   </div>
 
-  <!-- Post-verification next-step popup -->
+  <!-- Post-verification next-step selection -->
   <div id="post-verify-modal" class="slide-page">
     <div class="header">
       <div style="font-size: 40px; margin-bottom: 12px;">✅</div>
@@ -911,7 +911,13 @@
   });
   postVerifyContinue?.addEventListener('click', () => {
     _postVerifyTryTalk = !!postVerifyTalk?.checked;
-    closePostVerifyModal();
+    
+    // Explicitly hide the post-verify modal
+    const postVerifyPage = document.getElementById('post-verify-modal');
+    postVerifyPage.classList.remove('active');
+    postVerifyPage.style.display = 'none';
+
+    // Slide in the wish state inside the card container
     const wishPage = document.getElementById('wish-state');
     wishPage.style.display = 'flex';
     void wishPage.offsetWidth;
@@ -989,7 +995,7 @@
     }
   });
 
-  // ── Existing-email guard ─────────────────────────────────────────────────
+  // ── Existing-email guard ──
   async function redirectExistingEmailToMainSignup(email) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
     if (!normalizedEmail) return false;
@@ -998,9 +1004,15 @@
       const { data: sessionData } = await sb.auth.getSession();
       const sessionEmail = sessionData?.session?.user?.email?.trim().toLowerCase() || '';
 
-      if (sessionEmail) {
+      // FIX: Only redirect if the email they are signing up with is the exact one they are logged in as
+      if (sessionEmail === normalizedEmail) {
         window.location.href = 'https://mortalive.com/index.html#lobby';
         return true;
+      }
+
+      // If they are logged in as someone else, sign them out silently so they can create a new account
+      if (sessionEmail && sessionEmail !== normalizedEmail) {
+        await sb.auth.signOut();
       }
 
       const { data: exists, error } = await sb.rpc('is_email_registered', {
