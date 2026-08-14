@@ -7,13 +7,21 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
   :root {
-    --surface: #ffffff; --surface-2: #f6f7f9; --surface-3: #eef0f4;
-    --on-surface: #0d1117; --on-surface-2: #3d4451; --on-surface-3: #6b7280;
-    --primary: #1a6ef5; --secondary: #7c3aed;
+    --surface: #ffffff;
+    --surface-2: #f6f7f9;
+    --surface-3: #eef0f4;
+    --on-surface: #0d1117;
+    --on-surface-2: #3d4451;
+    --on-surface-3: #6b7280;
+    --primary: #1a6ef5;
+    --secondary: #7c3aed;
     --primary-alpha: rgba(26,110,245,.12);
     --danger: #dc2626;
-    --border: rgba(0,0,0,.08); --border-strong: rgba(0,0,0,.14);
-    --r-sm: 14px; --r-md: 20px; --r-lg: 28px;
+    --border: rgba(0,0,0,.08);
+    --border-strong: rgba(0,0,0,.14);
+    --r-sm: 14px;
+    --r-md: 20px;
+    --r-lg: 28px;
     --elev-3: 0 4px 16px rgba(0,0,0,.08), 0 16px 48px rgba(0,0,0,.06);
     --dur-fast: 140ms;
   }
@@ -22,17 +30,23 @@
     font-family: Inter, system-ui, sans-serif;
     background: url('https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortallive_background_manssu.png') center top / cover no-repeat fixed;
     color: var(--on-surface);
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     min-height: 100dvh;
     padding: 20px;
   }
   body::before {
-    content: ''; position: fixed; inset: 0;
-    background: rgba(0, 0, 0, 0.65); z-index: 0;
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 0;
   }
   
   .card {
-    position: relative; z-index: 1;
+    position: relative;
+    z-index: 1;
     background: rgba(255,255,255,.96);
     backdrop-filter: blur(24px);
     border: 1px solid var(--border);
@@ -87,10 +101,16 @@
   .field label { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--on-surface-3); }
   
   .field input, .field textarea, .field select {
-    width: 100%; padding: 13px 15px; border-radius: var(--r-sm);
-    border: 1.5px solid var(--border-strong); font-size: 14px; font-family: inherit;
-    outline: none; transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
-    background: var(--surface); color: var(--on-surface);
+    width: 100%;
+    padding: 13px 15px;
+    border-radius: var(--r-sm);
+    border: 1.5px solid var(--border-strong);
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+    background: var(--surface);
+    color: var(--on-surface);
   }
   
   .field input:focus, .field textarea:focus, .field select:focus { 
@@ -120,9 +140,16 @@
   .link-entry { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
   .link-entry input { flex: 1; }
   .btn-icon {
-    width: 40px; height: 44px; border-radius: var(--r-sm); border: 1px solid var(--border);
-    background: var(--surface); cursor: pointer; color: var(--on-surface-3);
-    display: flex; align-items: center; justify-content: center;
+    width: 40px;
+    height: 44px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    color: var(--on-surface-3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: all var(--dur-fast);
   }
   .btn-icon:hover { background: var(--surface-2); color: var(--primary); border-color: var(--primary); }
@@ -143,17 +170,26 @@
   
   .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
   .toggle-label { font-size: 13px; color: var(--on-surface-2); }
-  .switch {
-    position: relative; display: inline-block; width: 44px; height: 24px;
-  }
+  .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
   .switch input { opacity: 0; width: 0; height: 0; }
   .slider {
-    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-    background-color: var(--border-strong); transition: .4s; border-radius: 24px;
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: var(--border-strong);
+    transition: .4s;
+    border-radius: 24px;
   }
   .slider:before {
-    position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
-    background-color: white; transition: .4s; border-radius: 50%;
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
   }
   input:checked + .slider { background-color: var(--secondary); }
   input:checked + .slider:before { transform: translateX(20px); }
@@ -161,10 +197,15 @@
   .interest-group { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
   .interest-checkbox { display: none; }
   .interest-label {
-    padding: 8px 14px; border-radius: 20px;
-    background: var(--surface-2); border: 1px solid var(--border);
-    font-size: 12px; font-weight: 600; color: var(--on-surface-2);
-    cursor: pointer; transition: all var(--dur-fast);
+    padding: 8px 14px;
+    border-radius: 20px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--on-surface-2);
+    cursor: pointer;
+    transition: all var(--dur-fast);
   }
   .interest-checkbox:checked + .interest-label {
     background: rgba(26,110,245,0.1);
@@ -173,13 +214,22 @@
   }
 
   .checkbox-group {
-    display: flex; align-items: flex-start; gap: 10px;
-    font-size: 13px; color: var(--on-surface-3); line-height: 1.6;
-    cursor: pointer; margin-bottom: 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--on-surface-3);
+    line-height: 1.6;
+    cursor: pointer;
+    margin-bottom: 12px;
   }
   .checkbox-group input[type="checkbox"] {
-    width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px;
-    accent-color: var(--primary); cursor: pointer;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    accent-color: var(--primary);
+    cursor: pointer;
   }
 
   .notice-box {
@@ -194,15 +244,25 @@
   }
 
   .btn {
-    display: inline-flex; align-items: center; justify-content: center;
-    gap: 8px; padding: 14px 22px; border-radius: var(--r-sm);
-    font-size: 14px; font-weight: 700; cursor: pointer; border: 0; width: 100%;
-    text-decoration: none; transition: transform var(--dur-fast), box-shadow var(--dur-fast);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 22px;
+    border-radius: var(--r-sm);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 0;
+    width: 100%;
+    text-decoration: none;
+    transition: transform var(--dur-fast), box-shadow var(--dur-fast);
   }
   .btn:disabled { opacity: .5; cursor: not-allowed; }
   .btn-primary {
     background: linear-gradient(145deg, var(--primary), var(--secondary));
-    color: #fff; box-shadow: 0 4px 14px rgba(26,110,245,.28);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(26,110,245,.28);
   }
   .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(26,110,245,.36); }
 
@@ -269,7 +329,7 @@
   }
   .otp-actions .btn { flex: 1; }
 
-  /* Flow screens standard transition inside the card */
+  /* Smooth In-Card Slide Page Transitions */
   .slide-page {
     display: none;
     flex-direction: column;
@@ -317,9 +377,15 @@
   .success-icon { font-size: 52px; margin-bottom: 16px; animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) both; }
   #success-state h2 { font-size: 26px; font-weight: 800; letter-spacing: -.03em; color: var(--on-surface); }
   .notice {
-    padding: 22px; border-radius: var(--r-sm); background: var(--surface-2);
-    border: 1px solid var(--border); font-size: 14px; color: var(--on-surface-2);
-    line-height: 1.7; margin: 20px 0 28px; text-align: left;
+    padding: 22px;
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    font-size: 14px;
+    color: var(--on-surface-2);
+    line-height: 1.7;
+    margin: 20px 0 28px;
+    text-align: left;
   }
   
   @keyframes popIn {
@@ -349,18 +415,18 @@
 
     <!-- Standard Fields -->
     <div class="field">
-      <label>Username</label>
+      <label for="reg-username">Username</label>
       <input type="text" id="reg-username" placeholder="3–24 chars: letters, numbers, _" autocomplete="username" maxlength="24">
       <div id="reg-username-status" class="username-status" style="display:none;"></div>
     </div>
     
     <div class="field">
-      <label>Email</label>
+      <label for="reg-email">Email</label>
       <input type="email" id="reg-email" placeholder="you@example.com" autocomplete="email">
     </div>
 
     <div class="field">
-      <label>Password</label>
+      <label for="reg-password">Password</label>
       <div class="password-input-wrap">
         <input type="password" id="reg-password" placeholder="At least 8 characters" autocomplete="new-password">
         <button type="button" class="pw-toggle-btn" id="btn-reg-pw-toggle" aria-label="Show password">👁️</button>
@@ -375,7 +441,7 @@
     
     <!-- Dynamic Details Field -->
     <div class="field" id="dynamic-details-field" style="display: none;">
-      <label id="details-label">Details</label>
+      <label id="details-label" for="reg-details">Details</label>
       <input type="text" id="reg-details" placeholder="Enter details...">
     </div>
 
@@ -384,7 +450,7 @@
       <label id="upload-purpose-label">Upload CV / Portfolio (Optional)</label>
       <div class="file-upload-wrapper" onclick="document.getElementById('reg-cv').click()">
         <input type="file" id="reg-cv" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onchange="handleFileSelect(this)">
-        <label class="file-upload-label">
+        <label class="file-upload-label" for="reg-cv">
           <strong>Click to upload</strong> or drag and drop<br>
           <span id="upload-types-label" style="font-size: 11px; opacity: 0.8;">PDF, DOC, DOCX, JPG, PNG (Max 15MB)</span>
         </label>
@@ -394,7 +460,7 @@
 
     <!-- Business Website -->
     <div class="field" id="business-site-field" style="display: none;">
-      <label>Company Website (Optional)</label>
+      <label for="reg-business-site">Company Website (Optional)</label>
       <input type="url" id="reg-business-site" placeholder="https://www.yourcompany.com">
     </div>
 
@@ -428,12 +494,12 @@
         <span class="spark-title">Introducing Spark</span>
       </div>
       <div class="field" style="margin-bottom: 0;">
-        <label>Make a Wish</label>
+        <label for="spark-wish">Make a Wish</label>
         <textarea id="spark-wish" placeholder="What feature do you wish Mortalive had?"></textarea>
         <div id="spark-wish-count" style="font-size: 11px; color: var(--on-surface-3); margin-top: 6px; text-align: right;">0 / 400 words</div>
         <div class="toggle-row">
           <span class="toggle-label">Make this wish public?</span>
-          <label class="switch">
+          <label class="switch" for="spark-public">
             <input type="checkbox" id="spark-public">
             <span class="slider"></span>
           </label>
@@ -442,7 +508,7 @@
     </div>
 
     <div class="field">
-      <label>Profile Bio (Optional)</label>
+      <label for="reg-bio">Profile Bio (Optional)</label>
       <textarea id="reg-bio" maxlength="500" placeholder="Tell the world a bit about yourself..."></textarea>
       <div id="bio-count" style="font-size: 11px; color: var(--on-surface-3); margin-top: 6px; text-align: right;">0 / 500 characters</div>
     </div>
@@ -450,7 +516,7 @@
     <!-- Compliance -->
     <label class="checkbox-group" for="reg-terms">
       <input id="reg-terms" type="checkbox">
-      <span>I agree to Mortalive's <a href="#" style="color:var(--primary)">Terms of Service</a> and <a href="#" style="color:var(--primary)">Privacy Policy</a>.</span>
+      <span>I agree to Mortalive's <a href="terms.html" style="color:var(--primary)">Terms of Service</a> and <a href="privacy.html" style="color:var(--primary)">Privacy Policy</a>.</span>
     </label>
     
     <label class="checkbox-group" for="reg-marketing">
@@ -462,7 +528,7 @@
     <button id="btn-register" class="btn btn-primary" style="margin-top: 8px;">Register & Continue →</button>
   </div>
 
-  <!-- OTP Verification Section — skips intermediate popup -->
+  <!-- OTP Verification Section -->
   <div id="otp-state" class="slide-page">
     <div class="header">
       <div style="font-size: 40px; margin-bottom: 12px;">📬</div>
@@ -486,7 +552,7 @@
     </div>
   </div>
 
-  <!-- Post-verification next-step popup -->
+  <!-- Post-verification destination selection -->
   <div id="post-verify-modal" class="slide-page">
     <div class="header">
       <div style="font-size: 40px; margin-bottom: 12px;">✅</div>
@@ -498,15 +564,15 @@
       <label>Next stop</label>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
         <button type="button" class="btn btn-ghost" id="next-feed-btn">Feed</button>
-        <button type="button" class="btn btn-ghost" id="next-profile-btn">Profile</button>
+        <button type="button" class="btn btn-ghost selected" id="next-profile-btn">Profile</button>
       </div>
-      <div id="next-destination-status" style="font-size: 11px; color: var(--on-surface-3); margin-top: 7px;">You can change this later.</div>
+      <div id="next-destination-status" style="font-size: 11px; color: var(--on-surface-3); margin-top: 7px;">After setup, open your Profile.</div>
     </div>
 
     <div class="field" style="margin-bottom: 18px;">
       <div class="toggle-row" style="margin-top: 0;">
         <span class="toggle-label">Try 1:1 Talk after setup?</span>
-        <label class="switch">
+        <label class="switch" for="post-verify-talk">
           <input type="checkbox" id="post-verify-talk">
           <span class="slider"></span>
         </label>
@@ -529,12 +595,12 @@
     </div>
 
     <div class="field">
-      <label>Your Wish</label>
+      <label for="final-wish">Your Wish</label>
       <textarea id="final-wish" placeholder="I wish Mortalive had..." style="min-height: 120px; font-size: 16px;"></textarea>
       <div id="final-wish-count" style="font-size: 11px; color: var(--on-surface-3); margin-top: 6px; text-align: right;">0 / 400 words</div>
       <div class="toggle-row">
         <span class="toggle-label">Make this wish public?</span>
-        <label class="switch">
+        <label class="switch" for="final-wish-public">
           <input type="checkbox" id="final-wish-public">
           <span class="slider"></span>
         </label>
@@ -555,9 +621,9 @@
     <h2>Account Created!</h2>
     <div class="notice">
       <strong>Welcome aboard!</strong><br><br>
-      You can check back the profile as we will notify you via email, by the time we are setting things up feel free to use our 1:1 talk feature meeting random people around the globe.
+      You can check back on your profile as we will notify you via email. While we set things up, feel free to use our 1:1 talk feature to meet random people around the globe.
     </div>
-    <a href="#" class="btn btn-primary">Try 1:1 Talk →</a>
+    <a href="https://mortalive.com/index.html" class="btn btn-primary" id="success-cta-btn">Continue →</a>
   </div>
 </div>
 
@@ -572,7 +638,7 @@
     auth: { detectSessionInUrl: true }
   });
 
-  // ── Account-type config ─────────────────────────
+  // ── Account-type configuration ───────────
   const config = {
     private:      { showDetails: false, label: '',              placeholder: '',                      showCV: false, showSite: false, showSpark: true,  maxLinks: 5 },
     professional: { showDetails: true,  label: 'Job Title',     placeholder: 'e.g. Product Designer', showCV: true,  showSite: false, showSpark: true,  maxLinks: 8 },
@@ -584,17 +650,17 @@
   let linkCount   = 0;
   let userData    = {};
 
-  // Session stored after OTP verify
-  let _verifiedUser    = null;
-  let _verifiedSession = null;
-  let _lastOtpAt       = 0; 
+  let _verifiedUser          = null;
+  let _verifiedSession       = null;
+  let _lastOtpAt             = 0; 
   let _postVerifyDestination = 'profile';
-  let _postVerifyTryTalk = false;
-  const MAX_SPARK_WORDS = 400;
-  const MAX_BIO_CHARS = 500;
-  const MAX_DOB = '2026-08-12';
-  const DOCUMENT_BUCKET = 'mortalive-documents';
-  const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
+  let _postVerifyTryTalk     = false;
+
+  const MAX_SPARK_WORDS      = 400;
+  const MAX_BIO_CHARS        = 500;
+  const MAX_DOB              = '2026-08-12';
+  const DOCUMENT_BUCKET      = 'mortalive-documents';
+  const MAX_DOCUMENT_BYTES   = 15 * 1024 * 1024;
   const ALLOWED_DOCUMENT_MIMES = new Set([
     'application/pdf',
     'application/msword',
@@ -604,36 +670,36 @@
   ]);
   let _selectedUploadFile = null;
 
-  // ── DOM refs ────────────────────────────────────
-  const tabs             = document.querySelectorAll('.auth-tab');
-  const detailsField     = document.getElementById('dynamic-details-field');
-  const detailsLabel     = document.getElementById('details-label');
-  const detailsInput     = document.getElementById('reg-details');
-  const cvField          = document.getElementById('cv-upload-field');
-  const siteField        = document.getElementById('business-site-field');
-  const sparkSection     = document.getElementById('spark-section');
-  const linksContainer   = document.getElementById('links-container');
-  const btnAddLink       = document.getElementById('btn-add-link');
-  const linkCountDisplay = document.getElementById('link-count-display');
-  const linkMaxDisplay   = document.getElementById('link-max-display');
-  const dobInput          = document.getElementById('reg-dob');
-  const ageStatus         = document.getElementById('age-status');
-  const bioInput          = document.getElementById('reg-bio');
-  const bioCount          = document.getElementById('bio-count');
-  const sparkWishInput    = document.getElementById('spark-wish');
-  const sparkWishCount    = document.getElementById('spark-wish-count');
-  const finalWishInput    = document.getElementById('final-wish');
-  const finalWishCount    = document.getElementById('final-wish-count');
-  const uploadPurposeLabel = document.getElementById('upload-purpose-label');
-  const uploadTypesLabel   = document.getElementById('upload-types-label');
-  const uploadInput        = document.getElementById('reg-cv');
-  const otpEmailDisplay    = document.getElementById('otp-email-display');
-  const postVerifyModal    = document.getElementById('post-verify-modal');
-  const nextFeedBtn        = document.getElementById('next-feed-btn');
-  const nextProfileBtn     = document.getElementById('next-profile-btn');
+  // ── DOM References ──────────────────────
+  const tabs                  = document.querySelectorAll('.auth-tab');
+  const detailsField          = document.getElementById('dynamic-details-field');
+  const detailsLabel          = document.getElementById('details-label');
+  const detailsInput          = document.getElementById('reg-details');
+  const cvField               = document.getElementById('cv-upload-field');
+  const siteField             = document.getElementById('business-site-field');
+  const sparkSection          = document.getElementById('spark-section');
+  const linksContainer        = document.getElementById('links-container');
+  const btnAddLink            = document.getElementById('btn-add-link');
+  const linkCountDisplay      = document.getElementById('link-count-display');
+  const linkMaxDisplay        = document.getElementById('link-max-display');
+  const dobInput              = document.getElementById('reg-dob');
+  const ageStatus             = document.getElementById('age-status');
+  const bioInput              = document.getElementById('reg-bio');
+  const bioCount              = document.getElementById('bio-count');
+  const sparkWishInput        = document.getElementById('spark-wish');
+  const sparkWishCount        = document.getElementById('spark-wish-count');
+  const finalWishInput        = document.getElementById('final-wish');
+  const finalWishCount        = document.getElementById('final-wish-count');
+  const uploadPurposeLabel    = document.getElementById('upload-purpose-label');
+  const uploadTypesLabel      = document.getElementById('upload-types-label');
+  const uploadInput           = document.getElementById('reg-cv');
+  const otpEmailDisplay       = document.getElementById('otp-email-display');
+  const postVerifyModal       = document.getElementById('post-verify-modal');
+  const nextFeedBtn           = document.getElementById('next-feed-btn');
+  const nextProfileBtn        = document.getElementById('next-profile-btn');
   const nextDestinationStatus = document.getElementById('next-destination-status');
-  const postVerifyTalk     = document.getElementById('post-verify-talk');
-  const postVerifyContinue = document.getElementById('btn-post-verify-continue');
+  const postVerifyTalk        = document.getElementById('post-verify-talk');
+  const postVerifyContinue    = document.getElementById('btn-post-verify-continue');
 
   function calculateAge(dobString) {
     if (!dobString) return null;
@@ -711,7 +777,7 @@
   function updateUploadCopy() {
     if (!uploadPurposeLabel || !uploadTypesLabel || !uploadInput) return;
     if (currentType === 'business') {
-      uploadPurposeLabel.textContent = 'Upload Catalogues / Cards to Hire / Company Criteria Documents (Optional)';
+      uploadPurposeLabel.textContent = 'Upload Catalogues / Documents / Hiring Criteria (Optional)';
       uploadTypesLabel.textContent = 'PDF, DOC, DOCX, JPG, PNG (Max 15MB)';
       uploadInput.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
     } else {
@@ -732,22 +798,6 @@
     }
   }
 
-  function openPostVerifyModal() {
-    if (!postVerifyModal) return;
-    setPostVerifyDestination(_postVerifyDestination);
-    if (postVerifyTalk) postVerifyTalk.checked = _postVerifyTryTalk;
-    postVerifyModal.style.display = 'flex';
-    void postVerifyModal.offsetWidth;
-    postVerifyModal.classList.add('active');
-  }
-
-  function closePostVerifyModal() {
-    if (!postVerifyModal) return;
-    postVerifyModal.classList.remove('active');
-    postVerifyModal.style.display = 'none';
-  }
-
-  // ── Helper: show inline error ─────────────────────────────────────────────
   function setError(id, msg) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -764,7 +814,7 @@
     return err?.message || 'Something went wrong — please try again.';
   }
 
-  // ── Account-type tab switching ──────────────────
+  // ── Account Type Tab Switching ───────────
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
       tabs.forEach(t => t.classList.remove('active'));
@@ -793,7 +843,7 @@
     });
   });
 
-  // ── File upload validation / staging ─────────────────────────────────────
+  // ── Document Upload Validation & Staging ──
   function handleFileSelect(input) {
     const file = input.files?.[0] || null;
     const info = document.getElementById('cv-file-info');
@@ -829,24 +879,17 @@
   }
 
   function safeFileName(name) {
-    const clean = String(name || 'document')
+    return String(name || 'document')
       .trim()
       .replace(/[^a-zA-Z0-9._-]+/g, '-')
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '')
-      .slice(0, 100);
-    return clean || 'document';
+      .slice(0, 100) || 'document';
   }
 
   async function uploadSelectedDocument(uid) {
     const file = _selectedUploadFile;
-    if (!file) return null;
-
-    if (!uid || !file) throw new Error('No verified user or document selected.');
-    if (file.size > MAX_DOCUMENT_BYTES) throw new Error('The selected document exceeds 15MB.');
-    if (!ALLOWED_DOCUMENT_MIMES.has(file.type) && !/\.(pdf|doc|docx|jpe?g|png)$/i.test(file.name || '')) {
-      throw new Error('The selected document type is not supported.');
-    }
+    if (!file || !uid) return null;
 
     const extension = (file.name.split('.').pop() || 'bin').toLowerCase();
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -880,7 +923,7 @@
     return { path: data?.path || objectPath, kind: documentKind };
   }
 
-  // ── Dynamic links ───────────────────────────────
+  // ── Dynamic Links Builder ────────────────
   btnAddLink.addEventListener('click', () => {
     const max = config[currentType].maxLinks;
     if (linkCount >= max) return;
@@ -909,15 +952,14 @@
   postVerifyTalk?.addEventListener('change', () => {
     _postVerifyTryTalk = !!postVerifyTalk.checked;
   });
+
   postVerifyContinue?.addEventListener('click', () => {
     _postVerifyTryTalk = !!postVerifyTalk?.checked;
     
-    // Explicitly hide the post-verify modal
     const postVerifyPage = document.getElementById('post-verify-modal');
     postVerifyPage.classList.remove('active');
     postVerifyPage.style.display = 'none';
 
-    // Slide in the wish state inside the card container
     const wishPage = document.getElementById('wish-state');
     wishPage.style.display = 'flex';
     void wishPage.offsetWidth;
@@ -931,7 +973,7 @@
   updateUploadCopy();
   setPostVerifyDestination('profile');
 
-  // ── Live username availability ──
+  // ── Live Username Availability Check ─────
   let _usernameCheckTimer = null;
   let _usernameCheckToken = 0;
   let _usernameCheck = { username: null, available: null };
@@ -951,7 +993,6 @@
       const { data, error } = await sb.rpc('is_username_taken', { p_username: username });
       if (myToken !== _usernameCheckToken) return;
       if (error) {
-        console.warn('[register] is_username_taken:', error.message);
         _usernameCheck = { username, available: null };
         setUsernameStatus('bad', 'Could not check availability — try again.');
         return;
@@ -995,7 +1036,7 @@
     }
   });
 
-  // Password visibility
+  // Password Visibility Toggle
   function wireupPasswordToggle(inputId, btnId) {
     const input = document.getElementById(inputId);
     const btn = document.getElementById(btnId);
@@ -1009,13 +1050,13 @@
   }
   wireupPasswordToggle('reg-password', 'btn-reg-pw-toggle');
 
-  // ── REGISTER ────────
+  // ── Step 1: Initial Registration & OTP Send ──
   document.getElementById('btn-register').addEventListener('click', async () => {
-    const username = document.getElementById('reg-username').value.trim();
-    const email    = document.getElementById('reg-email').value.trim();
-    const password = document.getElementById('reg-password').value;
-    const terms    = document.getElementById('reg-terms').checked;
-    const dob      = dobInput?.value || '';
+    const username   = document.getElementById('reg-username').value.trim();
+    const email      = document.getElementById('reg-email').value.trim();
+    const password   = document.getElementById('reg-password').value;
+    const terms      = document.getElementById('reg-terms').checked;
+    const dob        = dobInput?.value || '';
     const ageInvalid = syncAgeState();
     const bio        = (bioInput?.value || '').trim();
     const sparkWish  = (sparkWishInput?.value || '').trim();
@@ -1026,31 +1067,19 @@
       return setError('err-register', 'Username must be 3–24 characters: letters, numbers, underscore only.');
     }
     if (_usernameCheck.username === username && _usernameCheck.available === false) {
-      setError('err-register', 'That username is taken — please choose a different one.');
-      usernameInput?.focus();
-      return;
-    }
-    if (_usernameCheck.username !== username || _usernameCheck.available !== true) {
-      await checkUsernameAvailability(username);
-      if (_usernameCheck.username !== username || _usernameCheck.available !== true) {
-        return setError('err-register', 'Please choose an available username before continuing.');
-      }
+      return setError('err-register', 'That username is taken — please choose a different one.');
     }
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
       return setError('err-register', 'Please enter a valid email address.');
     }
-
     if (password.length < 8) {
       return setError('err-register', 'Password must be at least 8 characters.');
     }
-    if (!dob) {
-      return setError('err-register', 'Please enter your date of birth.');
-    }
-    if (ageInvalid) {
+    if (!dob || ageInvalid) {
       return setError('err-register', 'You must be at least 13 years old to join Mortalive.');
     }
     if (countWords(sparkWish) > MAX_SPARK_WORDS) {
-      return setError('err-register', `Spark is limited to ${MAX_SPARK_WORDS} words per post.`);
+      return setError('err-register', `Spark is limited to ${MAX_SPARK_WORDS} words.`);
     }
     if (bio.length > MAX_BIO_CHARS) {
       return setError('err-register', `Profile bio is limited to ${MAX_BIO_CHARS} characters.`);
@@ -1123,11 +1152,11 @@
     }
   });
 
-  // ── OTP UI ─────────
+  // ── Step 2: OTP Verification Screen ───────
   const otpCodeInput = document.getElementById('otp-code');
   const btnOtpVerify = document.getElementById('btn-verify');
   const btnOtpResend = document.getElementById('btn-resend');
-  const btnOtpBack = document.getElementById('btn-otp-back');
+  const btnOtpBack   = document.getElementById('btn-otp-back');
   let _resendCooldownTimer = null;
   let _suppressAutoSignedIn = false;
 
@@ -1137,15 +1166,13 @@
     otpState.style.display = 'flex';
     void otpState.offsetWidth;
     otpState.classList.add('active');
+    
     if (otpEmailDisplay) otpEmailDisplay.textContent = `Code sent to ${email}`;
     setError('err-otp', null);
-    if (otpCodeInput) {
-      otpCodeInput.value = '';
-    }
+    if (otpCodeInput) otpCodeInput.value = '';
 
     const card = document.querySelector('.card');
     if (card) card.scrollTo({ top: 0, behavior: 'instant' });
-    window.scrollTo({ top: 0, behavior: 'instant' });
 
     if (otpCodeInput) {
       setTimeout(() => otpCodeInput.focus(), 80);
@@ -1193,8 +1220,7 @@
   });
 
   btnOtpResend?.addEventListener('click', async () => {
-    if (!userData.email) return;
-    if (btnOtpResend.disabled) return;
+    if (!userData.email || btnOtpResend.disabled) return;
 
     setError('err-otp', null);
     btnOtpResend.disabled = true;
@@ -1240,7 +1266,7 @@
     });
     if (passwordError) throw new Error(friendlyError(passwordError));
 
-    const { data: profileData, error: profileError } = await sb
+    const { error: profileError } = await sb
       .from('accounts')
       .update({
         username: userData.username,
@@ -1252,9 +1278,7 @@
         marketing_opt_in: Boolean(userData.marketing),
         interests: userData.interests || []
       })
-      .eq('id', user.id)
-      .select()
-      .single();
+      .eq('id', user.id);
     
     if (profileError) throw new Error(`Could not save profile: ${profileError.message}`);
 
@@ -1267,7 +1291,14 @@
     const otpState = document.getElementById('otp-state');
     otpState.classList.remove('active');
     otpState.style.display = 'none';
-    openPostVerifyModal();
+
+    // Slide to destination selection
+    const postVerifyPage = document.getElementById('post-verify-modal');
+    setPostVerifyDestination(_postVerifyDestination);
+    if (postVerifyTalk) postVerifyTalk.checked = _postVerifyTryTalk;
+    postVerifyPage.style.display = 'flex';
+    void postVerifyPage.offsetWidth;
+    postVerifyPage.classList.add('active');
   }
 
   btnOtpVerify?.addEventListener('click', async () => {
@@ -1303,7 +1334,6 @@
 
       await completeVerifiedSignup(user, session);
     } catch (e) {
-      console.error('[invitation] OTP verify:', e);
       setError('err-otp', e?.message || 'Could not verify the code. Try again.');
     } finally {
       _suppressAutoSignedIn = false;
@@ -1312,7 +1342,7 @@
     }
   });
 
-  // ── FINAL SUBMIT ────────────
+  // ── Step 3: Final Setup & Cross-Domain Transfer ──
   document.getElementById('btn-finish').addEventListener('click', async () => {
     enforceWordLimit(finalWishInput, finalWishCount, 'Final wish');
     syncBioCounter();
@@ -1328,7 +1358,8 @@
     }
 
     const btn = document.getElementById('btn-finish');
-    btn.disabled = true; btn.textContent = 'Setting up your account…';
+    btn.disabled = true;
+    btn.textContent = 'Setting up your account…';
 
     try {
       const uid = _verifiedUser.id;
@@ -1355,27 +1386,28 @@
 
       if (userData.spark?.wish) {
         const { error: sparkErr } = await sb.from('wishes').insert({
-          user_id:  uid,
+          user_id:   uid,
           wish_text: userData.spark.wish,
           is_public: userData.spark.isPublic,
-          status:   'hidden_until_launch'
+          status:    'hidden_until_launch'
         });
         if (sparkErr) throw new Error(`Could not save Spark wish: ${sparkErr.message}`);
       }
 
       if (finalWish) {
         const { error: wishErr } = await sb.from('wishes').insert({
-          user_id:  uid,
+          user_id:   uid,
           wish_text: finalWish,
           is_public: isPublic,
-          status:   'hidden_until_launch'
+          status:    'hidden_until_launch'
         });
         if (wishErr) throw new Error(`Could not save final wish: ${wishErr.message}`);
       }
 
-      localStorage.setItem('mortalive_token',    _verifiedSession.access_token);
-      localStorage.setItem('mortalive_username', userData.username);
-      localStorage.setItem('mortalive_user_id',  uid);
+      // Cleanup local subdomain storage
+      localStorage.removeItem('mortalive_token');
+      localStorage.removeItem('mortalive_username');
+      localStorage.removeItem('mortalive_user_id');
       localStorage.removeItem('mortalive_guest_name');
       _selectedUploadFile = null;
 
@@ -1386,30 +1418,32 @@
 
       let targetHash = 'lobby';
       if (!_postVerifyTryTalk) {
-          targetHash = _postVerifyDestination === 'feed' ? 'feed' : 'profile';
+        targetHash = _postVerifyDestination === 'feed' ? 'feed' : 'profile';
       }
       
-      const destinationUrl = `./index.html#${targetHash}`;
+      // Cross-Domain Transfer to root domain
+      const tokens = `access_token=${encodeURIComponent(_verifiedSession.access_token)}&refresh_token=${encodeURIComponent(_verifiedSession.refresh_token)}&expires_in=${_verifiedSession.expires_in}&token_type=bearer&type=magiclink`;
+      const destinationUrl = `https://mortalive.com/index.html?dest=${targetHash}&transfer=1#${tokens}`;
       
-      const successLink = document.querySelector('#success-state a.btn-primary');
+      const successLink = document.getElementById('success-cta-btn');
       if (successLink) {
-          successLink.href = destinationUrl;
-          if (targetHash === 'profile') successLink.textContent = 'Go to Profile →';
-          else if (targetHash === 'feed') successLink.textContent = 'Go to Feed →';
-          else successLink.textContent = 'Try 1:1 Talk →';
+        successLink.href = destinationUrl;
+        if (targetHash === 'profile') successLink.textContent = 'Go to Profile →';
+        else if (targetHash === 'feed') successLink.textContent = 'Go to Feed →';
+        else successLink.textContent = 'Try 1:1 Talk →';
       }
       
       setTimeout(() => { window.location.href = destinationUrl; }, 2200);
 
     } catch (e) {
-      console.error('[register] finish error:', e);
       setError('err-finish', e?.message || 'Profile data could not be saved. Please try again.');
     } finally {
-      btn.disabled = false; btn.textContent = 'Complete Setup →';
+      btn.disabled = false;
+      btn.textContent = 'Complete Setup →';
     }
   });
 
-  // ── Email-link confirmation ──
+  // ── Direct Link Confirmation Path ────────
   sb.auth.onAuthStateChange(async (event, session) => {
     if (event !== 'SIGNED_IN' || !session || _suppressAutoSignedIn) return;
 
@@ -1441,7 +1475,6 @@
       try {
         await completeVerifiedSignup(session.user, session);
       } catch (e) {
-        console.error('[invitation] Link confirmation:', e);
         setError('err-register', e?.message || 'Email confirmed, but setup could not be completed. Return to the invitation tab and try again.');
       }
     }
