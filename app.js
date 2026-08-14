@@ -3245,6 +3245,151 @@ function initRatingControls() {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// PROFILE PAGE LOGIC (Isolated & Mapped to S object)
+// ═══════════════════════════════════════════════════════════════════
+
+const ALL_BADGES = [
+  { id: 'rookie',      emoji: '🌱', name: 'Rookie',       desc: 'Joined the community' },
+  { id: 'momentum',    emoji: '🔥', name: 'Momentum',     desc: '3+ chats, 120+ score' },
+  { id: 'streak-3',    emoji: '⚡', name: '3-Day Streak', desc: 'Chat 3 days in a row' },
+  { id: 'bronze',      emoji: '🥉', name: 'Bronze',       desc: 'Reach 220 crockroach score' },
+  { id: 'silver',      emoji: '🥈', name: 'Silver',       desc: 'Reach 420 crockroach score' },
+  { id: 'gold',        emoji: '🥇', name: 'Gold',         desc: 'Reach 700 crockroach score' },
+  { id: 'top10',       emoji: '👑', name: 'Top 10%',      desc: 'Rank in the top 10% weekly' }
+];
+
+function initProfilePage() {
+  if (S.isGuest) return;
+
+  const progress = getCurrentProgress();
+  const summary = formatProgressLine(progress);
+  const profile = getCurrentProfile();
+
+  // Populate Hero
+  $('profile-username-display').textContent = S.username || 'User';
+  $('profile-subline-display').textContent = profile.bio || 'No bio added yet. Click edit to add one.';
+  $('profile-hero-score').textContent = summary.score.toLocaleString();
+
+  // Avatar Gradient Generation based on username length
+  const colors = ['#1a6ef5', '#7c3aed', '#06b6d4', '#f59e0b', '#ec4899'];
+  const colorIdx = (S.username || '').length % colors.length;
+  $('profile-avatar').style.background = `linear-gradient(135deg, ${colors[colorIdx]}, ${colors[(colorIdx + 1) % colors.length]})`;
+  $('profile-avatar').textContent = (S.username || 'U').charAt(0).toUpperCase();
+
+  // Populate Stats Grid
+  $('profile-stat-score').textContent = summary.score.toLocaleString();
+  $('profile-stat-streak').textContent = summary.streak;
+  $('profile-stat-completions').textContent = summary.completions;
+  $('profile-stat-rank').textContent = `#${summary.rank}`;
+
+  // Populate Badges
+  const earnedSet = new Set(progress.badges || []);
+  const grid = $('profile-badges-grid');
+  if (grid) {
+    grid.innerHTML = '';
+    ALL_BADGES.forEach(badge => {
+      const earned = earnedSet.has(badge.id);
+      const card = document.createElement('div');
+      card.className = `badge-card${earned ? '' : ' locked'}`;
+      card.innerHTML = `
+        <span class="badge-emoji">${badge.emoji}</span>
+        <div class="badge-name">${badge.name}</div>
+        <div class="badge-desc">${badge.desc}</div>
+        ${!earned ? '<span class="badge-locked-overlay">🔒</span>' : ''}
+      `;
+      grid.appendChild(card);
+    });
+    $('profile-badges-count').textContent = `${earnedSet.size} / ${ALL_BADGES.length}`;
+  }
+
+  // Pre-fill Edit Modal
+  if ($('edit-display-name')) $('edit-display-name').value = S.username || '';
+  if ($('edit-bio')) $('edit-bio').value = profile.bio || '';
+}
+
+// Attach Event Listeners
+function bindProfileEvents() {
+  $('btn-edit-profile')?.addEventListener('click', () => {
+    $('edit-profile-modal').classList.add('open');
+  });
+
+  const closeEdit = () => {
+    $('edit-profile-modal').classList.remove('open');
+    $('edit-error').style.display = 'none';
+  };
+
+  $('btn-edit-close')?.addEventListener('click', closeEdit);
+  $('btn-edit-cancel')?.addEventListener('click', closeEdit);
+  $('edit-profile-modal')?.addEventListener('click', e => { if (e.target.id === 'edit-profile-modal') closeEdit(); });
+
+  $('btn-edit-save')?.addEventListener('click', async () => {
+    const newPass = $('edit-new-password')?.value || '';
+    const newBio = $('edit-bio')?.value.trim() || '';
+    const errEl = $('edit-error');
+
+    errEl.style.display = 'none';
+    if (newPass && newPass.length < 8) {
+      errEl.textContent = 'Password must be at least 8 characters.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const btn = $('btn-edit-save');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    try {
+      if (newPass) {
+        const { error } = await sb.auth.updateUser({ password: newPass });
+        if (error) throw error;
+      }
+      
+      // Update local profile object
+      const profile = getCurrentProfile();
+      profile.bio = newBio;
+      persistProfile();
+
+      toast('Profile updated!', '✅');
+      closeEdit();
+      $('edit-new-password').value = '';
+      initProfilePage(); // Re-render
+    } catch (e) {
+      errEl.textContent = e.message || 'Could not save changes.';
+      errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Save Changes';
+    }
+  });
+
+  $('btn-share-profile')?.addEventListener('click', () => {
+    const link = `${window.location.origin}${window.location.pathname}`;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(link).then(() => toast('Profile link copied!', '📋'));
+    } else {
+      toast('Profile link: ' + link, '📋');
+    }
+  });
+
+  // Attach to the custom profile logout button
+  $('btn-profile-logout')?.addEventListener('click', () => {
+    if (confirm('Log out of Mortalive?')) {
+      $('btn-logout')?.click(); // Trigger standard app.js logout
+    }
+  });
+}
+
+// Tie into the existing showPage event architecture
+window.addEventListener('mortalive-auth-state', () => {
+  if ($('pg-profile').classList.contains('active')) {
+    initProfilePage();
+  }
+});
+
+// Call bindings once
+document.addEventListener('DOMContentLoaded', bindProfileEvents);
+
 ready(() => {
   prepareVideoSurfaces();
   initGlobalDefaults();
