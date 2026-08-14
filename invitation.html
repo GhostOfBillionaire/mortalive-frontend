@@ -10,6 +10,8 @@
     --surface: #ffffff; --surface-2: #f6f7f9; --surface-3: #eef0f4;
     --on-surface: #0d1117; --on-surface-2: #3d4451; --on-surface-3: #6b7280;
     --primary: #1a6ef5; --secondary: #7c3aed;
+    --primary-alpha: rgba(26,110,245,.12);
+    --danger: #dc2626;
     --border: rgba(0,0,0,.08); --border-strong: rgba(0,0,0,.14);
     --r-sm: 14px; --r-md: 20px; --r-lg: 28px;
     --elev-3: 0 4px 16px rgba(0,0,0,.08), 0 16px 48px rgba(0,0,0,.06);
@@ -204,7 +206,17 @@
   }
   .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(26,110,245,.36); }
 
-  /* Signup / OTP styles aligned with the live index.html signup flow */
+  .btn-ghost {
+    background: var(--surface);
+    color: var(--on-surface);
+    border: 1.5px solid var(--border-strong);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-alpha);
+  }
+
   /* Password field — same wrapper/toggle styling as index.html signup */
   .password-input-wrap { position: relative; }
   .password-input-wrap input { padding-right: 44px; }
@@ -257,53 +269,16 @@
   }
   .otp-actions .btn { flex: 1; }
 
-  /* Flow screens must participate in the card's height. */
+  /* Flow screens standard transition inside the card */
   .slide-page {
-    position: relative;
-    width: 100%;
-    min-height: 420px;
-    background: rgba(255,255,255,.96);
-    backdrop-filter: blur(24px);
-    z-index: 10;
-    padding: 34px 32px;
     display: none;
     flex-direction: column;
-    justify-content: center;
     opacity: 0;
-    transform: translateX(100%);
+    transform: translateX(30px);
   }
   .slide-page.active {
     display: flex;
-    animation: slideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-  .modal-screen {
-    position: fixed !important;
-    inset: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    min-height: 100vh !important;
-    z-index: 1000 !important;
-    margin: 0 !important;
-    padding: 24px !important;
-    background: rgba(8,14,28,.52) !important;
-    backdrop-filter: blur(12px) !important;
-    align-items: center;
-    justify-content: center;
-    transform: none;
-  }
-  .modal-screen.active { display: flex !important; }
-  .modal-screen > .header,
-  .modal-screen > .field,
-  .modal-screen > .notice-box,
-  .modal-screen > .btn {
-    width: min(460px, 100%);
-  }
-  .modal-screen > .header,
-  .modal-screen > .field,
-  .modal-screen > .notice-box,
-  .modal-screen > .btn {
-    margin-left: auto;
-    margin-right: auto;
+    animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
   @keyframes slideIn {
     to { opacity: 1; transform: translateX(0); }
@@ -512,7 +487,7 @@
   </div>
 
   <!-- Post-verification next-step popup -->
-  <div id="post-verify-modal" class="slide-page modal-screen" style="z-index: 20; display: none;">
+  <div id="post-verify-modal" class="slide-page">
     <div class="header">
       <div style="font-size: 40px; margin-bottom: 12px;">✅</div>
       <h2>Email verified</h2>
