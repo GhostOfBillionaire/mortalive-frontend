@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-11-cross-domain-routing'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-11-master-final'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -41,7 +41,6 @@ const S = {
   onlineTimerStarted: false,
   pendingAction: null,
   replyTimer: null,
-  // synthetic video fallback
   syntheticActive: false,
   syntheticSkipCount: 0,
   syntheticVideos: [],
@@ -49,11 +48,12 @@ const S = {
   syntheticVideoId: null,
   syntheticVideoStartTime: null,
   syntheticSearchTimer: null,
-  searchSnapshotTimer: null,  // fires every 2s while user is on the matching/searching screen
+  searchSnapshotTimer: null,  
   // identity
   authToken: localStorage.getItem('mortalive_token') || null,
   username: localStorage.getItem('mortalive_username') || null,
   userId: localStorage.getItem('mortalive_user_id') || null,
+  accountData: null, // Stores DB profile data (bio, display name, etc.)
   crockroachScore: null,
   isGuest: !localStorage.getItem('mortalive_token'),
   guestName: localStorage.getItem('mortalive_guest_name') || '',
@@ -64,12 +64,11 @@ const S = {
   profile: null
 };
 
-// EXPLICIT GLOBAL BINDING: Allows index.html inline scripts to accurately read the guest state
+// EXPLICIT GLOBAL BINDING
 window.S = S;
 
-// ── Synthetic video fallback constants ───────────────────
-const SYNTHETIC_SKIP_LIMIT = 10; // videos per "round" before final options shown
-const SEARCH_SNAPSHOT_MAX = 20;   // 15 target shots + 5 buffer before the search turns into synthetic video
+const SYNTHETIC_SKIP_LIMIT = 10; 
+const SEARCH_SNAPSHOT_MAX = 20;   
 
 function isSyntheticPlayback() {
   return !!(S.syntheticActive || (S.stranger && S.stranger.isSynthetic));
@@ -91,7 +90,6 @@ function prepareVideoElement(videoEl) {
   videoEl.style.maxHeight = '100%';
   videoEl.style.minWidth = '0';
   videoEl.style.minHeight = '0';
-  // Crop videos to fit square container without stretching
   videoEl.style.objectFit = 'cover';
   videoEl.style.objectPosition = 'center center';
   videoEl.style.background = '#000';
@@ -126,10 +124,6 @@ function showSearchScreen() {
   setText('match-title', 'Finding your match');
   const subReset = $('match-sub');
   if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
-  // Start continuous 1-per-2s snapshot capture while the user is on the
-  // search screen — covers both real-server queuing and synthetic search
-  // interstials. startSearchSnapshots() is safe to call repeatedly; it
-  // always clears the previous timer before starting a new one.
   startSearchSnapshots();
 }
 
@@ -143,8 +137,6 @@ function scheduleSyntheticSearchResume(delayMs = 1400) {
     const onMatchingScreen = $('pg-match')?.classList.contains('active');
     if (S.matched || !onMatchingScreen) return;
 
-    // If the socket is still connected, keep the queue alive and then
-    // fall back to the next synthetic clip only after the search interstitial.
     if (S.socket && S.socket.connected) {
       clearTimeout(matchTimeout);
       clearTimeout(S.noMatchTimeout);
@@ -152,12 +144,10 @@ function scheduleSyntheticSearchResume(delayMs = 1400) {
       return;
     }
 
-    // If the socket dropped, restart the search cleanly.
     startMatching();
   }, Math.max(650, delayMs));
 }
 
-// AI bot responses used when user picks "Chat with AI" after exhausting videos
 const BOT_REPLIES = [
   "That's interesting — tell me more!",
   "haha yeah I feel that",
@@ -197,7 +187,9 @@ const autoReplies = [
   'that’s actually kinda scary',
   'based',
   'wait are you serious?'
-];const PROGRESS_KEY = 'mortalive_progress_v3';
+];
+
+const PROGRESS_KEY = 'mortalive_progress_v3';
 const PROFILE_KEY = 'mortalive_profile_v3';
 
 const PROGRESS_BADGES = [
@@ -479,7 +471,6 @@ function formatProgressLine(progress = getCurrentProgress()) {
 
 function updateProgressText() {
   const progress = getCurrentProgress();
-  const profile = getCurrentProfile();
   const summary = formatProgressLine(progress);
 
   const stats = {
@@ -488,11 +479,7 @@ function updateProgressText() {
     'progress-completions': `${summary.completions}`,
     'progress-percentile': `Top ${summary.percentile}%`,
     'progress-rank': `#${summary.rank}`,
-    'progress-goal': summary.goal,
-    'progress-badges': summary.badges ? progress.badges.join(' · ') : 'Rookie',
-    'progress-frame': progress.profileFrame || profile.frame,
-    'progress-quote': profile.quote || progress.featuredQuote || '',
-    'progress-pinned': profile.pinned || progress.pinnedNote || ''
+    'progress-goal': summary.goal
   };
 
   Object.entries(stats).forEach(([id, value]) => {
@@ -586,7 +573,6 @@ function finalizeChatProgress(reason = 'completed') {
   if (durationMs < 6000) return;
 
   awardProgress('chat_complete', 1, { completion: true, durationMs });
-  // Tell feed.html to show the "just ended a chat — share something" banner.
   try { sessionStorage.setItem('mortalive_just_chatted', '1'); } catch (e) {}
 }
 
@@ -619,63 +605,6 @@ function copyProgressShareCard() {
   }
   return text;
 }
-
-function ensureProgressSheet() {
-  let overlay = $('progress-overlay');
-  if (overlay) return overlay;
-
-  overlay = document.createElement('div');
-  overlay.id = 'progress-overlay';
-  overlay.style.cssText = [
-    'display:none',
-    'position:fixed',
-    'inset:0',
-    'z-index:999',
-    'align-items:center',
-    'justify-content:center',
-    'padding:18px',
-    'background:rgba(8,14,28,.58)',
-    'backdrop-filter:blur(16px) saturate(130%)'
-  ].join(';');
-
-  const panel = document.createElement('div');
-  panel.style.cssText = [
-    'width:min(720px,100%)',
-    'max-height:min(84vh,880px)',
-    'overflow:auto',
-    'border-radius:28px',
-    'padding:20px',
-    'background:linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.08))',
-    'border:1px solid rgba(255,255,255,.20)',
-    'box-shadow:0 30px 80px rgba(0,0,0,.38)',
-    'color:#fff'
-  ].join(';');
-
-  overlay.appendChild(panel);
-  document.body.appendChild(overlay);
-  return overlay;
-}
-
-function openProgressSheet() {
-  if (S.isGuest) {
-    toast('Sign in to view your status', '👤');
-    return;
-  }
-  const overlay = ensureProgressSheet();
-  updateDerivedProgress();
-  updateProgressText();
-
-  const badgesWrap = overlay.querySelector('#progress-badges');
-  if (badgesWrap) {
-    const badges = getCurrentProgress().badges || [];
-    badgesWrap.innerHTML = badges.length
-      ? badges.map((badge) => `<span style="display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.15);font-size:13px;font-weight:700;">${badge}</span>`).join('')
-      : '<span style="opacity:.75;">No badges yet</span>';
-  }
-
-  overlay.style.display = 'flex';
-}
-
 
 function $(id) {
   return document.getElementById(id);
@@ -796,12 +725,6 @@ function isFullscreenVideoMode() {
 }
 
 function applyVideoLayout() {
-  // Layout is now entirely CSS-driven:
-  //   Desktop normal     → 2 squares side by side (grid-template-columns: 1fr 1fr)
-  //   Desktop fullscreen → 2 squares side by side filling the screen
-  //   Mobile normal      → 2 squares stacked (grid-template-columns: 1fr)
-  //   Mobile fullscreen  → 2 squares stacked filling the screen
-  // No class toggling needed — just ensure video surfaces are prepared.
   prepareVideoSurfaces();
 }
 
@@ -837,7 +760,6 @@ function setPrimaryButtonsEnabled(enabled) {
 }
 
 function updateConsentState() {
-  // Real <input type="checkbox" id="landing-consent"> used in the current HTML
   const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
   const oldChecks = ['c1', 'c2', 'c3'].map((id) => $(id)).filter(Boolean);
 
@@ -1177,6 +1099,17 @@ function initAuthControls() {
     localStorage.setItem('mortalive_token',    token);
     localStorage.setItem('mortalive_username', username);
     if (userId) localStorage.setItem('mortalive_user_id', userId);
+    
+    // Fetch profile data (bio, details) from Supabase immediately on login
+    if (userId) {
+       fetchUserProfile(userId).then(p => { 
+           S.accountData = p; 
+           if ($('pg-profile') && $('pg-profile').classList.contains('active')) {
+               initProfilePage(); 
+           }
+       });
+    }
+    
     syncAuthProgress(crockroachScore);
     toast(`Welcome, ${username}!`, '🧲');
     enterLobby();
@@ -1259,6 +1192,8 @@ function initAuthControls() {
         return;
       }
       const profile = await fetchUserProfile(user.id);
+      S.accountData = profile; // Save the DB profile data for the profile page
+      
       const username =
         profile?.username ||
         user.user_metadata?.username ||
@@ -1543,6 +1478,7 @@ function initAuthControls() {
           // can set a password later via "Forgot password?" if this failed.
         }
         const profile = await fetchUserProfile(user.id);
+        S.accountData = profile;
         const username =
           profile?.username ||
           user.user_metadata?.username ||
@@ -1645,6 +1581,8 @@ function initAuthControls() {
       const user    = data?.user || _pendingResetUser.user;
       const session = _pendingResetUser.session;
       const profile = await fetchUserProfile(user.id);
+      S.accountData = profile;
+      
       const username =
         profile?.username ||
         user.user_metadata?.username ||
@@ -1711,6 +1649,7 @@ function initAuthControls() {
         console.warn('Could not set chosen password after link-based confirm:', pwErr);
       }
       const profile = await fetchUserProfile(user.id);
+      S.accountData = profile;
       const username =
         profile?.username ||
         user.user_metadata?.username ||
@@ -1746,11 +1685,12 @@ function initAuthControls() {
   // Keep S.* in sync if the Supabase session changes in another tab, or
   // expires/gets revoked while this tab is open — and catch sign-ins
   // that happen via the email's link button rather than a click here.
-  sb.auth.onAuthStateChange((event, session) => {
+  sb.auth.onAuthStateChange(async (event, session) => {
     if (event === 'SIGNED_OUT') {
       S.authToken   = null;
       S.username    = null;
       S.userId      = null;
+      S.accountData = null;
       S.crockroachScore = null;
       S.isGuest     = true;
       _autoLoginPromise = null;
@@ -1776,6 +1716,14 @@ function initAuthControls() {
         
         localStorage.setItem('mortalive_token', S.authToken);
         localStorage.setItem('mortalive_user_id', S.userId);
+        
+        if (!S.accountData) {
+            const profile = await fetchUserProfile(S.userId);
+            S.accountData = profile;
+            if ($('pg-profile') && $('pg-profile').classList.contains('active')) {
+                initProfilePage();
+            }
+        }
         
         // Let the UI know state has resolved securely
         updateIdentityDisplay();
@@ -1850,6 +1798,7 @@ async function tryAutoLogin() {
       let profile = null;
       try {
         profile = await fetchUserProfile(user.id);
+        S.accountData = profile;
       } catch (profileError) {
         console.warn('[Profile] accounts enrichment failed:', profileError);
       }
@@ -1890,6 +1839,7 @@ async function tryAutoLogin() {
       S.authToken = null;
       S.username = null;
       S.userId = null;
+      S.accountData = null;
       S.crockroachScore = null;
       S.isGuest = true;
 
@@ -1964,6 +1914,7 @@ function initLobbyControls() {
     S.authToken   = null;
     S.username    = null;
     S.userId      = null;
+    S.accountData = null;
     S.crockroachScore = null;
     S.isGuest     = true;
     _autoLoginPromise = null; // allow fresh login attempt
@@ -3238,6 +3189,11 @@ ready(() => {
         'profile': 'pg-profile'
       };
 
+      if (urlParams.has('dest') || urlParams.has('transfer')) {
+          // Cross-domain token intercept logic - wipe URL params so they don't linger
+          window.history.replaceState(null, '', window.location.pathname + (targetPage && validPages[targetPage] ? '#' + targetPage : ''));
+      }
+
       if (targetPage && validPages[targetPage]) {
         showPage(validPages[targetPage]);
         if (targetPage === 'lobby') {
@@ -3247,11 +3203,6 @@ ready(() => {
         updateDerivedProgress();
         updateProgressText();
         updateIdentityDisplay();
-        
-        // Clean up the URL so ?dest= and &transfer= don't linger in the address bar
-        if (urlParams.has('dest') || urlParams.has('transfer')) {
-            window.history.replaceState(null, '', window.location.pathname + '#' + targetPage);
-        }
       } else {
         enterLobby();
       }
@@ -3390,40 +3341,75 @@ function initProfilePage() {
   const tier = getRankTier(score);
   const pct = tier.max === Infinity ? 100 : Math.round(((score - tier.min) / (tier.max - tier.min)) * 100);
 
+  // Fetch from Supabase DB to hydrate bio & actual display name
+  const acc = S.accountData || {};
+  const displayName = acc.display_name || S.username || 'User';
+  
   // Hero Data
-  $('profile-username').textContent = S.username || 'User';
+  const usernameEl = $('profile-username');
+  if (usernameEl) usernameEl.textContent = displayName;
+  
   const badgeHtml = score >= 700 ? `<span class="profile-badge-chip gold">⭐ Gold</span>` :
                     score >= 420 ? `<span class="profile-badge-chip silver">🔘 Silver</span>` : '';
-  $('profile-subline').innerHTML = `@${(S.username || 'user').toLowerCase().replace(/\s+/g,'_')} ${badgeHtml} · Member`;
   
-  $('score-val').textContent = score.toLocaleString();
-  $('stat-score').textContent = score.toLocaleString();
+  const sublineEl = $('profile-subline');
+  if (sublineEl) {
+    const actType = acc.account_type ? acc.account_type.charAt(0).toUpperCase() + acc.account_type.slice(1) : 'Member';
+    sublineEl.innerHTML = `@${(S.username || 'user').toLowerCase().replace(/\s+/g,'_')} ${badgeHtml} · ${actType}`;
+  }
+  
+  const heroScore = $('profile-hero-score');
+  if (heroScore) heroScore.textContent = score.toLocaleString();
+  
+  const statScore = $('stat-score');
+  if (statScore) statScore.textContent = score.toLocaleString();
 
   // Avatar Gradient
   const colors = ['#1a6ef5', '#7c3aed', '#06b6d4', '#f59e0b', '#ec4899'];
   const colorIdx = (S.username || '').length % colors.length;
-  $('profile-avatar').style.background = `linear-gradient(135deg, ${colors[colorIdx]}, ${colors[(colorIdx + 1) % colors.length]})`;
-  $('profile-avatar').textContent = (S.username || 'U').charAt(0).toUpperCase();
+  const avatarEl = $('profile-avatar');
+  if (avatarEl) {
+    avatarEl.style.background = `linear-gradient(135deg, ${colors[colorIdx]}, ${colors[(colorIdx + 1) % colors.length]})`;
+    avatarEl.textContent = (displayName).charAt(0).toUpperCase();
+  }
 
   // Stats
-  $('stat-chats').textContent = (progress.totalMessages || 0).toLocaleString();
-  $('stat-completions').textContent = summary.completions.toLocaleString();
-  $('stat-rank').textContent = `#${summary.rank}`;
+  const statChats = $('stat-chats');
+  if (statChats) statChats.textContent = (progress.totalMessages || 0).toLocaleString();
+  
+  const statCompletions = $('stat-completions');
+  if (statCompletions) statCompletions.textContent = summary.completions.toLocaleString();
+  
+  const statRank = $('stat-rank');
+  if (statRank) statRank.textContent = `#${summary.rank}`;
 
   // Progress
-  $('rank-label').textContent = `${tier.name}${tier.max < Infinity ? ' → ' + RANK_TIERS[RANK_TIERS.indexOf(tier)+1]?.name : ' (Max)'}`;
-  $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} Magnet Score`;
-  $('progress-pct').textContent = `${pct}%`;
-  $('progress-fill').style.width = `${pct}%`;
-  $('progress-percentile').textContent = `Top ${summary.percentile}%`;
+  const rankLabel = $('rank-label');
+  if (rankLabel) rankLabel.textContent = `${tier.name}${tier.max < Infinity ? ' → ' + RANK_TIERS[RANK_TIERS.indexOf(tier)+1]?.name : ' (Max)'}`;
+  
+  const progressLabel = $('progress-label');
+  if (progressLabel) progressLabel.textContent = `${score} / ${tier.max < Infinity ? tier.max : score} crockroach Score`;
+  
+  const progressPct = $('progress-pct');
+  if (progressPct) progressPct.textContent = `${pct}%`;
+  
+  const progressFill = $('progress-fill');
+  if (progressFill) progressFill.style.width = `${pct}%`;
+  
+  const progressPercentile = $('progress-percentile');
+  if (progressPercentile) progressPercentile.textContent = `Top ${summary.percentile}%`;
 
   // Streak
   const streak = summary.streak || 0;
-  $('streak-count').textContent = `${streak} day${streak !== 1 ? 's' : ''}`;
-  $('streak-sub').textContent = streak > 0 ? `Best: ${progress.bestStreak || streak} days` : 'Start chatting to build your streak!';
+  const streakCount = $('streak-count');
+  if (streakCount) streakCount.textContent = `${streak} day${streak !== 1 ? 's' : ''}`;
+  
+  const streakSub = $('streak-sub');
+  if (streakSub) streakSub.textContent = streak > 0 ? `Best: ${progress.bestStreak || streak} days` : 'Start chatting to build your streak!';
+  
   renderStreakDays(streak);
 
-  // Badges (Mapping Unimorta UI to app.js Logic)
+  // Badges
   const earnedSet = new Set(progress.badges || []);
   const grid = $('badges-grid');
   if (grid) {
@@ -3444,11 +3430,13 @@ function initProfilePage() {
       `;
       grid.appendChild(card);
     });
-    $('badges-count').textContent = `${earnedSet.size} / ${PROGRESS_BADGES.length}`;
+    const badgesCount = $('badges-count');
+    if (badgesCount) badgesCount.textContent = `${earnedSet.size} / ${PROGRESS_BADGES.length}`;
   }
 
-  // Pre-fill Edit
-  if ($('edit-display-name')) $('edit-display-name').value = S.username || '';
+  // Pre-fill Edit Modal
+  const editDisplayName = $('edit-display-name');
+  if (editDisplayName) editDisplayName.value = displayName;
 }
 
 // Attach Profile Events
@@ -3468,6 +3456,7 @@ function bindProfileEvents() {
   $('edit-modal')?.addEventListener('click', e => { if (e.target.id === 'edit-modal') closeEdit(); });
 
   $('btn-edit-save')?.addEventListener('click', async () => {
+    const newName = $('edit-display-name')?.value.trim() || '';
     const newPass = $('edit-new-password')?.value || '';
     const errEl = $('edit-error');
 
@@ -3486,6 +3475,13 @@ function bindProfileEvents() {
         if (error) throw error;
       }
       
+      // Update display name in Supabase
+      if (newName) {
+        const { error: dbErr } = await sb.from('accounts').update({ display_name: newName }).eq('id', S.userId);
+        if (dbErr) throw dbErr;
+        if (S.accountData) S.accountData.display_name = newName;
+      }
+
       toast('Profile updated!', '✅');
       closeEdit();
       if($('edit-new-password')) $('edit-new-password').value = '';
@@ -3506,10 +3502,9 @@ function bindProfileEvents() {
     }
   });
 
-  // Attach to the custom profile logout button
   $('btn-profile-logout')?.addEventListener('click', () => {
     if (confirm('Log out of Mortalive?')) {
-      $('btn-logout')?.click(); // Trigger standard app.js logout
+      $('btn-logout')?.click();
     }
   });
 
