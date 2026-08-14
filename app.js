@@ -3268,7 +3268,26 @@ ready(() => {
   tryAutoLogin().then((loggedIn) => {
     if (loggedIn) {
       // Session and identity are hydrated BEFORE enterLobby paints the UI.
-      enterLobby();
+      const hash = window.location.hash.replace('#', '');
+      const validPages = {
+        'lobby': 'pg-lobby',
+        'feed': 'pg-feed',
+        'messages': 'pg-messages',
+        'profile': 'pg-profile'
+      };
+
+      if (hash && validPages[hash]) {
+        showPage(validPages[hash]);
+        if (hash === 'lobby') {
+          setActiveMode(S.mode);
+          ensureLobbyCameraPreview();
+        }
+        updateDerivedProgress();
+        updateProgressText();
+        updateIdentityDisplay();
+      } else {
+        enterLobby();
+      }
       return;
     }
 
