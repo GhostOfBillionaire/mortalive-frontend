@@ -3201,14 +3201,110 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
   </div>
 </section>
 
-<section id="pg-profile" class="page blank-app-page">
-  <div class="wrap" style="display:flex;justify-content:center;">
-    <div class="card blank-card">
-      <span class="blank-kicker">Profile</span>
-      <h2 class="blank-title">Coming soon</h2>
-      <p class="blank-copy">This placeholder preserves the authenticated app layout and bottom navigation while leaving the profile screen blank for future work.</p>
-      <div class="blank-actions">
-        <button class="btn btn-primary" type="button" onclick="showPage('pg-lobby')">Back to Talk</button>
+<!-- ═══════════════════ PROFILE ═══════════════════════ -->
+<section id="pg-profile" class="page">
+  <div class="wrap" style="display:flex; flex-direction:column; gap:20px; padding:24px 0 110px; max-width:800px;">
+    
+    <!-- Profile Hero Card -->
+    <div class="card profile-card">
+      <div class="profile-hero">
+        <div class="profile-avatar-wrap">
+          <div class="profile-avatar" id="profile-avatar">👤</div>
+          <div class="profile-online-dot"></div>
+        </div>
+        <div class="profile-info">
+          <div class="profile-username" id="profile-username-display">
+            <span class="skel" style="width:180px;height:28px;display:inline-block;"></span>
+          </div>
+          <div class="profile-subline" id="profile-subline-display">
+            <span class="skel" style="width:120px;height:14px;display:inline-block;border-radius:4px;"></span>
+          </div>
+          <div class="profile-score-row">
+            <div class="score-pill">
+              🧲 <span id="profile-hero-score">—</span>
+              <span class="score-label">crockroach Score</span>
+            </div>
+          </div>
+        </div>
+        <div class="profile-hero-actions">
+          <button class="btn btn-ghost" id="btn-edit-profile" style="padding:8px 16px; font-size:12px;">✏️ Edit</button>
+          <button class="btn btn-ghost" id="btn-share-profile" style="padding:8px 16px; font-size:12px;">↗ Share</button>
+        </div>
+      </div>
+
+      <!-- Stats row -->
+      <div class="stats-grid">
+        <div class="stat-cell highlight">
+          <div class="stat-value" id="profile-stat-score">—</div>
+          <div class="stat-label">crockroach Score</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-value" id="profile-stat-streak">—</div>
+          <div class="stat-label">Day Streak</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-value" id="profile-stat-completions">—</div>
+          <div class="stat-label">Completions</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-value" id="profile-stat-rank">#—</div>
+          <div class="stat-label">Weekly Rank</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Badges Card -->
+    <div class="card">
+      <div class="section-head">
+        <span class="section-title">Achievements</span>
+        <span id="profile-badges-count" style="font-size:12px;color:var(--on-surface-3);font-weight:600;">— / 7</span>
+      </div>
+      <div class="badges-grid" id="profile-badges-grid">
+        <!-- Injected by JS -->
+      </div>
+    </div>
+
+    <!-- Account Actions -->
+    <div class="card">
+      <div class="section-head">
+        <span class="section-title" style="color:var(--danger);">Account</span>
+      </div>
+      <div class="danger-section">
+        <div class="danger-info">
+          <div class="danger-title">Log out of Mortalive</div>
+          <div class="danger-sub">You can always log back in with your username and password.</div>
+        </div>
+        <button class="btn btn-ghost" id="btn-profile-logout" style="border-color:var(--danger); color:var(--danger); background:rgba(220,38,38,.05);">Log Out</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Edit Profile Modal -->
+  <div class="overlay" id="edit-profile-modal">
+    <div class="modal" style="width:min(440px, 100%); padding:0; overflow:hidden;">
+      <div style="padding:20px 22px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--surface-2);">
+        <span style="font-size:16px; font-weight:800; letter-spacing:-.03em;">Edit Profile</span>
+        <button id="btn-edit-close" style="font-size:20px; color:var(--on-surface-3);">&times;</button>
+      </div>
+      <div style="padding:20px 22px; display:flex; flex-direction:column; gap:14px; text-align:left;">
+        <div class="field">
+          <label for="edit-display-name">Display name</label>
+          <input id="edit-display-name" type="text" placeholder="How others see you" maxlength="30" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="edit-bio">Bio</label>
+          <textarea id="edit-bio" placeholder="A little about yourself..." maxlength="150" style="min-height:80px;"></textarea>
+        </div>
+        <div class="field">
+          <label for="edit-new-password">New password</label>
+          <input id="edit-new-password" type="password" placeholder="Leave blank to keep current" autocomplete="new-password">
+        </div>
+        <div id="edit-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;padding:10px;font-size:12px;"></div>
+      </div>
+      <div style="padding:14px 22px 20px; border-top:1px solid var(--border); display:flex; gap:10px;">
+        <button class="btn btn-ghost" id="btn-edit-cancel" style="flex:1;">Cancel</button>
+        <button class="btn btn-primary" id="btn-edit-save" style="flex:1;">Save Changes</button>
       </div>
     </div>
   </div>
