@@ -217,7 +217,7 @@
     background: var(--primary-alpha);
   }
 
-  /* Password field — same wrapper/toggle styling as index.html signup */
+  /* Password field */
   .password-input-wrap { position: relative; }
   .password-input-wrap input { padding-right: 44px; }
   .pw-toggle-btn {
@@ -462,7 +462,7 @@
     <button id="btn-register" class="btn btn-primary" style="margin-top: 8px;">Register & Continue →</button>
   </div>
 
-  <!-- OTP Verification Section — skips intermediate popup -->
+  <!-- OTP Verification Section -->
   <div id="otp-state" class="slide-page">
     <div class="header">
       <div style="font-size: 40px; margin-bottom: 12px;">📬</div>
@@ -557,7 +557,7 @@
       <strong>Welcome aboard!</strong><br><br>
       You can check back the profile as we will notify you via email, by the time we are setting things up feel free to use our 1:1 talk feature meeting random people around the globe.
     </div>
-    <a href="https://mortalive.com/index.html#lobby" class="btn btn-primary">Try 1:1 Talk →</a>
+    <a href="#" class="btn btn-primary">Try 1:1 Talk →</a>
   </div>
 </div>
 
@@ -911,13 +911,7 @@
   });
   postVerifyContinue?.addEventListener('click', () => {
     _postVerifyTryTalk = !!postVerifyTalk?.checked;
-    
-    // Explicitly hide the post-verify modal
-    const postVerifyPage = document.getElementById('post-verify-modal');
-    postVerifyPage.classList.remove('active');
-    postVerifyPage.style.display = 'none';
-
-    // Slide in the wish state inside the card container
+    closePostVerifyModal();
     const wishPage = document.getElementById('wish-state');
     wishPage.style.display = 'flex';
     void wishPage.offsetWidth;
@@ -1004,13 +998,11 @@
       const { data: sessionData } = await sb.auth.getSession();
       const sessionEmail = sessionData?.session?.user?.email?.trim().toLowerCase() || '';
 
-      // FIX: Only redirect if the email they are signing up with is the exact one they are logged in as
       if (sessionEmail === normalizedEmail) {
-        window.location.href = 'https://mortalive.com/index.html#lobby';
+        window.location.href = 'index.html#lobby';
         return true;
       }
 
-      // If they are logged in as someone else, sign them out silently so they can create a new account
       if (sessionEmail && sessionEmail !== normalizedEmail) {
         await sb.auth.signOut();
       }
@@ -1026,7 +1018,7 @@
       }
 
       if (exists === true) {
-        window.location.href = `https://mortalive.com/index.html?signin=1&email=${encodeURIComponent(normalizedEmail)}`;
+        window.location.href = `index.html?signin=1&email=${encodeURIComponent(normalizedEmail)}`;
         return true;
       }
 
@@ -1429,9 +1421,21 @@
       document.getElementById('success-state').style.display = 'block';
       document.querySelector('.card').scrollTop = 0;
 
-      const destinationUrl = 'index.html#login';
+      let targetHash = 'lobby';
+      if (!_postVerifyTryTalk) {
+          targetHash = _postVerifyDestination === 'feed' ? 'feed' : 'profile';
+      }
+      
+      const destinationUrl = `index.html#${targetHash}`;
+      
       const successLink = document.querySelector('#success-state a.btn-primary');
-      if (successLink) successLink.href = destinationUrl;
+      if (successLink) {
+          successLink.href = destinationUrl;
+          if (targetHash === 'profile') successLink.textContent = 'Go to Profile →';
+          else if (targetHash === 'feed') successLink.textContent = 'Go to Feed →';
+          else successLink.textContent = 'Try 1:1 Talk →';
+      }
+      
       setTimeout(() => { window.location.href = destinationUrl; }, 2200);
 
     } catch (e) {
