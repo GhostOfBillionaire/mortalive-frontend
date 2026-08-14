@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-11-nav-isolation'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-11-rpc-fix'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -1219,69 +1219,35 @@ function initAuthControls() {
     _suppressAutoSignedIn = true;
     
     try {
+      // ── The Permanent Fix: Secure RPC Probe ──
+      const { data: emailStatus, error: rpcError } = await sb.rpc('check_email_status', { p_email: email });
+
+      if (emailStatus === 'unverified') {
+        // Account exists but is unverified. Safely resend OTP and slide to verification.
+        await sb.auth.resend({
+          type: 'signup',
+          email,
+          options: { emailRedirectTo: window.location.href }
+        });
+
+        _lastOtpRequestAt = Date.now();
+        _otpContext = { mode: 'signup', source: 'login', email };
+        _pendingSignupPassword = password; // Set password after verify
+
+        showOtpStep(email);
+
+        // Dynamically alter OTP screen text
+        const otpLabel = document.querySelector('#auth-otp-form label[for="otp-code"]');
+        if (otpLabel) otpLabel.textContent = 'Account unverified. Enter the 6-digit code:';
+
+        toast('Account unverified. Code sent to your email.', '📩');
+        return;
+      }
+
+      // If verified or not_found, proceed normally. Supabase will handle the error safely.
       const { data, error } = await sb.auth.signInWithPassword({ email, password });
       
       if (error) {
-        const msg = error.message.toLowerCase();
-        
-        // Intelligent fallback UI:
-        // Supabase intentionally obscures "wrong password" vs "unverified account" 
-        // to prevent email enumeration. We show the user the standard error, but
-        // embed an interactive link that lets THEM explicitly trigger a verification OTP.
-        if (msg.includes('invalid login credentials') || msg.includes('email not confirmed')) {
-          const errEl = $('login-error');
-          if (errEl) {
-            errEl.style.display = 'block';
-            errEl.innerHTML = `Incorrect email or password.<br>
-              <div style="margin-top:6px;padding-top:6px;border-top:1px solid #fecaca;font-size:12.5px;">
-                Account unverified? <a href="#" id="jump-to-verify" style="color:#b42318;font-weight:bold;text-decoration:underline;">Send verification code</a>
-              </div>`;
-            
-            const jumpBtn = $('jump-to-verify');
-            if (jumpBtn) {
-              jumpBtn.addEventListener('click', async (e) => {
-                e.preventDefault();
-                jumpBtn.textContent = 'Sending code...';
-                jumpBtn.style.pointerEvents = 'none';
-                
-                // Trigger the "forgot password" OTP send (shouldCreateUser: false)
-                // If the email exists, Supabase sends it. If it doesn't, Supabase stays silent.
-                await sb.auth.signInWithOtp({
-                  email,
-                  options: { shouldCreateUser: false, emailRedirectTo: window.location.href }
-                });
-                
-                _lastOtpRequestAt = Date.now();
-                // Pass mode: 'signup' so btn-otp-verify sets the password when verified
-                _otpContext = { mode: 'signup', source: 'login', email };
-                _pendingSignupPassword = password; 
-                
-                // Slide to the OTP step
-                if (guestForm)  guestForm.style.display  = 'none';
-                if (loginForm)  loginForm.style.display  = 'none';
-                if (signupForm) signupForm.style.display = 'none';
-                if (forgotForm) forgotForm.style.display = 'none';
-                if (otpForm)    otpForm.style.display    = '';
-                if (resetForm)  resetForm.style.display  = 'none';
-                
-                const display = $('otp-email-display');
-                if (display) display.textContent = `Code sent to ${email}`;
-                
-                // Make the OTP screen dynamically act as an email verifier instead of password reset
-                const otpLabel = document.querySelector('#auth-otp-form label[for="otp-code"]');
-                if (otpLabel) otpLabel.textContent = 'Account unverified. Enter the 6-digit code:';
-                
-                setError('otp-error', null);
-                const codeInput = $('otp-code');
-                if (codeInput) { codeInput.value = ''; codeInput.focus(); }
-                startResendCooldown(60);
-              });
-            }
-          }
-          return;
-        }
-
-        // Fallback for other login errors (e.g. network)
         setError('login-error', friendlyAuthError(error));
         return;
       }
@@ -2888,7 +2854,6 @@ function appendMsg(text, who) {
   time.className = 'msg-time';
   time.textContent = fmtTime();
 
-  body.appendChild(bub);
   body.appendChild(time);
   wrap.appendChild(ava);
   wrap.appendChild(body);
@@ -3245,151 +3210,6 @@ function initRatingControls() {
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// PROFILE PAGE LOGIC (Isolated & Mapped to S object)
-// ═══════════════════════════════════════════════════════════════════
-
-const ALL_BADGES = [
-  { id: 'rookie',      emoji: '🌱', name: 'Rookie',       desc: 'Joined the community' },
-  { id: 'momentum',    emoji: '🔥', name: 'Momentum',     desc: '3+ chats, 120+ score' },
-  { id: 'streak-3',    emoji: '⚡', name: '3-Day Streak', desc: 'Chat 3 days in a row' },
-  { id: 'bronze',      emoji: '🥉', name: 'Bronze',       desc: 'Reach 220 crockroach score' },
-  { id: 'silver',      emoji: '🥈', name: 'Silver',       desc: 'Reach 420 crockroach score' },
-  { id: 'gold',        emoji: '🥇', name: 'Gold',         desc: 'Reach 700 crockroach score' },
-  { id: 'top10',       emoji: '👑', name: 'Top 10%',      desc: 'Rank in the top 10% weekly' }
-];
-
-function initProfilePage() {
-  if (S.isGuest) return;
-
-  const progress = getCurrentProgress();
-  const summary = formatProgressLine(progress);
-  const profile = getCurrentProfile();
-
-  // Populate Hero
-  $('profile-username-display').textContent = S.username || 'User';
-  $('profile-subline-display').textContent = profile.bio || 'No bio added yet. Click edit to add one.';
-  $('profile-hero-score').textContent = summary.score.toLocaleString();
-
-  // Avatar Gradient Generation based on username length
-  const colors = ['#1a6ef5', '#7c3aed', '#06b6d4', '#f59e0b', '#ec4899'];
-  const colorIdx = (S.username || '').length % colors.length;
-  $('profile-avatar').style.background = `linear-gradient(135deg, ${colors[colorIdx]}, ${colors[(colorIdx + 1) % colors.length]})`;
-  $('profile-avatar').textContent = (S.username || 'U').charAt(0).toUpperCase();
-
-  // Populate Stats Grid
-  $('profile-stat-score').textContent = summary.score.toLocaleString();
-  $('profile-stat-streak').textContent = summary.streak;
-  $('profile-stat-completions').textContent = summary.completions;
-  $('profile-stat-rank').textContent = `#${summary.rank}`;
-
-  // Populate Badges
-  const earnedSet = new Set(progress.badges || []);
-  const grid = $('profile-badges-grid');
-  if (grid) {
-    grid.innerHTML = '';
-    ALL_BADGES.forEach(badge => {
-      const earned = earnedSet.has(badge.id);
-      const card = document.createElement('div');
-      card.className = `badge-card${earned ? '' : ' locked'}`;
-      card.innerHTML = `
-        <span class="badge-emoji">${badge.emoji}</span>
-        <div class="badge-name">${badge.name}</div>
-        <div class="badge-desc">${badge.desc}</div>
-        ${!earned ? '<span class="badge-locked-overlay">🔒</span>' : ''}
-      `;
-      grid.appendChild(card);
-    });
-    $('profile-badges-count').textContent = `${earnedSet.size} / ${ALL_BADGES.length}`;
-  }
-
-  // Pre-fill Edit Modal
-  if ($('edit-display-name')) $('edit-display-name').value = S.username || '';
-  if ($('edit-bio')) $('edit-bio').value = profile.bio || '';
-}
-
-// Attach Event Listeners
-function bindProfileEvents() {
-  $('btn-edit-profile')?.addEventListener('click', () => {
-    $('edit-profile-modal').classList.add('open');
-  });
-
-  const closeEdit = () => {
-    $('edit-profile-modal').classList.remove('open');
-    $('edit-error').style.display = 'none';
-  };
-
-  $('btn-edit-close')?.addEventListener('click', closeEdit);
-  $('btn-edit-cancel')?.addEventListener('click', closeEdit);
-  $('edit-profile-modal')?.addEventListener('click', e => { if (e.target.id === 'edit-profile-modal') closeEdit(); });
-
-  $('btn-edit-save')?.addEventListener('click', async () => {
-    const newPass = $('edit-new-password')?.value || '';
-    const newBio = $('edit-bio')?.value.trim() || '';
-    const errEl = $('edit-error');
-
-    errEl.style.display = 'none';
-    if (newPass && newPass.length < 8) {
-      errEl.textContent = 'Password must be at least 8 characters.';
-      errEl.style.display = 'block';
-      return;
-    }
-
-    const btn = $('btn-edit-save');
-    btn.disabled = true;
-    btn.textContent = 'Saving…';
-
-    try {
-      if (newPass) {
-        const { error } = await sb.auth.updateUser({ password: newPass });
-        if (error) throw error;
-      }
-      
-      // Update local profile object
-      const profile = getCurrentProfile();
-      profile.bio = newBio;
-      persistProfile();
-
-      toast('Profile updated!', '✅');
-      closeEdit();
-      $('edit-new-password').value = '';
-      initProfilePage(); // Re-render
-    } catch (e) {
-      errEl.textContent = e.message || 'Could not save changes.';
-      errEl.style.display = 'block';
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Save Changes';
-    }
-  });
-
-  $('btn-share-profile')?.addEventListener('click', () => {
-    const link = `${window.location.origin}${window.location.pathname}`;
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(link).then(() => toast('Profile link copied!', '📋'));
-    } else {
-      toast('Profile link: ' + link, '📋');
-    }
-  });
-
-  // Attach to the custom profile logout button
-  $('btn-profile-logout')?.addEventListener('click', () => {
-    if (confirm('Log out of Mortalive?')) {
-      $('btn-logout')?.click(); // Trigger standard app.js logout
-    }
-  });
-}
-
-// Tie into the existing showPage event architecture
-window.addEventListener('mortalive-auth-state', () => {
-  if ($('pg-profile').classList.contains('active')) {
-    initProfilePage();
-  }
-});
-
-// Call bindings once
-document.addEventListener('DOMContentLoaded', bindProfileEvents);
-
 ready(() => {
   prepareVideoSurfaces();
   initGlobalDefaults();
@@ -3522,3 +3342,191 @@ ready(() => {
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// PROFILE PAGE LOGIC (Extracted from Unimorta, Mapped to app.js)
+// ═══════════════════════════════════════════════════════════════════
+
+const RANK_TIERS = [
+  { name: 'Newcomer',  min: 0,    max: 50 },
+  { name: 'Chatter',   min: 50,   max: 150 },
+  { name: 'Connector', min: 150,  max: 400 },
+  { name: 'Socialite', min: 400,  max: 800 },
+  { name: 'Magnet',    min: 800,  max: 1500 },
+  { name: 'Legend',    min: 1500, max: Infinity },
+];
+
+function getRankTier(score) {
+  return RANK_TIERS.find(t => score >= t.min && score < t.max) || RANK_TIERS[0];
+}
+
+function renderStreakDays(streakCount) {
+  const container = $('streak-days');
+  if (!container) return;
+  container.innerHTML = '';
+  const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const today = new Date().getDay(); 
+  const todayIdx = today === 0 ? 6 : today - 1;
+
+  days.forEach((label, i) => {
+    const el = document.createElement('div');
+    el.className = 'streak-day';
+    el.textContent = label;
+    if (i === todayIdx) el.classList.add('today');
+    const daysBack = (todayIdx - i + 7) % 7;
+    if (daysBack < streakCount) el.classList.add('active');
+    container.appendChild(el);
+  });
+}
+
+function initProfilePage() {
+  if (S.isGuest) return;
+
+  const progress = getCurrentProgress();
+  const summary = formatProgressLine(progress);
+  const score = summary.score;
+  const tier = getRankTier(score);
+  const pct = tier.max === Infinity ? 100 : Math.round(((score - tier.min) / (tier.max - tier.min)) * 100);
+
+  // Hero Data
+  $('profile-username').textContent = S.username || 'User';
+  const badgeHtml = score >= 700 ? `<span class="profile-badge-chip gold">⭐ Gold</span>` :
+                    score >= 420 ? `<span class="profile-badge-chip silver">🔘 Silver</span>` : '';
+  $('profile-subline').innerHTML = `@${(S.username || 'user').toLowerCase().replace(/\s+/g,'_')} ${badgeHtml} · Member`;
+  
+  $('score-val').textContent = score.toLocaleString();
+  $('stat-score').textContent = score.toLocaleString();
+
+  // Avatar Gradient
+  const colors = ['#1a6ef5', '#7c3aed', '#06b6d4', '#f59e0b', '#ec4899'];
+  const colorIdx = (S.username || '').length % colors.length;
+  $('profile-avatar').style.background = `linear-gradient(135deg, ${colors[colorIdx]}, ${colors[(colorIdx + 1) % colors.length]})`;
+  $('profile-avatar').textContent = (S.username || 'U').charAt(0).toUpperCase();
+
+  // Stats
+  $('stat-chats').textContent = (progress.totalMessages || 0).toLocaleString();
+  $('stat-completions').textContent = summary.completions.toLocaleString();
+  $('stat-rank').textContent = `#${summary.rank}`;
+
+  // Progress
+  $('rank-label').textContent = `${tier.name}${tier.max < Infinity ? ' → ' + RANK_TIERS[RANK_TIERS.indexOf(tier)+1]?.name : ' (Max)'}`;
+  $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} Magnet Score`;
+  $('progress-pct').textContent = `${pct}%`;
+  $('progress-fill').style.width = `${pct}%`;
+  $('progress-percentile').textContent = `Top ${summary.percentile}%`;
+
+  // Streak
+  const streak = summary.streak || 0;
+  $('streak-count').textContent = `${streak} day${streak !== 1 ? 's' : ''}`;
+  $('streak-sub').textContent = streak > 0 ? `Best: ${progress.bestStreak || streak} days` : 'Start chatting to build your streak!';
+  renderStreakDays(streak);
+
+  // Badges (Mapping Unimorta UI to app.js Logic)
+  const earnedSet = new Set(progress.badges || []);
+  const grid = $('badges-grid');
+  if (grid) {
+    grid.innerHTML = '';
+    PROGRESS_BADGES.forEach(badge => {
+      const earned = earnedSet.has(badge.label);
+      const card = document.createElement('div');
+      card.className = `badge-card${earned ? '' : ' locked'}`;
+      
+      const iconMap = { 'Rookie':'🌱', 'Momentum':'🔥', '3-Day Streak':'⚡', 'Bronze':'🥉', 'Silver':'🥈', 'Gold':'🥇', 'Top 10%':'👑' };
+      const emoji = iconMap[badge.label] || '🏅';
+      
+      card.innerHTML = `
+        <span class="badge-emoji">${emoji}</span>
+        <div class="badge-name">${badge.label}</div>
+        <div class="badge-desc">Unlock requirement met</div>
+        ${!earned ? '<span class="badge-locked-overlay">🔒</span>' : ''}
+      `;
+      grid.appendChild(card);
+    });
+    $('badges-count').textContent = `${earnedSet.size} / ${PROGRESS_BADGES.length}`;
+  }
+
+  // Pre-fill Edit
+  if ($('edit-display-name')) $('edit-display-name').value = S.username || '';
+}
+
+// Attach Profile Events
+function bindProfileEvents() {
+  $('btn-edit-profile')?.addEventListener('click', () => {
+    $('edit-modal').classList.add('open');
+    $('edit-display-name')?.focus();
+  });
+
+  const closeEdit = () => {
+    $('edit-modal').classList.remove('open');
+    if($('edit-error')) $('edit-error').style.display = 'none';
+  };
+
+  $('btn-edit-close')?.addEventListener('click', closeEdit);
+  $('btn-edit-cancel')?.addEventListener('click', closeEdit);
+  $('edit-modal')?.addEventListener('click', e => { if (e.target.id === 'edit-modal') closeEdit(); });
+
+  $('btn-edit-save')?.addEventListener('click', async () => {
+    const newPass = $('edit-new-password')?.value || '';
+    const errEl = $('edit-error');
+
+    if(errEl) errEl.style.display = 'none';
+    if (newPass && newPass.length < 8) {
+      if(errEl) { errEl.textContent = 'Password must be at least 8 characters.'; errEl.style.display = 'block'; }
+      return;
+    }
+
+    const btn = $('btn-edit-save');
+    if(btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    try {
+      if (newPass) {
+        const { error } = await sb.auth.updateUser({ password: newPass });
+        if (error) throw error;
+      }
+      
+      toast('Profile updated!', '✅');
+      closeEdit();
+      if($('edit-new-password')) $('edit-new-password').value = '';
+      initProfilePage(); 
+    } catch (e) {
+      if(errEl) { errEl.textContent = e.message || 'Could not save changes.'; errEl.style.display = 'block'; }
+    } finally {
+      if(btn) { btn.disabled = false; btn.textContent = 'Save Changes'; }
+    }
+  });
+
+  $('btn-share-profile')?.addEventListener('click', () => {
+    const link = `${window.location.origin}${window.location.pathname}`;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(link).then(() => toast('Profile link copied!', '📋'));
+    } else {
+      toast('Profile link: ' + link, '📋');
+    }
+  });
+
+  // Attach to the custom profile logout button
+  $('btn-profile-logout')?.addEventListener('click', () => {
+    if (confirm('Log out of Mortalive?')) {
+      $('btn-logout')?.click(); // Trigger standard app.js logout
+    }
+  });
+
+  $('btn-delete-account')?.addEventListener('click', () => {
+    if(confirm('This will permanently delete your local account data. Proceed?')) {
+      localStorage.removeItem('mortalive_token');
+      localStorage.removeItem('mortalive_username');
+      localStorage.removeItem('mortalive_user_id');
+      localStorage.removeItem(PROGRESS_KEY);
+      window.location.reload();
+    }
+  });
+}
+
+// Sync with app.js router
+window.addEventListener('mortalive-auth-state', () => {
+  if ($('pg-profile')?.classList.contains('active')) {
+    initProfilePage();
+  }
+});
+
+document.addEventListener('DOMContentLoaded', bindProfileEvents);
