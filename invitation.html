@@ -294,8 +294,6 @@
     color: var(--danger);
     font-weight: 700;
   }
-  #next-feed-btn.selected,
-  #next-profile-btn.selected {
     border-color: var(--primary);
     color: var(--primary);
     background: var(--primary-alpha);
@@ -487,39 +485,6 @@
   </div>
 
   <!-- Post-verification next-step selection -->
-  <div id="post-verify-modal" class="slide-page">
-    <div class="header">
-      <div style="font-size: 40px; margin-bottom: 12px;">✅</div>
-      <h2>Email verified</h2>
-      <p>Choose where you want Mortalive to take you after setup.</p>
-    </div>
-
-    <div class="field" style="margin-bottom: 10px;">
-      <label>Next stop</label>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-        <button type="button" class="btn btn-ghost" id="next-feed-btn">Feed</button>
-        <button type="button" class="btn btn-ghost" id="next-profile-btn">Profile</button>
-      </div>
-      <div id="next-destination-status" style="font-size: 11px; color: var(--on-surface-3); margin-top: 7px;">You can change this later.</div>
-    </div>
-
-    <div class="field" style="margin-bottom: 18px;">
-      <div class="toggle-row" style="margin-top: 0;">
-        <span class="toggle-label">Try 1:1 Talk after setup?</span>
-        <label class="switch">
-          <input type="checkbox" id="post-verify-talk">
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>
-
-    <div class="notice-box" style="margin-top: 4px;">
-      You can still finish your profile and Spark wish before going to your selected destination.
-    </div>
-
-    <button id="btn-post-verify-continue" class="btn btn-primary">Continue setup →</button>
-  </div>
-
   <!-- Spark Wish Slide Page -->
   <div id="wish-state" class="slide-page">
     <div class="header">
@@ -588,8 +553,7 @@
   let _verifiedUser    = null;
   let _verifiedSession = null;
   let _lastOtpAt       = 0; 
-  let _postVerifyDestination = 'profile';
-  let _postVerifyTryTalk = false;
+  // _postVerifyDestination and _postVerifyTryTalk removed — always routes to Talk page
   const MAX_SPARK_WORDS = 400;
   const MAX_BIO_CHARS = 500;
   const MAX_DOB = '2026-08-12';
@@ -628,12 +592,7 @@
   const uploadTypesLabel   = document.getElementById('upload-types-label');
   const uploadInput        = document.getElementById('reg-cv');
   const otpEmailDisplay    = document.getElementById('otp-email-display');
-  const postVerifyModal    = document.getElementById('post-verify-modal');
-  const nextFeedBtn        = document.getElementById('next-feed-btn');
-  const nextProfileBtn     = document.getElementById('next-profile-btn');
-  const nextDestinationStatus = document.getElementById('next-destination-status');
-  const postVerifyTalk     = document.getElementById('post-verify-talk');
-  const postVerifyContinue = document.getElementById('btn-post-verify-continue');
+  // Post-verify destination DOM refs removed — modal excised
 
   function calculateAge(dobString) {
     if (!dobString) return null;
@@ -721,31 +680,8 @@
     }
   }
 
-  function setPostVerifyDestination(destination) {
-    _postVerifyDestination = destination === 'feed' ? 'feed' : 'profile';
-    nextFeedBtn?.classList.toggle('selected', _postVerifyDestination === 'feed');
-    nextProfileBtn?.classList.toggle('selected', _postVerifyDestination === 'profile');
-    if (nextDestinationStatus) {
-      nextDestinationStatus.textContent = _postVerifyDestination === 'feed'
-        ? 'After setup, open your Feed.'
-        : 'After setup, open your Profile.';
-    }
-  }
-
-  function openPostVerifyModal() {
-    if (!postVerifyModal) return;
-    setPostVerifyDestination(_postVerifyDestination);
-    if (postVerifyTalk) postVerifyTalk.checked = _postVerifyTryTalk;
-    postVerifyModal.style.display = 'flex';
-    void postVerifyModal.offsetWidth;
-    postVerifyModal.classList.add('active');
-  }
-
-  function closePostVerifyModal() {
-    if (!postVerifyModal) return;
-    postVerifyModal.classList.remove('active');
-    postVerifyModal.style.display = 'none';
-  }
+  // setPostVerifyDestination / openPostVerifyModal / closePostVerifyModal removed
+  // Users always go directly to Talk page (index.html#lobby) after setup
 
   // ── Helper: show inline error ─────────────────────────────────────────────
   function setError(id, msg) {
@@ -904,26 +840,14 @@
   bioInput?.addEventListener('input', syncBioCounter);
   sparkWishInput?.addEventListener('input', () => enforceWordLimit(sparkWishInput, sparkWishCount, 'Spark wish'));
   finalWishInput?.addEventListener('input', () => enforceWordLimit(finalWishInput, finalWishCount, 'Final wish'));
-  nextFeedBtn?.addEventListener('click', () => setPostVerifyDestination('feed'));
-  nextProfileBtn?.addEventListener('click', () => setPostVerifyDestination('profile'));
-  postVerifyTalk?.addEventListener('change', () => {
-    _postVerifyTryTalk = !!postVerifyTalk.checked;
-  });
-  postVerifyContinue?.addEventListener('click', () => {
-    _postVerifyTryTalk = !!postVerifyTalk?.checked;
-    closePostVerifyModal();
-    const wishPage = document.getElementById('wish-state');
-    wishPage.style.display = 'flex';
-    void wishPage.offsetWidth;
-    wishPage.classList.add('active');
-  });
+  // Post-verify event listeners removed — modal excised
 
   syncAgeState();
   syncBioCounter();
   enforceWordLimit(sparkWishInput, sparkWishCount, 'Spark wish');
   enforceWordLimit(finalWishInput, finalWishCount, 'Final wish');
   updateUploadCopy();
-  setPostVerifyDestination('profile');
+  // destination always Talk page — no init needed
 
   // ── Live username availability ──
   let _usernameCheckTimer = null;
@@ -1301,10 +1225,16 @@
     clearInterval(_resendCooldownTimer);
     try { sessionStorage.removeItem('mortalive_invitation_signup'); } catch {}
 
+    // Go directly to Wish screen — no destination picker needed
     const otpState = document.getElementById('otp-state');
     otpState.classList.remove('active');
     otpState.style.display = 'none';
-    openPostVerifyModal();
+
+    const wishPage = document.getElementById('wish-state');
+    wishPage.style.display = 'flex';
+    void wishPage.offsetWidth;
+    wishPage.classList.add('active');
+    document.querySelector('.card')?.scrollTo({ top: 0, behavior: 'instant' });
   }
 
   btnOtpVerify?.addEventListener('click', async () => {
@@ -1421,21 +1351,14 @@
       document.getElementById('success-state').style.display = 'block';
       document.querySelector('.card').scrollTop = 0;
 
-      let targetHash = 'lobby';
-      if (!_postVerifyTryTalk) {
-          targetHash = _postVerifyDestination === 'feed' ? 'feed' : 'profile';
-      }
-      
-      const destinationUrl = `index.html#${targetHash}`;
-      
+      // Always route to Talk lobby — logged in, ready to chat
+      const destinationUrl = 'index.html#lobby';
       const successLink = document.querySelector('#success-state a.btn-primary');
       if (successLink) {
-          successLink.href = destinationUrl;
-          if (targetHash === 'profile') successLink.textContent = 'Go to Profile →';
-          else if (targetHash === 'feed') successLink.textContent = 'Go to Feed →';
-          else successLink.textContent = 'Try 1:1 Talk →';
+        successLink.href = destinationUrl;
+        successLink.textContent = 'Start Talking →';
       }
-      
+
       setTimeout(() => { window.location.href = destinationUrl; }, 2200);
 
     } catch (e) {
