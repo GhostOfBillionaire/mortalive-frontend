@@ -1352,7 +1352,7 @@
       document.querySelector('.card').scrollTop = 0;
 
       // Always route to Talk lobby — logged in, ready to chat
-      const destinationUrl = 'index.html#lobby';
+      const destinationUrl = './index.html#${targetHash}';
       const successLink = document.querySelector('#success-state a.btn-primary');
       if (successLink) {
         successLink.href = destinationUrl;
