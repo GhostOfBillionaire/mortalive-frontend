@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-11-master-final'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-11-full-profile-integration'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -41,6 +41,7 @@ const S = {
   onlineTimerStarted: false,
   pendingAction: null,
   replyTimer: null,
+  // synthetic video fallback
   syntheticActive: false,
   syntheticSkipCount: 0,
   syntheticVideos: [],
@@ -48,12 +49,13 @@ const S = {
   syntheticVideoId: null,
   syntheticVideoStartTime: null,
   syntheticSearchTimer: null,
-  searchSnapshotTimer: null,  
+  searchSnapshotTimer: null,  // fires every 2s while user is on the matching/searching screen
   // identity
   authToken: localStorage.getItem('mortalive_token') || null,
   username: localStorage.getItem('mortalive_username') || null,
   userId: localStorage.getItem('mortalive_user_id') || null,
   accountData: null, // Stores DB profile data (bio, display name, etc.)
+  userLinks: [],     // Stores DB profile social links
   crockroachScore: null,
   isGuest: !localStorage.getItem('mortalive_token'),
   guestName: localStorage.getItem('mortalive_guest_name') || '',
@@ -64,11 +66,12 @@ const S = {
   profile: null
 };
 
-// EXPLICIT GLOBAL BINDING
+// EXPLICIT GLOBAL BINDING: Allows index.html inline scripts to accurately read the guest state
 window.S = S;
 
-const SYNTHETIC_SKIP_LIMIT = 10; 
-const SEARCH_SNAPSHOT_MAX = 20;   
+// ── Synthetic video fallback constants ───────────────────
+const SYNTHETIC_SKIP_LIMIT = 10; // videos per "round" before final options shown
+const SEARCH_SNAPSHOT_MAX = 20;   // 15 target shots + 5 buffer before the search turns into synthetic video
 
 function isSyntheticPlayback() {
   return !!(S.syntheticActive || (S.stranger && S.stranger.isSynthetic));
@@ -90,6 +93,7 @@ function prepareVideoElement(videoEl) {
   videoEl.style.maxHeight = '100%';
   videoEl.style.minWidth = '0';
   videoEl.style.minHeight = '0';
+  // Crop videos to fit square container without stretching
   videoEl.style.objectFit = 'cover';
   videoEl.style.objectPosition = 'center center';
   videoEl.style.background = '#000';
@@ -124,6 +128,10 @@ function showSearchScreen() {
   setText('match-title', 'Finding your match');
   const subReset = $('match-sub');
   if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
+  // Start continuous 1-per-2s snapshot capture while the user is on the
+  // search screen — covers both real-server queuing and synthetic search
+  // interstials. startSearchSnapshots() is safe to call repeatedly; it
+  // always clears the previous timer before starting a new one.
   startSearchSnapshots();
 }
 
@@ -137,6 +145,8 @@ function scheduleSyntheticSearchResume(delayMs = 1400) {
     const onMatchingScreen = $('pg-match')?.classList.contains('active');
     if (S.matched || !onMatchingScreen) return;
 
+    // If the socket is still connected, keep the queue alive and then
+    // fall back to the next synthetic clip only after the search interstitial.
     if (S.socket && S.socket.connected) {
       clearTimeout(matchTimeout);
       clearTimeout(S.noMatchTimeout);
@@ -144,10 +154,12 @@ function scheduleSyntheticSearchResume(delayMs = 1400) {
       return;
     }
 
+    // If the socket dropped, restart the search cleanly.
     startMatching();
   }, Math.max(650, delayMs));
 }
 
+// AI bot responses used when user picks "Chat with AI" after exhausting videos
 const BOT_REPLIES = [
   "That's interesting — tell me more!",
   "haha yeah I feel that",
@@ -187,9 +199,7 @@ const autoReplies = [
   'that’s actually kinda scary',
   'based',
   'wait are you serious?'
-];
-
-const PROGRESS_KEY = 'mortalive_progress_v3';
+];const PROGRESS_KEY = 'mortalive_progress_v3';
 const PROFILE_KEY = 'mortalive_profile_v3';
 
 const PROGRESS_BADGES = [
@@ -471,6 +481,7 @@ function formatProgressLine(progress = getCurrentProgress()) {
 
 function updateProgressText() {
   const progress = getCurrentProgress();
+  const profile = getCurrentProfile();
   const summary = formatProgressLine(progress);
 
   const stats = {
@@ -479,7 +490,11 @@ function updateProgressText() {
     'progress-completions': `${summary.completions}`,
     'progress-percentile': `Top ${summary.percentile}%`,
     'progress-rank': `#${summary.rank}`,
-    'progress-goal': summary.goal
+    'progress-goal': summary.goal,
+    'progress-badges': summary.badges ? progress.badges.join(' · ') : 'Rookie',
+    'progress-frame': progress.profileFrame || profile.frame,
+    'progress-quote': profile.quote || progress.featuredQuote || '',
+    'progress-pinned': profile.pinned || progress.pinnedNote || ''
   };
 
   Object.entries(stats).forEach(([id, value]) => {
@@ -573,6 +588,7 @@ function finalizeChatProgress(reason = 'completed') {
   if (durationMs < 6000) return;
 
   awardProgress('chat_complete', 1, { completion: true, durationMs });
+  // Tell feed.html to show the "just ended a chat — share something" banner.
   try { sessionStorage.setItem('mortalive_just_chatted', '1'); } catch (e) {}
 }
 
@@ -605,6 +621,63 @@ function copyProgressShareCard() {
   }
   return text;
 }
+
+function ensureProgressSheet() {
+  let overlay = $('progress-overlay');
+  if (overlay) return overlay;
+
+  overlay = document.createElement('div');
+  overlay.id = 'progress-overlay';
+  overlay.style.cssText = [
+    'display:none',
+    'position:fixed',
+    'inset:0',
+    'z-index:999',
+    'align-items:center',
+    'justify-content:center',
+    'padding:18px',
+    'background:rgba(8,14,28,.58)',
+    'backdrop-filter:blur(16px) saturate(130%)'
+  ].join(';');
+
+  const panel = document.createElement('div');
+  panel.style.cssText = [
+    'width:min(720px,100%)',
+    'max-height:min(84vh,880px)',
+    'overflow:auto',
+    'border-radius:28px',
+    'padding:20px',
+    'background:linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.08))',
+    'border:1px solid rgba(255,255,255,.20)',
+    'box-shadow:0 30px 80px rgba(0,0,0,.38)',
+    'color:#fff'
+  ].join(';');
+
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function openProgressSheet() {
+  if (S.isGuest) {
+    toast('Sign in to view your status', '👤');
+    return;
+  }
+  const overlay = ensureProgressSheet();
+  updateDerivedProgress();
+  updateProgressText();
+
+  const badgesWrap = overlay.querySelector('#progress-badges');
+  if (badgesWrap) {
+    const badges = getCurrentProgress().badges || [];
+    badgesWrap.innerHTML = badges.length
+      ? badges.map((badge) => `<span style="display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.15);font-size:13px;font-weight:700;">${badge}</span>`).join('')
+      : '<span style="opacity:.75;">No badges yet</span>';
+  }
+
+  overlay.style.display = 'flex';
+}
+
 
 function $(id) {
   return document.getElementById(id);
@@ -725,6 +798,12 @@ function isFullscreenVideoMode() {
 }
 
 function applyVideoLayout() {
+  // Layout is now entirely CSS-driven:
+  //   Desktop normal     → 2 squares side by side (grid-template-columns: 1fr 1fr)
+  //   Desktop fullscreen → 2 squares side by side filling the screen
+  //   Mobile normal      → 2 squares stacked (grid-template-columns: 1fr)
+  //   Mobile fullscreen  → 2 squares stacked filling the screen
+  // No class toggling needed — just ensure video surfaces are prepared.
   prepareVideoSurfaces();
 }
 
@@ -760,6 +839,7 @@ function setPrimaryButtonsEnabled(enabled) {
 }
 
 function updateConsentState() {
+  // Real <input type="checkbox" id="landing-consent"> used in the current HTML
   const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
   const oldChecks = ['c1', 'c2', 'c3'].map((id) => $(id)).filter(Boolean);
 
@@ -1100,13 +1180,16 @@ function initAuthControls() {
     localStorage.setItem('mortalive_username', username);
     if (userId) localStorage.setItem('mortalive_user_id', userId);
     
-    // Fetch profile data (bio, details) from Supabase immediately on login
+    // Fetch profile data (bio, details) and links from Supabase immediately on login
     if (userId) {
        fetchUserProfile(userId).then(p => { 
            S.accountData = p; 
-           if ($('pg-profile') && $('pg-profile').classList.contains('active')) {
-               initProfilePage(); 
-           }
+           fetchUserLinks(userId).then(links => {
+               S.userLinks = links;
+               if ($('pg-profile') && $('pg-profile').classList.contains('active')) {
+                   initProfilePage(); 
+               }
+           });
        });
     }
     
@@ -1192,7 +1275,9 @@ function initAuthControls() {
         return;
       }
       const profile = await fetchUserProfile(user.id);
-      S.accountData = profile; // Save the DB profile data for the profile page
+      const links = await fetchUserLinks(user.id);
+      S.accountData = profile; 
+      S.userLinks = links;
       
       const username =
         profile?.username ||
@@ -1210,11 +1295,6 @@ function initAuthControls() {
   });
 
   // ── Live username availability check (Instagram-style) ──
-  // Requires a `is_username_taken(p_username text) returns boolean` RPC
-  // function in Supabase (SECURITY DEFINER) — see setup notes. Plain
-  // client-side SELECT against public.accounts won't work once RLS is
-  // locked down to "users can only see their own row", since an
-  // anonymous signup has no row yet to be "their own".
   let _usernameCheckTimer = null;
   let _usernameCheckToken = 0; // guards against out-of-order async replies
   let _usernameCheck = { username: null, available: null }; // available: null=unknown, true/false=result for `username`
@@ -1234,9 +1314,6 @@ function initAuthControls() {
       const { data, error } = await sb.rpc('is_username_taken', { p_username: username });
       if (myToken !== _usernameCheckToken) return; // a newer keystroke superseded this check
       if (error) {
-        // RPC missing/misconfigured, or a network hiccup — fail open.
-        // The DB's unique constraint on accounts.username (see setup
-        // notes) is the real backstop against duplicates either way.
         console.warn('is_username_taken check failed:', error.message);
         _usernameCheck = { username, available: null };
         setUsernameStatus(null, '');
@@ -1478,7 +1555,9 @@ function initAuthControls() {
           // can set a password later via "Forgot password?" if this failed.
         }
         const profile = await fetchUserProfile(user.id);
+        const links = await fetchUserLinks(user.id);
         S.accountData = profile;
+        S.userLinks = links;
         const username =
           profile?.username ||
           user.user_metadata?.username ||
@@ -1544,10 +1623,7 @@ function initAuthControls() {
     _otpContext = null;
     _pendingResetUser = null;
     _pendingSignupPassword = null;
-    
     if (otpForm) otpForm.style.display = 'none';
-    
-    // Route them back to the exact form they initiated the request from
     if (source === 'login') {
       if (loginForm) loginForm.style.display = '';
     } else if (mode === 'signup') {
@@ -1581,7 +1657,9 @@ function initAuthControls() {
       const user    = data?.user || _pendingResetUser.user;
       const session = _pendingResetUser.session;
       const profile = await fetchUserProfile(user.id);
+      const links = await fetchUserLinks(user.id);
       S.accountData = profile;
+      S.userLinks = links;
       
       const username =
         profile?.username ||
@@ -1606,6 +1684,8 @@ function initAuthControls() {
     S.authToken   = null;
     S.username    = null;
     S.userId      = null;
+    S.accountData = null;
+    S.userLinks   = [];
     S.crockroachScore = null;
     S.isGuest     = true;
     S.guestName   = name.slice(0, 24) || `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
@@ -1649,7 +1729,10 @@ function initAuthControls() {
         console.warn('Could not set chosen password after link-based confirm:', pwErr);
       }
       const profile = await fetchUserProfile(user.id);
+      const links = await fetchUserLinks(user.id);
       S.accountData = profile;
+      S.userLinks = links;
+      
       const username =
         profile?.username ||
         user.user_metadata?.username ||
@@ -1685,12 +1768,13 @@ function initAuthControls() {
   // Keep S.* in sync if the Supabase session changes in another tab, or
   // expires/gets revoked while this tab is open — and catch sign-ins
   // that happen via the email's link button rather than a click here.
-  sb.auth.onAuthStateChange(async (event, session) => {
+  sb.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') {
       S.authToken   = null;
       S.username    = null;
       S.userId      = null;
       S.accountData = null;
+      S.userLinks   = [];
       S.crockroachScore = null;
       S.isGuest     = true;
       _autoLoginPromise = null;
@@ -1717,14 +1801,6 @@ function initAuthControls() {
         localStorage.setItem('mortalive_token', S.authToken);
         localStorage.setItem('mortalive_user_id', S.userId);
         
-        if (!S.accountData) {
-            const profile = await fetchUserProfile(S.userId);
-            S.accountData = profile;
-            if ($('pg-profile') && $('pg-profile').classList.contains('active')) {
-                initProfilePage();
-            }
-        }
-        
         // Let the UI know state has resolved securely
         updateIdentityDisplay();
       }
@@ -1733,9 +1809,6 @@ function initAuthControls() {
 }
 
 // Fetches the row from public.accounts for the given auth user id.
-// Uses select('*') rather than named columns so this doesn't break if
-// your accounts table's column names differ slightly from the defaults
-// assumed here (username, full_name, crockroach_score).
 async function fetchUserProfile(userId) {
   try {
     const { data, error } = await sb
@@ -1756,12 +1829,25 @@ async function fetchUserProfile(userId) {
   }
 }
 
+// Fetches the row(s) from public.user_links for the given auth user id.
+async function fetchUserLinks(userId) {
+  try {
+    const { data, error } = await sb
+      .from('user_links')
+      .select('*')
+      .eq('user_id', userId)
+      .order('sort_order', { ascending: true });
+
+    if (error) return [];
+    return data || [];
+  } catch (e) {
+    return [];
+  }
+}
 
 
 // If a Supabase session already exists (page reload / return visit), log
 // the user in automatically and skip past the auth screen.
-// The promise is cached so calling tryAutoLogin() a second time
-// (from proceedPastLanding) just awaits the same in-flight request.
 let _autoLoginPromise = null;
 async function tryAutoLogin() {
   if (_autoLoginPromise) return _autoLoginPromise;
@@ -1795,23 +1881,24 @@ async function tryAutoLogin() {
       localStorage.removeItem('mortalive_guest_name');
 
       // Profile enrichment is best-effort. It must never invalidate Auth.
-      let profile = null;
       try {
-        profile = await fetchUserProfile(user.id);
+        const profile = await fetchUserProfile(user.id);
+        const links = await fetchUserLinks(user.id);
         S.accountData = profile;
+        S.userLinks = links;
       } catch (profileError) {
         console.warn('[Profile] accounts enrichment failed:', profileError);
       }
 
       const username =
-        profile?.username ||
+        S.accountData?.username ||
         user.user_metadata?.username ||
         user.email?.split('@')[0] ||
         'User';
 
       const crockroachScore =
-        profile?.crockroach_score ??
-        profile?.crockroachScore ??
+        S.accountData?.crockroach_score ??
+        S.accountData?.crockroachScore ??
         (Number(user.user_metadata?.crockroach_score) || 0);
 
       S.username = username;
@@ -1840,6 +1927,7 @@ async function tryAutoLogin() {
       S.username = null;
       S.userId = null;
       S.accountData = null;
+      S.userLinks = [];
       S.crockroachScore = null;
       S.isGuest = true;
 
@@ -1915,6 +2003,7 @@ function initLobbyControls() {
     S.username    = null;
     S.userId      = null;
     S.accountData = null;
+    S.userLinks   = [];
     S.crockroachScore = null;
     S.isGuest     = true;
     _autoLoginPromise = null; // allow fresh login attempt
@@ -3297,8 +3386,17 @@ ready(() => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// PROFILE PAGE LOGIC (Extracted from Unimorta, Mapped to app.js)
+// PROFILE PAGE LOGIC (Fully Integrated, Unimorta Base + app.js Map)
 // ═══════════════════════════════════════════════════════════════════
+
+const PROFILE_INTERESTS = [
+  { id: 'networking', label: '🤝 Networking', icon: '🤝' },
+  { id: 'dating', label: '❤️ Dating', icon: '❤️' },
+  { id: 'learning', label: '📚 Learning', icon: '📚' },
+  { id: 'business', label: '💼 Business', icon: '💼' },
+  { id: 'content', label: '🎬 Content', icon: '🎬' },
+  { id: 'fun', label: '🎲 Fun', icon: '🎲' }
+];
 
 const RANK_TIERS = [
   { name: 'Newcomer',  min: 0,    max: 50 },
@@ -3332,6 +3430,34 @@ function renderStreakDays(streakCount) {
   });
 }
 
+function renderInterestsDisplay(interests) {
+  const container = $('profile-interests-display');
+  if (!container) return;
+  if (!interests || interests.length === 0) {
+    container.innerHTML = '<span style="display:inline-block;padding:6px 10px;border-radius:var(--r-full);background:var(--surface-2);font-size:12px;color:var(--on-surface-3);">None added yet</span>';
+    return;
+  }
+  container.innerHTML = interests.map(id => {
+    const interest = PROFILE_INTERESTS.find(i => i.id === id);
+    return `<span style="display:inline-block;padding:8px 12px;border-radius:var(--r-full);background:var(--primary-alpha);border:1px solid rgba(26,110,245,.14);font-size:12px;font-weight:600;color:var(--primary);">${interest ? interest.label : id}</span>`;
+  }).join('');
+}
+
+function renderLinksDisplay() {
+  const container = $('profile-links-display');
+  if (!container) return;
+  if (!S.userLinks || S.userLinks.length === 0) {
+    container.innerHTML = '<p style="font-size:13px;color:var(--on-surface-3);margin:0;">No links added yet. Edit profile to add social or portfolio links.</p>';
+    return;
+  }
+  container.innerHTML = S.userLinks.map(link => `
+    <a href="${link.url}" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:var(--r-sm);background:var(--surface-2);border:1px solid var(--border);color:var(--primary);text-decoration:none;transition:all var(--dur-fast);" onmouseover="this.style.background='var(--primary-alpha)'" onmouseout="this.style.background='var(--surface-2)'">
+      <span style="font-size:13px;font-weight:600;">${link.name}</span>
+      <span style="margin-left:auto;opacity:.6;font-size:12px;">↗</span>
+    </a>
+  `).join('');
+}
+
 function initProfilePage() {
   if (S.isGuest) return;
 
@@ -3341,28 +3467,25 @@ function initProfilePage() {
   const tier = getRankTier(score);
   const pct = tier.max === Infinity ? 100 : Math.round(((score - tier.min) / (tier.max - tier.min)) * 100);
 
-  // Fetch from Supabase DB to hydrate bio & actual display name
+  // Hydrate from DB
   const acc = S.accountData || {};
   const displayName = acc.display_name || S.username || 'User';
   
   // Hero Data
-  const usernameEl = $('profile-username');
+  const usernameEl = $('profile-username-display');
   if (usernameEl) usernameEl.textContent = displayName;
   
   const badgeHtml = score >= 700 ? `<span class="profile-badge-chip gold">⭐ Gold</span>` :
                     score >= 420 ? `<span class="profile-badge-chip silver">🔘 Silver</span>` : '';
   
-  const sublineEl = $('profile-subline');
+  const sublineEl = $('profile-subline-display');
   if (sublineEl) {
     const actType = acc.account_type ? acc.account_type.charAt(0).toUpperCase() + acc.account_type.slice(1) : 'Member';
     sublineEl.innerHTML = `@${(S.username || 'user').toLowerCase().replace(/\s+/g,'_')} ${badgeHtml} · ${actType}`;
   }
   
-  const heroScore = $('profile-hero-score');
-  if (heroScore) heroScore.textContent = score.toLocaleString();
-  
-  const statScore = $('stat-score');
-  if (statScore) statScore.textContent = score.toLocaleString();
+  if ($('profile-hero-score')) $('profile-hero-score').textContent = score.toLocaleString();
+  if ($('profile-stat-score')) $('profile-stat-score').textContent = score.toLocaleString();
 
   // Avatar Gradient
   const colors = ['#1a6ef5', '#7c3aed', '#06b6d4', '#f59e0b', '#ec4899'];
@@ -3373,118 +3496,276 @@ function initProfilePage() {
     avatarEl.textContent = (displayName).charAt(0).toUpperCase();
   }
 
-  // Stats
-  const statChats = $('stat-chats');
-  if (statChats) statChats.textContent = (progress.totalMessages || 0).toLocaleString();
-  
-  const statCompletions = $('stat-completions');
-  if (statCompletions) statCompletions.textContent = summary.completions.toLocaleString();
-  
-  const statRank = $('stat-rank');
-  if (statRank) statRank.textContent = `#${summary.rank}`;
+  // Stats Grid
+  if ($('profile-stat-streak')) $('profile-stat-streak').textContent = summary.streak;
+  if ($('profile-stat-completions')) $('profile-stat-completions').textContent = summary.completions.toLocaleString();
+  if ($('profile-stat-rank')) $('profile-stat-rank').textContent = `#${summary.rank}`;
 
-  // Progress
-  const rankLabel = $('rank-label');
-  if (rankLabel) rankLabel.textContent = `${tier.name}${tier.max < Infinity ? ' → ' + RANK_TIERS[RANK_TIERS.indexOf(tier)+1]?.name : ' (Max)'}`;
-  
-  const progressLabel = $('progress-label');
-  if (progressLabel) progressLabel.textContent = `${score} / ${tier.max < Infinity ? tier.max : score} crockroach Score`;
-  
-  const progressPct = $('progress-pct');
-  if (progressPct) progressPct.textContent = `${pct}%`;
-  
-  const progressFill = $('progress-fill');
-  if (progressFill) progressFill.style.width = `${pct}%`;
-  
-  const progressPercentile = $('progress-percentile');
-  if (progressPercentile) progressPercentile.textContent = `Top ${summary.percentile}%`;
+  // View Mode Details
+  if ($('profile-bio-display')) {
+    const bioEl = $('profile-bio-display');
+    if (acc.bio) {
+      bioEl.textContent = acc.bio;
+      bioEl.style.fontStyle = 'normal';
+      bioEl.style.opacity = '1';
+    } else {
+      bioEl.textContent = 'No bio yet. Click Edit to add one.';
+      bioEl.style.fontStyle = 'italic';
+      bioEl.style.opacity = '0.6';
+    }
+  }
 
-  // Streak
+  if ($('profile-details-display')) {
+    const detailsEl = $('profile-details-display');
+    if (acc.details) {
+      detailsEl.textContent = acc.details;
+      detailsEl.style.fontStyle = 'normal';
+      detailsEl.style.opacity = '1';
+    } else {
+      detailsEl.textContent = 'Not specified. Click Edit to add.';
+      detailsEl.style.fontStyle = 'italic';
+      detailsEl.style.opacity = '0.6';
+    }
+    
+    const detailsLabels = {
+      'professional': 'Job Title',
+      'creator': 'Content Niche',
+      'business': 'Company Name',
+      'private': 'Details'
+    };
+    if ($('profile-details-label-display')) {
+        $('profile-details-label-display').textContent = detailsLabels[acc.account_type] || 'Details';
+    }
+  }
+
+  if ($('profile-website-container')) {
+    if (acc.account_type === 'business' && acc.website) {
+      $('profile-website-container').style.display = '';
+      const wLink = $('profile-website-display');
+      wLink.textContent = acc.website.replace(/^https?:\/\//, '');
+      wLink.href = acc.website.startsWith('http') ? acc.website : `https://${acc.website}`;
+    } else {
+      $('profile-website-container').style.display = 'none';
+    }
+  }
+
+  renderInterestsDisplay(acc.interests);
+  renderLinksDisplay();
+
+  // Progress Bar
+  if ($('rank-label')) $('rank-label').textContent = `${tier.name}${tier.max < Infinity ? ' → ' + RANK_TIERS[RANK_TIERS.indexOf(tier)+1]?.name : ' (Max)'}`;
+  if ($('progress-label')) $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} crockroach Score`;
+  if ($('progress-pct')) $('progress-pct').textContent = `${pct}%`;
+  if ($('progress-fill')) $('progress-fill').style.width = `${pct}%`;
+  if ($('progress-percentile')) $('progress-percentile').textContent = `Top ${summary.percentile}%`;
+
+  // Streak Callout
   const streak = summary.streak || 0;
-  const streakCount = $('streak-count');
-  if (streakCount) streakCount.textContent = `${streak} day${streak !== 1 ? 's' : ''}`;
-  
-  const streakSub = $('streak-sub');
-  if (streakSub) streakSub.textContent = streak > 0 ? `Best: ${progress.bestStreak || streak} days` : 'Start chatting to build your streak!';
-  
+  if ($('streak-count')) $('streak-count').textContent = `${streak} day${streak !== 1 ? 's' : ''}`;
+  if ($('streak-sub')) $('streak-sub').textContent = streak > 0 ? `Best: ${progress.bestStreak || streak} days` : 'Start chatting to build your streak!';
   renderStreakDays(streak);
 
   // Badges
   const earnedSet = new Set(progress.badges || []);
-  const grid = $('badges-grid');
+  const grid = $('profile-badges-grid');
   if (grid) {
     grid.innerHTML = '';
     PROGRESS_BADGES.forEach(badge => {
       const earned = earnedSet.has(badge.label);
       const card = document.createElement('div');
       card.className = `badge-card${earned ? '' : ' locked'}`;
-      
       const iconMap = { 'Rookie':'🌱', 'Momentum':'🔥', '3-Day Streak':'⚡', 'Bronze':'🥉', 'Silver':'🥈', 'Gold':'🥇', 'Top 10%':'👑' };
       const emoji = iconMap[badge.label] || '🏅';
-      
-      card.innerHTML = `
-        <span class="badge-emoji">${emoji}</span>
-        <div class="badge-name">${badge.label}</div>
-        <div class="badge-desc">Unlock requirement met</div>
-        ${!earned ? '<span class="badge-locked-overlay">🔒</span>' : ''}
-      `;
+      card.innerHTML = `<span class="badge-emoji">${emoji}</span><div class="badge-name">${badge.label}</div><div class="badge-desc">Unlock requirement met</div>${!earned ? '<span class="badge-locked-overlay">🔒</span>' : ''}`;
       grid.appendChild(card);
     });
-    const badgesCount = $('badges-count');
-    if (badgesCount) badgesCount.textContent = `${earnedSet.size} / ${PROGRESS_BADGES.length}`;
+    if ($('profile-badges-count')) $('profile-badges-count').textContent = `${earnedSet.size} / ${PROGRESS_BADGES.length}`;
   }
 
   // Pre-fill Edit Modal
-  const editDisplayName = $('edit-display-name');
-  if (editDisplayName) editDisplayName.value = displayName;
+  if ($('edit-display-name')) $('edit-display-name').value = displayName;
+  if ($('edit-bio')) $('edit-bio').value = acc.bio || '';
+  if ($('edit-details')) $('edit-details').value = acc.details || '';
+  
+  if ($('edit-website-container')) {
+    if (acc.account_type === 'business') {
+      $('edit-website-container').style.display = '';
+      if ($('edit-website')) $('edit-website').value = acc.website || '';
+    } else {
+      $('edit-website-container').style.display = 'none';
+    }
+  }
+
+  renderEditInterests(acc.interests || []);
+  renderEditLinks();
+}
+
+function renderEditInterests(selectedInterests) {
+  const container = $('edit-interests-container');
+  if (!container) return;
+  container.innerHTML = PROFILE_INTERESTS.map(interest => `
+    <label style="display:flex;align-items:center;padding:10px 12px;border-radius:var(--r-sm);background:var(--surface-2);border:1px solid var(--border);cursor:pointer;user-select:none;" class="edit-interest-label" data-id="${interest.id}">
+      <input type="checkbox" value="${interest.id}" ${selectedInterests.includes(interest.id) ? 'checked' : ''} style="display:none;" onchange="toggleEditInterest(this)">
+      <span style="font-size:13px;font-weight:600;">${interest.label}</span>
+    </label>
+  `).join('');
+  syncEditInterestStyles();
+}
+
+function toggleEditInterest(checkbox) {
+  const selected = document.querySelectorAll('#edit-interests-container input:checked');
+  if (selected.length > 3) {
+    toast('Maximum 3 interests allowed', '⚠️');
+    checkbox.checked = false;
+    return;
+  }
+  syncEditInterestStyles();
+}
+
+function syncEditInterestStyles() {
+  const labels = document.querySelectorAll('.edit-interest-label');
+  labels.forEach(label => {
+    const input = label.querySelector('input');
+    if (input.checked) {
+      label.style.background = 'var(--primary-alpha)';
+      label.style.borderColor = 'rgba(26,110,245,.14)';
+      label.style.color = 'var(--primary)';
+    } else {
+      label.style.background = 'var(--surface-2)';
+      label.style.borderColor = 'var(--border)';
+      label.style.color = 'var(--on-surface)';
+    }
+  });
+}
+
+function renderEditLinks() {
+  const container = $('edit-links-container');
+  if (!container) return;
+  
+  window._tempEditLinks = window._tempEditLinks || (S.userLinks ? [...S.userLinks] : []);
+  const links = window._tempEditLinks;
+
+  container.innerHTML = links.map((link, idx) => `
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input type="text" class="edit-link-name" value="${link.name}" placeholder="Link Name" maxlength="30" style="flex:0 0 100px;padding:9px 12px;border-radius:var(--r-sm);border:1.5px solid var(--border-strong);font-size:13px;outline:none;" onchange="window._tempEditLinks[${idx}].name=this.value">
+      <input type="url" class="edit-link-url" value="${link.url}" placeholder="https://..." maxlength="500" style="flex:1;padding:9px 12px;border-radius:var(--r-sm);border:1.5px solid var(--border-strong);font-size:13px;outline:none;" onchange="window._tempEditLinks[${idx}].url=this.value">
+      <button type="button" onclick="removeEditLink(${idx})" style="width:36px;height:36px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--surface-2);color:var(--danger);cursor:pointer;font-weight:700;">✕</button>
+    </div>
+  `).join('');
+
+  if ($('edit-link-count')) $('edit-link-count').textContent = links.length;
+  if ($('btn-edit-add-link')) $('btn-edit-add-link').style.display = links.length >= 5 ? 'none' : 'block';
+}
+
+window.addEditLink = function() {
+  if (window._tempEditLinks.length >= 5) return;
+  window._tempEditLinks.push({ name: '', url: '' });
+  renderEditLinks();
+};
+
+window.removeEditLink = function(idx) {
+  window._tempEditLinks.splice(idx, 1);
+  renderEditLinks();
+};
+
+function toggleProfileEditMode() {
+  const viewMode = $('profile-view-mode');
+  const editMode = $('profile-edit-mode');
+  const toggleBtn = $('btn-edit-profile');
+  const actionRow = $('profile-edit-actions');
+  
+  if (!viewMode || !editMode) return;
+
+  const isEditing = viewMode.style.display === 'none';
+
+  if (!isEditing) {
+    // Enter edit mode
+    window._tempEditLinks = S.userLinks ? JSON.parse(JSON.stringify(S.userLinks)) : [];
+    initProfilePage(); // reset forms
+    viewMode.style.display = 'none';
+    editMode.style.display = 'block';
+    if (actionRow) actionRow.style.display = 'flex';
+    if (toggleBtn) {
+      toggleBtn.textContent = '× Cancel';
+      toggleBtn.style.color = 'var(--danger)';
+      toggleBtn.style.background = 'rgba(220,38,38,.08)';
+    }
+  } else {
+    // Exit edit mode
+    viewMode.style.display = 'block';
+    editMode.style.display = 'none';
+    if (actionRow) actionRow.style.display = 'none';
+    if (toggleBtn) {
+      toggleBtn.textContent = '✏️ Edit';
+      toggleBtn.style.color = '';
+      toggleBtn.style.background = '';
+    }
+    if ($('edit-error')) $('edit-error').style.display = 'none';
+  }
 }
 
 // Attach Profile Events
 function bindProfileEvents() {
-  $('btn-edit-profile')?.addEventListener('click', () => {
-    $('edit-modal').classList.add('open');
-    $('edit-display-name')?.focus();
-  });
+  $('btn-edit-profile')?.addEventListener('click', toggleProfileEditMode);
+  $('btn-edit-cancel-inline')?.addEventListener('click', toggleProfileEditMode);
 
-  const closeEdit = () => {
-    $('edit-modal').classList.remove('open');
-    if($('edit-error')) $('edit-error').style.display = 'none';
-  };
-
-  $('btn-edit-close')?.addEventListener('click', closeEdit);
-  $('btn-edit-cancel')?.addEventListener('click', closeEdit);
-  $('edit-modal')?.addEventListener('click', e => { if (e.target.id === 'edit-modal') closeEdit(); });
-
-  $('btn-edit-save')?.addEventListener('click', async () => {
+  $('btn-edit-save-inline')?.addEventListener('click', async () => {
     const newName = $('edit-display-name')?.value.trim() || '';
-    const newPass = $('edit-new-password')?.value || '';
+    const newBio = $('edit-bio')?.value.trim() || '';
+    const newDetails = $('edit-details')?.value.trim() || '';
+    const newWebsite = $('edit-website')?.value.trim() || '';
     const errEl = $('edit-error');
 
-    if(errEl) errEl.style.display = 'none';
-    if (newPass && newPass.length < 8) {
-      if(errEl) { errEl.textContent = 'Password must be at least 8 characters.'; errEl.style.display = 'block'; }
-      return;
-    }
+    const selectedInterests = Array.from(document.querySelectorAll('#edit-interests-container input:checked')).map(cb => cb.value);
 
-    const btn = $('btn-edit-save');
+    // Filter valid links
+    const validLinks = (window._tempEditLinks || []).filter(l => l.name.trim() && l.url.trim()).map((l, idx) => ({
+      user_id: S.userId,
+      name: l.name.trim(),
+      url: l.url.trim(),
+      sort_order: idx
+    }));
+
+    const btn = $('btn-edit-save-inline');
     if(btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    if(errEl) errEl.style.display = 'none';
 
     try {
-      if (newPass) {
-        const { error } = await sb.auth.updateUser({ password: newPass });
-        if (error) throw error;
-      }
+      // 1. Update Accounts Table
+      const updatePayload = {
+        display_name: newName,
+        bio: newBio,
+        details: newDetails,
+        interests: selectedInterests,
+        updated_at: new Date().toISOString()
+      };
       
-      // Update display name in Supabase
-      if (newName) {
-        const { error: dbErr } = await sb.from('accounts').update({ display_name: newName }).eq('id', S.userId);
-        if (dbErr) throw dbErr;
-        if (S.accountData) S.accountData.display_name = newName;
+      if (S.accountData?.account_type === 'business') {
+        updatePayload.website = newWebsite;
       }
 
+      const { error: dbErr } = await sb.from('accounts').update(updatePayload).eq('id', S.userId);
+      if (dbErr) throw dbErr;
+
+      // 2. Update Links Table (delete all, insert new)
+      await sb.from('user_links').delete().eq('user_id', S.userId);
+      if (validLinks.length > 0) {
+        const { error: linkErr } = await sb.from('user_links').insert(validLinks);
+        if (linkErr) throw linkErr;
+      }
+
+      // 3. Sync local S object
+      if (S.accountData) {
+        S.accountData.display_name = newName;
+        S.accountData.bio = newBio;
+        S.accountData.details = newDetails;
+        S.accountData.interests = selectedInterests;
+        if (S.accountData.account_type === 'business') S.accountData.website = newWebsite;
+      }
+      S.userLinks = validLinks;
+
       toast('Profile updated!', '✅');
-      closeEdit();
-      if($('edit-new-password')) $('edit-new-password').value = '';
+      toggleProfileEditMode();
       initProfilePage(); 
     } catch (e) {
       if(errEl) { errEl.textContent = e.message || 'Could not save changes.'; errEl.style.display = 'block'; }
