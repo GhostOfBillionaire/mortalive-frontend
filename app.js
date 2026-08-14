@@ -3439,7 +3439,9 @@ function renderInterestsDisplay(interests) {
   }
   container.innerHTML = interests.map(id => {
     const interest = PROFILE_INTERESTS.find(i => i.id === id);
-    return `<span style="display:inline-block;padding:8px 12px;border-radius:var(--r-full);background:var(--primary-alpha);border:1px solid rgba(26,110,245,.14);font-size:12px;font-weight:600;color:var(--primary);">${interest ? interest.label : id}</span>`;
+    // sanitizeHTML guards against any unexpected content in id/label
+    const label = sanitizeHTML(interest ? interest.label : id);
+    return `<span style="display:inline-block;padding:8px 12px;border-radius:var(--r-full);background:var(--primary-alpha);border:1px solid rgba(26,110,245,.14);font-size:12px;font-weight:600;color:var(--primary);">${label}</span>`;
   }).join('');
 }
 
@@ -3450,12 +3452,27 @@ function renderLinksDisplay() {
     container.innerHTML = '<p style="font-size:13px;color:var(--on-surface-3);margin:0;">No links added yet. Edit profile to add social or portfolio links.</p>';
     return;
   }
-  container.innerHTML = S.userLinks.map(link => `
-    <a href="${link.url}" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:var(--r-sm);background:var(--surface-2);border:1px solid var(--border);color:var(--primary);text-decoration:none;transition:all var(--dur-fast);" onmouseover="this.style.background='var(--primary-alpha)'" onmouseout="this.style.background='var(--surface-2)'">
-      <span style="font-size:13px;font-weight:600;">${link.name}</span>
+  container.innerHTML = S.userLinks.map(link => {
+    const safeName = sanitizeHTML(link.name);
+    // Only allow http/https URLs to prevent javascript: URIs
+    const rawUrl = String(link.url || '');
+    const safeUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+    return `
+    <a href="${sanitizeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:var(--r-sm);background:var(--surface-2);border:1px solid var(--border);color:var(--primary);text-decoration:none;transition:all var(--dur-fast);" onmouseover="this.style.background='var(--primary-alpha)'" onmouseout="this.style.background='var(--surface-2)'">
+      <span style="font-size:13px;font-weight:600;">${safeName}</span>
       <span style="margin-left:auto;opacity:.6;font-size:12px;">↗</span>
     </a>
-  `).join('');
+  `;
+  }).join('');
+}
+
+// ── XSS-safe helper: always use textContent for user data, but this
+// utility lets us safely insert a sanitized string into innerHTML
+// contexts where we must (e.g. interest chip HTML). ──
+function sanitizeHTML(str) {
+  const div = document.createElement('div');
+  div.textContent = String(str || '');
+  return div.innerHTML;
 }
 
 function initProfilePage() {
@@ -3470,6 +3487,15 @@ function initProfilePage() {
   // Hydrate from DB
   const acc = S.accountData || {};
   const displayName = acc.display_name || S.username || 'User';
+
+  // No-data fallback: surface a clear unavailable state if profile never loaded
+  if (!S.accountData) {
+    const unEl = $('profile-username-display');
+    if (unEl) {
+      unEl.textContent = 'Profile unavailable';
+      unEl.style.color = 'var(--on-surface-3)';
+    }
+  }
   
   // Hero Data
   const usernameEl = $('profile-username-display');
@@ -3669,11 +3695,30 @@ window.removeEditLink = function(idx) {
 };
 
 function toggleProfileEditMode() {
+  // Supports two HTML patterns:
+  //  A) Overlay/modal: elements with id="edit-modal" (class toggled active)
+  //  B) Inline toggle: profile-view-mode / profile-edit-mode divs
+  const modal = $('edit-modal');
+  if (modal) {
+    // Pattern A — modal/overlay
+    const isOpen = modal.classList.contains('active');
+    if (!isOpen) {
+      window._tempEditLinks = S.userLinks ? JSON.parse(JSON.stringify(S.userLinks)) : [];
+      initProfilePage(); // reset form fields
+      modal.classList.add('active');
+    } else {
+      modal.classList.remove('active');
+      if ($('edit-error')) $('edit-error').style.display = 'none';
+    }
+    return;
+  }
+
+  // Pattern B — inline view/edit mode divs
   const viewMode = $('profile-view-mode');
   const editMode = $('profile-edit-mode');
   const toggleBtn = $('btn-edit-profile');
   const actionRow = $('profile-edit-actions');
-  
+
   if (!viewMode || !editMode) return;
 
   const isEditing = viewMode.style.display === 'none';
@@ -3709,6 +3754,22 @@ function bindProfileEvents() {
   $('btn-edit-profile')?.addEventListener('click', toggleProfileEditMode);
   $('btn-edit-cancel-inline')?.addEventListener('click', toggleProfileEditMode);
 
+  // Modal close buttons (Pattern A — overlay/modal HTML)
+  $('btn-edit-close')?.addEventListener('click', () => {
+    const modal = $('edit-modal');
+    if (modal) { modal.classList.remove('active'); }
+    else toggleProfileEditMode();
+  });
+  $('btn-edit-cancel')?.addEventListener('click', () => {
+    const modal = $('edit-modal');
+    if (modal) { modal.classList.remove('active'); }
+    else toggleProfileEditMode();
+  });
+  // Close modal on backdrop click
+  $('edit-modal')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) e.currentTarget.classList.remove('active');
+  });
+
   $('btn-edit-save-inline')?.addEventListener('click', async () => {
     const newName = $('edit-display-name')?.value.trim() || '';
     const newBio = $('edit-bio')?.value.trim() || '';
@@ -3716,7 +3777,9 @@ function bindProfileEvents() {
     const newWebsite = $('edit-website')?.value.trim() || '';
     const errEl = $('edit-error');
 
-    const selectedInterests = Array.from(document.querySelectorAll('#edit-interests-container input:checked')).map(cb => cb.value);
+    const selectedInterests = Array.from(
+      document.querySelectorAll('#edit-interests-container input:checked')
+    ).map(cb => cb.value).filter(v => v);
 
     // Filter valid links
     const validLinks = (window._tempEditLinks || []).filter(l => l.name.trim() && l.url.trim()).map((l, idx) => ({
@@ -3741,6 +3804,13 @@ function bindProfileEvents() {
       };
       
       if (S.accountData?.account_type === 'business') {
+        if (newWebsite) {
+          try {
+            new URL(/^https?:\/\//i.test(newWebsite) ? newWebsite : `https://${newWebsite}`);
+          } catch {
+            throw new Error('Invalid website URL — please enter a valid address.');
+          }
+        }
         updatePayload.website = newWebsite;
       }
 
