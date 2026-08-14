@@ -138,6 +138,54 @@ img { display: block; max-width: 100%; }
   pointer-events: none;
   z-index: 0;
 }
+
+/* ── Profile Page Specifics ────────────────────────────── */
+.profile-hero {
+  padding: 32px 28px 24px;
+  background: linear-gradient(160deg, var(--primary-alpha), rgba(124,58,237,.05));
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+.profile-avatar-wrap { position: relative; flex-shrink: 0; }
+.profile-avatar {
+  width: 82px; height: 82px; border-radius: 26px;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  display: grid; place-items: center; font-size: 38px;
+  border: 3px solid rgba(255,255,255,.9); box-shadow: var(--elev-2);
+}
+.profile-online-dot {
+  position: absolute; bottom: 2px; right: 2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--success); border: 2.5px solid var(--surface);
+}
+.profile-info { flex: 1; min-width: 0; padding-top: 4px; text-align: left; }
+.profile-username { font-size: 24px; font-weight: 800; letter-spacing: -.04em; color: var(--on-surface); line-height: 1.1; }
+.profile-subline { font-size: 13px; color: var(--on-surface-3); margin-top: 4px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.profile-score-row { margin-top: 12px; display: flex; align-items: center; gap: 8px; }
+.score-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: var(--r-full); background: var(--primary-alpha); color: var(--primary); font-size: 14px; font-weight: 800; border: 1px solid rgba(26,110,245,.18); }
+.score-label { font-size: 11px; color: var(--on-surface-3); font-weight: 500; }
+.profile-hero-actions { display: flex; gap: 8px; flex-shrink: 0; flex-direction: column; align-items: flex-end; }
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
+.stat-cell { padding: 18px 16px; text-align: center; border-right: 1px solid var(--border); }
+.stat-cell:last-child { border-right: 0; }
+.stat-value { font-size: 26px; font-weight: 800; letter-spacing: -.04em; color: var(--on-surface); line-height: 1; }
+.stat-label { font-size: 11px; font-weight: 600; color: var(--on-surface-3); text-transform: uppercase; letter-spacing: .07em; margin-top: 5px; }
+.stat-cell.highlight .stat-value { color: var(--primary); }
+.badges-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; padding: 16px 20px 20px; }
+.badge-card { padding: 14px 14px 12px; border-radius: var(--r-sm); background: var(--surface-2); border: 1px solid var(--border); text-align: center; transition: all var(--dur-fast); position: relative; }
+.badge-card.locked { opacity: .45; filter: grayscale(.8); }
+.badge-card:not(.locked):hover { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-alpha); }
+.badge-emoji { font-size: 28px; display: block; margin-bottom: 6px; }
+.badge-name { font-size: 12px; font-weight: 700; color: var(--on-surface); }
+.badge-desc { font-size: 11px; color: var(--on-surface-3); margin-top: 2px; line-height: 1.4; }
+.badge-locked-overlay { position: absolute; top: 6px; right: 6px; font-size: 12px; opacity: .5; }
+.danger-section { padding: 16px 20px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; text-align: left; }
+.danger-info { flex: 1; }
+.danger-title { font-size: 14px; font-weight: 700; color: var(--danger); }
+.danger-sub   { font-size: 12px; color: var(--on-surface-3); margin-top: 2px; line-height: 1.5; }
+  
 @media (max-width: 900px) {
   #pg-land::before {
     left: 0;
