@@ -2698,7 +2698,7 @@ body.mortalive-progress-open .sakura-topbar {
 .profile-info-value{color:var(--on-surface-3);min-width:0;word-break:break-word}
 .profile-info-chips{display:flex;flex-wrap:wrap;gap:5px;flex:1;min-width:0}
 .profile-info-chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;background:var(--primary-alpha);border:1px solid rgba(26,110,245,.14);font-size:11.5px;font-weight:600;color:var(--primary)}
-.profile-info-link{color:var(--primary);font-weight:600;text-decoration:none;font-size:13px}
+.profile-info-link{color:var(--primary);font-weight:600;text-decoration:none;font-size:13px;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:bottom}
 .profile-info-link:hover{text-decoration:underline}
 .profile-goal-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;background:linear-gradient(120deg,rgba(26,110,245,.08),rgba(124,58,237,.07));border:1px solid rgba(26,110,245,.12);font-size:12px;font-weight:700;color:var(--primary)}
 
@@ -2721,6 +2721,10 @@ body.mortalive-progress-open .sakura-topbar {
 .profile-achievements-scroll::-webkit-scrollbar{display:none}
 .profile-achievements-scroll .badge-card{flex:0 0 auto;width:110px;scroll-snap-align:start;padding:12px 10px;border-radius:var(--r-sm);background:var(--surface-2);border:1px solid var(--border);text-align:center;position:relative}
 .profile-achievements-scroll .badge-card.locked{opacity:.45;filter:grayscale(.8)}
+/* Scroll fade — hints there are more badges to the right */
+.profile-achievements-card{position:relative}
+.profile-achievements-card::after{content:'';position:absolute;right:0;top:0;bottom:0;width:44px;background:linear-gradient(to right,transparent,rgba(255,255,255,.96));border-radius:0 22px 22px 0;pointer-events:none;z-index:2}
+/* Link names in info row are truncated via .profile-info-link (defined above in base styles) */
 
 /* Account Center modal */
 .acct-center-overlay{display:none;position:fixed;inset:0;z-index:1100;background:rgba(13,17,23,.54);backdrop-filter:blur(6px);align-items:center;justify-content:center}
@@ -3990,7 +3994,10 @@ body.mortalive-progress-open .sakura-topbar {
     if(btnDelete && !btnDelete.dataset.acctBound){
       btnDelete.dataset.acctBound='1';
       btnDelete.addEventListener('click', ()=>{
+        // Proxy through the app.js handler which now uses showConfirmDialog
         q('btn-delete-account')?.click();
+        // Close Account Center immediately — the confirm dialog will appear on top
+        closeAcctCenter();
       });
     }
     // ESC to close
