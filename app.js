@@ -3724,15 +3724,14 @@ function sanitizeHTML(str) {
   return div.innerHTML;
 }
 
-function initProfilePage() {
+async function initProfilePage() {
   if (S.isGuest) return;
 
-  // If profile navigation/rendering wins the race against DB hydration,
-  // fetch the account data now and let the hydration callback re-render.
+  // Ensure DB-backed account data is available before rendering dynamic profile fields.
   if (!S.accountData && S.userId) {
-    hydrateAccountData(S.userId, { rerender: true }).catch((error) => {
+    try { await hydrateAccountData(S.userId, { rerender: false }); } catch (error) {
       console.warn('[Profile] render hydration warning:', error);
-    });
+    }
   }
 
   const progress = getCurrentProgress();
@@ -4284,7 +4283,7 @@ function bindProfileEvents() {
         if (linkErr) throw linkErr;
       }
 
-      // 4. Sync local S object
+      // 4. Sync local S object, then refresh from Supabase as the source of truth.
       if (S.accountData) {
         S.accountData.display_name = newName;
         S.accountData.bio = newBio;
@@ -4293,6 +4292,7 @@ function bindProfileEvents() {
         if (S.accountData.account_type === 'business') S.accountData.website = newWebsite;
       }
       S.userLinks = validLinks;
+      S.accountData = await fetchUserProfile(S.userId); S.userLinks = await fetchUserLinks(S.userId);
 
       toast('Profile updated!', '✅');
       toggleProfileEditMode();
