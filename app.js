@@ -3528,7 +3528,15 @@ function finishStartupSplash() {
   if (!splash || splash.dataset.closed === '1') return;
   splash.dataset.closed = '1';
   splash.classList.add('is-leaving');
-  window.setTimeout(() => splash.remove(), 420);
+  splash.setAttribute('aria-hidden', 'true');
+  splash.style.pointerEvents = 'none';
+  window.setTimeout(() => {
+    if (!splash || !splash.isConnected) return;
+    splash.style.setProperty('display', 'none', 'important');
+    splash.style.setProperty('visibility', 'hidden', 'important');
+    splash.style.setProperty('pointer-events', 'none', 'important');
+    splash.remove();
+  }, 450);
 }
 
 ready(() => {
