@@ -220,8 +220,31 @@ img { display: block; max-width: 100%; }
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border: 1.5px solid rgba(0,0,0,.10);
   border-radius: var(--r-xl);
-  box-shadow: var(--elev-2), inset 0 1px 0 rgba(255,255,255,.9);
+  box-shadow: none;
   margin-bottom: 0;
+  transition: background-color .22s ease, border-color .22s ease, box-shadow .22s ease;
+}
+
+/* Shared authenticated header: fixed without changing its existing width. */
+.app-topbar-wrap {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: min(1280px, calc(100% - 28px));
+  margin: 0;
+  padding: 0;
+  pointer-events: none;
+}
+.app-topbar-wrap .sakura-topbar {
+  width: 100%;
+  pointer-events: auto;
+}
+.app-topbar-wrap .sakura-topbar.scrolled {
+  background: rgba(255,255,255,.98);
+  border-color: rgba(0,0,0,.08);
+  box-shadow: 0 10px 30px rgba(20,34,68,.10);
 }
 .sakura-brand {
   display: flex;
@@ -1804,6 +1827,10 @@ img { display: block; max-width: 100%; }
     top: 10px;
     gap: 10px;
     padding: 12px 14px;
+  }
+  .app-topbar-wrap {
+    top: 10px;
+    width: min(100% - 28px, 1280px);
   }
   .sakura-nav {
     flex-wrap: wrap;
@@ -3476,7 +3503,7 @@ body.mortalive-progress-open .sakura-topbar {
 <!-- ════════════ SHARED AUTHENTICATED TOPBAR ════════════ -->
 <div class="wrap app-topbar-wrap" id="app-topbar-wrap" style="display:none;">
   <nav class="sakura-topbar" id="app-topbar" aria-label="Mortalive navigation">
-    <a class="sakura-brand" href="#" id="app-topbar-brand" aria-label="Mortalive Talk">
+    <a class="sakura-brand" href="index.html" id="app-topbar-brand" aria-label="Mortalive Talk">
       <img class="topbar-logo"
            src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783865256/cllogo_ystlxa.png"
            alt="Mortalive">
@@ -4601,8 +4628,12 @@ body.mortalive-progress-open .sakura-topbar {
   let observer = null;
 
   function syncTopbar() {
-    if (!topbar) return;
-    topbar.classList.toggle('scrolled', window.scrollY > 8);
+    const sharedTopbar = document.getElementById('app-topbar');
+    const target = sharedTopbar && document.body.classList.contains('mortalive-app-topbar-visible')
+      ? sharedTopbar
+      : topbar;
+    if (!target) return;
+    target.classList.toggle('scrolled', window.scrollY > 8);
   }
 
   function revealNow(el) {
@@ -4725,6 +4756,9 @@ body.mortalive-progress-open .sakura-topbar {
       const score = window.getProgressScore?.(window.S?.progress);
       scoreVal.textContent = Number.isFinite(Number(score)) ? Number(score).toLocaleString() : '—';
     }
+
+    const sharedTopbar = document.getElementById('app-topbar');
+    if (sharedTopbar) sharedTopbar.classList.toggle('scrolled', window.scrollY > 8);
   }
 
   document.addEventListener('click', (ev) => {
