@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-15-confirm-dialogs-css-fixes'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-15-feed-supabase-step2'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -815,6 +815,14 @@ function showPage(id) {
       hydrateAccountData(S.userId, { rerender: true }).catch((error) => {
         console.warn('[Profile] navigation hydration warning:', error);
       });
+    }
+  }
+
+  if (id === 'pg-feed') {
+    initFeedPage();
+    if (!S.isGuest && S.userId) {
+      syncFeedSidebar();
+      fetchFeedPage(true);
     }
   }
 }
@@ -1930,6 +1938,9 @@ function initAuthControls() {
       localStorage.removeItem('mortalive_username');
       localStorage.removeItem('mortalive_user_id');
       updateIdentityDisplay();
+      _feedPosts = [];
+      _feedOffset = 0;
+      _feedHasMore = true;
       return;
     }
 
@@ -1963,6 +1974,7 @@ function initAuthControls() {
         localStorage.setItem('mortalive_user_id', S.userId);
 
         updateIdentityDisplay();
+        syncFeedSidebar();
 
         hydrateAccountData(S.userId, { rerender: true }).catch((error) => {
           console.warn('[Profile] auth-state hydration warning:', error);
@@ -2067,6 +2079,10 @@ async function hydrateAccountData(userId, options = {}) {
       if (rerender && $('pg-profile')?.classList.contains('active')) {
         initProfilePage();
         if (typeof window.renderProfileInfoRow === 'function') window.renderProfileInfoRow();
+      }
+      if ($('pg-feed')?.classList.contains('active')) {
+        syncFeedSidebar();
+        fetchFeedPage(true);
       }
 
       return !!profile;
@@ -3511,6 +3527,7 @@ ready(() => {
   initLobbyControls();
   initChatControls();
   initRatingControls();
+  initFeedPage();
 
   // Initial routing waits for the real Supabase session result.
   // The landing checkmark only gates the Continue button; it is not auth state.
@@ -3728,6 +3745,384 @@ function sanitizeHTML(str) {
   div.textContent = String(str || '');
   return div.innerHTML;
 }
+
+
+
+// ═══════════════════════════════════════════════════════════════════
+// MORTALIVE FEED — Supabase-backed integration (Step 2)
+// Reuses public.posts created by the Profile composer. Text posts only
+// for this phase; likes/comments/polls remain later relational phases.
+// ═══════════════════════════════════════════════════════════════════
+const FEED_PAGE_SIZE = 10;
+const FEED_MAX_POST_CHARS = 500;
+let _feedInitialized = false;
+let _feedFilter = 'all';
+let _feedOffset = 0;
+let _feedHasMore = true;
+let _feedLoading = false;
+let _feedPosts = [];
+
+function feedRelTime(iso) {
+  const ts = Date.parse(iso || '');
+  if (!Number.isFinite(ts)) return 'Just now';
+  const diff = Math.max(0, Date.now() - ts);
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+  return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function feedAvatarLetter(name) {
+  const value = String(name || 'M').trim();
+  return sanitizeHTML((value.charAt(0) || 'M').toUpperCase());
+}
+
+function feedProfileFor(userId) {
+  if (userId && userId === S.userId) {
+    return {
+      username: S.accountData?.username || S.username || 'You',
+      display_name: S.accountData?.display_name || S.username || 'You',
+      crockroach_score: S.accountData?.crockroach_score ?? S.crockroachScore ?? getProgressScore(getCurrentProgress())
+    };
+  }
+  return null;
+}
+
+async function fetchFeedProfileDirectory(userIds) {
+  const ids = Array.from(new Set((userIds || []).filter(Boolean)));
+  if (!ids.length || !sb) return new Map();
+  const map = new Map();
+  try {
+    const { data, error } = await sb
+      .from('public_profile_directory')
+      .select('id,username,display_name,crockroach_score,account_type')
+      .in('id', ids);
+    if (error) throw error;
+    (data || []).forEach(row => map.set(row.id, row));
+  } catch (e) {
+    console.warn('[Feed] public profile directory lookup failed:', e?.message || e);
+  }
+  ids.forEach(id => {
+    if (!map.has(id)) {
+      const local = feedProfileFor(id);
+      if (local) map.set(id, { id, ...local });
+    }
+  });
+  return map;
+}
+
+async function fetchFeedPage(reset = false) {
+  if (S.isGuest || !S.userId || !sb || _feedLoading) return;
+  if (reset) {
+    _feedOffset = 0;
+    _feedHasMore = true;
+    _feedPosts = [];
+  }
+  if (!_feedHasMore) return;
+
+  const container = $('feed-posts');
+  const loadMore = $('load-more-btn');
+  if (_feedOffset === 0 && container) {
+    container.innerHTML = `
+      <div class="skel-post"><div class="skel-row"><div class="skeleton skel-circle"></div><div style="flex:1;display:flex;flex-direction:column;gap:6px;"><div class="skeleton skel-line" style="width:38%;"></div><div class="skeleton skel-line" style="width:22%;height:11px;"></div></div></div><div class="skeleton skel-line" style="width:100%;margin-bottom:8px;"></div><div class="skeleton skel-line" style="width:85%;"></div></div>`;
+  }
+  _feedLoading = true;
+  if (loadMore) loadMore.disabled = true;
+
+  try {
+    let query = sb
+      .from('posts')
+      .select('id,user_id,content,post_type,visibility,created_at,updated_at')
+      .order('created_at', { ascending: false })
+      .range(_feedOffset, _feedOffset + FEED_PAGE_SIZE - 1);
+
+    if (_feedFilter === 'mine') {
+      query = query.eq('user_id', S.userId);
+    } else {
+      query = query.eq('visibility', 'public');
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const rows = Array.isArray(data) ? data : [];
+    const directory = await fetchFeedProfileDirectory(rows.map(row => row.user_id));
+    const mapped = rows.map(row => ({
+      ...row,
+      author: directory.get(row.user_id) || feedProfileFor(row.user_id) || { username: 'Mortalive member', display_name: 'Mortalive member', crockroach_score: 0 }
+    }));
+
+    _feedPosts = reset || _feedOffset === 0 ? mapped : [..._feedPosts, ...mapped];
+    _feedOffset += rows.length;
+    _feedHasMore = rows.length === FEED_PAGE_SIZE;
+    renderFeedPosts();
+    renderFeedSidebars();
+  } catch (e) {
+    console.warn('[Feed] fetch failed:', e?.message || e);
+    if (container) {
+      container.innerHTML = `<div class="feed-empty"><div class="feed-empty-icon">⚠️</div><h3>Feed unavailable</h3><p>${sanitizeHTML(e?.message || 'Could not load public posts right now.')}</p><button class="load-more-btn" type="button" data-feed-action="retry">Retry</button></div>`;
+    }
+    _feedHasMore = false;
+  } finally {
+    _feedLoading = false;
+    if (loadMore) {
+      loadMore.disabled = false;
+      loadMore.style.display = _feedHasMore ? 'flex' : 'none';
+    }
+  }
+}
+
+function filteredFeedPosts() {
+  if (_feedFilter === 'mine') return _feedPosts.filter(post => post.user_id === S.userId);
+  return _feedPosts;
+}
+
+function renderFeedPosts() {
+  const container = $('feed-posts');
+  if (!container) return;
+  const posts = filteredFeedPosts();
+  if (!posts.length) {
+    const mine = _feedFilter === 'mine';
+    container.innerHTML = `
+      <div class="feed-empty">
+        <div class="feed-empty-icon">${mine ? '✍️' : '🌐'}</div>
+        <h3>${mine ? 'No posts yet' : 'The feed is quiet'}</h3>
+        <p>${mine ? 'Share your first thought from the composer above.' : 'Public text posts from Mortalive members will appear here.'}</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = posts.map(post => {
+    const author = post.author || {};
+    const username = author.username || 'member';
+    const display = author.display_name || username;
+    const score = Number(author.crockroach_score) || 0;
+    const mine = post.user_id === S.userId;
+    const typeLabel = post.post_type === 'text' ? 'Text' : post.post_type || 'Post';
+    const badge = score >= 700 ? '<span class="post-badge gold">Gold</span>' : score >= 420 ? '<span class="post-badge silver">Silver</span>' : '';
+    return `
+      <article class="post-card" data-post-id="${sanitizeHTML(post.id)}">
+        <div class="post-header">
+          <div class="post-avatar">${feedAvatarLetter(display)}</div>
+          <div class="post-meta">
+            <div class="post-author">${sanitizeHTML(display)} ${badge}</div>
+            <div class="post-time">@${sanitizeHTML(username)} · ${sanitizeHTML(feedRelTime(post.created_at))} · ${sanitizeHTML(typeLabel)}</div>
+          </div>
+          ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
+        </div>
+        <div class="post-body"><div class="post-text">${sanitizeHTML(post.content || '')}</div></div>
+        <div class="post-actions">
+          <button class="action-btn like-btn" type="button" disabled title="Likes are the next feed phase"><span class="action-icon">♡</span><span>0</span></button>
+          <button class="action-btn comment-btn" type="button" disabled title="Comments are the next feed phase"><span class="action-icon">💬</span><span>0</span></button>
+          <button class="action-btn share-btn" type="button" data-feed-action="copy" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">↗</span><span>Share</span></button>
+          <span class="action-btn" style="margin-left:auto;cursor:default;">${sanitizeHTML(post.visibility || 'public')}</span>
+        </div>
+      </article>`;
+  }).join('');
+}
+
+function renderFeedSidebars() {
+  const recent = $('trending-polls-list');
+  if (recent) {
+    const rows = _feedPosts.slice(0, 3);
+    recent.innerHTML = rows.length ? rows.map(post => `
+      <div class="trending-poll-item">
+        <div class="trending-poll-q">${sanitizeHTML(post.content || '').slice(0, 100)}${(post.content || '').length > 100 ? '…' : ''}</div>
+        <div class="trending-poll-meta"><span>✍️ ${sanitizeHTML(post.author?.username || 'member')}</span><span>⏱ ${sanitizeHTML(feedRelTime(post.created_at))}</span></div>
+      </div>`).join('') : '<div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">No public posts yet.</div>';
+  }
+
+  const active = $('active-users-list');
+  if (active) {
+    const seen = new Set();
+    const authors = [];
+    for (const post of _feedPosts) {
+      const id = post.user_id;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      authors.push(post.author || {});
+      if (authors.length >= 4) break;
+    }
+    active.innerHTML = authors.length ? authors.map(author => `
+      <div class="active-user-item">
+        <div class="active-user-ava">${feedAvatarLetter(author.display_name || author.username)}</div>
+        <div class="active-user-info"><div class="active-user-name">${sanitizeHTML(author.display_name || author.username || 'Member')}</div><div class="active-user-sub">@${sanitizeHTML(author.username || 'member')}</div></div>
+        <div class="active-user-score">${Number(author.crockroach_score) || 0}</div>
+      </div>`).join('') : '<div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">No active posters yet.</div>';
+  }
+}
+
+async function submitFeedTextPost() {
+  const field = $('compose-field');
+  const submit = $('compose-submit');
+  if (!field || !submit || S.isGuest || !S.userId || !sb) {
+    toast('Sign in to post', '🔒');
+    return;
+  }
+  const content = field.value.trim();
+  if (!content) return;
+  if (content.length > FEED_MAX_POST_CHARS) {
+    toast(`Posts are limited to ${FEED_MAX_POST_CHARS} characters`, '⚠️');
+    return;
+  }
+
+  submit.disabled = true;
+  const original = submit.textContent;
+  submit.textContent = 'Posting…';
+  try {
+    const { data, error } = await sb.from('posts').insert({
+      user_id: S.userId,
+      content,
+      post_type: 'text',
+      visibility: 'public'
+    }).select('id,user_id,content,post_type,visibility,created_at,updated_at').single();
+    if (error) throw error;
+
+    const author = feedProfileFor(S.userId) || {
+      username: S.username || 'You',
+      display_name: S.accountData?.display_name || S.username || 'You',
+      crockroach_score: S.accountData?.crockroach_score ?? S.crockroachScore ?? getProgressScore(getCurrentProgress())
+    };
+    _feedPosts = [{ ...data, author }, ..._feedPosts.filter(post => post.id !== data.id)];
+    field.value = '';
+    syncFeedComposer();
+    renderFeedPosts();
+    renderFeedSidebars();
+    toast('Post published!', '✍️');
+  } catch (e) {
+    toast(e?.message || 'Could not publish the post.', '⚠️');
+  } finally {
+    submit.textContent = original;
+    syncFeedComposer();
+  }
+}
+
+function syncFeedComposer() {
+  const field = $('compose-field');
+  const submit = $('compose-submit');
+  const count = $('char-count');
+  if (!field || !submit) return;
+  const len = field.value.length;
+  if (count) count.textContent = `${FEED_MAX_POST_CHARS - len}`;
+  submit.disabled = S.isGuest || !S.userId || len === 0 || len > FEED_MAX_POST_CHARS;
+  if (S.isGuest) submit.title = 'Sign in to post';
+}
+
+function setFeedFilter(filter) {
+  const next = filter === 'mine' ? 'mine' : 'all';
+  _feedFilter = next;
+  document.querySelectorAll('#feed-tabs .feed-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.filter === next));
+  document.querySelectorAll('#pg-feed .snav-link').forEach(btn => btn.classList.toggle('active', btn.dataset.filter === next));
+  fetchFeedPage(true);
+}
+
+async function deleteFeedPost(postId) {
+  const post = _feedPosts.find(row => row.id === postId);
+  if (!post || post.user_id !== S.userId || !sb) return;
+  const confirmed = await showConfirmDialog({
+    title: 'Delete this post?',
+    body: 'This permanently removes the post from the Mortalive database.',
+    confirmLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    danger: true
+  });
+  if (!confirmed) return;
+  try {
+    const { error } = await sb.from('posts').delete().eq('id', postId).eq('user_id', S.userId);
+    if (error) throw error;
+    _feedPosts = _feedPosts.filter(row => row.id !== postId);
+    renderFeedPosts();
+    renderFeedSidebars();
+    toast('Post deleted', '🗑️');
+  } catch (e) {
+    toast(e?.message || 'Could not delete the post.', '⚠️');
+  }
+}
+
+function initFeedPage() {
+  if (_feedInitialized) {
+    syncFeedComposer();
+    syncFeedSidebar();
+    return;
+  }
+  _feedInitialized = true;
+
+  document.addEventListener('click', (event) => {
+    const feedRoot = event.target.closest('#pg-feed');
+    if (!feedRoot) return;
+
+    const nav = event.target.closest('[data-feed-target]');
+    if (nav) {
+      event.preventDefault();
+      showPage(nav.dataset.feedTarget);
+      return;
+    }
+
+    const filter = event.target.closest('#feed-tabs [data-filter], #pg-feed .snav-link[data-filter]');
+    if (filter) {
+      const filterValue = filter.dataset.filter;
+      if (filterValue === 'mine' || filterValue === 'all') setFeedFilter(filterValue);
+      return;
+    }
+
+    const action = event.target.closest('[data-feed-action]');
+    if (action) {
+      const type = action.dataset.feedAction;
+      if (type === 'delete') deleteFeedPost(action.dataset.postId);
+      if (type === 'copy') {
+        const url = `${location.origin}${location.pathname}#feed-post-${action.dataset.postId}`;
+        navigator.clipboard?.writeText(url).then(() => toast('Post link copied', '📋')).catch(() => toast(url, '🔗'));
+      }
+    }
+  });
+
+  $('compose-field')?.addEventListener('input', syncFeedComposer);
+  $('compose-submit')?.addEventListener('click', submitFeedTextPost);
+  $('btn-type-poll')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    toast('Polls are coming after the core text-post system', '📊');
+  });
+  $('btn-type-poll')?.style.setProperty('display', 'none');
+  $('poll-builder')?.style.setProperty('display', 'none');
+  $('compose-fab')?.addEventListener('click', () => {
+    $('compose-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => $('compose-field')?.focus(), 250);
+  });
+  $('load-more-btn')?.addEventListener('click', () => fetchFeedPage(false));
+  $('banner-close')?.addEventListener('click', () => { if ($('context-banner')) $('context-banner').style.display = 'none'; });
+
+  const justChatted = sessionStorage.getItem('mortalive_just_chatted');
+  if (justChatted && $('context-banner')) {
+    $('context-banner').style.display = 'flex';
+    sessionStorage.removeItem('mortalive_just_chatted');
+  }
+
+  syncFeedComposer();
+  syncFeedSidebar();
+}
+
+function syncFeedSidebar() {
+  const progress = getCurrentProgress();
+  const acc = S.accountData || {};
+  const name = acc.display_name || acc.username || S.username || 'User';
+  const username = acc.username || S.username || 'member';
+  const score = acc.crockroach_score ?? S.crockroachScore ?? getProgressScore(progress);
+  setText('sidebar-name', name);
+  setText('sidebar-handle', `@${username} · ${S.isGuest ? 'Guest' : 'Member'}`);
+  setText('sidebar-score', Number(score) || 0);
+  setText('sidebar-completions', progress.completions || 0);
+  setText('sidebar-streak', progress.streak || 0);
+  setText('sidebar-rank', progress.weeklyRank ? `#${progress.weeklyRank}` : '#—');
+  setText('feed-score-val', Number(score) || 0);
+  const avatar = $('sidebar-avatar');
+  const composeAvatar = $('compose-avatar');
+  const initial = feedAvatarLetter(name);
+  if (avatar) avatar.textContent = initial;
+  if (composeAvatar) composeAvatar.textContent = initial;
+}
+
+window.initFeedPage = initFeedPage;
 
 // ── Step 1: Supabase-backed Profile Posts ───────────────────────────────────
 const POSTS_PAGE_SIZE = 20;
