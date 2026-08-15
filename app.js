@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-15-progress-sync-edit-modal-final'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-15-confirm-dialogs-css-fixes'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -547,7 +547,6 @@ async function syncScoreToSupabase() {
       progress_state: progress,
       updated_at: new Date().toISOString()
     }).eq('id', S.userId);
-
     if (error) throw error;
     console.log(`[Score] Synced ${score} pts and full progress to Supabase ✓`);
   } catch (e) {
@@ -629,6 +628,9 @@ function resetChatProgress() {
 }
 
 function copyProgressShareCard() {
+  initProfilePostComposer();
+  if (S.userId) hydrateProfilePosts(S.userId).catch((error) => console.warn('[Posts] hydration warning:', error));
+
   const progress = getCurrentProgress();
   const summary = formatProgressLine(progress);
   const profile = getCurrentProfile();
@@ -2052,13 +2054,10 @@ async function hydrateAccountData(userId, options = {}) {
         S.crockroachScore ??
         0;
 
-      // Restore the complete progress state saved in Supabase so a fresh
-      // device/session gets the same streaks, completions, badges, ranks,
-      // profile reward state, and other progress fields as the source device.
       if (S.accountData?.progress_state && typeof S.accountData.progress_state === 'object') {
-        S.progress = { ...getCurrentProgress(), ...S.accountData.progress_state };
+        const localProgress = getCurrentProgress();
+        Object.assign(localProgress, S.accountData.progress_state);
         persistProgress();
-        updateDerivedProgress();
       }
 
       S.username = dbUsername;
@@ -2149,6 +2148,12 @@ async function tryAutoLogin() {
         S.accountData?.crockroach_score ??
         S.accountData?.crockroachScore ??
         (Number(user.user_metadata?.crockroach_score) || 0);
+
+      if (S.accountData?.progress_state && typeof S.accountData.progress_state === 'object') {
+        const localProgress = getCurrentProgress();
+        Object.assign(localProgress, S.accountData.progress_state);
+        persistProgress();
+      }
 
       S.username = username;
       S.crockroachScore = crockroachScore;
@@ -3724,14 +3729,183 @@ function sanitizeHTML(str) {
   return div.innerHTML;
 }
 
-async function initProfilePage() {
+// ── Step 1: Supabase-backed Profile Posts ───────────────────────────────────
+const POSTS_PAGE_SIZE = 20;
+let _profilePosts = [];
+let _postsHydrationPromise = null;
+
+async function fetchProfilePosts(userId = S.userId) {
+  if (!userId || S.isGuest || !sb) return [];
+  try {
+    const { data, error } = await sb
+      .from('posts')
+      .select('id,user_id,content,post_type,visibility,created_at,updated_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(POSTS_PAGE_SIZE);
+
+    if (error) throw error;
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    console.warn('[Posts] profile fetch failed:', e?.message || e);
+    return [];
+  }
+}
+
+function formatPostTime(iso) {
+  const ts = Date.parse(iso || '');
+  if (!Number.isFinite(ts)) return 'Just now';
+  const diff = Math.max(0, Date.now() - ts);
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function renderProfilePosts(posts = _profilePosts) {
+  const strip = $('profile-post-strip');
+  const countEl = $('profile-post-count');
+  if (!strip) return;
+
+  if (countEl) countEl.textContent = posts.length ? `${posts.length} ${posts.length === 1 ? 'post' : 'posts'}` : 'No posts yet';
+
+  if (!posts.length) {
+    strip.innerHTML = `
+      <article class="profile-post-card profile-post-empty-card">
+        <div class="profile-post-header">
+          <div class="profile-post-mini-avatar" id="profile-post-empty-avatar">M</div>
+          <div class="profile-post-author">Your first post</div>
+          <div class="profile-post-time">Ready</div>
+        </div>
+        <div class="profile-post-body">Share a thought, update, question, or conversation starter with your profile.</div>
+        <div class="profile-post-footer"><span>Posts are saved to Supabase</span></div>
+      </article>`;
+    const emptyAvatar = $('profile-post-empty-avatar');
+    if (emptyAvatar) emptyAvatar.style.background = 'linear-gradient(135deg,#1a6ef5,#7c3aed)';
+    return;
+  }
+
+  strip.innerHTML = posts.map((post) => {
+    const content = sanitizeHTML(post.content || '');
+    const time = sanitizeHTML(formatPostTime(post.created_at));
+    const type = sanitizeHTML(post.post_type || 'text');
+    const initial = sanitizeHTML((S.username || 'M').charAt(0).toUpperCase());
+    return `
+      <article class="profile-post-card" data-post-id="${sanitizeHTML(post.id)}">
+        <div class="profile-post-header">
+          <div class="profile-post-mini-avatar" style="background:linear-gradient(135deg,#1a6ef5,#7c3aed)">${initial}</div>
+          <div class="profile-post-author">${sanitizeHTML(S.username || 'You')}</div>
+          <div class="profile-post-time">${time}</div>
+        </div>
+        <div class="profile-post-body">${content}</div>
+        <div class="profile-post-footer"><span>♡ 0</span><span>💬 0</span><span>${type === 'text' ? 'Text' : type}</span></div>
+      </article>`;
+  }).join('');
+}
+
+async function hydrateProfilePosts(userId = S.userId, options = {}) {
+  if (!userId || S.isGuest || !sb) return [];
+  if (_postsHydrationPromise) return _postsHydrationPromise;
+
+  _postsHydrationPromise = fetchProfilePosts(userId)
+    .then((posts) => {
+      if (S.userId === userId && !S.isGuest) {
+        _profilePosts = posts;
+        renderProfilePosts(posts);
+      }
+      return posts;
+    })
+    .finally(() => {
+      _postsHydrationPromise = null;
+    });
+
+  return _postsHydrationPromise;
+}
+
+function resetProfilePosts() {
+  _profilePosts = [];
+  _postsHydrationPromise = null;
+}
+
+function initProfilePostComposer() {
+  const composer = $('profile-post-composer');
+  const input = $('profile-post-input');
+  const button = $('btn-profile-post-submit');
+  const error = $('profile-post-error');
+  if (!composer || !input || !button) return;
+  if (composer.dataset.bound === '1') return;
+  composer.dataset.bound = '1';
+
+  const sync = () => {
+    const text = input.value.trim();
+    button.disabled = !text || text.length > 500 || S.isGuest || !S.userId;
+    const count = $('profile-post-char-count');
+    if (count) {
+      count.textContent = `${input.value.length} / 500`;
+      count.style.color = input.value.length > 500 ? 'var(--danger)' : 'var(--on-surface-3)';
+    }
+  };
+
+  input.addEventListener('input', sync);
+  input.addEventListener('keydown', (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      button.click();
+    }
+  });
+
+  button.addEventListener('click', async () => {
+    const content = input.value.trim();
+    if (!content || content.length > 500 || S.isGuest || !S.userId) return;
+
+    button.disabled = true;
+    button.textContent = 'Posting…';
+    if (error) error.style.display = 'none';
+
+    try {
+      const { data, error: postError } = await sb.from('posts').insert({
+        user_id: S.userId,
+        content,
+        post_type: 'text',
+        visibility: 'public'
+      }).select('id,user_id,content,post_type,visibility,created_at,updated_at').single();
+
+      if (postError) throw postError;
+      if (data) {
+        _profilePosts = [data, ..._profilePosts].slice(0, POSTS_PAGE_SIZE);
+        renderProfilePosts(_profilePosts);
+      }
+      input.value = '';
+      sync();
+      toast('Post published!', '✍️');
+    } catch (e) {
+      console.warn('[Posts] create failed:', e);
+      if (error) {
+        error.textContent = e?.message || 'Could not publish the post.';
+        error.style.display = 'block';
+      }
+    } finally {
+      button.textContent = 'Post';
+      sync();
+    }
+  });
+
+  sync();
+}
+
+function initProfilePage() {
   if (S.isGuest) return;
 
-  // Ensure DB-backed account data is available before rendering dynamic profile fields.
+  // If profile navigation/rendering wins the race against DB hydration,
+  // fetch the account data now and let the hydration callback re-render.
   if (!S.accountData && S.userId) {
-    try { await hydrateAccountData(S.userId, { rerender: false }); } catch (error) {
+    hydrateAccountData(S.userId, { rerender: true }).catch((error) => {
       console.warn('[Profile] render hydration warning:', error);
-    }
+    });
   }
 
   const progress = getCurrentProgress();
@@ -4115,9 +4289,10 @@ function openEditModal() {
   if (!modal) return;
   window._tempEditLinks = S.userLinks ? JSON.parse(JSON.stringify(S.userLinks)) : [];
   initProfilePage(); // re-hydrate form fields every time
-
+  // Belt-and-suspenders: set both the class *and* explicit inline styles so
+  // neither a stale inline override nor a missing CSS rule can block clicks.
   modal.classList.add('active');
-  modal.style.display = 'flex';
+  modal.style.display    = 'flex';
   modal.style.pointerEvents = 'auto';
   document.body.classList.add('mortalive-edit-open');
   if ($('edit-error')) $('edit-error').style.display = 'none';
@@ -4127,7 +4302,8 @@ function closeEditModal() {
   const modal = $('edit-modal');
   if (!modal) return;
   modal.classList.remove('active');
-  modal.style.display = '';
+  // Remove inline overrides so the base .overlay CSS takes full control again.
+  modal.style.display    = '';
   modal.style.pointerEvents = '';
   document.body.classList.remove('mortalive-edit-open');
   if ($('edit-error')) $('edit-error').style.display = 'none';
@@ -4172,46 +4348,20 @@ function bindProfileEvents() {
   if (document.body.dataset.profileEventsBound) return;
   document.body.dataset.profileEventsBound = '1';
 
-  // Event delegation keeps dynamically re-rendered profile controls working.
-  document.addEventListener('click', (e) => {
-    if (e.target.closest('#btn-edit-profile') || e.target.closest('#btn-edit-cancel-inline')) {
-      toggleProfileEditMode();
-      return;
-    }
+  $('btn-edit-profile')?.addEventListener('click', toggleProfileEditMode);
+  $('btn-edit-cancel-inline')?.addEventListener('click', toggleProfileEditMode);
 
-    if (e.target.closest('#btn-edit-close') || e.target.closest('#btn-edit-cancel')) {
-      closeEditModal();
-      return;
-    }
-
-    const modal = $('edit-modal');
-    if (modal?.classList.contains('active') && e.target === modal) {
-      closeEditModal();
-    }
-  });
-
-  // Hard interaction boundary for the edit modal: if browser hit-testing ever
-  // resolves a pointer/click against the blurred profile behind the overlay,
-  // suppress that event unless it originated inside the modal card itself.
-  if (!document.body.dataset.profileEditInteractionGuard) {
-    document.body.dataset.profileEditInteractionGuard = '1';
-    document.addEventListener('pointerdown', (e) => {
-      const modal = $('edit-modal');
-      if (!modal?.classList.contains('active')) return;
-      if (!e.target.closest('#edit-modal > .modal')) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    }, true);
-
+  // Modal close uses event delegation so controls remain functional even if
+  // the modal subtree is rerendered or replaced after hydration.
+  if (!document.body.dataset.profileModalDelegationBound) {
+    document.body.dataset.profileModalDelegationBound = '1';
     document.addEventListener('click', (e) => {
-      const modal = $('edit-modal');
-      if (!modal?.classList.contains('active')) return;
-      if (!e.target.closest('#edit-modal > .modal')) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (e.target?.closest?.('#btn-edit-close, #btn-edit-cancel')) {
+        closeEditModal();
+        return;
       }
-    }, true);
+      if (e.target?.id === 'edit-modal') closeEditModal();
+    });
   }
 
   // The current index.html uses id="btn-edit-save"; keep support for the
@@ -4283,7 +4433,7 @@ function bindProfileEvents() {
         if (linkErr) throw linkErr;
       }
 
-      // 4. Sync local S object, then refresh from Supabase as the source of truth.
+      // 4. Sync local S object
       if (S.accountData) {
         S.accountData.display_name = newName;
         S.accountData.bio = newBio;
@@ -4292,12 +4442,12 @@ function bindProfileEvents() {
         if (S.accountData.account_type === 'business') S.accountData.website = newWebsite;
       }
       S.userLinks = validLinks;
-      S.accountData = await fetchUserProfile(S.userId); S.userLinks = await fetchUserLinks(S.userId);
 
       toast('Profile updated!', '✅');
       toggleProfileEditMode();
       if ($('edit-new-password')) $('edit-new-password').value = '';
       initProfilePage();
+      hydrateProfilePosts(S.userId).catch((error) => console.warn('[Posts] post-save hydration warning:', error));
       // Refresh the instagram-style info row in the profile top section
       if (typeof window.renderProfileInfoRow === 'function') window.renderProfileInfoRow();
     } catch (e) {
@@ -4387,6 +4537,7 @@ async function performAccountDeletion() {
   S.userId    = null;
   S.accountData = null;
   S.userLinks   = [];
+  resetProfilePosts();
   S.crockroachScore = null;
   S.isGuest   = true;
   _autoLoginPromise = null;
