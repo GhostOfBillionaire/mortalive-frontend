@@ -1941,6 +1941,10 @@ function initAuthControls() {
       _feedPosts = [];
       _feedOffset = 0;
       _feedHasMore = true;
+      _feedLoading = false;
+      _commentCache = new Map();
+      _feedEngagement = new Map();
+      _commentLoading = new Set();
       return;
     }
 
@@ -4019,7 +4023,7 @@ function renderPostComments(postId, comments) {
       <div class="comment-input-row">
         <div class="comment-avatar">${feedAvatarLetter(S.accountData?.display_name || S.username || 'You')}</div>
         <input class="comment-input" data-comment-input="${sanitizeHTML(postId)}" maxlength="300" placeholder="Write a comment…">
-        <button class="comment-submit" type="button" data-feed-action="comment-submit" data-post-id="${sanitizeHTML(postId)}">Comment</button>
+        <button class="comment-submit" type="button" data-feed-action="comment-submit" data-post-id="${sanitizeHTML(postId)}" style="opacity:1;pointer-events:auto;">Comment</button>
       </div>
       <div class="comments-empty">Be the first to comment.</div>`;
     return;
@@ -4028,7 +4032,7 @@ function renderPostComments(postId, comments) {
     <div class="comment-input-row">
       <div class="comment-avatar">${feedAvatarLetter(S.accountData?.display_name || S.username || 'You')}</div>
       <input class="comment-input" data-comment-input="${sanitizeHTML(postId)}" maxlength="300" placeholder="Write a comment…">
-      <button class="comment-submit" type="button" data-feed-action="comment-submit" data-post-id="${sanitizeHTML(postId)}">Comment</button>
+      <button class="comment-submit" type="button" data-feed-action="comment-submit" data-post-id="${sanitizeHTML(postId)}" style="opacity:1;pointer-events:auto;">Comment</button>
     </div>
     ${comments.map(comment => {
       const author = comment.author || {};
@@ -4045,13 +4049,17 @@ function renderPostComments(postId, comments) {
 }
 
 async function togglePostComments(postId) {
-  const section = document.querySelector(`#pg-feed .comments-section[data-post-id="${CSS.escape(postId)}"]`);
+  let section = document.querySelector(`#pg-feed .comments-section[data-post-id="${CSS.escape(postId)}"]`);
   if (!section) return;
   const shouldOpen = !section.classList.contains('open');
   section.classList.toggle('open', shouldOpen);
   if (!shouldOpen) return;
   section.innerHTML = '<div class="comments-loading">Loading comments…</div>';
   const comments = await loadPostComments(postId);
+  // Re-query after async — a concurrent renderFeedPosts may have replaced the DOM
+  section = document.querySelector(`#pg-feed .comments-section[data-post-id="${CSS.escape(postId)}"]`);
+  if (!section) return;
+  section.classList.add('open');
   renderPostComments(postId, comments);
 }
 
@@ -4114,7 +4122,29 @@ async function deletePostComment(postId, commentId) {
   }
 }
 
+// ── Helpers: preserve open comment sections across renderFeedPosts calls ──────
+// Every innerHTML replacement destroys open comment sections; these helpers
+// save which post IDs had open sections and restore them from the cache.
+function _getOpenCommentIds() {
+  return Array.from(
+    document.querySelectorAll('#pg-feed .comments-section.open[data-post-id]')
+  ).map(el => el.dataset.postId).filter(Boolean);
+}
+
+function _restoreOpenCommentSections(ids) {
+  for (const postId of ids) {
+    const section = document.querySelector(
+      `#pg-feed .comments-section[data-post-id="${CSS.escape(postId)}"]`
+    );
+    if (!section) continue;
+    section.classList.add('open');
+    const cached = _commentCache.get(postId);
+    if (cached !== undefined) renderPostComments(postId, cached);
+  }
+}
+
 function renderFeedPosts() {
+  const openIds = _getOpenCommentIds(); // save before replacing innerHTML
   const container = $('feed-posts');
   if (!container) return;
   const posts = filteredFeedPosts();
@@ -4158,6 +4188,8 @@ function renderFeedPosts() {
         <div class="comments-section" data-post-id="${sanitizeHTML(post.id)}" aria-hidden="true"></div>
       </article>`;
   }).join('');
+  // Restore any comment sections that were open before the innerHTML was replaced
+  if (openIds.length) _restoreOpenCommentSections(openIds);
 }
 
 function renderFeedSidebars() {
@@ -5139,31 +5171,60 @@ async function performAccountDeletion() {
 
   const userId = S.userId;
 
-  // 1. Delete profile data from Supabase (anon key is sufficient when RLS
-  //    "users can delete their own rows" policy is in place).
+  // 1. Primary path: SECURITY DEFINER RPC that deletes all rows AND the
+  //    auth.users entry in one atomic call (client anon key cannot delete
+  //    auth users directly — the RPC runs as the postgres role which can).
+  //    Run the SQL in Supabase: mortalive-delete-account.sql
+  let rpcSucceeded = false;
   try {
     if (userId && sb) {
-      await sb.from('user_links').delete().eq('user_id', userId);
-      await sb.from('accounts').delete().eq('id', userId);
+      const { error: rpcError } = await sb.rpc('delete_my_account');
+      if (rpcError) {
+        console.warn('[Delete] delete_my_account RPC failed (will fall back):', rpcError.message);
+      } else {
+        rpcSucceeded = true;
+        console.log('[Delete] delete_my_account RPC succeeded — auth user removed ✓');
+      }
     }
   } catch (e) {
-    console.warn('[Delete] DB row cleanup failed:', e?.message || e);
+    console.warn('[Delete] delete_my_account RPC threw (will fall back):', e?.message || e);
   }
 
-  // 2. Ask the server to call supabase.auth.admin.deleteUser() with the
-  //    service role key (the client anon key cannot delete auth users).
-  try {
-    await fetch(`${SERVER_URL}/api/delete-account`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${S.authToken}`
-      },
-      body: JSON.stringify({ userId })
-    });
-  } catch (e) {
-    // Non-fatal: server may not have this endpoint yet; local cleanup still runs.
-    console.warn('[Delete] Server auth-delete failed (non-fatal):', e?.message || e);
+  // 2. Fallback A: manual row deletion when RPC is unavailable.
+  if (!rpcSucceeded) {
+    try {
+      if (userId && sb) {
+        await sb.from('post_likes').delete().eq('user_id', userId);
+        await sb.from('post_comments').delete().eq('user_id', userId);
+        await sb.from('posts').delete().eq('user_id', userId);
+        await sb.from('user_links').delete().eq('user_id', userId);
+        await sb.from('accounts').delete().eq('id', userId);
+      }
+    } catch (e) {
+      console.warn('[Delete] DB row cleanup failed:', e?.message || e);
+    }
+
+    // Fallback B: ask server to call supabase.auth.admin.deleteUser() with
+    // the service-role key (the client anon key cannot delete auth users).
+    try {
+      const res = await fetch(`${SERVER_URL}/api/delete-account`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${S.authToken}`
+        },
+        body: JSON.stringify({ userId })
+      });
+      if (res.ok) {
+        console.log('[Delete] Server auth-delete succeeded ✓');
+      } else {
+        console.warn('[Delete] Server auth-delete returned', res.status,
+          '— deploy the /api/delete-account endpoint or run mortalive-delete-account.sql');
+      }
+    } catch (e) {
+      console.warn('[Delete] Server auth-delete failed:', e?.message || e,
+        '— NOTE: the auth.users record may remain until the SQL RPC is deployed.');
+    }
   }
 
   // 3. Invalidate the Supabase session token
