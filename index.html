@@ -2637,28 +2637,8 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
 <style id="mortalive-profile-modal-fixes">
 /* Existing app.js uses .active for edit/profile overlays. */
 .overlay.active { display:flex; pointer-events:auto; }
-#edit-modal {
-  position: fixed !important;
-  inset: 0 !important;
-  z-index: 5000 !important;
-  display: none;
-  pointer-events: none;
-  align-items: center;
-  justify-content: center;
-  padding: 18px;
-  isolation: isolate;
-}
-#edit-modal.active {
-  display: flex !important;
-  pointer-events: auto !important;
-}
-#edit-modal > .modal {
-  position: relative;
-  z-index: 5001;
-  pointer-events: auto;
-}
-body.mortalive-edit-open { overflow: hidden; }
-body.mortalive-edit-open #edit-modal { pointer-events: auto !important; }
+#edit-modal { z-index: 1000; }
+#progress-overlay { z-index: 980 !important; pointer-events:none; }
 body.mortalive-progress-open { overflow:hidden; }
 body.mortalive-progress-open #app-bottomnav,
 body.mortalive-progress-open .sakura-topbar {
@@ -2782,7 +2762,9 @@ body.mortalive-progress-open .sakura-topbar {
   .profile-gallery{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 .profile-feed-viewport{min-height:0;max-height:min(72vh,800px);overflow:auto;scrollbar-width:thin;overscroll-behavior:contain;border-radius:24px}.profile-section-card{border-radius:22px;overflow:hidden}.profile-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px 12px}.profile-section-title-wrap{display:flex;align-items:center;gap:9px}.profile-section-kicker{color:var(--on-surface-3);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}.profile-section-title{font-size:15px;font-weight:900}.profile-open-grid-btn{padding:8px 11px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);font-size:10.5px;font-weight:800;color:var(--on-surface-2)}
-.profile-thoughts{transition:max-height .28s var(--ease-out),opacity .2s ease,transform .28s var(--ease-out);max-height:460px}.profile-thoughts.collapsed-for-gallery{max-height:0;opacity:0;transform:translateY(-8px);overflow:hidden;pointer-events:none}.profile-post-strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(300px,64%);gap:12px;overflow-x:auto;overflow-y:hidden;padding:0 18px 16px;scroll-snap-type:x mandatory}.profile-post-strip.expanded{grid-auto-columns:minmax(420px,74%)}.profile-post-card{scroll-snap-align:start;aspect-ratio:16/9;min-height:220px;border-radius:20px;display:flex;flex-direction:column;border:1px solid var(--border);background:#fff;padding:14px;box-shadow:0 4px 16px rgba(13,17,23,.035)}.profile-post-header{display:flex;align-items:center;gap:9px;margin-bottom:10px}.profile-post-mini-avatar{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:900}.profile-post-author{font-size:11.5px;font-weight:800}.profile-post-time{margin-left:auto;color:var(--on-surface-3);font-size:10px}.profile-post-body{font-size:14px;line-height:1.55}.profile-post-footer{margin-top:13px;padding-top:11px;border-top:1px solid var(--border);display:flex;gap:13px;color:var(--on-surface-3);font-size:10.5px;font-weight:700}.profile-poll-box{margin-top:11px;padding:11px;border-radius:15px;background:var(--surface-2)}.profile-poll-option{position:relative;overflow:hidden;margin-top:7px;min-height:32px;padding:7px 9px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-radius:10px;border:1px solid var(--border);background:#fff;font-size:10.5px;font-weight:700}.profile-poll-option-fill{position:absolute;inset:0 auto 0 0;background:rgba(26,110,245,.08)}.profile-poll-option span{position:relative;z-index:1}.profile-poll-percent{color:var(--on-surface-3)}
+.profile-thoughts{transition:max-height .28s var(--ease-out),opacity .2s ease,transform .28s var(--ease-out);max-height:460px}.profile-thoughts.collapsed-for-gallery{max-height:0;opacity:0;transform:translateY(-8px);overflow:hidden;pointer-events:none}body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#edit-modal{position:fixed!important;inset:0!important;z-index:5000!important;pointer-events:none}#edit-modal.active{display:flex!important;pointer-events:auto!important}#edit-modal .modal{position:relative;z-index:5001;pointer-events:auto}
+.profile-post-composer{padding:0 18px 16px}.profile-post-composer-box{padding:12px;border-radius:16px;background:var(--surface-2);border:1px solid var(--border)}.profile-post-composer textarea{width:100%;min-height:76px;resize:vertical;border:1px solid var(--border-strong);border-radius:14px;background:#fff;color:var(--on-surface);padding:11px 12px;font:inherit;font-size:13px;line-height:1.5;outline:none}.profile-post-composer textarea:focus{border-color:var(--primary);box-shadow:0 0 0 4px var(--primary-alpha)}.profile-post-composer-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}.profile-post-char-count{font-size:10.5px;color:var(--on-surface-3)}.profile-post-submit{border:0;border-radius:999px;padding:9px 15px;background:linear-gradient(145deg,var(--primary),var(--secondary));color:#fff;font-size:11px;font-weight:800;cursor:pointer}.profile-post-submit:disabled{opacity:.45;cursor:not-allowed}.profile-post-error{display:none;margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(220,38,38,.07);border:1px solid rgba(220,38,38,.16);color:var(--danger);font-size:11px}.profile-post-empty-card{justify-content:flex-start}.profile-post-empty-card .profile-post-body{max-width:44ch}
+.profile-post-strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(300px,64%);gap:12px;overflow-x:auto;overflow-y:hidden;padding:0 18px 16px;scroll-snap-type:x mandatory}.profile-post-strip.expanded{grid-auto-columns:minmax(420px,74%)}.profile-post-card{scroll-snap-align:start;aspect-ratio:16/9;min-height:220px;border-radius:20px;display:flex;flex-direction:column;border:1px solid var(--border);background:#fff;padding:14px;box-shadow:0 4px 16px rgba(13,17,23,.035)}.profile-post-header{display:flex;align-items:center;gap:9px;margin-bottom:10px}.profile-post-mini-avatar{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:900}.profile-post-author{font-size:11.5px;font-weight:800}.profile-post-time{margin-left:auto;color:var(--on-surface-3);font-size:10px}.profile-post-body{font-size:14px;line-height:1.55}.profile-post-footer{margin-top:13px;padding-top:11px;border-top:1px solid var(--border);display:flex;gap:13px;color:var(--on-surface-3);font-size:10.5px;font-weight:700}.profile-poll-box{margin-top:11px;padding:11px;border-radius:15px;background:var(--surface-2)}.profile-poll-option{position:relative;overflow:hidden;margin-top:7px;min-height:32px;padding:7px 9px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-radius:10px;border:1px solid var(--border);background:#fff;font-size:10.5px;font-weight:700}.profile-poll-option-fill{position:absolute;inset:0 auto 0 0;background:rgba(26,110,245,.08)}.profile-poll-option span{position:relative;z-index:1}.profile-poll-percent{color:var(--on-surface-3)}
 .profile-gallery-section{margin-top:12px;min-height:360px}.profile-gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;padding:0 3px 3px}.profile-gallery-tile{position:relative;aspect-ratio:1/1;overflow:hidden;background:var(--surface-3)}.profile-gallery-tile.large{grid-column:span 2;grid-row:span 2}.profile-gallery-placeholder{aspect-ratio:1/1;display:grid;place-items:center;text-align:center;padding:18px;color:var(--on-surface-3);background:linear-gradient(135deg,rgba(26,110,245,.06),rgba(124,58,237,.07)),var(--surface-2)}.profile-gallery-placeholder strong{display:block;color:var(--on-surface);font-size:13px;margin-bottom:4px}.profile-gallery-placeholder span{font-size:10.5px;line-height:1.5}.profile-extra-strip{display:grid;gap:12px;margin-top:12px;padding-bottom:8px}.profile-achievements-card{padding:16px}.profile-achievements-card .section-head{padding:0 0 10px;margin-bottom:0}.profile-achievements-card .badges-grid{padding:0;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}.profile-about-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:0 16px 16px}.profile-about-box{padding:12px;border-radius:15px;background:var(--surface-2);border:1px solid var(--border)}.profile-about-label{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;font-weight:800;color:var(--on-surface-3)}.profile-about-value{margin-top:5px;font-size:12px;line-height:1.55;color:var(--on-surface);word-break:break-word}.profile-top-sticky{transition:opacity .2s,max-height .28s var(--ease-out),transform .28s var(--ease-out);max-height:999px}.profile-feed-viewport.gallery-focus .profile-top-sticky{opacity:0;max-height:0;transform:translateY(-10px);overflow:hidden;pointer-events:none}.profile-feed-viewport.gallery-focus .profile-thoughts{margin-top:0;max-height:0;opacity:0;transform:translateY(-10px);overflow:hidden;pointer-events:none}
 /* old mobile rules now merged into redesign CSS block above */
 
@@ -3500,11 +3482,27 @@ body.mortalive-progress-open .sakura-topbar {
 
     <div class="profile-content-shell"><div class="profile-feed-viewport" id="profile-feed-viewport">
       <section class="profile-section-card profile-thoughts" id="profile-thoughts-section">
-        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Live identity</span><span class="profile-section-title">Thoughts & polls</span></div><button class="profile-open-grid-btn" id="profile-open-grid" type="button" aria-expanded="false">Open grid ↗</button></div>
+        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Live identity</span><span class="profile-section-title">Thoughts & polls</span><span id="profile-post-count" style="font-size:10px;color:var(--on-surface-3);font-weight:700">Loading…</span></div><button class="profile-open-grid-btn" id="profile-open-grid" type="button" aria-expanded="false">Open grid ↗</button></div>
+        <div class="profile-post-composer" id="profile-post-composer">
+          <div class="profile-post-composer-box">
+            <textarea id="profile-post-input" maxlength="500" placeholder="Share a thought, update, question, or conversation starter…"></textarea>
+            <div class="profile-post-composer-actions">
+              <span class="profile-post-char-count" id="profile-post-char-count">0 / 500</span>
+              <button class="profile-post-submit" id="btn-profile-post-submit" type="button" disabled>Post</button>
+            </div>
+            <div class="profile-post-error" id="profile-post-error"></div>
+          </div>
+        </div>
         <div class="profile-post-strip" id="profile-post-strip">
-          <article class="profile-post-card"><div class="profile-post-header"><div class="profile-post-mini-avatar" style="background:linear-gradient(135deg,#1a6ef5,#7c3aed)">M</div><div class="profile-post-author">Your first post</div><div class="profile-post-time">Draft</div></div><div class="profile-post-body">Your text posts will live here — short thoughts, updates, questions, reactions, and conversation starters built for the Mortalive feed.</div><div class="profile-post-footer"><span>♡ 0</span><span>↗ Share</span><span>💬 0</span></div></article>
-          <article class="profile-post-card"><div class="profile-post-header"><div class="profile-post-mini-avatar" style="background:linear-gradient(135deg,#7c3aed,#ec4899)">P</div><div class="profile-post-author">Poll template</div><div class="profile-post-time">Poll</div></div><div class="profile-post-body">Ask the room. Let people vote. Mortalive polls can become a lightweight prediction / opinion surface.<div class="profile-poll-box"><div style="font-size:11px;font-weight:800">What should Mortalive build next?</div><div class="profile-poll-option"><div class="profile-poll-option-fill" style="width:52%"></div><span>More 1:1 Talk tools</span><span class="profile-poll-percent">52%</span></div><div class="profile-poll-option"><div class="profile-poll-option-fill" style="width:31%"></div><span>Creator features</span><span class="profile-poll-percent">31%</span></div><div class="profile-poll-option"><div class="profile-poll-option-fill" style="width:17%"></div><span>Prediction markets</span><span class="profile-poll-percent">17%</span></div></div></div><div class="profile-post-footer"><span>🗳 126 votes</span><span>24h left</span><span>↗ Share</span></div></article>
-          <article class="profile-post-card"><div class="profile-post-header"><div class="profile-post-mini-avatar" style="background:linear-gradient(135deg,#06b6d4,#1a6ef5)">Q</div><div class="profile-post-author">Question card</div><div class="profile-post-time">Demo</div></div><div class="profile-post-body">A future profile can pin its best questions, highest-voted takes, or prediction wins here — giving the page a living identity beyond a static bio.</div><div class="profile-post-footer"><span>♡ 14</span><span>💬 6</span><span>↗ Repost</span></div></article>
+          <article class="profile-post-card profile-post-empty-card">
+            <div class="profile-post-header">
+              <div class="profile-post-mini-avatar" style="background:linear-gradient(135deg,#1a6ef5,#7c3aed)">M</div>
+              <div class="profile-post-author">Loading posts…</div>
+              <div class="profile-post-time">—</div>
+            </div>
+            <div class="profile-post-body">Your profile posts will appear here after they are loaded from Supabase.</div>
+            <div class="profile-post-footer"><span>Supabase</span></div>
+          </article>
         </div>
       </section>
 
