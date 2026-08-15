@@ -1970,6 +1970,7 @@ async function hydrateAccountData(userId, options = {}) {
 
       if (rerender && $('pg-profile')?.classList.contains('active')) {
         initProfilePage();
+        if (typeof window.renderProfileInfoRow === 'function') window.renderProfileInfoRow();
       }
 
       return !!profile;
@@ -1980,6 +1981,7 @@ async function hydrateAccountData(userId, options = {}) {
 
       if (rerender && $('pg-profile')?.classList.contains('active')) {
         initProfilePage();
+        if (typeof window.renderProfileInfoRow === 'function') window.renderProfileInfoRow();
       }
 
       return false;
@@ -3864,8 +3866,11 @@ function toggleProfileEditMode() {
       window._tempEditLinks = S.userLinks ? JSON.parse(JSON.stringify(S.userLinks)) : [];
       initProfilePage(); // reset form fields
       modal.classList.add('active');
+      // Always reset pointer-events when opening (fixes re-open unresponsiveness)
+      modal.style.pointerEvents = '';
     } else {
       modal.classList.remove('active');
+      modal.style.pointerEvents = ''; // ensure clean state for next open
       if ($('edit-error')) $('edit-error').style.display = 'none';
     }
     return;
@@ -3913,19 +3918,20 @@ function bindProfileEvents() {
   $('btn-edit-cancel-inline')?.addEventListener('click', toggleProfileEditMode);
 
   // Modal close buttons (Pattern A — overlay/modal HTML)
+  // NOTE: Do NOT set pointerEvents='none' here — doing so prevents re-opening the modal.
   $('btn-edit-close')?.addEventListener('click', () => {
     const modal = $('edit-modal');
-    if (modal) { modal.classList.remove('active'); modal.style.pointerEvents = 'none'; }
+    if (modal) { modal.classList.remove('active'); modal.style.pointerEvents = ''; }
     else toggleProfileEditMode();
   });
   $('btn-edit-cancel')?.addEventListener('click', () => {
     const modal = $('edit-modal');
-    if (modal) { modal.classList.remove('active'); modal.style.pointerEvents = 'none'; }
+    if (modal) { modal.classList.remove('active'); modal.style.pointerEvents = ''; }
     else toggleProfileEditMode();
   });
   // Close modal on backdrop click
   $('edit-modal')?.addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) { e.currentTarget.classList.remove('active'); e.currentTarget.style.pointerEvents = 'none'; }
+    if (e.target === e.currentTarget) { e.currentTarget.classList.remove('active'); e.currentTarget.style.pointerEvents = ''; }
   });
 
   // The current index.html uses id="btn-edit-save"; keep support for the
@@ -4011,6 +4017,8 @@ function bindProfileEvents() {
       toggleProfileEditMode();
       if ($('edit-new-password')) $('edit-new-password').value = '';
       initProfilePage();
+      // Refresh the instagram-style info row in the profile top section
+      if (typeof window.renderProfileInfoRow === 'function') window.renderProfileInfoRow();
     } catch (e) {
       if(errEl) { errEl.textContent = e.message || 'Could not save changes.'; errEl.style.display = 'block'; }
     } finally {
