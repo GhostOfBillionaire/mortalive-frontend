@@ -2637,8 +2637,28 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
 <style id="mortalive-profile-modal-fixes">
 /* Existing app.js uses .active for edit/profile overlays. */
 .overlay.active { display:flex; pointer-events:auto; }
-#edit-modal { z-index: 1000; }
-#progress-overlay { z-index: 980 !important; pointer-events:none; }
+#edit-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 5000 !important;
+  display: none;
+  pointer-events: none;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  isolation: isolate;
+}
+#edit-modal.active {
+  display: flex !important;
+  pointer-events: auto !important;
+}
+#edit-modal > .modal {
+  position: relative;
+  z-index: 5001;
+  pointer-events: auto;
+}
+body.mortalive-edit-open { overflow: hidden; }
+body.mortalive-edit-open #edit-modal { pointer-events: auto !important; }
 body.mortalive-progress-open { overflow:hidden; }
 body.mortalive-progress-open #app-bottomnav,
 body.mortalive-progress-open .sakura-topbar {
