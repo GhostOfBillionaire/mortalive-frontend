@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-11-full-profile-integration'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-15-profile-final-4023-merge'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -624,7 +624,27 @@ function copyProgressShareCard() {
 
 function ensureProgressSheet() {
   let overlay = $('progress-overlay');
-  if (overlay) return overlay;
+  if (overlay) {
+    // Respect the HTML-owned modal when present, but make its lifecycle
+    // deterministic even if app.js is used without the latest index.html.
+    overlay.style.pointerEvents = 'auto';
+    overlay.setAttribute('aria-hidden', 'false');
+    if (!overlay.dataset.mortaliveProgressBound) {
+      overlay.dataset.mortaliveProgressBound = '1';
+      overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) closeProgressSheet();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeProgressSheet();
+      });
+    }
+    const close = $('progress-close');
+    if (close && !close.dataset.mortaliveBound) {
+      close.dataset.mortaliveBound = '1';
+      close.addEventListener('click', closeProgressSheet);
+    }
+    return overlay;
+  }
 
   overlay = document.createElement('div');
   overlay.id = 'progress-overlay';
@@ -632,12 +652,13 @@ function ensureProgressSheet() {
     'display:none',
     'position:fixed',
     'inset:0',
-    'z-index:999',
+    'z-index:980',
     'align-items:center',
     'justify-content:center',
     'padding:18px',
     'background:rgba(8,14,28,.58)',
-    'backdrop-filter:blur(16px) saturate(130%)'
+    'backdrop-filter:blur(16px) saturate(130%)',
+    'pointer-events:none'
   ].join(';');
 
   const panel = document.createElement('div');
@@ -650,12 +671,29 @@ function ensureProgressSheet() {
     'background:linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.08))',
     'border:1px solid rgba(255,255,255,.20)',
     'box-shadow:0 30px 80px rgba(0,0,0,.38)',
-    'color:#fff'
+    'color:#fff',
+    'pointer-events:auto'
   ].join(';');
 
   overlay.appendChild(panel);
   document.body.appendChild(overlay);
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) closeProgressSheet();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeProgressSheet();
+  });
   return overlay;
+}
+
+function closeProgressSheet() {
+  const overlay = $('progress-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'none';
+  overlay.style.pointerEvents = 'none';
+  overlay.classList.remove('active', 'open');
+  overlay.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('mortalive-progress-open');
 }
 
 function openProgressSheet() {
@@ -676,6 +714,10 @@ function openProgressSheet() {
   }
 
   overlay.style.display = 'flex';
+  overlay.style.pointerEvents = 'auto';
+  overlay.classList.add('active');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('mortalive-progress-open');
 }
 
 
@@ -727,6 +769,8 @@ function showPage(id) {
 
   // Emit state event so UI triggers nav update
   window.dispatchEvent(new CustomEvent('mortalive-auth-state'));
+
+  if (id !== 'pg-profile') closeProgressSheet();
 
   // Profile is backed by public.accounts/user_links in the latest build.
   // Navigation can happen before asynchronous auth/profile hydration has
@@ -3871,17 +3915,17 @@ function bindProfileEvents() {
   // Modal close buttons (Pattern A — overlay/modal HTML)
   $('btn-edit-close')?.addEventListener('click', () => {
     const modal = $('edit-modal');
-    if (modal) { modal.classList.remove('active'); }
+    if (modal) { modal.classList.remove('active'); modal.style.pointerEvents = 'none'; }
     else toggleProfileEditMode();
   });
   $('btn-edit-cancel')?.addEventListener('click', () => {
     const modal = $('edit-modal');
-    if (modal) { modal.classList.remove('active'); }
+    if (modal) { modal.classList.remove('active'); modal.style.pointerEvents = 'none'; }
     else toggleProfileEditMode();
   });
   // Close modal on backdrop click
   $('edit-modal')?.addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) e.currentTarget.classList.remove('active');
+    if (e.target === e.currentTarget) { e.currentTarget.classList.remove('active'); e.currentTarget.style.pointerEvents = 'none'; }
   });
 
   // The current index.html uses id="btn-edit-save"; keep support for the
@@ -4013,7 +4057,7 @@ document.addEventListener('visibilitychange', () => {
   });
 });
 
-// Sync with app.js router 
+// Sync with app.js router
 window.addEventListener('mortalive-auth-state', () => {
   if ($('pg-profile')?.classList.contains('active')) {
     initProfilePage();
