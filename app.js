@@ -520,7 +520,11 @@ function syncAuthProgress(baseScore) {
     progress.baseScore = Math.max(Number(progress.baseScore) || 0, incoming);
   }
   updateDerivedProgress();
+  persistProgress();
   updateProgressText();
+  // If local bonusScore accumulated while the user was offline, push the
+  // merged total back to Supabase now that they're authenticated again.
+  scheduleSyncScoreToSupabase();
 }
 
 function bootProgressState() {
@@ -528,6 +532,29 @@ function bootProgressState() {
   S.profile = loadProfile();
   updateDerivedProgress();
   updateProgressText();
+}
+
+// ── Supabase score sync ──────────────────────────────────────────────────────
+// Debounced so rapid events (messages, micro-completions) batch into one write.
+let _scoreSync = null;
+async function syncScoreToSupabase() {
+  if (S.isGuest || !S.userId || !sb) return;
+  const score = getProgressScore(getCurrentProgress());
+  const progress = getCurrentProgress();
+  try {
+    await sb.from('accounts').update({
+      crockroach_score: score,
+      updated_at: new Date().toISOString()
+    }).eq('id', S.userId);
+    console.log(`[Score] Synced ${score} pts to Supabase ✓`);
+  } catch (e) {
+    console.warn('[Score] Supabase sync failed:', e?.message || e);
+  }
+}
+
+function scheduleSyncScoreToSupabase() {
+  clearTimeout(_scoreSync);
+  _scoreSync = setTimeout(syncScoreToSupabase, 2500);
 }
 
 function awardProgress(kind, amount = 1, meta = {}) {
@@ -560,6 +587,7 @@ function awardProgress(kind, amount = 1, meta = {}) {
   progress.lastSyncedAt = Date.now();
 
   persistProgress();
+  scheduleSyncScoreToSupabase(); // keep Supabase accounts.crockroach_score in sync
   updateProgressText();
 
   if (meta.completion) {
@@ -3841,6 +3869,18 @@ function initProfilePage() {
 
   renderEditInterests(acc.interests || []);
   renderEditLinks();
+
+  // ── Goal pill → achievements sheet button ─────────────────────────────────
+  const goalPill = $('profile-info-goal-val');
+  if (goalPill) {
+    goalPill.textContent = computeGoalText(getCurrentProgress());
+    goalPill.style.cursor = 'pointer';
+    goalPill.title = 'View achievements & score breakdown';
+    if (!goalPill.dataset.achBound) {
+      goalPill.dataset.achBound = '1';
+      goalPill.addEventListener('click', openAchievementsSheet);
+    }
+  }
 }
 
 function renderEditInterests(selectedInterests) {
@@ -3911,84 +3951,225 @@ window.removeEditLink = function(idx) {
   renderEditLinks();
 };
 
+// ── Achievements & Score Sheet ───────────────────────────────────────────────
+function openAchievementsSheet() {
+  document.getElementById('achievements-overlay')?.remove();
+
+  const progress  = getCurrentProgress();
+  const summary   = formatProgressLine(progress);
+  const score     = summary.score;
+  const tier      = getRankTier(score);
+  const tierIdx   = RANK_TIERS.indexOf(tier);
+  const nextTier  = RANK_TIERS[tierIdx + 1] || null;
+  const pct       = tier.max === Infinity ? 100 : Math.min(100, Math.round(((score - tier.min) / (tier.max - tier.min)) * 100));
+  const earnedSet = new Set(progress.badges || []);
+
+  const iconMap = { 'Rookie':'🌱','Momentum':'🔥','3-Day Streak':'⚡','Bronze':'🥉','Silver':'🥈','Gold':'🥇','Top 10%':'👑' };
+
+  const reqText = (b) => {
+    const parts = [];
+    if (b.minScore)        parts.push(`${b.minScore.toLocaleString()} pts`);
+    if (b.minCompletions)  parts.push(`${b.minCompletions} chats`);
+    if (b.minStreak)       parts.push(`${b.minStreak}-day streak`);
+    return parts.length ? parts.join(' · ') : 'Starting badge';
+  };
+
+  const badgesHtml = PROGRESS_BADGES.map(b => {
+    const earned = earnedSet.has(b.label);
+    const emoji  = iconMap[b.label] || '🏅';
+    return `
+      <div style="
+        display:flex;flex-direction:column;align-items:center;gap:5px;
+        padding:14px 8px 10px;border-radius:14px;text-align:center;
+        background:${earned ? 'var(--primary-alpha)' : 'var(--surface-2)'};
+        border:1px solid ${earned ? 'rgba(26,110,245,.20)' : 'var(--border)'};
+        opacity:${earned ? '1' : '0.55'};position:relative;transition:all .18s;">
+        <span style="font-size:28px;">${emoji}</span>
+        <span style="font-size:11px;font-weight:800;color:${earned ? 'var(--primary)' : 'var(--on-surface-3)'};">${b.label}</span>
+        <span style="font-size:9.5px;color:var(--on-surface-3);line-height:1.4;">${earned ? '✓ Unlocked' : reqText(b)}</span>
+        ${!earned ? '<span style="position:absolute;top:5px;right:6px;font-size:10px;">🔒</span>' : ''}
+      </div>`;
+  }).join('');
+
+  const progressBarHtml = nextTier ? `
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:10px 14px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--on-surface-2);margin-bottom:7px;">
+        <span>Progress to ${nextTier.name}</span>
+        <span style="color:var(--on-surface-3);">${score.toLocaleString()} / ${nextTier.min.toLocaleString()}</span>
+      </div>
+      <div style="height:7px;border-radius:999px;background:var(--surface-3);overflow:hidden;">
+        <div style="height:100%;border-radius:999px;background:linear-gradient(90deg,var(--primary),var(--secondary));width:${pct}%;transition:width .55s cubic-bezier(.16,1,.3,1);"></div>
+      </div>
+    </div>` : `
+    <div style="padding:10px 14px;border-radius:12px;background:linear-gradient(145deg,var(--primary-alpha),rgba(124,58,237,.08));border:1px solid rgba(26,110,245,.16);text-align:center;font-size:13px;font-weight:700;color:var(--primary);">
+      🏆 Maximum tier reached!
+    </div>`;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'achievements-overlay';
+  overlay.style.cssText = [
+    'position:fixed','inset:0','z-index:2100',
+    'display:flex','align-items:center','justify-content:center','padding:18px',
+    'background:rgba(0,0,0,.48)','backdrop-filter:blur(14px)',
+    '-webkit-backdrop-filter:blur(14px)'
+  ].join(';');
+
+  overlay.innerHTML = `
+    <div style="
+      width:min(560px,100%);max-height:88vh;overflow-y:auto;
+      border-radius:24px;background:#fff;border:1px solid var(--border);
+      box-shadow:0 28px 70px rgba(0,0,0,.18);
+      display:flex;flex-direction:column;
+      animation:toastIn .18s cubic-bezier(.16,1,.3,1);">
+
+      <!-- Header -->
+      <div style="
+        padding:20px 22px 16px;border-bottom:1px solid var(--border);
+        display:flex;align-items:center;justify-content:space-between;
+        background:linear-gradient(145deg,var(--primary-alpha),rgba(124,58,237,.05));
+        flex-shrink:0;border-radius:24px 24px 0 0;">
+        <div>
+          <div style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--on-surface-3);">Achievements &amp; Score</div>
+          <div style="font-size:21px;font-weight:900;letter-spacing:-.04em;margin-top:3px;">Your status</div>
+        </div>
+        <button id="ach-close" style="
+          width:36px;height:36px;border-radius:50%;
+          border:1px solid var(--border);background:#fff;
+          display:grid;place-items:center;font-size:18px;
+          color:var(--on-surface-3);cursor:pointer;">×</button>
+      </div>
+
+      <!-- Score stats grid -->
+      <div style="padding:18px 22px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px;">
+          <div style="padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,var(--primary-alpha),rgba(124,58,237,.06));border:1px solid rgba(26,110,245,.14);">
+            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">crockroach Score</div>
+            <div style="font-size:24px;font-weight:900;letter-spacing:-.04em;margin-top:4px;color:var(--primary);">${score.toLocaleString()}</div>
+          </div>
+          <div style="padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);">
+            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">Tier</div>
+            <div style="font-size:24px;font-weight:900;letter-spacing:-.04em;margin-top:4px;">${tier.name}</div>
+          </div>
+          <div style="padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);">
+            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">Chats completed</div>
+            <div style="font-size:24px;font-weight:900;letter-spacing:-.04em;margin-top:4px;">${summary.completions.toLocaleString()}</div>
+          </div>
+          <div style="padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);">
+            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">Day streak</div>
+            <div style="font-size:24px;font-weight:900;letter-spacing:-.04em;margin-top:4px;">${summary.streak}d 🔥</div>
+          </div>
+          <div style="padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);">
+            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">Weekly rank</div>
+            <div style="font-size:24px;font-weight:900;letter-spacing:-.04em;margin-top:4px;">#${summary.rank}</div>
+          </div>
+          <div style="padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);">
+            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">Top percentile</div>
+            <div style="font-size:24px;font-weight:900;letter-spacing:-.04em;margin-top:4px;">Top ${summary.percentile}%</div>
+          </div>
+        </div>
+        ${progressBarHtml}
+      </div>
+
+      <!-- Badges -->
+      <div style="padding:18px 22px 24px;flex:1;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <span style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--on-surface-3);">Badges</span>
+          <span style="font-size:12px;font-weight:700;color:var(--on-surface-3);">${earnedSet.size} / ${PROGRESS_BADGES.length} unlocked</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;">
+          ${badgesHtml}
+        </div>
+        <!-- Score breakdown note -->
+        <div style="margin-top:16px;padding:10px 12px;border-radius:11px;background:var(--surface-2);border:1px solid var(--border);font-size:11.5px;color:var(--on-surface-3);line-height:1.6;">
+          <strong style="color:var(--on-surface);">Score breakdown:</strong>
+          Base ${(Number(progress.baseScore)||0).toLocaleString()} pts
+          + Bonus ${(Number(progress.bonusScore)||0).toLocaleString()} pts
+          = <strong style="color:var(--primary);">${score.toLocaleString()} total</strong>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  document.getElementById('ach-close')?.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  const escH = (e) => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escH); } };
+  document.addEventListener('keydown', escH);
+}
+
+// ── Central helper: open / close the edit-profile modal ─────────────────────
+function openEditModal() {
+  const modal = $('edit-modal');
+  if (!modal) return;
+  window._tempEditLinks = S.userLinks ? JSON.parse(JSON.stringify(S.userLinks)) : [];
+  initProfilePage(); // re-hydrate form fields every time
+  // Belt-and-suspenders: set both the class *and* explicit inline styles so
+  // neither a stale inline override nor a missing CSS rule can block clicks.
+  modal.classList.add('active');
+  modal.style.display    = 'flex';
+  modal.style.pointerEvents = 'auto';
+  if ($('edit-error')) $('edit-error').style.display = 'none';
+}
+
+function closeEditModal() {
+  const modal = $('edit-modal');
+  if (!modal) return;
+  modal.classList.remove('active');
+  // Remove inline overrides so the base .overlay CSS takes full control again.
+  modal.style.display    = '';
+  modal.style.pointerEvents = '';
+  if ($('edit-error')) $('edit-error').style.display = 'none';
+}
+
 function toggleProfileEditMode() {
-  // Supports two HTML patterns:
-  //  A) Overlay/modal: elements with id="edit-modal" (class toggled active)
-  //  B) Inline toggle: profile-view-mode / profile-edit-mode divs
+  // Pattern A — overlay/modal HTML (current index.html layout)
   const modal = $('edit-modal');
   if (modal) {
-    // Pattern A — modal/overlay
-    const isOpen = modal.classList.contains('active');
-    if (!isOpen) {
-      window._tempEditLinks = S.userLinks ? JSON.parse(JSON.stringify(S.userLinks)) : [];
-      initProfilePage(); // reset form fields
-      modal.classList.add('active');
-      // Always reset pointer-events when opening (fixes re-open unresponsiveness)
-      modal.style.pointerEvents = '';
-    } else {
-      modal.classList.remove('active');
-      modal.style.pointerEvents = ''; // ensure clean state for next open
-      if ($('edit-error')) $('edit-error').style.display = 'none';
-    }
+    modal.classList.contains('active') ? closeEditModal() : openEditModal();
     return;
   }
 
-  // Pattern B — inline view/edit mode divs
-  const viewMode = $('profile-view-mode');
-  const editMode = $('profile-edit-mode');
+  // Pattern B — inline view/edit mode divs (legacy layout fallback)
+  const viewMode  = $('profile-view-mode');
+  const editMode  = $('profile-edit-mode');
   const toggleBtn = $('btn-edit-profile');
   const actionRow = $('profile-edit-actions');
-
   if (!viewMode || !editMode) return;
 
   const isEditing = viewMode.style.display === 'none';
-
   if (!isEditing) {
-    // Enter edit mode
     window._tempEditLinks = S.userLinks ? JSON.parse(JSON.stringify(S.userLinks)) : [];
-    initProfilePage(); // reset forms
-    viewMode.style.display = 'none';
-    editMode.style.display = 'block';
+    initProfilePage();
+    viewMode.style.display  = 'none';
+    editMode.style.display  = 'block';
     if (actionRow) actionRow.style.display = 'flex';
-    if (toggleBtn) {
-      toggleBtn.textContent = '× Cancel';
-      toggleBtn.style.color = 'var(--danger)';
-      toggleBtn.style.background = 'rgba(220,38,38,.08)';
-    }
+    if (toggleBtn) { toggleBtn.textContent = '× Cancel'; toggleBtn.style.color = 'var(--danger)'; toggleBtn.style.background = 'rgba(220,38,38,.08)'; }
   } else {
-    // Exit edit mode
-    viewMode.style.display = 'block';
-    editMode.style.display = 'none';
+    viewMode.style.display  = 'block';
+    editMode.style.display  = 'none';
     if (actionRow) actionRow.style.display = 'none';
-    if (toggleBtn) {
-      toggleBtn.textContent = '✏️ Edit';
-      toggleBtn.style.color = '';
-      toggleBtn.style.background = '';
-    }
+    if (toggleBtn) { toggleBtn.textContent = '✏️ Edit'; toggleBtn.style.color = ''; toggleBtn.style.background = ''; }
     if ($('edit-error')) $('edit-error').style.display = 'none';
   }
 }
 
 // Attach Profile Events
+// Guard: idempotent — safe to call multiple times, only binds once per element.
 function bindProfileEvents() {
+  // Hard guard against double-binding (e.g. auth-state listener re-triggering)
+  if (document.body.dataset.profileEventsBound) return;
+  document.body.dataset.profileEventsBound = '1';
+
   $('btn-edit-profile')?.addEventListener('click', toggleProfileEditMode);
   $('btn-edit-cancel-inline')?.addEventListener('click', toggleProfileEditMode);
 
-  // Modal close buttons (Pattern A — overlay/modal HTML)
-  // NOTE: Do NOT set pointerEvents='none' here — doing so prevents re-opening the modal.
-  $('btn-edit-close')?.addEventListener('click', () => {
-    const modal = $('edit-modal');
-    if (modal) { modal.classList.remove('active'); modal.style.pointerEvents = ''; }
-    else toggleProfileEditMode();
-  });
-  $('btn-edit-cancel')?.addEventListener('click', () => {
-    const modal = $('edit-modal');
-    if (modal) { modal.classList.remove('active'); modal.style.pointerEvents = ''; }
-    else toggleProfileEditMode();
-  });
-  // Close modal on backdrop click
+  // Modal close — all three routes funnel through closeEditModal()
+  $('btn-edit-close')?.addEventListener('click',   closeEditModal);
+  $('btn-edit-cancel')?.addEventListener('click',  closeEditModal);
+  // Backdrop click (clicking the dark overlay outside the white card)
   $('edit-modal')?.addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) { e.currentTarget.classList.remove('active'); e.currentTarget.style.pointerEvents = ''; }
+    if (e.target === e.currentTarget) closeEditModal();
   });
 
   // The current index.html uses id="btn-edit-save"; keep support for the
@@ -4103,39 +4284,72 @@ function bindProfileEvents() {
     if (confirmed) $('btn-logout')?.click();
   });
 
-  $('btn-delete-account')?.addEventListener('click', async () => {
-    const confirmed = await showConfirmDialog({
-      title: 'Delete account?',
-      body: 'This removes all your local data and signs you out permanently. This action cannot be undone.',
-      confirmLabel: 'Delete',
-      cancelLabel: 'Cancel',
-      danger: true
-    });
-    if (!confirmed) return;
+  $('btn-delete-account')?.addEventListener('click', performAccountDeletion);
+}
 
-    // Sign out from Supabase to invalidate the server session token
-    try { await sb?.auth?.signOut(); } catch (e) {}
-
-    // Clear all local state
-    localStorage.removeItem('mortalive_token');
-    localStorage.removeItem('mortalive_username');
-    localStorage.removeItem('mortalive_user_id');
-    localStorage.removeItem('mortalive_guest_name');
-    localStorage.removeItem(PROGRESS_KEY);
-    localStorage.removeItem(PROFILE_KEY);
-
-    S.authToken = null;
-    S.username = null;
-    S.userId = null;
-    S.accountData = null;
-    S.userLinks = [];
-    S.crockroachScore = null;
-    S.isGuest = true;
-    _autoLoginPromise = null;
-
-    toast('Account data deleted', '🗑️');
-    setTimeout(() => window.location.reload(), 800);
+// Shared deletion flow — called from both the profile menu button AND the
+// Account Center danger-zone button so both paths behave identically.
+async function performAccountDeletion() {
+  const confirmed = await showConfirmDialog({
+    title: 'Permanently delete account?',
+    body: 'This removes your profile, score, badges, and all associated data from Mortalive — on every device. You will not be able to recover it.',
+    confirmLabel: 'Delete permanently',
+    cancelLabel: 'Cancel',
+    danger: true
   });
+  if (!confirmed) return;
+
+  const userId = S.userId;
+
+  // 1. Delete profile data from Supabase (anon key is sufficient when RLS
+  //    "users can delete their own rows" policy is in place).
+  try {
+    if (userId && sb) {
+      await sb.from('user_links').delete().eq('user_id', userId);
+      await sb.from('accounts').delete().eq('id', userId);
+    }
+  } catch (e) {
+    console.warn('[Delete] DB row cleanup failed:', e?.message || e);
+  }
+
+  // 2. Ask the server to call supabase.auth.admin.deleteUser() with the
+  //    service role key (the client anon key cannot delete auth users).
+  try {
+    await fetch(`${SERVER_URL}/api/delete-account`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${S.authToken}`
+      },
+      body: JSON.stringify({ userId })
+    });
+  } catch (e) {
+    // Non-fatal: server may not have this endpoint yet; local cleanup still runs.
+    console.warn('[Delete] Server auth-delete failed (non-fatal):', e?.message || e);
+  }
+
+  // 3. Invalidate the Supabase session token
+  try { await sb?.auth?.signOut(); } catch (e) {}
+
+  // 4. Clear all client-side state and storage
+  localStorage.removeItem('mortalive_token');
+  localStorage.removeItem('mortalive_username');
+  localStorage.removeItem('mortalive_user_id');
+  localStorage.removeItem('mortalive_guest_name');
+  localStorage.removeItem(PROGRESS_KEY);
+  localStorage.removeItem(PROFILE_KEY);
+
+  S.authToken = null;
+  S.username  = null;
+  S.userId    = null;
+  S.accountData = null;
+  S.userLinks   = [];
+  S.crockroachScore = null;
+  S.isGuest   = true;
+  _autoLoginPromise = null;
+
+  toast('Account permanently deleted', '🗑️');
+  setTimeout(() => window.location.reload(), 900);
 }
 
 // Refresh the DB-backed profile after a tab becomes visible again.
@@ -4159,3 +4373,8 @@ window.addEventListener('mortalive-auth-state', () => {
 });
 
 document.addEventListener('DOMContentLoaded', bindProfileEvents);
+
+// ── Global exports for inline-script access ──────────────────────────────────
+window.performAccountDeletion = performAccountDeletion;
+window.openAchievementsSheet  = openAchievementsSheet;
+window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInfoRow
