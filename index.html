@@ -224,8 +224,7 @@ img { display: block; max-width: 100%; }
   margin-bottom: 0;
   transition: background-color .22s ease, border-color .22s ease, box-shadow .22s ease;
 }
-
-/* Shared authenticated header: fixed without changing its existing width. */
+/* Shared authenticated header: fixed visual layer + reserved document space. */
 .app-topbar-wrap {
   position: fixed;
   top: 16px;
@@ -241,9 +240,16 @@ img { display: block; max-width: 100%; }
   width: 100%;
   pointer-events: auto;
 }
+.app-topbar-spacer {
+  display: none;
+  height: 88px;
+  width: 100%;
+  flex: 0 0 88px;
+}
+body.mortalive-app-topbar-visible .app-topbar-spacer {
+  display: block;
+}
 .app-topbar-wrap .sakura-topbar.scrolled {
-  background: rgba(255,255,255,.98);
-  border-color: rgba(0,0,0,.08);
   box-shadow: 0 10px 30px rgba(20,34,68,.10);
 }
 .sakura-brand {
@@ -1831,6 +1837,10 @@ img { display: block; max-width: 100%; }
   .app-topbar-wrap {
     top: 10px;
     width: min(100% - 28px, 1280px);
+  }
+  .app-topbar-spacer {
+    height: 134px;
+    flex-basis: 134px;
   }
   .sakura-nav {
     flex-wrap: wrap;
@@ -3531,7 +3541,7 @@ body.mortalive-progress-open .sakura-topbar {
     </div>
   </nav>
 </div>
-
+<div class="app-topbar-spacer" aria-hidden="true"></div>
 
 <!-- ═══════════════════ LANDING ═══════════════════ -->
 <section id="pg-land" class="page active">
