@@ -220,7 +220,7 @@ img { display: block; max-width: 100%; }
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border: 1.5px solid rgba(0,0,0,.10);
   border-radius: var(--r-xl);
-  box-shadow: none;
+  box-shadow: 0 8px 24px rgba(20,34,68,.08);
   margin-bottom: 0;
   transition: background-color .22s ease, border-color .22s ease, box-shadow .22s ease;
 }
@@ -3507,6 +3507,25 @@ body.mortalive-progress-open .sakura-topbar {
 #pg-feed .load-more-btn:hover{ border-color:var(--primary); color:var(--primary); background:var(--primary-alpha); }
 
 </style>
+<style id="mortalive-auth-background-patch">
+/* Shared authenticated-page background: matches the Profile redesign background exactly. */
+body.mortalive-app-topbar-visible {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(26,110,245,.07), transparent 34%),
+    radial-gradient(circle at 88% 8%, rgba(124,58,237,.06), transparent 32%),
+    var(--surface);
+}
+#pg-lobby, #pg-feed, #pg-messages, #pg-profile {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(26,110,245,.07), transparent 34%),
+    radial-gradient(circle at 88% 8%, rgba(124,58,237,.06), transparent 32%),
+    var(--surface);
+}
+/* The fixed topbar's reserved spacer must blend into the authenticated background. */
+body.mortalive-app-topbar-visible .app-topbar-spacer {
+  background: transparent;
+}
+</style>
 </head>
 <body>
 
@@ -3515,7 +3534,7 @@ body.mortalive-progress-open .sakura-topbar {
   <nav class="sakura-topbar" id="app-topbar" aria-label="Mortalive navigation">
     <a class="sakura-brand" href="index.html" id="app-topbar-brand" aria-label="Mortalive Talk">
       <img class="topbar-logo"
-           src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783865256/cllogo_ystlxa.png"
+           src="https://res.cloudinary.com/yvjzeilj/image/upload/v1786110689/IMG_20260807_180515_ymdcdi.png"
            alt="Mortalive">
       <div>
         <div class="brand-name">Mortalive</div>
