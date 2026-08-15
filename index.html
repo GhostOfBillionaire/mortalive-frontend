@@ -290,6 +290,30 @@ img { display: block; max-width: 100%; }
   background: var(--surface-2);
   color: var(--on-surface);
 }
+.sakura-nav a.active {
+  background: var(--primary-alpha);
+  color: var(--primary);
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.topbar-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--on-surface-2);
+  white-space: nowrap;
+}
+.app-topbar-score { cursor: pointer; }
 
 /* ── Shared card ────────────────────────────────────── */
 .card {
@@ -1794,6 +1818,14 @@ img { display: block; max-width: 100%; }
 
   .feature-card   { width: 100%; max-width: 100%; }
   .phone-frame    { max-width: 200px; }
+  .app-topbar-wrap .topbar-actions {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .app-topbar-wrap .topbar-stat {
+    font-size: 11.5px;
+  }
   .consent-panel  { padding: 22px; }
   .policy-grid    { grid-template-columns: 1fr; }
   .footer         { border-radius: 28px 28px 0 0; padding: 48px 0 56px; }
@@ -2498,105 +2530,6 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
   flex-wrap: wrap;
   margin-top: 22px;
 }
-#app-bottomnav {
-  position: fixed;
-  left: 50%;
-  bottom: 16px;
-  transform: translateX(-50%);
-  z-index: 140;
-  display: none;
-  align-items: center;
-  gap: 4px;
-  padding: 8px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.92);
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
-  border: 1px solid rgba(0,0,0,.08);
-  box-shadow: 0 8px 28px rgba(0,0,0,.12), 0 2px 6px rgba(0,0,0,.05);
-}
-.bottomnav-btn {
-  padding: 9px 14px;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--on-surface-2);
-  font-size: 13px;
-  font-weight: 700;
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
-}
-.bottomnav-btn:hover {
-  background: var(--surface-2);
-  color: var(--on-surface);
-}
-.bottomnav-btn.active {
-  background: var(--primary-alpha);
-  color: var(--primary);
-}
-.blank-app-page .blank-card .btn {
-  min-width: 160px;
-}
-
-/* ─────────────────────────────────────────────────────────────
-   RESPONSIVE AUTH NAVIGATION
-   Portrait phones: fixed bottom bar.
-   Landscape: fixed top bar.
-   The Talk/auth/guest UI itself is unchanged.
-   ───────────────────────────────────────────────────────────── */
-
-/* Landscape: move authenticated app navigation to the top. */
-@media (orientation: landscape) {
-  #app-bottomnav {
-    top: 12px;
-    bottom: auto;
-    left: 50%;
-    transform: translateX(-50%);
-    border-radius: 14px;
-    padding: 7px;
-    gap: 3px;
-    max-width: calc(100vw - 24px);
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  #app-bottomnav::-webkit-scrollbar {
-    display: none;
-  }
-
-  .bottomnav-btn {
-    white-space: nowrap;
-    padding: 9px 16px;
-  }
-
-  /* Keep the placeholder/authenticated pages clear of the top nav. */
-  #pg-feed.active,
-  #pg-messages.active,
-  #pg-profile.active {
-    padding-top: 82px;
-  }
-
-  /* Lobby is also an authenticated destination. */
-  #pg-lobby.active {
-    padding-top: 78px;
-  }
-
-  /*
-   * Do not move the Talk chat controls/video itself.
-   * The nav is only shown on authenticated app destinations,
-   * and the existing chat layout remains responsible for its
-   * full-screen/video sizing.
-   */
-}
-
-/* Portrait: retain the current bottom navigation. */
-@media (orientation: portrait) {
-  #app-bottomnav {
-    top: auto;
-    bottom: 16px;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-}
-
 /* Dark film over the landing background image only.
    The existing background image/fade remains untouched underneath. */
 #pg-land {
@@ -2815,27 +2748,21 @@ body.mortalive-progress-open .sakura-topbar {
   #pg-feed .feed-left{ display: none; }
 }
 
-/* ── Feed navigation ─────────────────────────────────────── */
-/* Feed uses the canonical authenticated Talk / Feed / Messages / Profile nav
-   from #app-bottomnav. On Feed it is promoted to the top so the page has one
-   navigation bar instead of a duplicate Feed-specific header. */
-.mortalive-feed-nav-top #app-bottomnav {
-  top: 16px;
-  bottom: auto;
-  left: 50%;
-  transform: translateX(-50%);
-  border-radius: var(--r-xl);
-  padding: 8px;
-  max-width: calc(100vw - 28px);
-  overflow-x: auto;
-  scrollbar-width: none;
+/* Shared authenticated topbar spacing: Talk, Feed, Messages, Profile */
+.mortalive-app-topbar-visible #pg-lobby.active,
+.mortalive-app-topbar-visible #pg-feed.active,
+.mortalive-app-topbar-visible #pg-messages.active,
+.mortalive-app-topbar-visible #pg-profile.active {
+  padding-top: 8px;
 }
-.mortalive-feed-nav-top #app-bottomnav::-webkit-scrollbar { display:none; }
-.mortalive-feed-nav-top .bottomnav-btn {
-  white-space: nowrap;
-  padding: 9px 16px;
+@media (max-width: 720px) {
+  .mortalive-app-topbar-visible #pg-lobby.active,
+  .mortalive-app-topbar-visible #pg-feed.active,
+  .mortalive-app-topbar-visible #pg-messages.active,
+  .mortalive-app-topbar-visible #pg-profile.active {
+    padding-top: 6px;
+  }
 }
-.mortalive-feed-nav-top #pg-feed.active { padding-top: 82px; }
 
 /* ── Left sidebar ────────────────────────────────────────── */
 #pg-feed .feed-left{ position:sticky; top:100px; }
@@ -3545,6 +3472,39 @@ body.mortalive-progress-open .sakura-topbar {
 </style>
 </head>
 <body>
+
+<!-- ════════════ SHARED AUTHENTICATED TOPBAR ════════════ -->
+<div class="wrap app-topbar-wrap" id="app-topbar-wrap" style="display:none;">
+  <nav class="sakura-topbar" id="app-topbar" aria-label="Mortalive navigation">
+    <a class="sakura-brand" href="#" id="app-topbar-brand" aria-label="Mortalive Talk">
+      <img class="topbar-logo"
+           src="https://res.cloudinary.com/yvjzeilj/image/upload/v1783865256/cllogo_ystlxa.png"
+           alt="Mortalive">
+      <div>
+        <div class="brand-name">Mortalive</div>
+        <div class="brand-sub" id="app-topbar-page-name">Talk</div>
+      </div>
+    </a>
+
+    <div class="sakura-nav" id="app-topbar-nav">
+      <a href="#" data-top-page="pg-lobby" aria-label="Talk">Talk</a>
+      <a href="#" data-top-page="pg-feed" aria-label="Feed">Feed</a>
+      <a href="#" data-top-page="pg-messages" aria-label="Messages">Messages</a>
+      <a href="#" data-top-page="pg-profile" aria-label="Profile">Profile</a>
+    </div>
+
+    <div class="topbar-actions">
+      <div class="topbar-stat">
+        <div class="live-dot"></div>
+        <span id="app-topbar-online-count">2,847</span> online
+      </div>
+      <div class="topbar-stat app-topbar-score" id="app-topbar-score-pill" title="Open crockroach Score">
+        🧲 <span id="app-topbar-score-val">—</span>
+      </div>
+    </div>
+  </nav>
+</div>
+
 
 <!-- ═══════════════════ LANDING ═══════════════════ -->
 <section id="pg-land" class="page active">
@@ -4542,12 +4502,6 @@ body.mortalive-progress-open .sakura-topbar {
   </div></div>
 </section>
 
-<nav id="app-bottomnav" aria-label="Authenticated navigation" aria-hidden="true">
-  <button class="bottomnav-btn" type="button" data-bottom-page="pg-lobby" aria-label="Talk" title="Talk">Talk</button>
-  <button class="bottomnav-btn" type="button" data-bottom-page="pg-feed" aria-label="Feed" title="Feed">Feed</button>
-  <button class="bottomnav-btn" type="button" data-bottom-page="pg-messages" aria-label="Messages" title="Messages">Messages</button>
-  <button class="bottomnav-btn" type="button" data-bottom-page="pg-profile" aria-label="Profile" title="Profile">Profile</button>
-</nav>
 
 <!-- ═══════════════════ RATING MODAL ══════════════ -->
 <div class="overlay" id="rating-overlay" role="dialog" aria-modal="true" aria-labelledby="rating-title">
@@ -4734,80 +4688,81 @@ body.mortalive-progress-open .sakura-topbar {
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
+  const PAGE_NAMES = {
+    'pg-lobby': 'Talk',
+    'pg-feed': 'Feed',
+    'pg-messages': 'Messages',
+    'pg-profile': 'Profile'
+  };
 
-  function syncBottomNav(pageId) {
-    const nav = document.getElementById('app-bottomnav');
-    if (!nav) return;
+  function syncTopbar(pageId) {
+    const wrap = document.getElementById('app-topbar-wrap');
+    const nav = document.getElementById('app-topbar-nav');
+    const pageName = document.getElementById('app-topbar-page-name');
+    const scoreVal = document.getElementById('app-topbar-score-val');
+    const onlineVal = document.getElementById('app-topbar-online-count');
+    if (!wrap || !nav) return;
 
-    // Strict guard checking the explicit window export created in app.js
     const isGuest = !!(window.S && window.S.isGuest);
+    const show = AUTH_PAGES.has(pageId) && !isGuest;
 
-    // GUESTS MUST NOT SEE THE NAVIGATION TABS AT ALL
-    if (isGuest) {
-      document.body.classList.remove('mortalive-feed-nav-top');
-      nav.style.display = 'none';
-      nav.setAttribute('aria-hidden', 'true');
-      nav.querySelectorAll('.bottomnav-btn').forEach((btn) => {
-        btn.setAttribute('tabindex', '-1');
-      });
-      return;
-    }
+    wrap.style.display = show ? 'block' : 'none';
+    wrap.setAttribute('aria-hidden', show ? 'false' : 'true');
+    document.body.classList.toggle('mortalive-app-topbar-visible', show);
 
-    const showNav = AUTH_PAGES.has(pageId);
-    document.body.classList.toggle('mortalive-feed-nav-top', pageId === 'pg-feed' && !isGuest);
-    nav.style.display = showNav ? 'flex' : 'none';
-    nav.setAttribute('aria-hidden', showNav ? 'false' : 'true');
-
-    nav.querySelectorAll('.bottomnav-btn').forEach((btn) => {
-      btn.setAttribute('tabindex', showNav ? '0' : '-1');
-      btn.classList.toggle('active', btn.dataset.bottomPage === pageId);
+    nav.querySelectorAll('[data-top-page]').forEach((link) => {
+      const active = link.dataset.topPage === pageId;
+      link.classList.toggle('active', active);
+      link.setAttribute('aria-current', active ? 'page' : 'false');
+      link.setAttribute('tabindex', show ? '0' : '-1');
     });
+
+    if (pageName) pageName.textContent = PAGE_NAMES[pageId] || 'Talk';
+    if (onlineVal && Number.isFinite(Number(window.S?.onlineCount))) {
+      onlineVal.textContent = Number(window.S.onlineCount).toLocaleString();
+    }
+    if (scoreVal) {
+      const score = window.getProgressScore?.(window.S?.progress);
+      scoreVal.textContent = Number.isFinite(Number(score)) ? Number(score).toLocaleString() : '—';
+    }
   }
 
   document.addEventListener('click', (ev) => {
-    const btn = ev.target.closest('[data-bottom-page]');
-    if (!btn) return;
+    const link = ev.target.closest('[data-top-page]');
+    if (!link) return;
     ev.preventDefault();
-    const target = btn.dataset.bottomPage;
-
-    // Aggressive click interceptor for guests
+    const target = link.dataset.topPage;
     if (window.S && window.S.isGuest && ['pg-feed', 'pg-messages', 'pg-profile'].includes(target)) {
-      if(window.showPage) window.showPage('pg-auth');
-      setTimeout(() => {
-        const tabLogin = document.getElementById('tab-login');
-        if (tabLogin) tabLogin.click();
-      }, 0);
+      window.showPage?.('pg-auth');
+      setTimeout(() => document.getElementById('tab-login')?.click(), 0);
       return;
     }
-    if(window.showPage) window.showPage(target);
+    window.showPage?.(target);
   });
 
-  // Standard lifecycle hooks
-  document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('app-topbar-brand')?.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    window.showPage?.('pg-lobby');
+  });
+
+  document.getElementById('app-topbar-score-pill')?.addEventListener('click', () => {
+    window.openProgressSheet?.();
+  });
+
+  const refresh = () => {
     const active = document.querySelector('.page.active');
-    if (active) syncBottomNav(active.id);
-  });
+    if (active) syncTopbar(active.id);
+  };
 
-  window.addEventListener('pageshow', () => {
-    const active = document.querySelector('.page.active');
-    if (active) syncBottomNav(active.id);
-  });
+  document.addEventListener('DOMContentLoaded', refresh, { once: true });
+  window.addEventListener('pageshow', refresh);
+  window.addEventListener('mortalive-auth-state', refresh);
+  window.addEventListener('resize', refresh, { passive: true });
 
-  window.addEventListener('mortalive-auth-state', () => {
-    const active = document.querySelector('.page.active');
-    if (active) syncBottomNav(active.id);
-  });
-
-  // Defensive guard loop: strictly forces the UI clear if a guest session overrides it.
   setInterval(() => {
-    if (window.S && window.S.isGuest) {
-      const nav = document.getElementById('app-bottomnav');
-      if (nav && nav.style.display !== 'none') {
-        nav.style.display = 'none';
-      }
-    }
-  }, 500);
-
+    const active = document.querySelector('.page.active');
+    if (active) syncTopbar(active.id);
+  }, 1000);
 })();
 </script>
 
