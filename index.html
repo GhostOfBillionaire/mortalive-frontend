@@ -2700,7 +2700,7 @@ body.mortalive-progress-open .sakura-topbar {
 .profile-info-chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;background:var(--primary-alpha);border:1px solid rgba(26,110,245,.14);font-size:11.5px;font-weight:600;color:var(--primary)}
 .profile-info-link{color:var(--primary);font-weight:600;text-decoration:none;font-size:13px;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:bottom}
 .profile-info-link:hover{text-decoration:underline}
-.profile-goal-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;background:linear-gradient(120deg,rgba(26,110,245,.08),rgba(124,58,237,.07));border:1px solid rgba(26,110,245,.12);font-size:12px;font-weight:700;color:var(--primary)}
+.profile-goal-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 13px;border-radius:999px;background:linear-gradient(120deg,rgba(26,110,245,.08),rgba(124,58,237,.07));border:1px solid rgba(26,110,245,.18);font-size:12px;font-weight:700;color:var(--primary);cursor:pointer;transition:background .15s,box-shadow .15s,transform .15s cubic-bezier(.34,1.56,.64,1)}.profile-goal-pill:hover{background:linear-gradient(120deg,rgba(26,110,245,.16),rgba(124,58,237,.13));box-shadow:0 0 0 3px rgba(26,110,245,.12);transform:translateY(-1px)}.profile-goal-pill:active{transform:scale(.97)}
 
 /* ── Score strip ── */
 .profile-score-strip{margin:0 20px 16px;padding:12px 14px;border-radius:17px;background:linear-gradient(120deg,rgba(26,110,245,.07),rgba(124,58,237,.06));border:1px solid rgba(26,110,245,.12);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
@@ -3498,23 +3498,15 @@ body.mortalive-progress-open .sakura-topbar {
         </div>
       </section>
 
-      <div class="profile-extra-strip">
-        <!-- Achievements: single horizontal scroll line, scrollable on mobile -->
-        <section class="profile-section-card profile-achievements-card">
-          <div class="section-head" style="padding:14px 16px 10px;margin-bottom:0;">
-            <span class="section-title">Achievements</span>
-            <span id="profile-badges-count" style="font-size:12px;color:var(--on-surface-3);font-weight:600">— / 7</span>
-          </div>
-          <div class="profile-achievements-scroll" id="profile-badges-grid"></div>
-        </section>
-        <!-- About section removed — data now shown in profile top section -->
-        <!-- Legacy compat IDs kept hidden so app.js syncs don't error -->
-        <div style="display:none" aria-hidden="true">
-          <div id="profile-about-details">—</div>
-          <div id="profile-about-interests">—</div>
-          <div id="profile-about-links">—</div>
-          <div id="profile-about-goal">—</div>
-        </div>
+      <!-- All legacy compat IDs kept hidden — app.js references them internally -->
+      <div style="display:none" aria-hidden="true">
+        <div id="profile-about-details">—</div>
+        <div id="profile-about-interests">—</div>
+        <div id="profile-about-links">—</div>
+        <div id="profile-about-goal">—</div>
+        <!-- Achievements rendered inside openAchievementsSheet popup, not in-page -->
+        <div id="profile-badges-grid"></div>
+        <span id="profile-badges-count"></span>
       </div>
     </div></div>
   </div>
@@ -3554,7 +3546,7 @@ body.mortalive-progress-open .sakura-topbar {
       <!-- Danger zone -->
       <div class="acct-center-section acct-center-danger">
         <div class="acct-center-section-title">Danger Zone</div>
-        <p style="font-size:12px;color:var(--on-surface-3);line-height:1.6;margin-bottom:12px;">Deleting your account removes all local data permanently and cannot be undone.</p>
+        <p style="font-size:12px;color:var(--on-surface-3);line-height:1.6;margin-bottom:12px;">Permanently removes your profile, score, and all data from Mortalive on every device. Cannot be undone.</p>
         <button class="btn" id="btn-acct-delete" type="button" style="background:#fff;color:var(--danger);border:1.5px solid var(--danger);min-height:38px;font-size:13px;font-weight:700;padding:8px 16px;border-radius:var(--r-sm);width:100%;">🗑️ Delete account</button>
       </div>
     </div>
@@ -3994,10 +3986,15 @@ body.mortalive-progress-open .sakura-topbar {
     if(btnDelete && !btnDelete.dataset.acctBound){
       btnDelete.dataset.acctBound='1';
       btnDelete.addEventListener('click', ()=>{
-        // Proxy through the app.js handler which now uses showConfirmDialog
-        q('btn-delete-account')?.click();
-        // Close Account Center immediately — the confirm dialog will appear on top
         closeAcctCenter();
+        // performAccountDeletion is defined in app.js and handles the full
+        // Supabase + local cleanup flow with a proper confirm dialog.
+        if(typeof window.performAccountDeletion === 'function'){
+          window.performAccountDeletion();
+        } else {
+          // Fallback: proxy through hidden compat button if app.js hasn't loaded yet
+          q('btn-delete-account')?.click();
+        }
       });
     }
     // ESC to close
