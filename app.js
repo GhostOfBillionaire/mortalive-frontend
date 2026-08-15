@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-15-confirm-dialogs-css-fixes'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-15-progress-sync-edit-modal-final'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -542,11 +542,14 @@ async function syncScoreToSupabase() {
   const score = getProgressScore(getCurrentProgress());
   const progress = getCurrentProgress();
   try {
-    await sb.from('accounts').update({
+    const { error } = await sb.from('accounts').update({
       crockroach_score: score,
+      progress_state: progress,
       updated_at: new Date().toISOString()
     }).eq('id', S.userId);
-    console.log(`[Score] Synced ${score} pts to Supabase ✓`);
+
+    if (error) throw error;
+    console.log(`[Score] Synced ${score} pts and full progress to Supabase ✓`);
   } catch (e) {
     console.warn('[Score] Supabase sync failed:', e?.message || e);
   }
@@ -2048,6 +2051,15 @@ async function hydrateAccountData(userId, options = {}) {
         S.accountData?.crockroachScore ??
         S.crockroachScore ??
         0;
+
+      // Restore the complete progress state saved in Supabase so a fresh
+      // device/session gets the same streaks, completions, badges, ranks,
+      // profile reward state, and other progress fields as the source device.
+      if (S.accountData?.progress_state && typeof S.accountData.progress_state === 'object') {
+        S.progress = { ...getCurrentProgress(), ...S.accountData.progress_state };
+        persistProgress();
+        updateDerivedProgress();
+      }
 
       S.username = dbUsername;
       S.crockroachScore = dbScore;
@@ -4104,11 +4116,11 @@ function openEditModal() {
   if (!modal) return;
   window._tempEditLinks = S.userLinks ? JSON.parse(JSON.stringify(S.userLinks)) : [];
   initProfilePage(); // re-hydrate form fields every time
-  // Belt-and-suspenders: set both the class *and* explicit inline styles so
-  // neither a stale inline override nor a missing CSS rule can block clicks.
+
   modal.classList.add('active');
-  modal.style.display    = 'flex';
+  modal.style.display = 'flex';
   modal.style.pointerEvents = 'auto';
+  document.body.classList.add('mortalive-edit-open');
   if ($('edit-error')) $('edit-error').style.display = 'none';
 }
 
@@ -4116,9 +4128,9 @@ function closeEditModal() {
   const modal = $('edit-modal');
   if (!modal) return;
   modal.classList.remove('active');
-  // Remove inline overrides so the base .overlay CSS takes full control again.
-  modal.style.display    = '';
+  modal.style.display = '';
   modal.style.pointerEvents = '';
+  document.body.classList.remove('mortalive-edit-open');
   if ($('edit-error')) $('edit-error').style.display = 'none';
 }
 
@@ -4161,16 +4173,47 @@ function bindProfileEvents() {
   if (document.body.dataset.profileEventsBound) return;
   document.body.dataset.profileEventsBound = '1';
 
-  $('btn-edit-profile')?.addEventListener('click', toggleProfileEditMode);
-  $('btn-edit-cancel-inline')?.addEventListener('click', toggleProfileEditMode);
+  // Event delegation keeps dynamically re-rendered profile controls working.
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#btn-edit-profile') || e.target.closest('#btn-edit-cancel-inline')) {
+      toggleProfileEditMode();
+      return;
+    }
 
-  // Modal close — all three routes funnel through closeEditModal()
-  $('btn-edit-close')?.addEventListener('click',   closeEditModal);
-  $('btn-edit-cancel')?.addEventListener('click',  closeEditModal);
-  // Backdrop click (clicking the dark overlay outside the white card)
-  $('edit-modal')?.addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) closeEditModal();
+    if (e.target.closest('#btn-edit-close') || e.target.closest('#btn-edit-cancel')) {
+      closeEditModal();
+      return;
+    }
+
+    const modal = $('edit-modal');
+    if (modal?.classList.contains('active') && e.target === modal) {
+      closeEditModal();
+    }
   });
+
+  // Hard interaction boundary for the edit modal: if browser hit-testing ever
+  // resolves a pointer/click against the blurred profile behind the overlay,
+  // suppress that event unless it originated inside the modal card itself.
+  if (!document.body.dataset.profileEditInteractionGuard) {
+    document.body.dataset.profileEditInteractionGuard = '1';
+    document.addEventListener('pointerdown', (e) => {
+      const modal = $('edit-modal');
+      if (!modal?.classList.contains('active')) return;
+      if (!e.target.closest('#edit-modal > .modal')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+
+    document.addEventListener('click', (e) => {
+      const modal = $('edit-modal');
+      if (!modal?.classList.contains('active')) return;
+      if (!e.target.closest('#edit-modal > .modal')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+  }
 
   // The current index.html uses id="btn-edit-save"; keep support for the
   // older inline id as well so the JS remains compatible with both layouts.
