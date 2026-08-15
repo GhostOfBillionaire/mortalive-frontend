@@ -3587,6 +3587,24 @@ body.mortalive-progress-open .sakura-topbar {
   }
 </style>
 
+<script>
+  // Independent splash hard-stop: this runs from index.html itself so the
+  // branded cover cannot remain visible even if app.js/auth startup stalls.
+  window.setTimeout(function () {
+    var splash = document.getElementById('mortalive-startup-splash');
+    if (!splash) return;
+    splash.classList.add('is-leaving');
+    splash.setAttribute('aria-hidden', 'true');
+    window.setTimeout(function () {
+      if (!splash || !splash.isConnected) return;
+      splash.style.setProperty('display', 'none', 'important');
+      splash.style.setProperty('visibility', 'hidden', 'important');
+      splash.style.setProperty('pointer-events', 'none', 'important');
+      splash.remove();
+    }, 450);
+  }, 4500);
+</script>
+
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
