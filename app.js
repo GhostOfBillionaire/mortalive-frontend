@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-15-feed-supabase-step2'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-15-step3-likes-comments'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -3803,6 +3803,10 @@ let _feedHasMore = true;
 let _feedLoading = false;
 let _feedPosts = [];
 
+let _feedEngagement = new Map();
+let _commentCache = new Map();
+let _commentLoading = new Set();
+
 function feedRelTime(iso) {
   const ts = Date.parse(iso || '');
   if (!Number.isFinite(ts)) return 'Just now';
@@ -3897,6 +3901,7 @@ async function fetchFeedPage(reset = false) {
     _feedPosts = reset || _feedOffset === 0 ? mapped : [..._feedPosts, ...mapped];
     _feedOffset += rows.length;
     _feedHasMore = rows.length === FEED_PAGE_SIZE;
+    await hydratePostEngagement(rows.map(row => row.id));
     renderFeedPosts();
     renderFeedSidebars();
   } catch (e) {
@@ -3917,6 +3922,196 @@ async function fetchFeedPage(reset = false) {
 function filteredFeedPosts() {
   if (_feedFilter === 'mine') return _feedPosts.filter(post => post.user_id === S.userId);
   return _feedPosts;
+}
+
+
+async function hydratePostEngagement(postIds) {
+  const ids = Array.from(new Set((postIds || []).filter(Boolean)));
+  if (!ids.length || !sb || S.isGuest) return;
+  try {
+    const { data, error } = await sb.rpc('get_post_engagement', { p_post_ids: ids });
+    if (error) throw error;
+    (data || []).forEach(row => {
+      _feedEngagement.set(row.post_id, {
+        likes: Number(row.like_count) || 0,
+        comments: Number(row.comment_count) || 0,
+        liked: !!row.liked_by_me
+      });
+    });
+    ids.forEach(id => {
+      if (!_feedEngagement.has(id)) _feedEngagement.set(id, { likes: 0, comments: 0, liked: false });
+    });
+  } catch (e) {
+    console.warn('[Feed] engagement lookup failed:', e?.message || e);
+    ids.forEach(id => {
+      if (!_feedEngagement.has(id)) _feedEngagement.set(id, { likes: 0, comments: 0, liked: false });
+    });
+  }
+}
+
+function engagementFor(postId) {
+  return _feedEngagement.get(postId) || { likes: 0, comments: 0, liked: false };
+}
+
+async function togglePostLike(postId) {
+  if (S.isGuest || !S.userId || !sb) {
+    toast('Sign in to like posts', '🔒');
+    return;
+  }
+  const card = document.querySelector(`#pg-feed .post-card[data-post-id="${CSS.escape(postId)}"]`);
+  const state = { ...engagementFor(postId) };
+  const nextLiked = !state.liked;
+  _feedEngagement.set(postId, { ...state, liked: nextLiked, likes: Math.max(0, state.likes + (nextLiked ? 1 : -1)) });
+  renderFeedPosts();
+  if (!document.querySelector(`#pg-feed .post-card[data-post-id="${CSS.escape(postId)}"]`) && card) return;
+
+  try {
+    if (nextLiked) {
+      const { error } = await sb.from('post_likes').insert({ post_id: postId, user_id: S.userId });
+      if (error && error.code !== '23505') throw error;
+    } else {
+      const { error } = await sb.from('post_likes').delete().eq('post_id', postId).eq('user_id', S.userId);
+      if (error) throw error;
+    }
+    await hydratePostEngagement([postId]);
+    renderFeedPosts();
+  } catch (e) {
+    _feedEngagement.set(postId, state);
+    renderFeedPosts();
+    toast(e?.message || 'Could not update like.', '⚠️');
+  }
+}
+
+async function loadPostComments(postId, force = false) {
+  if (!postId || !sb || S.isGuest) return [];
+  if (!force && _commentCache.has(postId)) return _commentCache.get(postId);
+  if (_commentLoading.has(postId)) return _commentCache.get(postId) || [];
+  _commentLoading.add(postId);
+  try {
+    const { data, error } = await sb
+      .from('post_comments')
+      .select('id,post_id,user_id,content,parent_id,created_at')
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true })
+      .limit(100);
+    if (error) throw error;
+    const rows = Array.isArray(data) ? data : [];
+    const directory = await fetchFeedProfileDirectory(rows.map(row => row.user_id));
+    const comments = rows.map(row => ({ ...row, author: directory.get(row.user_id) || { username: 'member', display_name: 'Member' } }));
+    _commentCache.set(postId, comments);
+    const state = engagementFor(postId);
+    _feedEngagement.set(postId, { ...state, comments: comments.length });
+    return comments;
+  } catch (e) {
+    console.warn('[Feed] comments lookup failed:', e?.message || e);
+    toast('Could not load comments right now.', '⚠️');
+    return [];
+  } finally {
+    _commentLoading.delete(postId);
+  }
+}
+
+function renderPostComments(postId, comments) {
+  const section = document.querySelector(`#pg-feed .comments-section[data-post-id="${CSS.escape(postId)}"]`);
+  if (!section) return;
+  if (!comments?.length) {
+    section.innerHTML = `
+      <div class="comment-input-row">
+        <div class="comment-avatar">${feedAvatarLetter(S.accountData?.display_name || S.username || 'You')}</div>
+        <input class="comment-input" data-comment-input="${sanitizeHTML(postId)}" maxlength="300" placeholder="Write a comment…">
+        <button class="comment-submit" type="button" data-feed-action="comment-submit" data-post-id="${sanitizeHTML(postId)}">Comment</button>
+      </div>
+      <div class="comments-empty">Be the first to comment.</div>`;
+    return;
+  }
+  section.innerHTML = `
+    <div class="comment-input-row">
+      <div class="comment-avatar">${feedAvatarLetter(S.accountData?.display_name || S.username || 'You')}</div>
+      <input class="comment-input" data-comment-input="${sanitizeHTML(postId)}" maxlength="300" placeholder="Write a comment…">
+      <button class="comment-submit" type="button" data-feed-action="comment-submit" data-post-id="${sanitizeHTML(postId)}">Comment</button>
+    </div>
+    ${comments.map(comment => {
+      const author = comment.author || {};
+      const mine = comment.user_id === S.userId;
+      return `<div class="comment-item">
+        <div class="comment-item-avatar">${feedAvatarLetter(author.display_name || author.username || 'Member')}</div>
+        <div class="comment-bubble">
+          <div class="comment-author">${sanitizeHTML(author.display_name || author.username || 'Member')} <span class="comment-author-time">· ${sanitizeHTML(feedRelTime(comment.created_at))}</span></div>
+          <div class="comment-text">${sanitizeHTML(comment.content || '')}</div>
+          ${mine ? `<div class="comment-actions"><button class="comment-action" type="button" data-feed-action="delete-comment" data-post-id="${sanitizeHTML(postId)}" data-comment-id="${sanitizeHTML(comment.id)}">Delete</button></div>` : ''}
+        </div>
+      </div>`;
+    }).join('')}`;
+}
+
+async function togglePostComments(postId) {
+  const section = document.querySelector(`#pg-feed .comments-section[data-post-id="${CSS.escape(postId)}"]`);
+  if (!section) return;
+  const shouldOpen = !section.classList.contains('open');
+  section.classList.toggle('open', shouldOpen);
+  if (!shouldOpen) return;
+  section.innerHTML = '<div class="comments-loading">Loading comments…</div>';
+  const comments = await loadPostComments(postId);
+  renderPostComments(postId, comments);
+}
+
+async function createPostComment(postId, content) {
+  if (S.isGuest || !S.userId || !sb) {
+    toast('Sign in to comment', '🔒');
+    return;
+  }
+  const text = String(content || '').trim();
+  if (!text) return;
+  if (text.length > 300) {
+    toast('Comments are limited to 300 characters', '⚠️');
+    return;
+  }
+  try {
+    const { data, error } = await sb.from('post_comments').insert({
+      post_id: postId,
+      user_id: S.userId,
+      content: text
+    }).select('id,post_id,user_id,content,parent_id,created_at').single();
+    if (error) throw error;
+    const author = feedProfileFor(S.userId) || {
+      username: S.username || 'You',
+      display_name: S.accountData?.display_name || S.username || 'You'
+    };
+    const current = _commentCache.get(postId) || [];
+    _commentCache.set(postId, [...current, { ...data, author }]);
+    const state = engagementFor(postId);
+    _feedEngagement.set(postId, { ...state, comments: state.comments + 1 });
+    renderFeedPosts();
+    const section = document.querySelector(`#pg-feed .comments-section[data-post-id="${CSS.escape(postId)}"]`);
+    if (section) {
+      section.classList.add('open');
+      renderPostComments(postId, _commentCache.get(postId));
+    }
+    toast('Comment added', '💬');
+  } catch (e) {
+    toast(e?.message || 'Could not add comment.', '⚠️');
+  }
+}
+
+async function deletePostComment(postId, commentId) {
+  if (!S.userId || !sb) return;
+  try {
+    const { error } = await sb.from('post_comments').delete().eq('id', commentId).eq('user_id', S.userId);
+    if (error) throw error;
+    const current = (_commentCache.get(postId) || []).filter(comment => comment.id !== commentId);
+    _commentCache.set(postId, current);
+    const state = engagementFor(postId);
+    _feedEngagement.set(postId, { ...state, comments: Math.max(0, state.comments - 1) });
+    renderFeedPosts();
+    const section = document.querySelector(`#pg-feed .comments-section[data-post-id="${CSS.escape(postId)}"]`);
+    if (section) {
+      section.classList.add('open');
+      renderPostComments(postId, current);
+    }
+    toast('Comment deleted', '🗑️');
+  } catch (e) {
+    toast(e?.message || 'Could not delete comment.', '⚠️');
+  }
 }
 
 function renderFeedPosts() {
@@ -3942,6 +4137,7 @@ function renderFeedPosts() {
     const mine = post.user_id === S.userId;
     const typeLabel = post.post_type === 'text' ? 'Text' : post.post_type || 'Post';
     const badge = score >= 700 ? '<span class="post-badge gold">Gold</span>' : score >= 420 ? '<span class="post-badge silver">Silver</span>' : '';
+    const engagement = engagementFor(post.id);
     return `
       <article class="post-card" data-post-id="${sanitizeHTML(post.id)}">
         <div class="post-header">
@@ -3954,11 +4150,12 @@ function renderFeedPosts() {
         </div>
         <div class="post-body"><div class="post-text">${sanitizeHTML(post.content || '')}</div></div>
         <div class="post-actions">
-          <button class="action-btn like-btn" type="button" disabled title="Likes are the next feed phase"><span class="action-icon">♡</span><span>0</span></button>
-          <button class="action-btn comment-btn" type="button" disabled title="Comments are the next feed phase"><span class="action-icon">💬</span><span>0</span></button>
+          <button class="action-btn like-btn ${engagement.liked ? 'liked' : ''}" type="button" data-feed-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${engagement.liked ? 'true' : 'false'}"><span class="action-icon">${engagement.liked ? '♥' : '♡'}</span><span class="like-count">${engagement.likes}</span></button>
+          <button class="action-btn comment-btn" type="button" data-feed-action="comments" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">💬</span><span>${engagement.comments}</span></button>
           <button class="action-btn share-btn" type="button" data-feed-action="copy" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">↗</span><span>Share</span></button>
           <span class="action-btn" style="margin-left:auto;cursor:default;">${sanitizeHTML(post.visibility || 'public')}</span>
         </div>
+        <div class="comments-section" data-post-id="${sanitizeHTML(post.id)}" aria-hidden="true"></div>
       </article>`;
   }).join('');
 }
@@ -4026,6 +4223,8 @@ async function submitFeedTextPost() {
       crockroach_score: S.accountData?.crockroach_score ?? S.crockroachScore ?? getProgressScore(getCurrentProgress())
     };
     _feedPosts = [{ ...data, author }, ..._feedPosts.filter(post => post.id !== data.id)];
+    _feedEngagement.set(data.id, { likes: 0, comments: 0, liked: false });
+    _commentCache.delete(data.id);
     field.value = '';
     syncFeedComposer();
     renderFeedPosts();
@@ -4073,6 +4272,8 @@ async function deleteFeedPost(postId) {
     const { error } = await sb.from('posts').delete().eq('id', postId).eq('user_id', S.userId);
     if (error) throw error;
     _feedPosts = _feedPosts.filter(row => row.id !== postId);
+    _feedEngagement.delete(postId);
+    _commentCache.delete(postId);
     renderFeedPosts();
     renderFeedSidebars();
     toast('Post deleted', '🗑️');
@@ -4110,9 +4311,17 @@ function initFeedPage() {
     const action = event.target.closest('[data-feed-action]');
     if (action) {
       const type = action.dataset.feedAction;
-      if (type === 'delete') deleteFeedPost(action.dataset.postId);
+      const postId = action.dataset.postId;
+      if (type === 'delete') deleteFeedPost(postId);
+      if (type === 'like') togglePostLike(postId);
+      if (type === 'comments') togglePostComments(postId);
+      if (type === 'delete-comment') deletePostComment(postId, action.dataset.commentId);
+      if (type === 'comment-submit') {
+        const input = document.querySelector(`#pg-feed .comment-input[data-comment-input=\"${CSS.escape(postId)}\"]`);
+        createPostComment(postId, input?.value || '');
+      }
       if (type === 'copy') {
-        const url = `${location.origin}${location.pathname}#feed-post-${action.dataset.postId}`;
+        const url = `${location.origin}${location.pathname}#feed-post-${postId}`;
         navigator.clipboard?.writeText(url).then(() => toast('Post link copied', '📋')).catch(() => toast(url, '🔗'));
       }
     }
