@@ -3515,7 +3515,33 @@ function initRatingControls() {
   });
 }
 
+
+let _startupSplashWatchdog = null;
+
+function finishStartupSplash() {
+  if (_startupSplashWatchdog) {
+    clearTimeout(_startupSplashWatchdog);
+    _startupSplashWatchdog = null;
+  }
+
+  const splash = document.getElementById('mortalive-startup-splash');
+  if (!splash || splash.dataset.closed === '1') return;
+  splash.dataset.closed = '1';
+  splash.classList.add('is-leaving');
+  window.setTimeout(() => splash.remove(), 420);
+}
+
 ready(() => {
+  // Hard maximum: the branded splash can never remain on screen longer than
+  // 4.5 seconds, even if Supabase/Auth routing hangs unexpectedly. The normal
+  // auth-driven finally() below still closes it sooner whenever possible.
+  _startupSplashWatchdog = window.setTimeout(() => {
+    const activePage = document.querySelector('.page.active');
+    if (!activePage && $('pg-land')) {
+      showPage('pg-land');
+    }
+    finishStartupSplash();
+  }, 4500);
   prepareVideoSurfaces();
   initGlobalDefaults();
   startOnlineCounter();
@@ -3588,6 +3614,13 @@ ready(() => {
 
     // No authenticated session: first-time/signed-out visitor sees landing.
     if ($('pg-land')) showPage('pg-land');
+  }).catch((routingError) => {
+    // A routing failure should never leave the branded splash covering the site.
+    console.error('[Mortalive] Initial session routing failed:', routingError);
+    if ($('pg-land')) showPage('pg-land');
+  }).finally(() => {
+    // Keep the cover up only until Supabase has decided the initial destination.
+    finishStartupSplash();
   });
 
   // Preload the synthetic video batch silently so it's ready the instant
