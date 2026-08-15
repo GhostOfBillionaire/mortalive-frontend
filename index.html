@@ -2654,20 +2654,113 @@ body.mortalive-progress-open .sakura-topbar {
 #pg-profile .profile-wrap{width:min(1120px,calc(100% - 22px));padding:14px 0 84px;display:flex;flex-direction:column;gap:12px;min-height:calc(100dvh - 30px)}
 .modern-profile-card,.profile-section-card{border:1px solid rgba(0,0,0,.075);background:rgba(255,255,255,.96);backdrop-filter:blur(22px) saturate(145%);-webkit-backdrop-filter:blur(22px) saturate(145%);box-shadow:0 10px 40px rgba(13,17,23,.07)}
 .modern-profile-card{position:relative;overflow:visible;border-radius:26px}
-.profile-cover{height:150px;border-radius:26px 26px 0 0;background:radial-gradient(circle at 20% 20%,rgba(255,255,255,.34),transparent 30%),radial-gradient(circle at 82% 15%,rgba(255,255,255,.18),transparent 28%),linear-gradient(125deg,#1a6ef5 0%,#7c3aed 52%,#06b6d4 100%);position:relative;overflow:hidden}
-.profile-cover:after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 0 34%,rgba(255,255,255,.16) 35%,transparent 48%),radial-gradient(circle at 70% 70%,rgba(255,255,255,.18),transparent 28%)}
-.profile-topline{position:absolute;top:12px;right:12px;z-index:3}.profile-menu-wrap{position:relative}.profile-round-btn{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.82);border:1px solid rgba(255,255,255,.72);box-shadow:0 4px 18px rgba(0,0,0,.12);font-weight:800;font-size:17px}
-.profile-menu{position:absolute;top:46px;right:0;width:180px;padding:6px;border-radius:16px;background:rgba(255,255,255,.98);border:1px solid var(--border);box-shadow:0 18px 48px rgba(0,0,0,.16);display:none;z-index:20}.profile-menu.open{display:block}.profile-menu-item{width:100%;display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:11px;font-size:12.5px;font-weight:700;color:var(--on-surface);text-align:left}.profile-menu-item:hover{background:var(--surface-2)}.profile-menu-item.danger{color:var(--danger)}.profile-menu-item.danger:hover{background:rgba(220,38,38,.06)}
-.profile-identity{position:relative;margin-top:-48px;padding:0 24px 18px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;align-items:end}.profile-avatar-shell{position:relative;z-index:3;width:108px;height:108px;padding:4px;border-radius:30px;background:rgba(255,255,255,.94);box-shadow:0 10px 26px rgba(0,0,0,.15)}.profile-avatar-modern{width:100%;height:100%;border-radius:26px;display:grid;place-items:center;font-size:42px;font-weight:900;color:#fff;background:linear-gradient(135deg,var(--primary),var(--secondary));border:1px solid rgba(255,255,255,.38)}.profile-live-dot{position:absolute;right:0;bottom:0;width:18px;height:18px;border-radius:50%;background:var(--success);border:4px solid #fff}
-.profile-identity-copy{min-width:0;padding-bottom:2px}.profile-name-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.profile-name-modern{font-size:28px;line-height:1.02;letter-spacing:-.055em;font-weight:900}.profile-handle-modern{margin-top:5px;color:var(--on-surface-3);font-size:13px}.profile-subline-modern{margin-top:8px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:var(--on-surface-3);font-size:12px}.profile-verified-chip,.profile-tier-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border-radius:999px;font-size:10.5px;font-weight:800;border:1px solid rgba(26,110,245,.16);background:rgba(26,110,245,.08);color:var(--primary)}.profile-tier-chip{background:rgba(124,58,237,.08);border-color:rgba(124,58,237,.16);color:var(--secondary)}
-.profile-actions-modern{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;padding-bottom:2px}.profile-action-primary,.profile-action-secondary{min-height:38px;padding:9px 15px;border-radius:999px;font-size:12px;font-weight:800}.profile-action-primary{color:#fff;background:linear-gradient(145deg,var(--primary),var(--secondary));box-shadow:0 7px 18px rgba(26,110,245,.22)}.profile-action-secondary{background:#fff;border:1px solid var(--border-strong);color:var(--on-surface)}
-.profile-bio-row{padding:0 24px 18px 150px}.profile-bio-modern{font-size:13.5px;line-height:1.7;max-width:70ch}.profile-meta-row{margin-top:10px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}.profile-meta-item{display:inline-flex;align-items:center;gap:5px;color:var(--on-surface-3);font-size:11.5px}.profile-score-strip{margin:0 24px 18px;padding:12px 14px;border-radius:17px;background:linear-gradient(120deg,rgba(26,110,245,.07),rgba(124,58,237,.06));border:1px solid rgba(26,110,245,.12);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.profile-score-strip-main{display:flex;align-items:center;gap:9px}.profile-score-strip-value{font-size:18px;font-weight:900;letter-spacing:-.04em}.profile-score-strip-label{color:var(--on-surface-3);font-size:11px;font-weight:700}.profile-score-goal{color:var(--on-surface-3);font-size:11px;font-weight:600}
-.profile-mini-stats{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--border)}.profile-mini-stat{padding:13px 10px;text-align:center;border-right:1px solid var(--border)}.profile-mini-stat:last-child{border-right:0}.profile-mini-stat-value{font-size:18px;line-height:1;font-weight:900}.profile-mini-stat-label{margin-top:5px;color:var(--on-surface-3);text-transform:uppercase;letter-spacing:.07em;font-size:9px;font-weight:800}
+
+/* ── Profile topline: menu button row (no cover) ── */
+.profile-topline{display:flex;justify-content:flex-end;padding:14px 14px 0;position:relative;z-index:3}
+.profile-menu-wrap{position:relative}
+.profile-round-btn{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.07);font-weight:800;font-size:17px;color:var(--on-surface-2)}
+.profile-menu{position:absolute;top:46px;right:0;width:200px;padding:6px;border-radius:16px;background:rgba(255,255,255,.98);border:1px solid var(--border);box-shadow:0 18px 48px rgba(0,0,0,.16);display:none;z-index:20}
+.profile-menu.open{display:block}
+.profile-menu-item{width:100%;display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:11px;font-size:12.5px;font-weight:700;color:var(--on-surface);text-align:left}
+.profile-menu-item:hover{background:var(--surface-2)}
+.profile-menu-item.danger{color:var(--danger)}
+.profile-menu-item.danger:hover{background:rgba(220,38,38,.06)}
+.profile-menu-divider{height:1px;background:var(--border);margin:4px 6px}
+
+/* ── Identity: avatar + name + actions, NO cover overlap ── */
+.profile-identity{position:relative;padding:8px 20px 16px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:center}
+.profile-avatar-shell{position:relative;z-index:3;width:90px;height:90px;padding:3px;border-radius:26px;background:rgba(255,255,255,.94);box-shadow:0 6px 20px rgba(0,0,0,.13)}
+.profile-avatar-modern{width:100%;height:100%;border-radius:22px;display:grid;place-items:center;font-size:38px;font-weight:900;color:#fff;background:linear-gradient(135deg,var(--primary),var(--secondary));border:1px solid rgba(255,255,255,.38)}
+.profile-live-dot{position:absolute;right:2px;bottom:2px;width:14px;height:14px;border-radius:50%;background:var(--success);border:3px solid #fff}
+.profile-identity-copy{min-width:0}
+.profile-name-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.profile-name-modern{font-size:24px;line-height:1.05;letter-spacing:-.05em;font-weight:900}
+.profile-handle-modern{margin-top:3px;color:var(--on-surface-3);font-size:13px}
+.profile-subline-modern{margin-top:6px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:var(--on-surface-3);font-size:12px}
+.profile-verified-chip,.profile-tier-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;font-size:10px;font-weight:800;border:1px solid rgba(26,110,245,.16);background:rgba(26,110,245,.08);color:var(--primary)}
+.profile-tier-chip{background:rgba(124,58,237,.08);border-color:rgba(124,58,237,.16);color:var(--secondary)}
+.profile-actions-modern{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.profile-action-primary,.profile-action-secondary{min-height:36px;padding:8px 14px;border-radius:999px;font-size:12px;font-weight:800}
+.profile-action-primary{color:#fff;background:linear-gradient(145deg,var(--primary),var(--secondary));box-shadow:0 5px 14px rgba(26,110,245,.22)}
+.profile-action-secondary{background:#fff;border:1px solid var(--border-strong);color:var(--on-surface)}
+
+/* ── Bio row — full width, no left-indent (no cover) ── */
+.profile-bio-row{padding:0 20px 14px}
+.profile-bio-modern{font-size:13.5px;line-height:1.7;max-width:70ch;color:var(--on-surface)}
+.profile-meta-row{margin-top:8px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.profile-meta-item{display:inline-flex;align-items:center;gap:5px;color:var(--on-surface-3);font-size:11.5px}
+
+/* ── Instagram-style info row (details, interests, links, goal) ── */
+.profile-info-row{padding:0 20px 16px;display:flex;flex-direction:column;gap:6px}
+.profile-info-item{display:flex;align-items:flex-start;gap:7px;font-size:13px;line-height:1.5}
+.profile-info-icon{font-size:14px;width:18px;flex-shrink:0;margin-top:1px}
+.profile-info-label{font-weight:700;color:var(--on-surface-2);flex-shrink:0}
+.profile-info-value{color:var(--on-surface-3);min-width:0;word-break:break-word}
+.profile-info-chips{display:flex;flex-wrap:wrap;gap:5px;flex:1;min-width:0}
+.profile-info-chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;background:var(--primary-alpha);border:1px solid rgba(26,110,245,.14);font-size:11.5px;font-weight:600;color:var(--primary)}
+.profile-info-link{color:var(--primary);font-weight:600;text-decoration:none;font-size:13px}
+.profile-info-link:hover{text-decoration:underline}
+.profile-goal-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;background:linear-gradient(120deg,rgba(26,110,245,.08),rgba(124,58,237,.07));border:1px solid rgba(26,110,245,.12);font-size:12px;font-weight:700;color:var(--primary)}
+
+/* ── Score strip ── */
+.profile-score-strip{margin:0 20px 16px;padding:12px 14px;border-radius:17px;background:linear-gradient(120deg,rgba(26,110,245,.07),rgba(124,58,237,.06));border:1px solid rgba(26,110,245,.12);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.profile-score-strip-main{display:flex;align-items:center;gap:9px}
+.profile-score-strip-value{font-size:18px;font-weight:900;letter-spacing:-.04em}
+.profile-score-strip-label{color:var(--on-surface-3);font-size:11px;font-weight:700}
+.profile-score-goal{color:var(--on-surface-3);font-size:11px;font-weight:600}
+
+/* ── Mini stats ── */
+.profile-mini-stats{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--border)}
+.profile-mini-stat{padding:13px 10px;text-align:center;border-right:1px solid var(--border)}
+.profile-mini-stat:last-child{border-right:0}
+.profile-mini-stat-value{font-size:18px;line-height:1;font-weight:900}
+.profile-mini-stat-label{margin-top:5px;color:var(--on-surface-3);text-transform:uppercase;letter-spacing:.07em;font-size:9px;font-weight:800}
+
+/* ── Achievements: one scrollable strip ── */
+.profile-achievements-scroll{display:flex;flex-direction:row;gap:10px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;scrollbar-width:none;padding:0 16px 16px}
+.profile-achievements-scroll::-webkit-scrollbar{display:none}
+.profile-achievements-scroll .badge-card{flex:0 0 auto;width:110px;scroll-snap-align:start;padding:12px 10px;border-radius:var(--r-sm);background:var(--surface-2);border:1px solid var(--border);text-align:center;position:relative}
+.profile-achievements-scroll .badge-card.locked{opacity:.45;filter:grayscale(.8)}
+
+/* Account Center modal */
+.acct-center-overlay{display:none;position:fixed;inset:0;z-index:1100;background:rgba(13,17,23,.54);backdrop-filter:blur(6px);align-items:center;justify-content:center}
+.acct-center-overlay.open{display:flex}
+.acct-center-modal{width:min(440px,calc(100% - 32px));border-radius:24px;background:#fff;border:1px solid var(--border);box-shadow:0 24px 64px rgba(0,0,0,.18);overflow:hidden;display:flex;flex-direction:column}
+.acct-center-head{padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface-2)}
+.acct-center-title{font-size:16px;font-weight:800;letter-spacing:-.03em}
+.acct-center-close{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:#fff;display:grid;place-items:center;font-size:18px;color:var(--on-surface-3);cursor:pointer}
+.acct-center-body{padding:20px;display:flex;flex-direction:column;gap:16px;overflow-y:auto}
+.acct-center-section{padding:14px;border-radius:15px;background:var(--surface-2);border:1px solid var(--border)}
+.acct-center-section-title{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--on-surface-3);margin-bottom:10px}
+.acct-center-row{display:flex;gap:8px;flex-direction:column}
+.acct-center-danger{border-color:rgba(220,38,38,.18);background:rgba(220,38,38,.04)}
+.acct-center-danger .acct-center-section-title{color:var(--danger)}
+
+@media(max-width:840px){
+  #pg-profile .profile-wrap{width:min(100%,calc(100% - 12px));padding-top:7px}
+  .profile-identity{grid-template-columns:auto minmax(0,1fr);align-items:center;gap:12px;padding-inline:14px}
+  .profile-avatar-shell{width:76px;height:76px;border-radius:22px}
+  .profile-avatar-modern{border-radius:18px;font-size:30px}
+  .profile-actions-modern{grid-column:1/-1;justify-content:stretch;padding-bottom:0}
+  .profile-action-primary,.profile-action-secondary{flex:1}
+  .profile-bio-row{padding:0 14px 12px}
+  .profile-info-row{padding:0 14px 14px}
+  .profile-score-strip{margin-inline:14px}
+  .profile-feed-viewport{max-height:calc(100dvh - 110px)}
+  .profile-post-strip{grid-auto-columns:minmax(280px,86%)}
+  .profile-post-strip.expanded{grid-auto-columns:minmax(330px,92%)}
+  .profile-gallery{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .profile-gallery-tile.large{grid-column:span 2;grid-row:span 2}
+}
+@media(max-width:560px){
+  .profile-name-modern{font-size:20px}
+  .profile-mini-stat-value{font-size:16px}
+  .profile-gallery{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
 .profile-feed-viewport{min-height:0;max-height:min(72vh,800px);overflow:auto;scrollbar-width:thin;overscroll-behavior:contain;border-radius:24px}.profile-section-card{border-radius:22px;overflow:hidden}.profile-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px 12px}.profile-section-title-wrap{display:flex;align-items:center;gap:9px}.profile-section-kicker{color:var(--on-surface-3);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}.profile-section-title{font-size:15px;font-weight:900}.profile-open-grid-btn{padding:8px 11px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);font-size:10.5px;font-weight:800;color:var(--on-surface-2)}
 .profile-thoughts{transition:max-height .28s var(--ease-out),opacity .2s ease,transform .28s var(--ease-out);max-height:460px}.profile-thoughts.collapsed-for-gallery{max-height:0;opacity:0;transform:translateY(-8px);overflow:hidden;pointer-events:none}.profile-post-strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(300px,64%);gap:12px;overflow-x:auto;overflow-y:hidden;padding:0 18px 16px;scroll-snap-type:x mandatory}.profile-post-strip.expanded{grid-auto-columns:minmax(420px,74%)}.profile-post-card{scroll-snap-align:start;aspect-ratio:16/9;min-height:220px;border-radius:20px;display:flex;flex-direction:column;border:1px solid var(--border);background:#fff;padding:14px;box-shadow:0 4px 16px rgba(13,17,23,.035)}.profile-post-header{display:flex;align-items:center;gap:9px;margin-bottom:10px}.profile-post-mini-avatar{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:900}.profile-post-author{font-size:11.5px;font-weight:800}.profile-post-time{margin-left:auto;color:var(--on-surface-3);font-size:10px}.profile-post-body{font-size:14px;line-height:1.55}.profile-post-footer{margin-top:13px;padding-top:11px;border-top:1px solid var(--border);display:flex;gap:13px;color:var(--on-surface-3);font-size:10.5px;font-weight:700}.profile-poll-box{margin-top:11px;padding:11px;border-radius:15px;background:var(--surface-2)}.profile-poll-option{position:relative;overflow:hidden;margin-top:7px;min-height:32px;padding:7px 9px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-radius:10px;border:1px solid var(--border);background:#fff;font-size:10.5px;font-weight:700}.profile-poll-option-fill{position:absolute;inset:0 auto 0 0;background:rgba(26,110,245,.08)}.profile-poll-option span{position:relative;z-index:1}.profile-poll-percent{color:var(--on-surface-3)}
 .profile-gallery-section{margin-top:12px;min-height:360px}.profile-gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;padding:0 3px 3px}.profile-gallery-tile{position:relative;aspect-ratio:1/1;overflow:hidden;background:var(--surface-3)}.profile-gallery-tile.large{grid-column:span 2;grid-row:span 2}.profile-gallery-placeholder{aspect-ratio:1/1;display:grid;place-items:center;text-align:center;padding:18px;color:var(--on-surface-3);background:linear-gradient(135deg,rgba(26,110,245,.06),rgba(124,58,237,.07)),var(--surface-2)}.profile-gallery-placeholder strong{display:block;color:var(--on-surface);font-size:13px;margin-bottom:4px}.profile-gallery-placeholder span{font-size:10.5px;line-height:1.5}.profile-extra-strip{display:grid;gap:12px;margin-top:12px;padding-bottom:8px}.profile-achievements-card{padding:16px}.profile-achievements-card .section-head{padding:0 0 10px;margin-bottom:0}.profile-achievements-card .badges-grid{padding:0;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}.profile-about-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:0 16px 16px}.profile-about-box{padding:12px;border-radius:15px;background:var(--surface-2);border:1px solid var(--border)}.profile-about-label{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;font-weight:800;color:var(--on-surface-3)}.profile-about-value{margin-top:5px;font-size:12px;line-height:1.55;color:var(--on-surface);word-break:break-word}.profile-top-sticky{transition:opacity .2s,max-height .28s var(--ease-out),transform .28s var(--ease-out);max-height:999px}.profile-feed-viewport.gallery-focus .profile-top-sticky{opacity:0;max-height:0;transform:translateY(-10px);overflow:hidden;pointer-events:none}.profile-feed-viewport.gallery-focus .profile-thoughts{margin-top:0;max-height:0;opacity:0;transform:translateY(-10px);overflow:hidden;pointer-events:none}
-@media(max-width:840px){#pg-profile .profile-wrap{width:min(100%,calc(100% - 12px));padding-top:7px}.profile-identity{grid-template-columns:auto minmax(0,1fr);align-items:center;gap:13px;padding-inline:15px}.profile-avatar-shell{width:88px;height:88px;border-radius:24px}.profile-avatar-modern{border-radius:20px;font-size:34px}.profile-actions-modern{grid-column:1/-1;justify-content:stretch;padding-bottom:0}.profile-action-primary,.profile-action-secondary{flex:1}.profile-bio-row{padding:0 15px 14px}.profile-score-strip{margin-inline:15px}.profile-feed-viewport{max-height:calc(100dvh - 110px)}.profile-post-strip{grid-auto-columns:minmax(280px,86%)}.profile-post-strip.expanded{grid-auto-columns:minmax(330px,92%)}.profile-gallery{grid-template-columns:repeat(3,minmax(0,1fr))}.profile-gallery-tile.large{grid-column:span 2;grid-row:span 2}}
-@media(max-width:560px){.profile-cover{height:126px}.profile-name-modern{font-size:23px}.profile-mini-stat-value{font-size:16px}.profile-gallery{grid-template-columns:repeat(3,minmax(0,1fr))}.profile-about-grid{grid-template-columns:1fr}}
+/* old mobile rules now merged into redesign CSS block above */
 
 
 </style>
@@ -3290,38 +3383,76 @@ body.mortalive-progress-open .sakura-topbar {
 </section>
 
 <!-- ═══════════════════ PROFILE ═══════════════════════ -->
-<!-- ═══════════════════ PROFILE ═══════════════════════ -->
 <section id="pg-profile" class="page">
   <div class="wrap profile-wrap">
     <div class="modern-profile-card profile-top-sticky">
-      <div class="profile-cover">
-        <div class="profile-topline"><div class="profile-menu-wrap">
+
+      <!-- Top bar: menu button only, no cover banner -->
+      <div class="profile-topline">
+        <div class="profile-menu-wrap">
           <button class="profile-round-btn" id="btn-profile-menu" type="button" aria-label="Profile menu" aria-expanded="false">•••</button>
           <div class="profile-menu" id="profile-menu" role="menu">
             <button class="profile-menu-item" id="btn-profile-copy" type="button">🔗 Copy profile link</button>
             <button class="profile-menu-item" id="btn-profile-progress" type="button">🧲 View status</button>
+            <div class="profile-menu-divider"></div>
+            <button class="profile-menu-item" id="btn-profile-account-center" type="button">🔐 Account center</button>
+            <div class="profile-menu-divider"></div>
             <button class="profile-menu-item danger" id="btn-profile-logout" type="button">↪ Log out</button>
           </div>
-        </div></div>
+        </div>
       </div>
 
+      <!-- Identity row: avatar + name + actions (no cover overlap needed) -->
       <div class="profile-identity">
-        <div class="profile-avatar-shell"><div class="profile-avatar-modern" id="profile-avatar">👤</div><div class="profile-live-dot"></div></div>
+        <div class="profile-avatar-shell">
+          <div class="profile-avatar-modern" id="profile-avatar">👤</div>
+          <div class="profile-live-dot"></div>
+        </div>
         <div class="profile-identity-copy">
-          <div class="profile-name-line"><div class="profile-name-modern" id="profile-username-display">—</div><span class="profile-verified-chip">✓ Mortal</span></div>
+          <div class="profile-name-line">
+            <div class="profile-name-modern" id="profile-username-display">—</div>
+            <span class="profile-verified-chip">✓ Mortal</span>
+          </div>
           <div class="profile-handle-modern" id="profile-handle-modern">@user</div>
           <div class="profile-subline-modern" id="profile-subline-display">Member</div>
         </div>
-        <div class="profile-actions-modern"><button class="profile-action-primary" id="btn-edit-profile" type="button">Edit profile</button><button class="profile-action-secondary" id="btn-share-profile" type="button">Share</button></div>
+        <div class="profile-actions-modern">
+          <button class="profile-action-primary" id="btn-edit-profile" type="button">Edit profile</button>
+          <button class="profile-action-secondary" id="btn-share-profile" type="button">Share</button>
+        </div>
       </div>
 
+      <!-- Bio -->
       <div class="profile-bio-row">
         <p class="profile-bio-modern" id="profile-bio-display">—</p>
-        <div class="profile-meta-row"><span class="profile-meta-item">🧲 <strong id="profile-hero-score">—</strong> crockroach Score</span><span class="profile-meta-item">•</span><span class="profile-meta-item" id="profile-details-meta">Member</span><span class="profile-meta-item" id="profile-website-meta"></span></div>
+        <div class="profile-meta-row">
+          <span class="profile-meta-item">🧲 <strong id="profile-hero-score">—</strong> crockroach Score</span>
+          <span class="profile-meta-item">•</span>
+          <span class="profile-meta-item" id="profile-details-meta">Member</span>
+        </div>
       </div>
 
-      <div class="profile-score-strip"><div class="profile-score-strip-main"><div class="profile-score-strip-value"><span id="profile-score-strip-value">—</span></div><div><div class="profile-score-strip-label">crockroach Score</div><div class="profile-score-goal" id="profile-score-strip-goal">Building momentum…</div></div></div><span class="profile-tier-chip" id="profile-tier-chip">Starter</span></div>
+      <!-- Instagram-style inline details (replaces About section) -->
+      <div class="profile-info-row" id="profile-info-row">
+        <div class="profile-info-item" id="profile-info-details-row" style="display:none">
+          <span class="profile-info-icon">📌</span>
+          <span class="profile-info-value" id="profile-info-details-val">—</span>
+        </div>
+        <div class="profile-info-item" id="profile-info-interests-row" style="display:none">
+          <span class="profile-info-icon">✨</span>
+          <div class="profile-info-chips" id="profile-info-interests-val"></div>
+        </div>
+        <div class="profile-info-item" id="profile-info-links-row" style="display:none">
+          <span class="profile-info-icon">🔗</span>
+          <div style="display:flex;flex-direction:column;gap:4px;" id="profile-info-links-val"></div>
+        </div>
+        <div class="profile-info-item" id="profile-info-goal-row">
+          <span class="profile-info-icon">🎯</span>
+          <span class="profile-goal-pill" id="profile-info-goal-val">Building momentum…</span>
+        </div>
+      </div>
 
+      <!-- Stats grid -->
       <div class="profile-mini-stats">
         <div class="profile-mini-stat"><div class="profile-mini-stat-value" id="profile-stat-score">—</div><div class="profile-mini-stat-label">Score</div></div>
         <div class="profile-mini-stat"><div class="profile-mini-stat-value" id="profile-stat-streak">—</div><div class="profile-mini-stat-label">Day streak</div></div>
@@ -3329,10 +3460,17 @@ body.mortalive-progress-open .sakura-topbar {
         <div class="profile-mini-stat"><div class="profile-mini-stat-value" id="profile-stat-rank">#—</div><div class="profile-mini-stat-label">Weekly rank</div></div>
       </div>
 
-      <div style="display:none">
-        <div id="profile-details-label-display">Details</div><div id="profile-details-display">—</div>
+      <!-- Hidden compat elements (used by app.js internals) -->
+      <div style="display:none" aria-hidden="true">
+        <div id="profile-details-label-display">Details</div>
+        <div id="profile-details-display">—</div>
         <div id="profile-website-container"><a id="profile-website-display" href="#" target="_blank">—</a></div>
-        <div id="profile-interests-display">—</div><div id="profile-links-display">—</div>
+        <div id="profile-interests-display">—</div>
+        <div id="profile-links-display">—</div>
+        <div id="profile-score-strip-value">—</div>
+        <div id="profile-score-strip-goal">—</div>
+        <div id="profile-tier-chip">Starter</div>
+        <div id="profile-website-meta"></div>
       </div>
     </div>
 
@@ -3357,8 +3495,22 @@ body.mortalive-progress-open .sakura-topbar {
       </section>
 
       <div class="profile-extra-strip">
-        <section class="profile-section-card profile-achievements-card"><div class="section-head"><span class="section-title">Achievements</span><span id="profile-badges-count" style="font-size:12px;color:var(--on-surface-3);font-weight:600">— / 7</span></div><div class="badges-grid" id="profile-badges-grid"></div></section>
-        <section class="profile-section-card"><div class="section-head"><span class="section-title">About</span></div><div class="profile-about-grid"><div class="profile-about-box"><div class="profile-about-label">Details</div><div class="profile-about-value" id="profile-about-details">—</div></div><div class="profile-about-box"><div class="profile-about-label">Interests</div><div class="profile-about-value" id="profile-about-interests">—</div></div><div class="profile-about-box"><div class="profile-about-label">Links</div><div class="profile-about-value" id="profile-about-links">—</div></div><div class="profile-about-box"><div class="profile-about-label">Goal</div><div class="profile-about-value" id="profile-about-goal">—</div></div></div></section>
+        <!-- Achievements: single horizontal scroll line, scrollable on mobile -->
+        <section class="profile-section-card profile-achievements-card">
+          <div class="section-head" style="padding:14px 16px 10px;margin-bottom:0;">
+            <span class="section-title">Achievements</span>
+            <span id="profile-badges-count" style="font-size:12px;color:var(--on-surface-3);font-weight:600">— / 7</span>
+          </div>
+          <div class="profile-achievements-scroll" id="profile-badges-grid"></div>
+        </section>
+        <!-- About section removed — data now shown in profile top section -->
+        <!-- Legacy compat IDs kept hidden so app.js syncs don't error -->
+        <div style="display:none" aria-hidden="true">
+          <div id="profile-about-details">—</div>
+          <div id="profile-about-interests">—</div>
+          <div id="profile-about-links">—</div>
+          <div id="profile-about-goal">—</div>
+        </div>
       </div>
     </div></div>
   </div>
@@ -3371,6 +3523,39 @@ body.mortalive-progress-open .sakura-topbar {
   <button id="btn-edit-save-inline" type="button"></button>
   <button id="btn-delete-account" type="button"></button>
 </div>
+
+<!-- ── Account Center Modal ── -->
+<div class="acct-center-overlay" id="acct-center-overlay" role="dialog" aria-modal="true" aria-label="Account center">
+  <div class="acct-center-modal">
+    <div class="acct-center-head">
+      <span class="acct-center-title">🔐 Account Center</span>
+      <button class="acct-center-close" id="btn-acct-center-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="acct-center-body">
+      <!-- Change password -->
+      <div class="acct-center-section">
+        <div class="acct-center-section-title">Change Password</div>
+        <div class="acct-center-row">
+          <div class="field" style="margin:0">
+            <label for="acct-new-password" style="font-size:12px;font-weight:700;color:var(--on-surface-2);margin-bottom:6px;display:block">New password</label>
+            <div class="password-input-wrap">
+              <input id="acct-new-password" type="password" placeholder="At least 8 characters" autocomplete="new-password" style="width:100%;padding:10px 14px;border-radius:var(--r-sm);border:1.5px solid var(--border-strong);font-size:13px;outline:none;">
+              <button type="button" class="pw-toggle-btn" id="btn-acct-pw-toggle" tabindex="-1" aria-label="Show password">👁️</button>
+            </div>
+          </div>
+          <div id="acct-pw-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;padding:10px;font-size:12px;border-radius:8px;border:1px solid"></div>
+          <button class="btn btn-primary" id="btn-acct-save-password" type="button" style="margin-top:4px;min-height:40px;font-size:13px;">Update password</button>
+        </div>
+      </div>
+      <!-- Danger zone -->
+      <div class="acct-center-section acct-center-danger">
+        <div class="acct-center-section-title">Danger Zone</div>
+        <p style="font-size:12px;color:var(--on-surface-3);line-height:1.6;margin-bottom:12px;">Deleting your account removes all local data permanently and cannot be undone.</p>
+        <button class="btn" id="btn-acct-delete" type="button" style="background:#fff;color:var(--danger);border:1.5px solid var(--danger);min-height:38px;font-size:13px;font-weight:700;padding:8px 16px;border-radius:var(--r-sm);width:100%;">🗑️ Delete account</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="overlay" id="edit-modal"><div class="modal" style="width:min(520px,100%);padding:0;overflow:hidden;max-height:85vh;display:flex;flex-direction:column">
     <div style="padding:20px 22px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--surface-2);flex-shrink:0"><span style="font-size:16px;font-weight:800;letter-spacing:-.03em">Edit Profile</span><button id="btn-edit-close" class="modal-close" style="font-size:20px;color:var(--on-surface-3);border:none;background:transparent;cursor:pointer">&times;</button></div>
     <div style="padding:20px 22px;display:flex;flex-direction:column;gap:16px;text-align:left;overflow-y:auto;flex:1">
@@ -3380,7 +3565,8 @@ body.mortalive-progress-open .sakura-topbar {
       <div class="field" id="edit-website-container" style="display:none"><label for="edit-website">Website</label><input id="edit-website" type="url" placeholder="https://..."></div>
       <div class="field"><label>Interests (max 3)</label><div id="edit-interests-container" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px"></div></div>
       <div class="field"><label>Links & Portfolio (<span id="edit-link-count">0</span>/5)</label><div id="edit-links-container" style="display:flex;flex-direction:column;gap:10px;margin-bottom:8px"></div><button type="button" class="btn btn-ghost" id="btn-edit-add-link" onclick="window.addEditLink()" style="padding:8px;font-size:12px">+ Add Link</button></div>
-      <div class="field" style="margin-top:10px;padding-top:16px;border-top:1px solid var(--border)"><label for="edit-new-password">New password</label><input id="edit-new-password" type="password" placeholder="Leave blank to keep current" autocomplete="new-password"></div>
+      <!-- Password moved to Account Center (dropdown → Account Center) -->
+      <input id="edit-new-password" type="password" autocomplete="new-password" style="display:none" aria-hidden="true">
       <div id="edit-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;padding:10px;font-size:12px"></div>
     </div>
     <div style="padding:14px 22px 20px;border-top:1px solid var(--border);display:flex;gap:10px;flex-shrink:0"><button class="btn btn-ghost" id="btn-edit-cancel" style="flex:1">Cancel</button><button class="btn btn-primary" id="btn-edit-save" style="flex:1">Save Changes</button></div>
@@ -3658,21 +3844,160 @@ body.mortalive-progress-open .sakura-topbar {
 (function(){
   function q(id){ return document.getElementById(id); }
 
+  /* ── Render instagram-style info row from app.js data ── */
+  function renderInfoRow(){
+    const S = window.S || {};
+    const acc = S.accountData || {};
+
+    // Details
+    const detailsRow = q('profile-info-details-row');
+    const detailsVal = q('profile-info-details-val');
+    if(detailsRow && detailsVal){
+      if(acc.details){
+        detailsVal.textContent = acc.details;
+        detailsRow.style.display = 'flex';
+      } else {
+        detailsRow.style.display = 'none';
+      }
+    }
+
+    // Interests as chips
+    const interestsRow = q('profile-info-interests-row');
+    const interestsVal = q('profile-info-interests-val');
+    if(interestsRow && interestsVal){
+      const interests = acc.interests || [];
+      const PROFILE_INTERESTS = window.PROFILE_INTERESTS || [];
+      if(interests.length > 0){
+        interestsVal.innerHTML = interests.map(id => {
+          const found = PROFILE_INTERESTS.find(i=>i.id===id);
+          const label = found ? found.label : id;
+          return `<span class="profile-info-chip">${label}</span>`;
+        }).join('');
+        interestsRow.style.display = 'flex';
+      } else {
+        interestsRow.style.display = 'none';
+      }
+    }
+
+    // Links
+    const linksRow = q('profile-info-links-row');
+    const linksVal = q('profile-info-links-val');
+    if(linksRow && linksVal){
+      const links = S.userLinks || [];
+      if(links.length > 0){
+        linksVal.innerHTML = links.map(l => {
+          const url = /^https?:\/\//i.test(l.url||'') ? l.url : `https://${l.url}`;
+          return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="profile-info-link">${l.name}</a>`;
+        }).join('');
+        linksRow.style.display = 'flex';
+      } else {
+        linksRow.style.display = 'none';
+      }
+    }
+
+    // Goal
+    const goalVal = q('profile-info-goal-val');
+    if(goalVal){
+      const goal = q('progress-goal')?.textContent || 'Keep building momentum.';
+      goalVal.textContent = goal;
+    }
+  }
+
   function sync(){
     const score=q('profile-hero-score')?.textContent || '—';
     const goal=q('progress-goal')?.textContent || 'Keep building momentum.';
-    if(q('profile-score-strip-value')) q('profile-score-strip-value').textContent=score;
-    if(q('profile-score-strip-goal')) q('profile-score-strip-goal').textContent=goal;
     const u=window.S?.username || 'user';
     if(q('profile-handle-modern')) q('profile-handle-modern').textContent='@'+String(u).toLowerCase().replace(/\s+/g,'_');
     const sub=q('profile-subline-display')?.textContent || '';
     if(q('profile-details-meta')) q('profile-details-meta').textContent=sub.split('·').map(s=>s.trim()).filter(Boolean).pop() || 'Member';
-    const n=Number(String(score).replace(/[^0-9.-]/g,'')) || 0;
-    if(q('profile-tier-chip')) q('profile-tier-chip').textContent=n>=700?'Gold':n>=420?'Silver':'Starter';
+    // Update hidden compat elements (used by app.js)
     if(q('profile-about-details')) q('profile-about-details').textContent=q('profile-details-display')?.textContent || '—';
     if(q('profile-about-interests')) q('profile-about-interests').textContent=q('profile-interests-display')?.textContent || '—';
     if(q('profile-about-links')) q('profile-about-links').textContent=q('profile-links-display')?.textContent || '—';
     if(q('profile-about-goal')) q('profile-about-goal').textContent=goal;
+    renderInfoRow();
+  }
+
+  /* ── Account Center ── */
+  function openAcctCenter(){
+    const overlay = q('acct-center-overlay');
+    if(overlay){ overlay.classList.add('open'); document.body.style.overflow='hidden'; }
+    q('profile-menu')?.classList.remove('open');
+    q('btn-profile-menu')?.setAttribute('aria-expanded','false');
+  }
+  function closeAcctCenter(){
+    const overlay = q('acct-center-overlay');
+    if(overlay){ overlay.classList.remove('open'); document.body.style.overflow=''; }
+    if(q('acct-pw-error')) q('acct-pw-error').style.display='none';
+    if(q('acct-new-password')) q('acct-new-password').value='';
+  }
+
+  function bindAcctCenter(){
+    const overlay = q('acct-center-overlay');
+    const btnOpen = q('btn-profile-account-center');
+    const btnClose = q('btn-acct-center-close');
+    const btnSavePw = q('btn-acct-save-password');
+    const btnDelete = q('btn-acct-delete');
+    const pwToggle = q('btn-acct-pw-toggle');
+
+    if(btnOpen && !btnOpen.dataset.acctBound){
+      btnOpen.dataset.acctBound='1';
+      btnOpen.addEventListener('click', openAcctCenter);
+    }
+    if(btnClose && !btnClose.dataset.acctBound){
+      btnClose.dataset.acctBound='1';
+      btnClose.addEventListener('click', closeAcctCenter);
+    }
+    if(overlay && !overlay.dataset.acctBound){
+      overlay.dataset.acctBound='1';
+      overlay.addEventListener('click', e=>{ if(e.target===overlay) closeAcctCenter(); });
+    }
+    if(pwToggle && !pwToggle.dataset.acctBound){
+      pwToggle.dataset.acctBound='1';
+      pwToggle.addEventListener('click', ()=>{
+        const inp = q('acct-new-password');
+        if(!inp) return;
+        inp.type = inp.type==='password' ? 'text' : 'password';
+        pwToggle.textContent = inp.type==='password' ? '👁️' : '🙈';
+      });
+    }
+    if(btnSavePw && !btnSavePw.dataset.acctBound){
+      btnSavePw.dataset.acctBound='1';
+      btnSavePw.addEventListener('click', async()=>{
+        const pw = q('acct-new-password')?.value||'';
+        const errEl = q('acct-pw-error');
+        if(errEl) errEl.style.display='none';
+        if(pw.length < 8){
+          if(errEl){ errEl.textContent='Password must be at least 8 characters.'; errEl.style.display='block'; }
+          return;
+        }
+        btnSavePw.disabled=true; btnSavePw.textContent='Saving…';
+        try{
+          const sb = window.sb;
+          if(!sb) throw new Error('Not connected. Please log in again.');
+          const { error } = await sb.auth.updateUser({ password: pw });
+          if(error) throw error;
+          if(q('acct-new-password')) q('acct-new-password').value='';
+          window.toast?.('Password updated!','🔐');
+          closeAcctCenter();
+        } catch(e){
+          if(errEl){ errEl.textContent=e.message||'Could not update password.'; errEl.style.display='block'; }
+        } finally {
+          btnSavePw.disabled=false; btnSavePw.textContent='Update password';
+        }
+      });
+    }
+    if(btnDelete && !btnDelete.dataset.acctBound){
+      btnDelete.dataset.acctBound='1';
+      btnDelete.addEventListener('click', ()=>{
+        q('btn-delete-account')?.click();
+      });
+    }
+    // ESC to close
+    if(!document.body.dataset.acctCenterEsc){
+      document.body.dataset.acctCenterEsc='1';
+      document.addEventListener('keydown', e=>{ if(e.key==='Escape' && q('acct-center-overlay')?.classList.contains('open')) closeAcctCenter(); });
+    }
   }
 
   function closeProgress(){
@@ -3774,14 +4099,22 @@ body.mortalive-progress-open .sakura-topbar {
     };
   }
 
+  // Expose renderInfoRow so app.js save handler can refresh the top section
+  window.renderProfileInfoRow = renderInfoRow;
+
   window.addEventListener('mortalive-auth-state',()=>{
     setTimeout(()=>{
       const active=document.querySelector('.page.active');
       if(active?.id!=='pg-profile') closeProgress();
       init();
+      bindAcctCenter();
+      setTimeout(renderInfoRow, 200); // give app.js time to hydrate
     },0);
   });
-  document.addEventListener('DOMContentLoaded',init);
+  document.addEventListener('DOMContentLoaded',()=>{
+    init();
+    bindAcctCenter();
+  });
 })();
 </script>
 
