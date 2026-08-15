@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-15-profile-final-4023-merge'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-15-confirm-dialogs-css-fixes'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -804,6 +804,63 @@ function toast(msg, icon = '✅') {
 function fmtTime() {
   const d = new Date();
   return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// Reusable confirm dialog — replaces all native confirm() calls.
+// Returns a Promise<boolean>. Danger variant styles the confirm button red.
+function showConfirmDialog({ title, body, confirmLabel = 'Confirm', cancelLabel = 'Cancel', danger = false } = {}) {
+  return new Promise((resolve) => {
+    const existing = document.getElementById('mortalive-confirm-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'mortalive-confirm-overlay';
+    overlay.style.cssText = [
+      'position:fixed', 'inset:0', 'z-index:2000',
+      'display:flex', 'align-items:center', 'justify-content:center', 'padding:18px',
+      'background:rgba(0,0,0,.44)', 'backdrop-filter:blur(12px)',
+      '-webkit-backdrop-filter:blur(12px)'
+    ].join(';');
+
+    const confirmBtnStyle = danger
+      ? 'background:var(--danger);color:#fff;box-shadow:0 4px 14px rgba(220,38,38,.28);'
+      : 'background:linear-gradient(145deg,var(--primary),var(--secondary));color:#fff;box-shadow:0 4px 14px rgba(26,110,245,.28);';
+
+    overlay.innerHTML = `
+      <div style="
+        width:min(380px,100%);background:#fff;border:1px solid var(--border);
+        border-radius:var(--r-lg);box-shadow:var(--elev-4);padding:28px;text-align:center;
+        animation:toastIn .18s var(--ease-out,cubic-bezier(.16,1,.3,1));
+      ">
+        <div style="font-size:36px;margin-bottom:12px;">${danger ? '⚠️' : '❓'}</div>
+        <div style="font-size:18px;font-weight:800;letter-spacing:-.03em;color:var(--on-surface);margin-bottom:10px;">${title || 'Are you sure?'}</div>
+        ${body ? `<div style="font-size:13.5px;color:var(--on-surface-3);line-height:1.65;margin-bottom:20px;">${body}</div>` : '<div style="margin-bottom:20px;"></div>'}
+        <div style="display:flex;gap:10px;">
+          <button id="mc-cancel" style="
+            flex:1;padding:13px;border-radius:var(--r-sm);border:1.5px solid var(--border-strong);
+            background:#fff;color:var(--on-surface);font-size:14px;font-weight:700;cursor:pointer;
+          ">${cancelLabel}</button>
+          <button id="mc-confirm" style="
+            flex:1;padding:13px;border-radius:var(--r-sm);border:0;
+            font-size:14px;font-weight:700;cursor:pointer;${confirmBtnStyle}
+          ">${confirmLabel}</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+
+    const cleanup = (result) => {
+      overlay.remove();
+      resolve(result);
+    };
+
+    overlay.querySelector('#mc-confirm').addEventListener('click', () => cleanup(true));
+    overlay.querySelector('#mc-cancel').addEventListener('click', () => cleanup(false));
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(false); });
+    document.addEventListener('keydown', function esc(e) {
+      if (e.key === 'Escape') { document.removeEventListener('keydown', esc); cleanup(false); }
+    });
+  });
 }
 
 function setText(id, value) {
@@ -4035,20 +4092,49 @@ function bindProfileEvents() {
     }
   });
 
-  $('btn-profile-logout')?.addEventListener('click', () => {
-    if (confirm('Log out of Mortalive?')) {
-      $('btn-logout')?.click();
-    }
+  $('btn-profile-logout')?.addEventListener('click', async () => {
+    const confirmed = await showConfirmDialog({
+      title: 'Log out?',
+      body: 'You can always sign back in with your email and password.',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Stay',
+      danger: false
+    });
+    if (confirmed) $('btn-logout')?.click();
   });
 
-  $('btn-delete-account')?.addEventListener('click', () => {
-    if(confirm('This will permanently delete your local account data. Proceed?')) {
-      localStorage.removeItem('mortalive_token');
-      localStorage.removeItem('mortalive_username');
-      localStorage.removeItem('mortalive_user_id');
-      localStorage.removeItem(PROGRESS_KEY);
-      window.location.reload();
-    }
+  $('btn-delete-account')?.addEventListener('click', async () => {
+    const confirmed = await showConfirmDialog({
+      title: 'Delete account?',
+      body: 'This removes all your local data and signs you out permanently. This action cannot be undone.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      danger: true
+    });
+    if (!confirmed) return;
+
+    // Sign out from Supabase to invalidate the server session token
+    try { await sb?.auth?.signOut(); } catch (e) {}
+
+    // Clear all local state
+    localStorage.removeItem('mortalive_token');
+    localStorage.removeItem('mortalive_username');
+    localStorage.removeItem('mortalive_user_id');
+    localStorage.removeItem('mortalive_guest_name');
+    localStorage.removeItem(PROGRESS_KEY);
+    localStorage.removeItem(PROFILE_KEY);
+
+    S.authToken = null;
+    S.username = null;
+    S.userId = null;
+    S.accountData = null;
+    S.userLinks = [];
+    S.crockroachScore = null;
+    S.isGuest = true;
+    _autoLoginPromise = null;
+
+    toast('Account data deleted', '🗑️');
+    setTimeout(() => window.location.reload(), 800);
   });
 }
 
