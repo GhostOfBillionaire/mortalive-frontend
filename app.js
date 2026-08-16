@@ -816,6 +816,11 @@ function showPage(id) {
         console.warn('[Profile] navigation hydration warning:', error);
       });
     }
+    // Always init the post composer and hydrate profile posts on navigation
+    initProfilePostComposer();
+    hydrateProfilePosts(S.userId).catch((error) => {
+      console.warn('[Profile] posts hydration warning:', error);
+    });
   }
 
   if (id === 'pg-feed') {
@@ -4344,13 +4349,15 @@ function initFeedPage() {
     if (action) {
       const type = action.dataset.feedAction;
       const postId = action.dataset.postId;
+      if (type === 'retry') { fetchFeedPage(true); return; }
+      if (!postId) return; // guard: all other actions require a postId
       if (type === 'delete') deleteFeedPost(postId);
       if (type === 'like') togglePostLike(postId);
       if (type === 'comments') togglePostComments(postId);
       if (type === 'delete-comment') deletePostComment(postId, action.dataset.commentId);
       if (type === 'comment-submit') {
-        const input = document.querySelector(`#pg-feed .comment-input[data-comment-input=\"${CSS.escape(postId)}\"]`);
-        createPostComment(postId, input?.value || '');
+        const input = document.querySelector(`#pg-feed .comment-input[data-comment-input="${CSS.escape(postId)}"]`);
+        if (input?.value?.trim()) createPostComment(postId, input.value);
       }
       if (type === 'copy') {
         const url = `${location.origin}${location.pathname}#feed-post-${postId}`;
@@ -4514,8 +4521,10 @@ function initProfilePostComposer() {
   const button = $('btn-profile-post-submit');
   const error = $('profile-post-error');
   if (!composer || !input || !button) return;
-  if (composer.dataset.bound === '1') return;
+  // Reset the guard if the input element changed (e.g. after a DOM re-render)
+  if (composer.dataset.bound === '1' && composer.dataset.boundInputId === input.id + (input.dataset.uid || '')) return;
   composer.dataset.bound = '1';
+  composer.dataset.boundInputId = input.id + (input.dataset.uid || '');
 
   const sync = () => {
     const text = input.value.trim();
