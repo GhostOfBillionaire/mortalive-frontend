@@ -1,3 +1,4 @@
+// MORTALIVE BOOT-CHAIN FINAL — 2026-08-16 16:40 IST — contains setActiveMode + full original startup functions
 // FRESH BUILD MARKER — 2026-08-16 16:26 IST — redeploy this exact file
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
