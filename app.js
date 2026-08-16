@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-16-social-profile-photos-presence'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-16-profile-scroll-gallery-likes-audit'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -37,7 +37,7 @@ const S = {
   camGranted: false,
   micMuted: false,
   camOff: false,
-  onlineCount: 0,
+  onlineCount: 2847,
   onlineTimerStarted: false,
   pendingAction: null,
   replyTimer: null,
@@ -63,11 +63,7 @@ const S = {
   chatStartedAt: null,
   chatCounted: false,
   progress: null,
-  profile: null,
-  profileViewUserId: null,
-  profileViewData: null,
-  selectedFeedPhoto: null,
-  selectedProfilePhoto: null
+  profile: null
 };
 
 // EXPLICIT GLOBAL BINDING: Allows index.html inline scripts to accurately read the guest state
@@ -770,8 +766,6 @@ function ready(fn) {
   }
 }
 
-
-
 // Phase 1 app boundary: Now extended to include the Coming Soon pages
 const TALK_PAGE_IDS = new Set([
   'pg-land',
@@ -785,45 +779,51 @@ const TALK_PAGE_IDS = new Set([
   'pg-profile'
 ]);
 
-function showPage(id, options = {}) {
+function showPage(id) {
+  // Enforce Guest Isolation - Redirect to auth if guest attempts to view locked tabs
   if (S.isGuest && ['pg-feed', 'pg-messages', 'pg-profile'].includes(id)) {
     toast('Sign in to access this page', '🔒');
     id = 'pg-auth';
-    setTimeout(() => { $('tab-login')?.click(); }, 0);
+    setTimeout(() => {
+      const tabLogin = $('tab-login');
+      if (tabLogin) tabLogin.click();
+    }, 0);
   }
+
   if (!TALK_PAGE_IDS.has(id)) {
     console.warn('[Mortalive] Blocked navigation to non-Talk page:', id);
     return;
   }
+
   document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
   const page = $(id);
   if (page) page.classList.add('active');
   window.scrollTo(0, 0);
+
+  // Emit state event so UI triggers nav update
   window.dispatchEvent(new CustomEvent('mortalive-auth-state'));
+
   if (id !== 'pg-profile') closeProgressSheet();
 
+  // Profile is backed by public.accounts/user_links in the latest build.
+  // Navigation can happen before asynchronous auth/profile hydration has
+  // finished, so explicitly retry hydration when entering the profile.
   if (id === 'pg-profile' && !S.isGuest && S.userId) {
-    const requestedUserId = options.profileUserId || null;
-    S.profileViewUserId = requestedUserId && requestedUserId !== S.userId ? requestedUserId : null;
-    S.profileViewData = null;
-    if (S.profileViewUserId) {
-      initPublicProfilePage(S.profileViewUserId).catch((error) => {
-        console.warn('[Profile] public profile navigation warning:', error);
-        toast(error?.message || 'Could not load profile.', '⚠️');
-      });
+    if (S.accountData) {
+      initProfilePage();
     } else {
-      document.body.classList.remove('profile-viewing-public');
-      if (S.accountData) initProfilePage();
-      else hydrateAccountData(S.userId, { rerender: true }).catch((error) => console.warn('[Profile] navigation hydration warning:', error));
-      initProfilePostComposer();
-      hydrateProfilePosts(S.userId).catch((error) => console.warn('[Profile] posts hydration warning:', error));
+      hydrateAccountData(S.userId, { rerender: true }).catch((error) => {
+        console.warn('[Profile] navigation hydration warning:', error);
+      });
     }
+    // Always init the post composer and hydrate profile posts on navigation
+    initProfilePostComposer();
+    hydrateProfilePosts(S.userId).catch((error) => {
+      console.warn('[Profile] posts hydration warning:', error);
+    });
   }
 
   if (id === 'pg-feed') {
-    S.profileViewUserId = null;
-    S.profileViewData = null;
-    document.body.classList.remove('profile-viewing-public');
     initFeedPage();
     if (!S.isGuest && S.userId) {
       syncFeedSidebar();
@@ -926,51 +926,12 @@ function setCallStatus(state, label) {
 }
 
 function updateOnlineCount() {
-  const formatted = Number(S.onlineCount || 0).toLocaleString();
-  ['online-n','online-n-hero','online-count','online-users','app-topbar-online-count'].forEach(id => {
+  ['online-n', 'online-n-hero', 'online-count', 'online-users'].forEach((id) => {
     const el = $(id);
-    if (el) el.textContent = formatted;
+    if (el) el.textContent = S.onlineCount.toLocaleString();
   });
   const mc = $('match-count');
-  if (mc) mc.textContent = formatted;
-}
-
-const PRESENCE_MODEL = {
-  min: 4000,
-  max: 70000,
-  center: 24000,
-  jitter: 0.12
-};
-
-function samplePresenceNumber(previous = PRESENCE_MODEL.center) {
-  const r = Math.random();
-  let target;
-  if (r < 0.10) target = PRESENCE_MODEL.min + Math.random() * 6500;
-  else if (r > 0.90) target = PRESENCE_MODEL.max - Math.random() * 9000;
-  else target = PRESENCE_MODEL.min + Math.pow(Math.random(), 0.72) * (PRESENCE_MODEL.max - PRESENCE_MODEL.min);
-  const blended = previous * 0.72 + target * 0.28;
-  return Math.round(Math.max(PRESENCE_MODEL.min, Math.min(PRESENCE_MODEL.max, blended)));
-}
-
-async function fetchPresenceSource() {
-  try {
-    if (!SERVER_URL) return null;
-    const res = await fetch(`${SERVER_URL}/api/presence`, { cache: 'no-store' });
-    if (!res.ok) return null;
-    const payload = await res.json();
-    const value = Number(payload?.count ?? payload?.online ?? payload?.onlineCount);
-    return Number.isFinite(value) ? Math.round(value) : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-async function refreshOnlinePresence() {
-  const sourceValue = await fetchPresenceSource();
-  S.onlineCount = sourceValue != null
-    ? Math.round(Math.max(PRESENCE_MODEL.min, Math.min(PRESENCE_MODEL.max, sourceValue)))
-    : samplePresenceNumber(S.onlineCount || PRESENCE_MODEL.center);
-  updateOnlineCount();
+  if (mc) mc.textContent = S.onlineCount.toLocaleString();
 }
 
 function isCompactViewport() {
@@ -1092,13 +1053,12 @@ function initConsentGate() {
 function startOnlineCounter() {
   if (S.onlineTimerStarted) return;
   S.onlineTimerStarted = true;
-  S.onlineCount = samplePresenceNumber(PRESENCE_MODEL.center);
   updateOnlineCount();
-  refreshOnlinePresence();
   setInterval(() => {
-    // Prefer a real backend presence source; otherwise use a smooth procedural estimate.
-    refreshOnlinePresence();
-  }, 6500);
+    S.onlineCount += Math.floor(Math.random() * 22) - 11;
+    S.onlineCount = Math.max(1500, Math.min(6000, S.onlineCount));
+    updateOnlineCount();
+  }, 3500);
 }
 
 function ensureLobbyCameraPreview() {
@@ -3927,7 +3887,7 @@ async function fetchFeedPage(reset = false) {
   try {
     let query = sb
       .from('posts')
-      .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size')
+      .select('id,user_id,content,post_type,visibility,created_at,updated_at')
       .order('created_at', { ascending: false })
       .range(_feedOffset, _feedOffset + FEED_PAGE_SIZE - 1);
 
@@ -4198,64 +4158,6 @@ function _restoreOpenCommentSections(ids) {
   }
 }
 
-function profileHref(userId) {
-  return userId ? `#profile-${encodeURIComponent(userId)}` : '#profile';
-}
-
-async function openUserProfile(userId) {
-  if (!userId) return;
-  if (S.userId === userId) {
-    S.profileViewUserId = null;
-    S.profileViewData = null;
-    showPage('pg-profile');
-    return;
-  }
-  S.profileViewUserId = userId;
-  S.profileViewData = null;
-  showPage('pg-profile', { profileUserId: userId });
-}
-
-function formatPhotoSize(bytes) {
-  if (!Number.isFinite(bytes)) return '';
-  const mb = bytes / (1024 * 1024);
-  return mb < 1 ? `${Math.round(bytes / 1024)} KB` : `${mb.toFixed(1)} MB`;
-}
-
-const PHOTO_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
-const PHOTO_UPLOAD_BUCKET = 'mortalive-media';
-const PHOTO_UPLOAD_TYPES = new Set(['image/jpeg','image/png','image/webp']);
-
-function validatePhotoFile(file) {
-  if (!file) throw new Error('Choose a photo first.');
-  if (!PHOTO_UPLOAD_TYPES.has(file.type)) throw new Error('Use JPG, PNG, or WebP images.');
-  if (file.size > PHOTO_UPLOAD_MAX_BYTES) throw new Error('Photo must be 10 MB or smaller.');
-  return file;
-}
-
-async function uploadPhotoFile(file, folder) {
-  validatePhotoFile(file);
-  if (!S.userId || S.isGuest || !sb) throw new Error('Sign in to upload photos.');
-  const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
-  const path = `${S.userId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2,10)}.${ext}`;
-  const { error } = await sb.storage.from(PHOTO_UPLOAD_BUCKET).upload(path, file, {
-    cacheControl: '31536000', upsert: false, contentType: file.type
-  });
-  if (error) throw error;
-  const { data } = sb.storage.from(PHOTO_UPLOAD_BUCKET).getPublicUrl(path);
-  if (!data?.publicUrl) throw new Error('Could not create the public photo URL.');
-  return { url: data.publicUrl, path, size: file.size, type: file.type };
-}
-
-function bindHorizontalProfileStrip(strip) {
-  if (!strip || strip.dataset.wheelBound) return;
-  strip.dataset.wheelBound = '1';
-  strip.addEventListener('wheel', (event) => {
-    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-    strip.scrollLeft += event.deltaY;
-    event.preventDefault();
-  }, { passive: false });
-}
-
 function renderFeedPosts() {
   const openIds = _getOpenCommentIds(); // save before replacing innerHTML
   const container = $('feed-posts');
@@ -4286,12 +4188,12 @@ function renderFeedPosts() {
         <div class="post-header">
           <div class="post-avatar">${feedAvatarLetter(display)}</div>
           <div class="post-meta">
-            <div class="post-author"><button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(post.user_id)}">${sanitizeHTML(display)} ${badge}</button></div>
+            <div class="post-author">${sanitizeHTML(display)} ${badge}</div>
             <div class="post-time">@${sanitizeHTML(username)} · ${sanitizeHTML(feedRelTime(post.created_at))} · ${sanitizeHTML(typeLabel)}</div>
           </div>
           ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
         </div>
-        <div class="post-body"><div class="post-text">${sanitizeHTML(post.content || '')}</div>${post.media_url ? `<img class="feed-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">` : ''}</div>
+        <div class="post-body"><div class="post-text">${sanitizeHTML(post.content || '')}</div></div>
         <div class="post-actions">
           <button class="action-btn like-btn ${engagement.liked ? 'liked' : ''}" type="button" data-feed-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${engagement.liked ? 'true' : 'false'}"><span class="action-icon">${engagement.liked ? '♥' : '♡'}</span><span class="like-count">${engagement.likes}</span></button>
           <button class="action-btn comment-btn" type="button" data-feed-action="comments" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">💬</span><span>${engagement.comments}</span></button>
@@ -4330,7 +4232,7 @@ function renderFeedSidebars() {
     active.innerHTML = authors.length ? authors.map(author => `
       <div class="active-user-item">
         <div class="active-user-ava">${feedAvatarLetter(author.display_name || author.username)}</div>
-        <div class="active-user-info"><button type="button" class="active-user-name post-author-link" data-open-profile="${sanitizeHTML(author.id || '')}">${sanitizeHTML(author.display_name || author.username || 'Member')}</button><div class="active-user-sub">@${sanitizeHTML(author.username || 'member')}</div></div>
+        <div class="active-user-info"><div class="active-user-name">${sanitizeHTML(author.display_name || author.username || 'Member')}</div><div class="active-user-sub">@${sanitizeHTML(author.username || 'member')}</div></div>
         <div class="active-user-score">${Number(author.crockroach_score) || 0}</div>
       </div>`).join('') : '<div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">No active posters yet.</div>';
   }
@@ -4339,30 +4241,46 @@ function renderFeedSidebars() {
 async function submitFeedTextPost() {
   const field = $('compose-field');
   const submit = $('compose-submit');
-  const photoInput = $('feed-photo-input');
-  if (!field || !submit || S.isGuest || !S.userId || !sb) { toast('Sign in to post', '🔒'); return; }
+  if (!field || !submit || S.isGuest || !S.userId || !sb) {
+    toast('Sign in to post', '🔒');
+    return;
+  }
   const content = field.value.trim();
-  const file = photoInput?.files?.[0] || null;
-  if (!content && !file) return;
-  if (content.length > FEED_MAX_POST_CHARS) { toast(`Posts are limited to ${FEED_MAX_POST_CHARS} characters`, '⚠️'); return; }
+  if (!content) return;
+  if (content.length > FEED_MAX_POST_CHARS) {
+    toast(`Posts are limited to ${FEED_MAX_POST_CHARS} characters`, '⚠️');
+    return;
+  }
+
+  submit.disabled = true;
+  const original = submit.textContent;
+  submit.textContent = 'Posting…';
   try {
-    if (file) validatePhotoFile(file);
-    submit.disabled = true; submit.textContent = 'Posting…';
-    const media = file ? await uploadPhotoFile(file, 'feed') : null;
-    const payload = { user_id: S.userId, content, post_type: media ? 'photo' : 'text', visibility: 'public' };
-    if (media) { payload.media_url = media.url; payload.media_type = media.type; payload.media_size = media.size; }
-    const { error } = await sb.from('posts').insert(payload);
+    const { data, error } = await sb.from('posts').insert({
+      user_id: S.userId,
+      content,
+      post_type: 'text',
+      visibility: 'public'
+    }).select('id,user_id,content,post_type,visibility,created_at,updated_at').single();
     if (error) throw error;
+
+    const author = feedProfileFor(S.userId) || {
+      username: S.username || 'You',
+      display_name: S.accountData?.display_name || S.username || 'You',
+      crockroach_score: S.accountData?.crockroach_score ?? S.crockroachScore ?? getProgressScore(getCurrentProgress())
+    };
+    _feedPosts = [{ ...data, author }, ..._feedPosts.filter(post => post.id !== data.id)];
+    _feedEngagement.set(data.id, { likes: 0, comments: 0, liked: false });
+    _commentCache.delete(data.id);
     field.value = '';
-    if (photoInput) photoInput.value = '';
-    if ($('feed-photo-name')) $('feed-photo-name').textContent = '';
-    await fetchFeedPage(true);
-    toast(media ? 'Photo post published!' : 'Post published!', '✍️');
+    syncFeedComposer();
+    renderFeedPosts();
+    renderFeedSidebars();
+    toast('Post published!', '✍️');
   } catch (e) {
-    console.warn('[Feed] post failed:', e);
-    toast(e?.message || 'Could not publish post.', '⚠️');
+    toast(e?.message || 'Could not publish the post.', '⚠️');
   } finally {
-    submit.textContent = 'Post';
+    submit.textContent = original;
     syncFeedComposer();
   }
 }
@@ -4371,14 +4289,11 @@ function syncFeedComposer() {
   const field = $('compose-field');
   const submit = $('compose-submit');
   const count = $('char-count');
-  const photoInput = $('feed-photo-input');
   if (!field || !submit) return;
   const len = field.value.length;
-  const file = photoInput?.files?.[0] || null;
-  if (count) count.textContent = `${Math.max(0, FEED_MAX_POST_CHARS - len)}`;
-  if ($('feed-photo-name')) $('feed-photo-name').textContent = file ? `${file.name} · ${formatPhotoSize(file.size)}` : '';
-  submit.disabled = S.isGuest || !S.userId || (!len && !file) || len > FEED_MAX_POST_CHARS;
-  submit.title = S.isGuest ? 'Sign in to post' : 'Publish';
+  if (count) count.textContent = `${FEED_MAX_POST_CHARS - len}`;
+  submit.disabled = S.isGuest || !S.userId || len === 0 || len > FEED_MAX_POST_CHARS;
+  if (S.isGuest) submit.title = 'Sign in to post';
 }
 
 function setFeedFilter(filter) {
@@ -4415,26 +4330,6 @@ async function deleteFeedPost(postId) {
 }
 
 function initFeedPage() {
-  if (!document.body.dataset.profileNavigationBound) {
-    document.body.dataset.profileNavigationBound = '1';
-    document.addEventListener('click', (event) => {
-      const btn = event.target.closest?.('[data-open-profile]');
-      if (btn) { event.preventDefault(); openUserProfile(btn.dataset.openProfile); }
-    });
-  }
-
-  const feedPhotoBtn = $('btn-feed-photo');
-  const feedPhotoInput = $('feed-photo-input');
-  if (feedPhotoBtn && feedPhotoInput && !feedPhotoBtn.dataset.bound) {
-    feedPhotoBtn.dataset.bound = '1';
-    feedPhotoBtn.addEventListener('click', () => feedPhotoInput.click());
-    feedPhotoInput.addEventListener('change', () => {
-      try { if (feedPhotoInput.files?.[0]) validatePhotoFile(feedPhotoInput.files[0]); syncFeedComposer(); }
-      catch (e) { feedPhotoInput.value=''; toast(e.message,'⚠️'); syncFeedComposer(); }
-    });
-  }
-
-
   if (_feedInitialized) {
     syncFeedComposer();
     syncFeedSidebar();
@@ -4531,7 +4426,6 @@ window.initFeedPage = initFeedPage;
 // ── Step 1: Supabase-backed Profile Posts ───────────────────────────────────
 const POSTS_PAGE_SIZE = 20;
 let _profilePosts = [];
-let _profilePostsOwner = null;
 let _postsHydrationPromise = null;
 
 async function fetchProfilePosts(userId = S.userId) {
@@ -4539,7 +4433,7 @@ async function fetchProfilePosts(userId = S.userId) {
   try {
     const { data, error } = await sb
       .from('posts')
-      .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size')
+      .select('id,user_id,content,post_type,visibility,created_at,updated_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(POSTS_PAGE_SIZE);
@@ -4593,8 +4487,7 @@ function renderProfilePosts(posts = _profilePosts) {
     const content = sanitizeHTML(post.content || '');
     const time = sanitizeHTML(formatPostTime(post.created_at));
     const type = sanitizeHTML(post.post_type || 'text');
-    const ownerName = post.author?.display_name || post.author?.username || _profilePostsOwner?.display_name || _profilePostsOwner?.username || S.username || 'You';
-    const initial = sanitizeHTML(ownerName.charAt(0).toUpperCase());
+    const initial = sanitizeHTML((S.username || 'M').charAt(0).toUpperCase());
     const eng = engagementFor(post.id);
     const likedClass = eng.liked ? 'liked' : '';
     const likeIcon = eng.liked ? '♥' : '♡';
@@ -4602,10 +4495,10 @@ function renderProfilePosts(posts = _profilePosts) {
       <article class="profile-post-card" data-post-id="${sanitizeHTML(post.id)}">
         <div class="profile-post-header">
           <div class="profile-post-mini-avatar" style="background:linear-gradient(135deg,#1a6ef5,#7c3aed)">${initial}</div>
-          <div class="profile-post-author"><button type="button" class="profile-author-link" data-open-profile="${sanitizeHTML(post.user_id || _profilePostsOwner?.id || S.userId || '')}">${sanitizeHTML(ownerName)}</button></div>
+          <div class="profile-post-author">${sanitizeHTML(S.username || 'You')}</div>
           <div class="profile-post-time">${time}</div>
         </div>
-        <div class="profile-post-body">${content}${post.media_url ? `<img class="profile-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Shared photo" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">` : ''}</div>
+        <div class="profile-post-body">${content}</div>
         <div class="profile-post-footer">
           <button type="button" data-profile-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${eng.liked}" style="background:none;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:0;color:${eng.liked ? 'var(--danger)' : 'var(--on-surface-3)'};font-size:10.5px;font-weight:700;transition:color .14s;" class="profile-like-btn ${likedClass}">${likeIcon} ${eng.likes}</button>
           <span>💬 ${eng.comments}</span>
@@ -4615,29 +4508,19 @@ function renderProfilePosts(posts = _profilePosts) {
   }).join('');
 }
 
-function renderProfileGallery(posts = _profilePosts) {
-  const gallery = $('profile-gallery');
-  if (!gallery) return;
-  const photos = (posts || []).filter(p => p.media_url);
-  if (!photos.length) return;
-  gallery.innerHTML = photos.map((p, i) => `<button type="button" class="profile-gallery-tile" data-photo-url="${sanitizeHTML(p.media_url)}" aria-label="Open photo ${i+1}"><img src="${sanitizeHTML(p.media_url)}" alt="Profile photo post ${i+1}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block"></button>`).join('');
-}
-
 async function hydrateProfilePosts(userId = S.userId, options = {}) {
   if (!userId || S.isGuest || !sb) return [];
   if (_postsHydrationPromise) return _postsHydrationPromise;
 
   _postsHydrationPromise = fetchProfilePosts(userId)
     .then(async (posts) => {
-      if ((S.userId === userId || S.profileViewUserId === userId) && !S.isGuest) {
+      if (S.userId === userId && !S.isGuest) {
         _profilePosts = posts;
-        _profilePostsOwner = S.profileViewData || (S.userId === userId ? { id: S.userId, username: S.username, display_name: S.username } : null);
         // Hydrate real like/comment counts before rendering so cards show live numbers
         if (posts.length) {
           await hydratePostEngagement(posts.map(p => p.id));
         }
         renderProfilePosts(posts);
-        renderProfileGallery(posts);
       }
       return posts;
     })
@@ -4657,9 +4540,6 @@ function initProfilePostComposer() {
   const composer = $('profile-post-composer');
   const input = $('profile-post-input');
   const button = $('btn-profile-post-submit');
-  const photoInput = $('profile-photo-input');
-  const photoButton = $('btn-profile-photo-upload');
-  const photoName = $('profile-photo-name');
   const error = $('profile-post-error');
   if (!composer || !input || !button) return;
   // Reset the guard if the input element changed (e.g. after a DOM re-render)
@@ -4669,9 +4549,7 @@ function initProfilePostComposer() {
 
   const sync = () => {
     const text = input.value.trim();
-    const hasPhoto = !!photoInput?.files?.[0];
-    button.disabled = (!text && !hasPhoto) || text.length > 500 || S.isGuest || !S.userId;
-    if (photoName) photoName.textContent = hasPhoto ? `${photoInput.files[0].name} · ${formatPhotoSize(photoInput.files[0].size)}` : '';
+    button.disabled = !text || text.length > 500 || S.isGuest || !S.userId;
     const count = $('profile-post-char-count');
     if (count) {
       count.textContent = `${input.value.length} / 500`;
@@ -4689,32 +4567,28 @@ function initProfilePostComposer() {
 
   button.addEventListener('click', async () => {
     const content = input.value.trim();
-    const file = photoInput?.files?.[0] || null;
-    if ((!content && !file) || content.length > 500 || S.isGuest || !S.userId) return;
+    if (!content || content.length > 500 || S.isGuest || !S.userId) return;
 
     button.disabled = true;
     button.textContent = 'Posting…';
     if (error) error.style.display = 'none';
 
     try {
-      if (file) validatePhotoFile(file);
-      const media = file ? await uploadPhotoFile(file, 'profile') : null;
-      const payload = { user_id: S.userId, content, post_type: media ? 'photo' : 'text', visibility: 'public' };
-      if (media) { payload.media_url = media.url; payload.media_type = media.type; payload.media_size = media.size; }
-      const { data, error: postError } = await sb.from('posts').insert(payload)
-        .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size').single();
+      const { data, error: postError } = await sb.from('posts').insert({
+        user_id: S.userId,
+        content,
+        post_type: 'text',
+        visibility: 'public'
+      }).select('id,user_id,content,post_type,visibility,created_at,updated_at').single();
 
       if (postError) throw postError;
       if (data) {
         _profilePosts = [data, ..._profilePosts].slice(0, POSTS_PAGE_SIZE);
         renderProfilePosts(_profilePosts);
-        renderProfileGallery(_profilePosts);
       }
       input.value = '';
-      if (photoInput) photoInput.value = '';
-      if (photoName) photoName.textContent = '';
       sync();
-      toast(file ? 'Photo post published!' : 'Post published!', '✍️');
+      toast('Post published!', '✍️');
     } catch (e) {
       console.warn('[Posts] create failed:', e);
       if (error) {
@@ -4727,75 +4601,11 @@ function initProfilePostComposer() {
     }
   });
 
-  if (photoButton && photoInput && !photoButton.dataset.bound) {
-    photoButton.dataset.bound = '1';
-    photoButton.addEventListener('click', () => photoInput.click());
-    photoInput.addEventListener('change', () => {
-      try { if (photoInput.files?.[0]) validatePhotoFile(photoInput.files[0]); sync(); }
-      catch (e) { photoInput.value=''; toast(e.message,'⚠️'); sync(); }
-    });
-  }
   sync();
-}
-
-async function fetchPublicProfileData(userId) {
-  const seed = (await fetchFeedProfileDirectory([userId]))[userId] || { id: userId, username: 'user', display_name: 'User' };
-  try {
-    const { data, error } = await sb.from('accounts').select('id,username,display_name,bio,avatar_url,crockroach_score,account_type').eq('id', userId).maybeSingle();
-    if (!error && data) return { ...seed, ...data, id: userId };
-  } catch (_) {}
-  return { ...seed, id: userId };
-}
-
-function applyProfileAvatar(url, name) {
-  const avatar = $('profile-avatar');
-  if (!avatar) return;
-  avatar.textContent = '';
-  avatar.style.background = url ? `url("${url}") center/cover no-repeat` : 'linear-gradient(135deg,#1a6ef5,#7c3aed)';
-  avatar.dataset.photoUrl = url || '';
-  if (!url) avatar.textContent = (name || 'U').charAt(0).toUpperCase();
-}
-
-async function changeProfilePhoto() {
-  if (S.isGuest || !S.userId || !sb) { toast('Sign in to change your profile photo.', '🔒'); return; }
-  const input = $('profile-avatar-input');
-  const file = input?.files?.[0];
-  if (!file) return;
-  try {
-    const media = await uploadPhotoFile(file, 'avatar');
-    const { error } = await sb.from('accounts').update({ avatar_url: media.url, updated_at: new Date().toISOString() }).eq('id', S.userId);
-    if (error) throw error;
-    S.accountData = { ...(S.accountData || {}), avatar_url: media.url };
-    applyProfileAvatar(media.url, S.username);
-    $('compose-avatar') && ( $('compose-avatar').style.backgroundImage = `url("${media.url}")`, $('compose-avatar').textContent='');
-    toast('Profile photo updated!', '📷');
-  } catch (e) {
-    console.warn('[Profile] avatar upload failed:', e);
-    toast(e?.message || 'Could not update profile photo.', '⚠️');
-  } finally { if (input) input.value=''; }
-}
-
-async function initPublicProfilePage(userId) {
-  const profile = await fetchPublicProfileData(userId);
-  S.profileViewData = profile;
-  _profilePostsOwner = profile;
-  document.body.classList.add('profile-viewing-public');
-  const name = profile.display_name || profile.username || 'User';
-  if ($('profile-username-display')) $('profile-username-display').textContent = name;
-  if ($('profile-subline-display')) $('profile-subline-display').textContent = `@${profile.username || 'user'} · ${profile.account_type || 'Member'}`;
-  if ($('profile-bio-display')) $('profile-bio-display').textContent = profile.bio || 'Connecting with the world.';
-  if ($('profile-info-goal-val')) $('profile-info-goal-val').textContent = 'Public profile';
-  applyProfileAvatar(profile.avatar_url || '', name);
-  if ($('profile-hero-score')) $('profile-hero-score').textContent = Number(profile.crockroach_score || 0).toLocaleString();
-  if ($('profile-stat-score')) $('profile-stat-score').textContent = Number(profile.crockroach_score || 0).toLocaleString();
-  resetProfilePosts();
-  await hydrateProfilePosts(userId);
-  bindHorizontalProfileStrip($('profile-post-strip'));
 }
 
 function initProfilePage() {
   if (S.isGuest) return;
-  bindHorizontalProfileStrip($('profile-post-strip'));
 
   // If profile navigation/rendering wins the race against DB hydration,
   // fetch the account data now and let the hydration callback re-render.
@@ -4845,11 +4655,8 @@ function initProfilePage() {
   const colorIdx = (S.username || '').length % colors.length;
   const avatarEl = $('profile-avatar');
   if (avatarEl) {
-    if (S.accountData?.avatar_url) applyProfileAvatar(S.accountData.avatar_url, displayName);
-    else {
-      avatarEl.style.background = `linear-gradient(135deg, ${colors[colorIdx]}, ${colors[(colorIdx + 1) % colors.length]})`;
-      avatarEl.textContent = (displayName).charAt(0).toUpperCase();
-    }
+    avatarEl.style.background = `linear-gradient(135deg, ${colors[colorIdx]}, ${colors[(colorIdx + 1) % colors.length]})`;
+    avatarEl.textContent = (displayName).charAt(0).toUpperCase();
   }
 
   // Stats Grid
@@ -4888,7 +4695,7 @@ function initProfilePage() {
       'creator': 'Content Niche',
       'business': 'Company Name',
       'private': 'Details'
-        };
+    };
     if ($('profile-details-label-display')) {
         $('profile-details-label-display').textContent = detailsLabels[acc.account_type] || 'Details';
     }
@@ -5248,20 +5055,7 @@ function bindProfileEvents() {
   if (document.body.dataset.profileEventsBound) return;
   document.body.dataset.profileEventsBound = '1';
 
-  document.addEventListener('click', (e) => {
-    const profileBtn = e.target.closest?.('[data-open-profile]');
-    if (profileBtn) { e.preventDefault(); openUserProfile(profileBtn.dataset.openProfile); return; }
-  });
-
   $('btn-edit-profile')?.addEventListener('click', toggleProfileEditMode);
-  const avatarInput = $('profile-avatar-input');
-  const avatarButton = $('btn-change-profile-photo');
-  if (avatarButton && avatarInput && !avatarButton.dataset.bound) {
-    avatarButton.dataset.bound = '1';
-    avatarButton.addEventListener('click', () => avatarInput.click());
-    avatarInput.addEventListener('change', () => changeProfilePhoto());
-  }
-
   $('btn-edit-cancel-inline')?.addEventListener('click', toggleProfileEditMode);
 
   // Profile post strip: like buttons (data-profile-action="like")
