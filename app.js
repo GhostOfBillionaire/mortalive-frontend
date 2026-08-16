@@ -4426,6 +4426,15 @@ async function submitFeedTextPost() {
     field.value = '';
     clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
     await fetchFeedPage(true);
+    // Keep profile post strip in sync when profile page is open in background
+    if (S.userId && !S.isGuest) {
+      _profilePosts = [];
+      _postsHydrationPromise = null;
+      if ($('pg-profile')?.classList.contains('active')) {
+        hydrateProfilePosts(S.userId).catch(() => {});
+        hydrateProfileGallery(S.userId).catch(() => {});
+      }
+    }
     toast(media ? 'Photo post published!' : 'Post published!', '✍️');
   } catch (e) {
     console.warn('[Feed] post failed:', e);
@@ -4595,11 +4604,21 @@ function syncFeedSidebar() {
   setText('sidebar-streak', progress.streak || 0);
   setText('sidebar-rank', progress.weeklyRank ? `#${progress.weeklyRank}` : '#—');
   setText('feed-score-val', Number(score) || 0);
-  const avatar = $('sidebar-avatar');
-  const composeAvatar = $('compose-avatar');
+  const avatarUrl = acc.avatar_url || '';
   const initial = feedAvatarLetter(name);
-  if (avatar) avatar.textContent = initial;
-  if (composeAvatar) composeAvatar.textContent = initial;
+  ['sidebar-avatar', 'compose-avatar'].forEach(id => {
+    const el = $(id);
+    if (!el) return;
+    if (avatarUrl) {
+      el.textContent = '';
+      el.style.background = `url("${avatarUrl}") center/cover no-repeat`;
+      el.style.fontSize = '0';
+    } else {
+      el.textContent = initial;
+      el.style.background = 'linear-gradient(135deg, var(--primary), var(--secondary))';
+      el.style.fontSize = '';
+    }
+  });
 }
 
 window.initFeedPage = initFeedPage;
@@ -4809,12 +4828,21 @@ function initProfilePostComposer() {
       }
       if (data) {
         _profilePosts = [data, ..._profilePosts].slice(0, POSTS_PAGE_SIZE);
+        // Hydrate engagement for the new post so like/comment counts are live
+        await hydratePostEngagement([data.id]).catch(() => {});
         renderProfilePosts(_profilePosts);
         renderProfileGallery(_profilePosts);
       }
       input.value = '';
       clearComposePhotoPreview('profile-photo-input','btn-profile-photo-upload','profile-photo-preview','profile-photo-name');
       sync();
+      // Refresh feed too if it is the active page
+      if ($('pg-feed')?.classList.contains('active')) {
+        _feedPosts = [];
+        _feedOffset = 0;
+        _feedHasMore = true;
+        fetchFeedPage(true).catch(() => {});
+      }
       toast(file ? 'Photo post published!' : 'Post published!', '✍️');
     } catch (e) {
       console.warn('[Posts] create failed:', e);
@@ -4874,7 +4902,15 @@ async function changeProfilePhoto() {
     if (error) throw error;
     S.accountData = { ...(S.accountData || {}), avatar_url: media.url };
     applyProfileAvatar(media.url, S.username);
-    $('compose-avatar') && ( $('compose-avatar').style.backgroundImage = `url("${media.url}")`, $('compose-avatar').textContent='');
+    // Sync avatar across feed sidebar, compose box, and any other avatar surfaces
+    ['sidebar-avatar', 'compose-avatar'].forEach(id => {
+      const el = $(id);
+      if (!el) return;
+      el.textContent = '';
+      el.style.background = `url("${media.url}") center/cover no-repeat`;
+      el.style.fontSize = '0';
+    });
+    syncFeedSidebar();
     toast('Profile photo updated!', '📷');
   } catch (e) {
     console.warn('[Profile] avatar upload failed:', e);
