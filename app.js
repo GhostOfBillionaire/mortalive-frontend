@@ -818,6 +818,7 @@ function showPage(id, options = {}) {
       else hydrateAccountData(S.userId, { rerender: true }).catch((error) => console.warn('[Profile] navigation hydration warning:', error));
       initProfilePostComposer();
       hydrateProfilePosts(S.userId).catch((error) => console.warn('[Profile] posts hydration warning:', error));
+      hydrateProfileGallery(S.userId).catch((error) => console.warn('[Gallery] hydration warning:', error));
     }
   }
 
@@ -3210,6 +3211,7 @@ function appendMsg(text, who) {
   time.className = 'msg-time';
   time.textContent = fmtTime();
 
+  body.appendChild(bub);
   body.appendChild(time);
   wrap.appendChild(ava);
   wrap.appendChild(body);
@@ -4697,6 +4699,27 @@ function renderProfileGallery(posts = _profilePosts) {
   gallery.innerHTML = photos.map((p, i) => `<button type="button" class="profile-gallery-tile" data-photo-url="${sanitizeHTML(p.media_url)}" aria-label="Open photo ${i+1}"><img src="${sanitizeHTML(p.media_url)}" alt="Profile photo post ${i+1}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block"></button>`).join('');
 }
 
+// Dedicated gallery fetch using the gallery_photos RPC (returns up to 24 media posts,
+// not capped by the 20-post strip limit). Falls back silently to the post-strip
+// subset already rendered by renderProfileGallery() if the RPC is unavailable.
+async function hydrateProfileGallery(userId = S.userId) {
+  const gallery = $('profile-gallery');
+  if (!gallery || !userId || S.isGuest || !sb) return;
+  try {
+    const { data, error } = await sb.rpc('gallery_photos', { p_user_id: userId, p_limit: 24 });
+    if (error) throw error;
+    const photos = Array.isArray(data) ? data.filter(p => p.media_url) : [];
+    if (!photos.length) return; // keep whatever renderProfileGallery() already drew
+    gallery.innerHTML = photos.map((p, i) =>
+      `<button type="button" class="profile-gallery-tile" data-photo-url="${sanitizeHTML(p.media_url)}" aria-label="Open photo ${i + 1}">` +
+      `<img src="${sanitizeHTML(p.media_url)}" alt="Profile gallery photo ${i + 1}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block"></button>`
+    ).join('');
+  } catch (e) {
+    // gallery_photos RPC not yet deployed — post-strip fallback is already showing
+    console.warn('[Gallery] gallery_photos RPC unavailable, using post-strip fallback:', e?.message || e);
+  }
+}
+
 async function hydrateProfilePosts(userId = S.userId, options = {}) {
   if (!userId || S.isGuest || !sb) return [];
   if (_postsHydrationPromise) return _postsHydrationPromise;
@@ -4874,6 +4897,7 @@ async function initPublicProfilePage(userId) {
   if ($('profile-stat-score')) $('profile-stat-score').textContent = Number(profile.crockroach_score || 0).toLocaleString();
   resetProfilePosts();
   await hydrateProfilePosts(userId);
+  hydrateProfileGallery(userId).catch((error) => console.warn('[Gallery] public profile hydration warning:', error));
   bindHorizontalProfileStrip($('profile-post-strip'));
 }
 
