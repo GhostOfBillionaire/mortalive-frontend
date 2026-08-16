@@ -4861,7 +4861,11 @@ body.mortalive-progress-open .sakura-topbar {
 })();
 </script>
 
-<script src="socket.io.min.js"></script>
+<script>
+  // Socket.IO is served by the live backend; keep the client source authoritative.
+  window.MORTALIVE_SERVER_URL = window.MORTALIVE_SERVER_URL || (location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://mortalive-server.onrender.com');
+</script>
+<script src="https://mortalive-server.onrender.com/socket.io/socket.io.js"></script>
 
 <!-- Supabase Auth (Email OTP via Resend) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -4898,7 +4902,7 @@ body.mortalive-progress-open .sakura-topbar {
   });
 </script>
 
-<script src="app.js"></script>
+<script src="app.js?v=20260816-boot-fix-1640"></script>
 <script>
 /* Landing consent safety bridge — intentionally independent of app.js.
    The Continue CTA must always track the real checkbox even if another
