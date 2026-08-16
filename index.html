@@ -5315,9 +5315,11 @@ body.mortalive-progress-open .sakura-topbar {
 
   const render = () => {
     if (!items.length) return;
-    const img = items[index];
-    imageEl.src = img.currentSrc || img.src;
-    imageEl.alt = img.alt || 'Profile photo';
+    const el = items[index];
+    // el may be an <img> (gallery) or any .js-photo-open element (post strip / feed).
+    // Prefer dataset.photoUrl so lazily-loaded src="" still resolves correctly.
+    imageEl.src = el.dataset?.photoUrl || el.currentSrc || el.src || '';
+    imageEl.alt = el.alt || 'Photo';
     counterEl.textContent = items.length > 1 ? `${index + 1} / ${items.length}` : '';
     prevBtn.style.display = items.length > 1 ? 'grid' : 'none';
     nextBtn.style.display = items.length > 1 ? 'grid' : 'none';
@@ -5348,8 +5350,13 @@ body.mortalive-progress-open .sakura-topbar {
   };
 
   gallery.addEventListener('click', (event) => {
-    const img = event.target.closest('.profile-gallery-tile img');
-    if (img && gallery.contains(img)) open(img);
+    // closest('.profile-gallery-tile img') is a descendant selector; closest() only
+    // matches it when the click lands exactly on the img. Use the tile-then-img
+    // pattern so clicks on the button wrapper also open the lightbox.
+    const tile = event.target.closest('.profile-gallery-tile');
+    if (!tile || !gallery.contains(tile)) return;
+    const img = tile.querySelector('img');
+    if (img) open(img); // guard: placeholder tiles have no img
   });
 
   document.addEventListener('click', (event) => {
