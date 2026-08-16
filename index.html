@@ -2742,6 +2742,15 @@ body.mortalive-progress-open .sakura-topbar {
 .profile-avatar-change-btn{position:absolute;right:-4px;bottom:-4px;width:30px;height:30px;border-radius:50%;background:#fff;border:1px solid var(--border-strong);box-shadow:var(--elev-2);display:grid;place-items:center;font-size:13px;z-index:3;cursor:pointer}
 .profile-post-photo-btn,.compose-tool{padding:7px 10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);font-size:11px;font-weight:800;color:var(--on-surface-2);cursor:pointer}
 .profile-post-photo-btn:hover,.compose-tool:hover{border-color:var(--primary);color:var(--primary)}
+.photo-compose-btn.active{background:var(--primary-alpha);border-color:rgba(26,110,245,.3);color:var(--primary)}
+.compose-photo-preview{display:inline-flex;align-items:center;gap:7px;margin-top:7px;padding:5px 7px;border:1px solid var(--border);border-radius:12px;background:#fff;max-width:min(100%,280px)}
+.compose-photo-preview img{width:52px;height:52px;border-radius:9px;object-fit:cover;background:var(--surface-3);display:block}
+.compose-photo-preview-meta{min-width:0;display:flex;flex-direction:column;gap:2px}
+.compose-photo-preview-name{font-size:10.5px;font-weight:700;color:var(--on-surface);max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.compose-photo-preview-size{font-size:9.5px;color:var(--on-surface-3)}
+.compose-photo-discard{border:1px solid var(--border);background:var(--surface-2);color:var(--on-surface-2);border-radius:999px;padding:5px 8px;font-size:10px;font-weight:800;cursor:pointer}
+.compose-photo-discard:hover{border-color:var(--danger);color:var(--danger)}
+
 .profile-photo-name,.compose-photo-name{font-size:10px;color:var(--on-surface-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
 .profile-post-strip{display:flex !important;grid-auto-flow:unset !important;grid-auto-columns:unset !important;overflow-x:auto !important;overflow-y:hidden !important;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:none;-webkit-overflow-scrolling:touch;scrollbar-width:thin;cursor:grab}
 .profile-post-strip:active{cursor:grabbing}
@@ -4389,9 +4398,10 @@ body.mortalive-progress-open .sakura-topbar {
 <div class="compose-toolbar">
 <button class="compose-type-btn active" id="btn-type-text">📝 Text</button>
 <button class="compose-type-btn" id="btn-type-poll">📊 Poll</button>
-<button class="compose-tool" id="btn-feed-photo" type="button" title="Add photo">📷 Photo</button>
+<button class="compose-tool photo-compose-btn" id="btn-feed-photo" type="button" title="Add photo">📷 Photo</button>
 <input id="feed-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
 <span id="feed-photo-name" class="compose-photo-name" aria-live="polite"></span>
+<div id="feed-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
 <span style="flex:1;"></span>
 <span id="char-count" style="font-size:12px;color:var(--on-surface-3);">500</span>
 <button class="compose-submit" disabled="" id="compose-submit">Post</button>
@@ -4610,9 +4620,10 @@ body.mortalive-progress-open .sakura-topbar {
             <textarea id="profile-post-input" maxlength="500" placeholder="Share a thought, update, question, or conversation starter…"></textarea>
             <div class="profile-post-composer-actions">
               <span class="profile-post-char-count" id="profile-post-char-count">0 / 500</span>
-              <button class="profile-post-photo-btn" id="btn-profile-photo-upload" type="button">📷 Photo</button>
+              <button class="profile-post-photo-btn photo-compose-btn" id="btn-profile-photo-upload" type="button">📷 Photo</button>
               <input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
               <span class="profile-photo-name" id="profile-photo-name" aria-live="polite"></span>
+<div id="profile-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
               <button class="profile-post-submit" id="btn-profile-post-submit" type="button" disabled>Post</button>
             </div>
             <div class="profile-post-error" id="profile-post-error"></div>
@@ -4861,11 +4872,7 @@ body.mortalive-progress-open .sakura-topbar {
 })();
 </script>
 
-<script>
-  // Socket.IO is served by the live backend; keep the client source authoritative.
-  window.MORTALIVE_SERVER_URL = window.MORTALIVE_SERVER_URL || (location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://mortalive-server.onrender.com');
-</script>
-<script src="https://mortalive-server.onrender.com/socket.io/socket.io.js"></script>
+<script src="socket.io.min.js"></script>
 
 <!-- Supabase Auth (Email OTP via Resend) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -4902,45 +4909,7 @@ body.mortalive-progress-open .sakura-topbar {
   });
 </script>
 
-<script src="app.js?v=20260816-boot-fix-1640"></script>
-<script>
-/* Landing consent safety bridge — intentionally independent of app.js.
-   The Continue CTA must always track the real checkbox even if another
-   startup subsystem changes button state or finishes later. */
-(function () {
-  function bindLandingConsent() {
-    const terms = document.getElementById('landing-consent');
-    const button = document.getElementById('btn-enter');
-    if (!terms || !button) return;
-
-    const sync = () => {
-      const enabled = !!terms.checked;
-      button.disabled = !enabled;
-      button.classList.toggle('ready', enabled);
-      button.setAttribute('aria-disabled', enabled ? 'false' : 'true');
-    };
-
-    if (terms.dataset.consentBridgeBound !== '1') {
-      terms.dataset.consentBridgeBound = '1';
-      terms.addEventListener('change', sync);
-      terms.addEventListener('input', sync);
-      terms.addEventListener('click', () => {
-        window.setTimeout(sync, 0);
-      });
-    }
-
-    sync();
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bindLandingConsent, { once: true });
-  } else {
-    bindLandingConsent();
-  }
-
-  window.addEventListener('pageshow', bindLandingConsent);
-})();
-</script>
+<script src="app.js"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
