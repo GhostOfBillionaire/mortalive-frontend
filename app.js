@@ -1,9 +1,8 @@
-// MORTALIVE BOOT-CHAIN FINAL — 2026-08-16 16:40 IST — contains setActiveMode + full original startup functions
 // FRESH BUILD MARKER — 2026-08-16 16:26 IST — redeploy this exact file
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-16-social-profile-photos-presence'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-16-photo-preview-revert-boot'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -4338,6 +4337,72 @@ function renderFeedSidebars() {
   }
 }
 
+function clearComposePhotoPreview(inputId, buttonId, previewId, nameId) {
+  const input = $(inputId);
+  const button = $(buttonId);
+  const preview = $(previewId);
+  const name = $(nameId);
+  if (input) input.value = '';
+  if (button) button.classList.remove('active');
+  if (name) name.textContent = '';
+  if (preview) {
+    const url = preview.dataset.objectUrl;
+    if (url) {
+      try { URL.revokeObjectURL(url); } catch (e) {}
+    }
+    preview.dataset.objectUrl = '';
+    preview.hidden = true;
+    preview.innerHTML = '';
+  }
+}
+
+function renderComposePhotoPreview({ inputId, buttonId, previewId, nameId } = {}) {
+  const input = $(inputId);
+  const button = $(buttonId);
+  const preview = $(previewId);
+  const name = $(nameId);
+  const file = input?.files?.[0] || null;
+  if (!file) {
+    clearComposePhotoPreview(inputId, buttonId, previewId, nameId);
+    return;
+  }
+
+  validatePhotoFile(file);
+  const objectUrl = URL.createObjectURL(file);
+
+  if (button) button.classList.add('active');
+  if (name) name.textContent = `${file.name} · ${formatPhotoSize(file.size)}`;
+
+  if (preview) {
+    const previousUrl = preview.dataset.objectUrl;
+    if (previousUrl) {
+      try { URL.revokeObjectURL(previousUrl); } catch (e) {}
+    }
+    preview.dataset.objectUrl = objectUrl;
+    preview.hidden = false;
+    preview.innerHTML = `
+      <img src="${objectUrl}" alt="Selected photo preview">
+      <div class="compose-photo-preview-meta">
+        <div class="compose-photo-preview-name">${sanitizeHTML(file.name)}</div>
+        <div class="compose-photo-preview-size">${sanitizeHTML(formatPhotoSize(file.size))}</div>
+      </div>
+      <button type="button" class="compose-photo-discard">Discard</button>
+    `;
+    preview.querySelector('.compose-photo-discard')?.addEventListener('click', () => {
+      clearComposePhotoPreview(inputId, buttonId, previewId, nameId);
+      if (inputId === 'feed-photo-input') syncFeedComposer();
+      if (inputId === 'profile-photo-input') {
+        const inputEl = $('profile-photo-input');
+        const profileComposer = $('profile-post-composer');
+        if (inputEl && profileComposer) {
+          const event = new Event('change', { bubbles: true });
+          inputEl.dispatchEvent(event);
+        }
+      }
+    });
+  }
+}
+
 async function submitFeedTextPost() {
   const field = $('compose-field');
   const submit = $('compose-submit');
@@ -4356,8 +4421,7 @@ async function submitFeedTextPost() {
     const { error } = await sb.from('posts').insert(payload);
     if (error) throw error;
     field.value = '';
-    if (photoInput) photoInput.value = '';
-    if ($('feed-photo-name')) $('feed-photo-name').textContent = '';
+    clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
     await fetchFeedPage(true);
     toast(media ? 'Photo post published!' : 'Post published!', '✍️');
   } catch (e) {
@@ -4379,6 +4443,7 @@ function syncFeedComposer() {
   const file = photoInput?.files?.[0] || null;
   if (count) count.textContent = `${Math.max(0, FEED_MAX_POST_CHARS - len)}`;
   if ($('feed-photo-name')) $('feed-photo-name').textContent = file ? `${file.name} · ${formatPhotoSize(file.size)}` : '';
+  $('btn-feed-photo')?.classList.toggle('active', !!file);
   submit.disabled = S.isGuest || !S.userId || (!len && !file) || len > FEED_MAX_POST_CHARS;
   submit.title = S.isGuest ? 'Sign in to post' : 'Publish';
 }
@@ -4431,8 +4496,14 @@ function initFeedPage() {
     feedPhotoBtn.dataset.bound = '1';
     feedPhotoBtn.addEventListener('click', () => feedPhotoInput.click());
     feedPhotoInput.addEventListener('change', () => {
-      try { if (feedPhotoInput.files?.[0]) validatePhotoFile(feedPhotoInput.files[0]); syncFeedComposer(); }
-      catch (e) { feedPhotoInput.value=''; toast(e.message,'⚠️'); syncFeedComposer(); }
+      try {
+        renderComposePhotoPreview({ inputId:'feed-photo-input', buttonId:'btn-feed-photo', previewId:'feed-photo-preview', nameId:'feed-photo-name' });
+        syncFeedComposer();
+      } catch (e) {
+        clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
+        toast(e.message,'⚠️');
+        syncFeedComposer();
+      }
     });
   }
 
@@ -4706,15 +4777,19 @@ function initProfilePostComposer() {
       const { data, error: postError } = await sb.from('posts').insert(payload)
         .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size').single();
 
-      if (postError) throw postError;
+      if (postError) {
+        if (String(postError.message || '').toLowerCase().includes('post_constrant_check')) {
+          throw new Error('Photo posts need the updated posts constraint. Run the latest Step 4 SQL in Supabase, then try again.');
+        }
+        throw postError;
+      }
       if (data) {
         _profilePosts = [data, ..._profilePosts].slice(0, POSTS_PAGE_SIZE);
         renderProfilePosts(_profilePosts);
         renderProfileGallery(_profilePosts);
       }
       input.value = '';
-      if (photoInput) photoInput.value = '';
-      if (photoName) photoName.textContent = '';
+      clearComposePhotoPreview('profile-photo-input','btn-profile-photo-upload','profile-photo-preview','profile-photo-name');
       sync();
       toast(file ? 'Photo post published!' : 'Post published!', '✍️');
     } catch (e) {
@@ -4733,8 +4808,14 @@ function initProfilePostComposer() {
     photoButton.dataset.bound = '1';
     photoButton.addEventListener('click', () => photoInput.click());
     photoInput.addEventListener('change', () => {
-      try { if (photoInput.files?.[0]) validatePhotoFile(photoInput.files[0]); sync(); }
-      catch (e) { photoInput.value=''; toast(e.message,'⚠️'); sync(); }
+      try {
+        renderComposePhotoPreview({ inputId:'profile-photo-input', buttonId:'btn-profile-photo-upload', previewId:'profile-photo-preview', nameId:'profile-photo-name' });
+        sync();
+      } catch (e) {
+        clearComposePhotoPreview('profile-photo-input','btn-profile-photo-upload','profile-photo-preview','profile-photo-name');
+        toast(e.message,'⚠️');
+        sync();
+      }
     });
   }
   sync();
