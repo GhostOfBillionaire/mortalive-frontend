@@ -3451,6 +3451,12 @@ body.mortalive-progress-open .sakura-topbar {
 }
 .comments-section.open { display:flex; }
 
+/* Always show the comment submit button when the section is open */
+#pg-feed .comments-section.open .comment-submit {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
 /* ── Toast ──────────────────────────────────────────────── */
 #pg-feed #toast-root{
   position:fixed; bottom:24px; right:24px; z-index:300;
