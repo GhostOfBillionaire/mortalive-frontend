@@ -973,6 +973,122 @@ async function refreshOnlinePresence() {
   updateOnlineCount();
 }
 
+function isCompactViewport() {
+  return window.matchMedia('(max-width: 720px)').matches;
+}
+
+function getEffectiveVideoLayout() {
+  return S.videoLayout === 'vertical' ? 'vertical' : 'horizontal';
+}
+
+function syncVideoPanelButton(forcedLayout) {
+  const btn = $('vc-layout');
+  if (!btn) return;
+  const layout = forcedLayout || getEffectiveVideoLayout();
+  const isHorizontal = layout === 'horizontal';
+  btn.textContent = isHorizontal ? 'Layout: Side' : 'Layout: Stack';
+  btn.title = isHorizontal ? 'Switch to stacked layout' : 'Switch to side-by-side layout';
+  btn.disabled = isCompactViewport();
+}
+
+function isFullscreenVideoMode() {
+  const panel = $('video-panel');
+  const fs = document.fullscreenElement;
+  return !!(panel && fs && (fs === panel || panel.contains(fs)));
+}
+
+function applyVideoLayout() {
+  // Layout is now entirely CSS-driven:
+  //   Desktop normal     → 2 squares side by side (grid-template-columns: 1fr 1fr)
+  //   Desktop fullscreen → 2 squares side by side filling the screen
+  //   Mobile normal      → 2 squares stacked (grid-template-columns: 1fr)
+  //   Mobile fullscreen  → 2 squares stacked filling the screen
+  // No class toggling needed — just ensure video surfaces are prepared.
+  prepareVideoSurfaces();
+}
+
+function toggleVideoLayout() {
+  if (isCompactViewport()) {
+    S.videoLayout = 'vertical';
+    applyVideoLayout();
+    toast('Phone stays in stacked layout', '📱');
+    return;
+  }
+  S.videoLayout = getEffectiveVideoLayout() === 'horizontal' ? 'vertical' : 'horizontal';
+  localStorage.setItem('mortalive_video_layout', S.videoLayout);
+  applyVideoLayout();
+  toast(S.videoLayout === 'horizontal' ? 'Camera layout set to side-by-side' : 'Camera layout set to stacked', '🎬');
+}
+
+function setActiveMode(mode) {
+  S.mode = mode === 'video' ? 'video' : 'text';
+  document.querySelectorAll('.mode-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.mode === S.mode);
+  });
+  const modeLabel = $('mode-label');
+  if (modeLabel) modeLabel.textContent = S.mode === 'video' ? 'Video' : 'Text';
+}
+
+function setPrimaryButtonsEnabled(enabled) {
+  ['btn-enter', 'continue-btn', 'btn-start-text', 'btn-start-video', 'btn-start'].forEach((id) => {
+    const btn = $(id);
+    if (!btn) return;
+    btn.disabled = !enabled;
+    btn.classList.toggle('ready', enabled);
+  });
+}
+
+function updateConsentState() {
+  // Real <input type="checkbox" id="landing-consent"> used in the current HTML
+  const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
+  const oldChecks = ['c1', 'c2', 'c3'].map((id) => $(id)).filter(Boolean);
+
+  if (terms) {
+    setPrimaryButtonsEnabled(!!terms.checked);
+    return;
+  }
+
+  if (oldChecks.length === 3) {
+    const all = oldChecks.every((box) => box.classList.contains('on'));
+    setPrimaryButtonsEnabled(all);
+    return;
+  }
+
+  setPrimaryButtonsEnabled(true);
+}
+
+function initConsentGate() {
+  const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
+
+  if (terms) {
+    const sync = () => updateConsentState();
+    terms.addEventListener('change', sync);
+    terms.addEventListener('input', sync);
+    terms.addEventListener('click', sync);
+    updateConsentState();
+    return;
+  }
+
+  const ids = ['c1', 'c2', 'c3'];
+  const boxes = ids.map((id) => $(id));
+  if (boxes.every(Boolean)) {
+    const checks = { c1: false, c2: false, c3: false };
+    ids.forEach((id) => {
+      const box = $(id);
+      const row = box && box.closest('.chk-row');
+      if (!row) return;
+      row.addEventListener('click', () => {
+        checks[id] = !checks[id];
+        box.classList.toggle('on', checks[id]);
+        const all = Object.values(checks).every(Boolean);
+        setPrimaryButtonsEnabled(all);
+      });
+    });
+  }
+
+  updateConsentState();
+}
+
 function startOnlineCounter() {
   if (S.onlineTimerStarted) return;
   S.onlineTimerStarted = true;
