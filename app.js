@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-16-photo-preview-revert-boot'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-16-appjs-consent-final'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -1058,6 +1058,7 @@ function updateConsentState() {
   setPrimaryButtonsEnabled(true);
 }
 
+// Landing Continue gating is intentionally owned by app.js only.
 function initConsentGate() {
   const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
 
