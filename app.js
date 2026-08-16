@@ -1,7 +1,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-15-step3-likes-comments'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-16-profile-scroll-gallery-likes-audit'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -3962,17 +3962,27 @@ function engagementFor(postId) {
   return _feedEngagement.get(postId) || { likes: 0, comments: 0, liked: false };
 }
 
+// Shared helper — re-renders whichever surfaces currently show postId
+function _rerenderPostEngagement(postId) {
+  // Re-render feed list if it contains this post
+  if (document.querySelector(`#pg-feed .post-card[data-post-id="${CSS.escape(postId)}"]`)) {
+    renderFeedPosts();
+  }
+  // Re-render profile post strip if it contains this post
+  if (document.querySelector(`#profile-post-strip [data-post-id="${CSS.escape(postId)}"]`)) {
+    renderProfilePosts(_profilePosts);
+  }
+}
+
 async function togglePostLike(postId) {
   if (S.isGuest || !S.userId || !sb) {
     toast('Sign in to like posts', '🔒');
     return;
   }
-  const card = document.querySelector(`#pg-feed .post-card[data-post-id="${CSS.escape(postId)}"]`);
   const state = { ...engagementFor(postId) };
   const nextLiked = !state.liked;
   _feedEngagement.set(postId, { ...state, liked: nextLiked, likes: Math.max(0, state.likes + (nextLiked ? 1 : -1)) });
-  renderFeedPosts();
-  if (!document.querySelector(`#pg-feed .post-card[data-post-id="${CSS.escape(postId)}"]`) && card) return;
+  _rerenderPostEngagement(postId);
 
   try {
     if (nextLiked) {
@@ -3983,10 +3993,10 @@ async function togglePostLike(postId) {
       if (error) throw error;
     }
     await hydratePostEngagement([postId]);
-    renderFeedPosts();
+    _rerenderPostEngagement(postId);
   } catch (e) {
     _feedEngagement.set(postId, state);
-    renderFeedPosts();
+    _rerenderPostEngagement(postId);
     toast(e?.message || 'Could not update like.', '⚠️');
   }
 }
@@ -4478,6 +4488,9 @@ function renderProfilePosts(posts = _profilePosts) {
     const time = sanitizeHTML(formatPostTime(post.created_at));
     const type = sanitizeHTML(post.post_type || 'text');
     const initial = sanitizeHTML((S.username || 'M').charAt(0).toUpperCase());
+    const eng = engagementFor(post.id);
+    const likedClass = eng.liked ? 'liked' : '';
+    const likeIcon = eng.liked ? '♥' : '♡';
     return `
       <article class="profile-post-card" data-post-id="${sanitizeHTML(post.id)}">
         <div class="profile-post-header">
@@ -4486,7 +4499,11 @@ function renderProfilePosts(posts = _profilePosts) {
           <div class="profile-post-time">${time}</div>
         </div>
         <div class="profile-post-body">${content}</div>
-        <div class="profile-post-footer"><span>♡ 0</span><span>💬 0</span><span>${type === 'text' ? 'Text' : type}</span></div>
+        <div class="profile-post-footer">
+          <button type="button" data-profile-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${eng.liked}" style="background:none;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:0;color:${eng.liked ? 'var(--danger)' : 'var(--on-surface-3)'};font-size:10.5px;font-weight:700;transition:color .14s;" class="profile-like-btn ${likedClass}">${likeIcon} ${eng.likes}</button>
+          <span>💬 ${eng.comments}</span>
+          <span>${type === 'text' ? 'Text' : type}</span>
+        </div>
       </article>`;
   }).join('');
 }
@@ -4496,9 +4513,13 @@ async function hydrateProfilePosts(userId = S.userId, options = {}) {
   if (_postsHydrationPromise) return _postsHydrationPromise;
 
   _postsHydrationPromise = fetchProfilePosts(userId)
-    .then((posts) => {
+    .then(async (posts) => {
       if (S.userId === userId && !S.isGuest) {
         _profilePosts = posts;
+        // Hydrate real like/comment counts before rendering so cards show live numbers
+        if (posts.length) {
+          await hydratePostEngagement(posts.map(p => p.id));
+        }
         renderProfilePosts(posts);
       }
       return posts;
@@ -5036,6 +5057,20 @@ function bindProfileEvents() {
 
   $('btn-edit-profile')?.addEventListener('click', toggleProfileEditMode);
   $('btn-edit-cancel-inline')?.addEventListener('click', toggleProfileEditMode);
+
+  // Profile post strip: like buttons (data-profile-action="like")
+  // Uses document delegation so it survives re-renders of the strip
+  if (!document.body.dataset.profilePostActionBound) {
+    document.body.dataset.profilePostActionBound = '1';
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-profile-action]');
+      if (!btn) return;
+      const action = btn.dataset.profileAction;
+      const postId = btn.dataset.postId;
+      if (!postId) return;
+      if (action === 'like') togglePostLike(postId);
+    });
+  }
 
   // Modal close uses event delegation so controls remain functional even if
   // the modal subtree is rerendered or replaced after hydration.
