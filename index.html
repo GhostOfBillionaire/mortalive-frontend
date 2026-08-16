@@ -3754,7 +3754,7 @@ body.mortalive-progress-open .sakura-topbar {
 
     <!-- CTA -->
     <div class="landing-cta">
-      <button class="btn btn-primary landing-continue" id="btn-enter" disabled>
+      <button type="button" class="btn btn-primary landing-continue" id="btn-enter" disabled aria-disabled="true">
         Continue
       </button>
       <label class="consent-toggle" for="landing-consent">
@@ -4899,6 +4899,44 @@ body.mortalive-progress-open .sakura-topbar {
 </script>
 
 <script src="app.js"></script>
+<script>
+/* Landing consent safety bridge — intentionally independent of app.js.
+   The Continue CTA must always track the real checkbox even if another
+   startup subsystem changes button state or finishes later. */
+(function () {
+  function bindLandingConsent() {
+    const terms = document.getElementById('landing-consent');
+    const button = document.getElementById('btn-enter');
+    if (!terms || !button) return;
+
+    const sync = () => {
+      const enabled = !!terms.checked;
+      button.disabled = !enabled;
+      button.classList.toggle('ready', enabled);
+      button.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+    };
+
+    if (terms.dataset.consentBridgeBound !== '1') {
+      terms.dataset.consentBridgeBound = '1';
+      terms.addEventListener('change', sync);
+      terms.addEventListener('input', sync);
+      terms.addEventListener('click', () => {
+        window.setTimeout(sync, 0);
+      });
+    }
+
+    sync();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindLandingConsent, { once: true });
+  } else {
+    bindLandingConsent();
+  }
+
+  window.addEventListener('pageshow', bindLandingConsent);
+})();
+</script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
