@@ -1277,6 +1277,25 @@ let _resendCooldownTimer = null;
 const OTP_COOLDOWN_MS = 60 * 1000;
 let _lastOtpRequestAt = 0;
 
+// Resolve a public username → { id, username, display_name } or null.
+// Used for shareable profile URLs (?user=username).
+async function lookupUserByUsername(username) {
+  if (!sb || !username) return null;
+  const clean = String(username).trim().replace(/^@/, '');
+  if (!clean) return null;
+  try {
+    const { data, error } = await sb
+      .from('accounts')
+      .select('id, username, display_name')
+      .ilike('username', clean)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
 function initAuthControls() {
   const tabGuest  = $('tab-guest');
   const tabLogin  = $('tab-login');
@@ -1395,6 +1414,22 @@ function initAuthControls() {
 
     syncAuthProgress(crockroachScore);
     toast(`Welcome, ${username}!`, '🧲');
+
+    // If the user arrived via a shared profile link (?user=...) but wasn't
+    // logged in, we saved the username in sessionStorage — open that profile now.
+    try {
+      const pending = sessionStorage.getItem('mortalive_pending_profile_user');
+      if (pending) {
+        sessionStorage.removeItem('mortalive_pending_profile_user');
+        lookupUserByUsername(pending).then(found => {
+          if (!found) { enterLobby(); return; }
+          if (found.id === (userId || null)) showPage('pg-profile');
+          else showPage('pg-profile', { profileUserId: found.id });
+        }).catch(() => enterLobby());
+        return;
+      }
+    } catch (_) {}
+
     enterLobby();
   }
 
@@ -2132,8 +2167,11 @@ async function hydrateAccountData(userId, options = {}) {
         initProfilePage();
         if (typeof window.renderProfileInfoRow === 'function') window.renderProfileInfoRow();
       }
+      // Always sync feed sidebar so avatar_url is applied regardless of which
+      // page is currently visible — ensures avatar is ready the instant the
+      // user navigates to feed, without requiring a second round-trip.
+      syncFeedSidebar();
       if ($('pg-feed')?.classList.contains('active')) {
-        syncFeedSidebar();
         fetchFeedPage(true);
       }
 
@@ -2233,6 +2271,9 @@ async function tryAutoLogin() {
         syncAuthProgress(crockroachScore);
         updateIdentityDisplay();
         updateProgressText();
+        // Pre-paint the feed sidebar avatar before any page routing runs,
+        // so the photo is present on first navigate rather than after a delay.
+        syncFeedSidebar();
       } catch (uiError) {
         console.warn('[Auth] UI hydration warning:', uiError);
       }
@@ -3623,10 +3664,28 @@ ready(() => {
   const invitationSignIn = entryParams.get('signin') === '1';
   const invitationEmail = (entryParams.get('email') || '').trim();
 
-  tryAutoLogin().then((loggedIn) => {
+  tryAutoLogin().then(async (loggedIn) => {
+    const urlParams = new URLSearchParams(window.location.search);
+    // ?user=username — shareable profile link
+    const sharedUsername = (urlParams.get('user') || '').trim().replace(/^@/, '');
+
     if (loggedIn) {
-      // Supabase strips auth hashes automatically, so we read the ?dest= param passed from the invitation subdomain
-      const urlParams = new URLSearchParams(window.location.search);
+      // ── Shareable profile URL: mortalive.com/?user=username ──────────
+      if (sharedUsername) {
+        window.history.replaceState(null, '', window.location.pathname);
+        const found = await lookupUserByUsername(sharedUsername);
+        if (!found) {
+          toast(`@${sharedUsername} not found`, '⚠️');
+          enterLobby();
+        } else if (found.id === S.userId) {
+          showPage('pg-profile');
+        } else {
+          showPage('pg-profile', { profileUserId: found.id });
+        }
+        return;
+      }
+
+      // ── Standard ?dest= / cross-domain routing ────────────────────────
       let targetPage = urlParams.get('dest') || window.location.hash.replace('#', '');
       
       const validPages = {
@@ -3637,7 +3696,6 @@ ready(() => {
       };
 
       if (urlParams.has('dest') || urlParams.has('transfer')) {
-          // Cross-domain token intercept logic - wipe URL params so they don't linger
           window.history.replaceState(null, '', window.location.pathname + (targetPage && validPages[targetPage] ? '#' + targetPage : ''));
       }
 
@@ -3653,6 +3711,18 @@ ready(() => {
       } else {
         enterLobby();
       }
+      return;
+    }
+
+    // ── Not logged in: handle shared profile link ─────────────────────
+    if (sharedUsername) {
+      try { sessionStorage.setItem('mortalive_pending_profile_user', sharedUsername); } catch (_) {}
+      window.history.replaceState(null, '', window.location.pathname);
+      showPage('pg-auth');
+      setTimeout(() => {
+        $('tab-login')?.click();
+        toast(`Sign in to view @${sharedUsername}'s profile`, '👤');
+      }, 0);
       return;
     }
 
@@ -5529,13 +5599,34 @@ function bindProfileEvents() {
   });
 
   $('btn-share-profile')?.addEventListener('click', () => {
-    const link = `${window.location.origin}${window.location.pathname}`;
+    const username = S.profileViewUserId
+      ? (S.profileViewData?.username || '')
+      : (S.accountData?.username || S.username || '');
+    if (!username) { toast('Could not determine username — try again.', '⚠️'); return; }
+    const link = `${window.location.origin}${window.location.pathname}?user=${encodeURIComponent(username)}`;
     if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(link).then(() => toast('Profile link copied!', '📋'));
+      navigator.clipboard.writeText(link).then(() => toast('Profile link copied! Share it anywhere.', '📋'));
     } else {
-      toast('Profile link: ' + link, '📋');
+      toast(link, '🔗');
     }
   });
+
+  // Override the inline-HTML handler on btn-profile-copy (which incorrectly
+  // used '#profile') by cloning the element to clear all prior listeners,
+  // then re-binding with the correct ?user=username shareable URL.
+  const copyBtnOld = $('btn-profile-copy');
+  if (copyBtnOld) {
+    const copyBtn = copyBtnOld.cloneNode(true);
+    copyBtnOld.parentNode?.replaceChild(copyBtn, copyBtnOld);
+    copyBtn.addEventListener('click', () => {
+      const username = S.accountData?.username || S.username || '';
+      if (!username) { window.toast?.('Sign in to copy your profile link', '🔒'); return; }
+      const link = `${location.origin}${location.pathname}?user=${encodeURIComponent(username)}`;
+      navigator.clipboard?.writeText(link)
+        .then(() => window.toast?.('Profile link copied! Share it anywhere.', '📋'))
+        .catch(() => window.toast?.(link, '🔗'));
+    });
+  }
 
   $('btn-profile-logout')?.addEventListener('click', async () => {
     const confirmed = await showConfirmDialog({
