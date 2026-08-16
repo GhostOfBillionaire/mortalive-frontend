@@ -4888,7 +4888,7 @@ function initProfilePage() {
       'creator': 'Content Niche',
       'business': 'Company Name',
       'private': 'Details'
-    };
+        };
     if ($('profile-details-label-display')) {
         $('profile-details-label-display').textContent = detailsLabels[acc.account_type] || 'Details';
     }
