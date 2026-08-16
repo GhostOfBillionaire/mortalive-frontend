@@ -2737,21 +2737,6 @@ body.mortalive-progress-open .sakura-topbar {
 .profile-post-strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(300px,64%);gap:12px;overflow-x:auto;overflow-y:hidden;padding:0 18px 16px;scroll-snap-type:x mandatory;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:none;-webkit-overflow-scrolling:touch}.profile-post-strip.expanded{grid-auto-columns:minmax(420px,74%)}.profile-post-card{scroll-snap-align:start;aspect-ratio:16/9;min-height:220px;border-radius:20px;display:flex;flex-direction:column;border:1px solid var(--border);background:#fff;padding:14px;box-shadow:0 4px 16px rgba(13,17,23,.035)}.profile-post-header{display:flex;align-items:center;gap:9px;margin-bottom:10px}.profile-post-mini-avatar{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:900}.profile-post-author{font-size:11.5px;font-weight:800}.profile-post-time{margin-left:auto;color:var(--on-surface-3);font-size:10px}.profile-post-body{font-size:14px;line-height:1.55}.profile-post-footer{margin-top:13px;padding-top:11px;border-top:1px solid var(--border);display:flex;gap:13px;color:var(--on-surface-3);font-size:10.5px;font-weight:700}.profile-poll-box{margin-top:11px;padding:11px;border-radius:15px;background:var(--surface-2)}.profile-poll-option{position:relative;overflow:hidden;margin-top:7px;min-height:32px;padding:7px 9px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-radius:10px;border:1px solid var(--border);background:#fff;font-size:10.5px;font-weight:700}.profile-poll-option-fill{position:absolute;inset:0 auto 0 0;background:rgba(26,110,245,.08)}.profile-poll-option span{position:relative;z-index:1}.profile-poll-percent{color:var(--on-surface-3)}
 .profile-gallery-section{margin-top:12px;min-height:360px}.profile-gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;padding:0 3px 3px}.profile-gallery-tile{position:relative;aspect-ratio:1/1;overflow:hidden;background:var(--surface-3)}.profile-gallery-tile{cursor:pointer;user-select:none}.profile-gallery-tile img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .24s ease}.profile-gallery-tile:hover img{transform:scale(1.025)}.profile-gallery-tile:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}.profile-gallery-placeholder{cursor:default}.profile-gallery-tile.large{grid-column:span 1;grid-row:span 1}.profile-gallery-placeholder{aspect-ratio:1/1;display:grid;place-items:center;text-align:center;padding:18px;color:var(--on-surface-3);background:linear-gradient(135deg,rgba(26,110,245,.06),rgba(124,58,237,.07)),var(--surface-2)}.profile-gallery-placeholder strong{display:block;color:var(--on-surface);font-size:13px;margin-bottom:4px}.profile-gallery-placeholder span{font-size:10.5px;line-height:1.5}.profile-extra-strip{display:grid;gap:12px;margin-top:12px;padding-bottom:8px}.profile-achievements-card{padding:16px}.profile-achievements-card .section-head{padding:0 0 10px;margin-bottom:0}.profile-achievements-card .badges-grid{padding:0;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}.profile-about-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:0 16px 16px}.profile-about-box{padding:12px;border-radius:15px;background:var(--surface-2);border:1px solid var(--border)}.profile-about-label{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;font-weight:800;color:var(--on-surface-3)}.profile-about-value{margin-top:5px;font-size:12px;line-height:1.55;color:var(--on-surface);word-break:break-word}/* Scroll focus is intentionally layout-stable: never collapse/remove content while the viewport is scrolling. */
 .profile-top-sticky{transition:opacity .2s ease,transform .2s ease}.profile-feed-viewport.gallery-focus .profile-top-sticky{opacity:.92;transform:translateY(-2px)}.profile-feed-viewport.gallery-focus .profile-thoughts{margin-top:0;max-height:460px;opacity:1;transform:none;overflow:visible;pointer-events:auto}
-/* ── Social photo + profile navigation enhancements ── */
-.profile-avatar-editable{position:relative}
-.profile-avatar-change-btn{position:absolute;right:-4px;bottom:-4px;width:30px;height:30px;border-radius:50%;background:#fff;border:1px solid var(--border-strong);box-shadow:var(--elev-2);display:grid;place-items:center;font-size:13px;z-index:3;cursor:pointer}
-.profile-post-photo-btn,.compose-tool{padding:7px 10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);font-size:11px;font-weight:800;color:var(--on-surface-2);cursor:pointer}
-.profile-post-photo-btn:hover,.compose-tool:hover{border-color:var(--primary);color:var(--primary)}
-.profile-photo-name,.compose-photo-name{font-size:10px;color:var(--on-surface-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
-.profile-post-strip{display:flex !important;grid-auto-flow:unset !important;grid-auto-columns:unset !important;overflow-x:auto !important;overflow-y:hidden !important;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:none;-webkit-overflow-scrolling:touch;scrollbar-width:thin;cursor:grab}
-.profile-post-strip:active{cursor:grabbing}
-.profile-post-strip .profile-post-card{flex:0 0 min(64%,520px);width:min(64%,520px);min-width:300px}
-.profile-post-strip .profile-post-media{display:block;width:100%;max-height:320px;object-fit:cover;border-radius:14px;margin-top:10px;cursor:zoom-in}
-.profile-author-link,.post-author-link{color:inherit;text-decoration:none;cursor:pointer}
-.profile-author-link:hover,.post-author-link:hover{text-decoration:underline;text-underline-offset:2px}
-.feed-post-media{display:block;width:100%;max-height:520px;object-fit:cover;border-radius:14px;margin-top:12px;cursor:zoom-in}
-@media(max-width:840px){.profile-post-strip .profile-post-card{flex-basis:86%;width:86%;min-width:280px}}
-@media(max-width:560px){.profile-post-strip .profile-post-card{flex-basis:92%;width:92%;min-width:260px}.profile-photo-name,.compose-photo-name{max-width:100px}}
 /* old mobile rules now merged into redesign CSS block above */
 
 
@@ -3698,7 +3683,7 @@ body.mortalive-progress-open .sakura-topbar {
     <div class="topbar-actions">
       <div class="topbar-stat">
         <div class="live-dot"></div>
-        <span id="app-topbar-online-count">—</span> online
+        <span id="app-topbar-online-count">2,847</span> online
       </div>
       <div class="topbar-stat app-topbar-score" id="app-topbar-score-pill" title="Open crockroach Score">
         🧲 <span id="app-topbar-score-val">—</span>
@@ -3746,7 +3731,7 @@ body.mortalive-progress-open .sakura-topbar {
     <div class="hero-stats">
       <div class="stat-item" style="color:#fff !important; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.2);">
         <span class="stat-dot"></span>
-        <span id="online-n-hero" style="color:#fff !important;">—</span> online now
+        <span id="online-n-hero" style="color:#fff !important;">2,847</span> online now
       </div>
       <div class="stat-item" style="color:#fff !important; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.2);">✔ Your identity stays private</div>
       <div class="stat-item" style="color:#fff !important; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.2);">⚡ Matches in under 10 s</div>
@@ -3754,7 +3739,7 @@ body.mortalive-progress-open .sakura-topbar {
 
     <!-- CTA -->
     <div class="landing-cta">
-      <button type="button" class="btn btn-primary landing-continue" id="btn-enter" disabled aria-disabled="true">
+      <button class="btn btn-primary landing-continue" id="btn-enter" disabled>
         Continue
       </button>
       <label class="consent-toggle" for="landing-consent">
@@ -4141,7 +4126,7 @@ body.mortalive-progress-open .sakura-topbar {
         </div>
         <div class="live-line">
           <span class="live-dot"></span>
-          <strong id="online-n">—</strong>&nbsp;online now
+          <strong id="online-n">2,847</strong>&nbsp;online now
           <span class="chip" id="mode-label" style="margin-left:6px;">Video</span>
         </div>
       </div>
@@ -4202,7 +4187,7 @@ body.mortalive-progress-open .sakura-topbar {
       <div class="spinner" aria-hidden="true"></div>
       <h2 class="match-title" id="match-title">Finding your match</h2>
       <p class="match-sub" id="match-sub">
-        Scanning <strong id="match-count">—</strong> people online right now.
+        Scanning <strong id="match-count">2,847</strong> people online right now.
       </p>
       <div class="match-badge">
         <span class="dot" id="conn-dot"></span>
@@ -4389,9 +4374,6 @@ body.mortalive-progress-open .sakura-topbar {
 <div class="compose-toolbar">
 <button class="compose-type-btn active" id="btn-type-text">📝 Text</button>
 <button class="compose-type-btn" id="btn-type-poll">📊 Poll</button>
-<button class="compose-tool" id="btn-feed-photo" type="button" title="Add photo">📷 Photo</button>
-<input id="feed-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
-<span id="feed-photo-name" class="compose-photo-name" aria-live="polite"></span>
 <span style="flex:1;"></span>
 <span id="char-count" style="font-size:12px;color:var(--on-surface-3);">500</span>
 <button class="compose-submit" disabled="" id="compose-submit">Post</button>
@@ -4530,11 +4512,9 @@ body.mortalive-progress-open .sakura-topbar {
 
       <!-- Identity row: avatar + name + actions (no cover overlap needed) -->
       <div class="profile-identity">
-        <div class="profile-avatar-shell profile-avatar-editable">
+        <div class="profile-avatar-shell">
           <div class="profile-avatar-modern" id="profile-avatar">👤</div>
           <div class="profile-live-dot"></div>
-          <button id="btn-change-profile-photo" class="profile-avatar-change-btn" type="button" title="Change profile photo" aria-label="Change profile photo">📷</button>
-          <input id="profile-avatar-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
         </div>
         <div class="profile-identity-copy">
           <div class="profile-name-line">
@@ -4610,9 +4590,6 @@ body.mortalive-progress-open .sakura-topbar {
             <textarea id="profile-post-input" maxlength="500" placeholder="Share a thought, update, question, or conversation starter…"></textarea>
             <div class="profile-post-composer-actions">
               <span class="profile-post-char-count" id="profile-post-char-count">0 / 500</span>
-              <button class="profile-post-photo-btn" id="btn-profile-photo-upload" type="button">📷 Photo</button>
-              <input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
-              <span class="profile-photo-name" id="profile-photo-name" aria-live="polite"></span>
               <button class="profile-post-submit" id="btn-profile-post-submit" type="button" disabled>Post</button>
             </div>
             <div class="profile-post-error" id="profile-post-error"></div>
@@ -4899,44 +4876,6 @@ body.mortalive-progress-open .sakura-topbar {
 </script>
 
 <script src="app.js"></script>
-<script>
-/* Landing consent safety bridge — intentionally independent of app.js.
-   The Continue CTA must always track the real checkbox even if another
-   startup subsystem changes button state or finishes later. */
-(function () {
-  function bindLandingConsent() {
-    const terms = document.getElementById('landing-consent');
-    const button = document.getElementById('btn-enter');
-    if (!terms || !button) return;
-
-    const sync = () => {
-      const enabled = !!terms.checked;
-      button.disabled = !enabled;
-      button.classList.toggle('ready', enabled);
-      button.setAttribute('aria-disabled', enabled ? 'false' : 'true');
-    };
-
-    if (terms.dataset.consentBridgeBound !== '1') {
-      terms.dataset.consentBridgeBound = '1';
-      terms.addEventListener('change', sync);
-      terms.addEventListener('input', sync);
-      terms.addEventListener('click', () => {
-        window.setTimeout(sync, 0);
-      });
-    }
-
-    sync();
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bindLandingConsent, { once: true });
-  } else {
-    bindLandingConsent();
-  }
-
-  window.addEventListener('pageshow', bindLandingConsent);
-})();
-</script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -5379,22 +5318,6 @@ body.mortalive-progress-open .sakura-topbar {
     if (img && gallery.contains(img)) open(img);
   });
 
-  document.addEventListener('click', (event) => {
-    const photo = event.target.closest('.js-photo-open');
-    if (!photo) return;
-    const url = photo.dataset.photoUrl || photo.currentSrc || photo.src;
-    if (!url) return;
-    // Reuse the same Instagram-style lightbox for feed/profile post photos.
-    items = Array.from(document.querySelectorAll('.js-photo-open')).filter(el => el.dataset.photoUrl || el.currentSrc || el.src);
-    index = Math.max(0, items.indexOf(photo));
-    if (!items.length) return;
-    render();
-    lightbox.classList.add('open');
-    lightbox.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-    closeBtn.focus();
-  });
-
   closeBtn.addEventListener('click', close);
   backdrop.addEventListener('click', close);
   prevBtn.addEventListener('click', () => step(-1));
@@ -5410,11 +5333,3 @@ body.mortalive-progress-open .sakura-topbar {
 </script>
 </body>
 </html>
-<style id="public-profile-visibility">
-body.profile-viewing-public #btn-edit-profile,
-body.profile-viewing-public #btn-change-profile-photo,
-body.profile-viewing-public #profile-post-composer,
-body.profile-viewing-public #profile-open-grid,
-body.profile-viewing-public #btn-profile-copy,
-body.profile-viewing-public #btn-profile-progress{display:none!important}
-</style>
