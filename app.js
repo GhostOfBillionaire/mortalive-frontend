@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-17-feed-profile-fullscreen-v6'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-17-post-viewer-v7'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -4670,7 +4670,7 @@ function renderFeedPosts() {
       : `<div class="post-avatar">${feedAvatarLetter(display)}</div>`;
     const engagement = engagementFor(post.id);
     return `
-      <article class="post-card" data-post-id="${sanitizeHTML(post.id)}">
+      <article class="post-card" data-post-id="${sanitizeHTML(post.id)}" data-post-owner="${sanitizeHTML(post.user_id || '')}" data-post-type="${sanitizeHTML(post.post_type || 'text')}">
         <div class="post-header">
           ${avatarMarkup}
           <div class="post-meta">
@@ -4691,6 +4691,269 @@ function renderFeedPosts() {
   }).join('');
   // Restore any comment sections that were open before the innerHTML was replaced
   if (openIds.length) _restoreOpenCommentSections(openIds);
+}
+
+
+// ── Post viewer (Instagram-style split layout) ──────────────────────────────
+// Opens any feed/profile post in a media + detail/comment layout instead of
+// exposing only the raw image. This viewer stays in the current page context.
+function getPostByIdForViewer(postId) {
+  if (!postId) return null;
+  const inFeed = Array.isArray(_feedPosts) ? _feedPosts.find(p => p.id === postId) : null;
+  if (inFeed) return inFeed;
+  const inProfile = Array.isArray(_profilePosts) ? _profilePosts.find(p => p.id === postId) : null;
+  if (inProfile) return inProfile;
+  return null;
+}
+
+function getPostViewerAuthor(post) {
+  const author = post?.author || {};
+  if (post?.user_id && post.user_id === S.userId) {
+    return {
+      id: S.userId,
+      username: S.accountData?.username || S.username || author.username || 'You',
+      display_name: S.accountData?.display_name || S.username || author.display_name || 'You',
+      avatar_url: S.accountData?.avatar_url || author.avatar_url || '',
+      crockroach_score: S.accountData?.crockroach_score ?? S.crockroachScore ?? author.crockroach_score ?? 0
+    };
+  }
+  return {
+    id: post?.user_id || '',
+    username: author.username || 'member',
+    display_name: author.display_name || author.username || 'Member',
+    avatar_url: author.avatar_url || '',
+    crockroach_score: Number(author.crockroach_score) || 0
+  };
+}
+
+function buildPostViewerAvatar(author, size = 40) {
+  const display = author?.display_name || author?.username || 'Member';
+  const avatar = feedAvatarUrl(author?.avatar_url);
+  if (avatar) {
+    return `<img src="${avatar}" alt="${sanitizeHTML(display)}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;display:block;" loading="eager" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${feedAvatarLetter(display)}'}))">`;
+  }
+  return `<span style="width:${size}px;height:${size}px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#1a6ef5,#7c3aed);color:#fff;font-size:${Math.max(12, Math.round(size*.38))}px;font-weight:800;">${feedAvatarLetter(display)}</span>`;
+}
+
+function postViewerMediaMarkup(post) {
+  const mediaUrl = feedAvatarUrl(post?.media_url);
+  if (mediaUrl) {
+    return `<div class="mortalive-post-viewer-media-frame"><img class="mortalive-post-viewer-media" src="${mediaUrl}" alt="Post photo" loading="eager" decoding="async"></div>`;
+  }
+  const content = sanitizeHTML(String(post?.content || '').trim());
+  return `
+    <div class="mortalive-post-viewer-text-stage">
+      <div class="mortalive-post-viewer-text-kicker">Thought</div>
+      <div class="mortalive-post-viewer-text">${content || 'Shared a thought.'}</div>
+    </div>`;
+}
+
+function postViewerCommentRows(comments = []) {
+  if (!comments.length) {
+    return `<div class="mortalive-post-viewer-empty-comments">No comments yet. Start the conversation.</div>`;
+  }
+  return comments.map(comment => {
+    const author = comment.author || {};
+    const display = author.display_name || author.username || 'Member';
+    return `
+      <div class="mortalive-post-viewer-comment">
+        ${buildPostViewerAvatar(author, 34)}
+        <div class="mortalive-post-viewer-comment-copy">
+          <div class="mortalive-post-viewer-comment-head">
+            <strong>${sanitizeHTML(display)}</strong>
+            <span>${sanitizeHTML(feedRelTime(comment.created_at))}</span>
+          </div>
+          <div class="mortalive-post-viewer-comment-text">${sanitizeHTML(comment.content || '')}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function postViewerRender(post, comments = _commentCache.get(post?.id) || []) {
+  const modal = $('mortalive-post-viewer');
+  if (!modal || !post) return;
+
+  const author = getPostViewerAuthor(post);
+  const display = author.display_name || author.username || 'Member';
+  const username = author.username || 'member';
+  const engagement = engagementFor(post.id);
+  const caption = String(post.content || '').trim();
+  const captionText = caption === ' ' ? '' : caption;
+  const likes = Number(engagement.likes) || 0;
+  const commentsCount = Math.max(Number(engagement.comments) || 0, comments.length);
+  const liked = !!engagement.liked;
+  const badge = Number(author.crockroach_score) >= 700 ? 'Gold' : Number(author.crockroach_score) >= 420 ? 'Silver' : '';
+
+  const mediaHost = modal.querySelector('.mortalive-post-viewer-media-host');
+  const avatarHost = modal.querySelector('.mortalive-post-viewer-avatar');
+  const nameEl = modal.querySelector('.mortalive-post-viewer-name');
+  const handleEl = modal.querySelector('.mortalive-post-viewer-handle');
+  const captionEl = modal.querySelector('.mortalive-post-viewer-caption');
+  const countEl = modal.querySelector('.mortalive-post-viewer-counter');
+  const commentsEl = modal.querySelector('.mortalive-post-viewer-comments');
+  const likesEl = modal.querySelector('.mortalive-post-viewer-likes');
+  const actionsEl = modal.querySelector('.mortalive-post-viewer-actions');
+  const inputEl = modal.querySelector('.mortalive-post-viewer-input');
+  const statusEl = modal.querySelector('.mortalive-post-viewer-status');
+
+  if (mediaHost) mediaHost.innerHTML = postViewerMediaMarkup(post);
+  if (avatarHost) avatarHost.innerHTML = buildPostViewerAvatar(author, 42);
+  if (nameEl) nameEl.textContent = display;
+  if (handleEl) handleEl.textContent = `@${username}${badge ? ` · ${badge}` : ''}`;
+  if (captionEl) {
+    captionEl.innerHTML = captionText ? `<div class="mortalive-post-viewer-caption-author">${sanitizeHTML(display)}</div><div class="mortalive-post-viewer-caption-text">${sanitizeHTML(captionText)}</div>` : '';
+    captionEl.style.display = captionText ? '' : 'none';
+  }
+  if (countEl) countEl.textContent = `${feedRelTime(post.created_at)}${post.post_type ? ` · ${post.post_type === 'text' ? 'Text' : post.post_type}` : ''}`;
+  if (likesEl) likesEl.textContent = `${likes.toLocaleString()} ${likes === 1 ? 'like' : 'likes'}`;
+  if (commentsEl) commentsEl.innerHTML = postViewerCommentRows(comments);
+
+  if (actionsEl) {
+    actionsEl.innerHTML = `
+      <button type="button" class="mortalive-post-viewer-action ${liked ? 'liked' : ''}" data-viewer-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${liked}">
+        <span class="mortalive-post-viewer-action-icon">${liked ? '♥' : '♡'}</span><span>${likes}</span>
+      </button>
+      <button type="button" class="mortalive-post-viewer-action" data-viewer-action="comment-focus" data-post-id="${sanitizeHTML(post.id)}">
+        <span class="mortalive-post-viewer-action-icon">💬</span><span>${commentsCount}</span>
+      </button>
+      <button type="button" class="mortalive-post-viewer-action" data-viewer-action="copy" data-post-id="${sanitizeHTML(post.id)}">
+        <span class="mortalive-post-viewer-action-icon">↗</span><span>Share</span>
+      </button>`;
+  }
+
+  if (inputEl) inputEl.dataset.postId = post.id;
+  if (statusEl) statusEl.textContent = comments.length ? `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'}` : '';
+}
+
+async function openPostViewer(postOrId) {
+  if (S.isGuest || !S.userId) {
+    toast('Sign in to view posts', '🔒');
+    return;
+  }
+  const sessionOk = await requireAuthenticatedSession();
+  if (!sessionOk) {
+    toast('Your session expired — please sign in again.', '🔒');
+    return;
+  }
+  const post = typeof postOrId === 'string' ? getPostByIdForViewer(postOrId) : postOrId;
+  if (!post?.id) return;
+
+  const modal = $('mortalive-post-viewer');
+  if (!modal) return;
+  window._mortalivePostViewerPostId = post.id;
+  window._mortalivePostViewerSequence = Array.from(document.querySelectorAll('#pg-feed .post-card[data-post-id], #pg-feed .profile-post-card[data-post-id]'))
+    .map(el => el.dataset.postId).filter(Boolean);
+  window._mortalivePostViewerIndex = Math.max(0, window._mortalivePostViewerSequence.indexOf(post.id));
+  postViewerRender(post, _commentCache.get(post.id) || []);
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+
+  try {
+    const comments = await loadPostComments(post.id);
+    if (window._mortalivePostViewerPostId === post.id && modal.classList.contains('open')) {
+      postViewerRender(post, comments);
+    }
+  } catch (_) {}
+}
+
+window.mortaliveOpenPostViewer = openPostViewer;
+
+async function stepPostViewer(delta) {
+  const sequence = Array.isArray(window._mortalivePostViewerSequence) ? window._mortalivePostViewerSequence : [];
+  if (sequence.length < 2) return;
+  let nextIndex = Number(window._mortalivePostViewerIndex) || 0;
+  nextIndex = (nextIndex + delta + sequence.length) % sequence.length;
+  const nextId = sequence[nextIndex];
+  const nextPost = getPostByIdForViewer(nextId);
+  if (!nextPost) return;
+  window._mortalivePostViewerIndex = nextIndex;
+  window._mortalivePostViewerPostId = nextId;
+  postViewerRender(nextPost, _commentCache.get(nextId) || []);
+  try {
+    const comments = await loadPostComments(nextId);
+    if (window._mortalivePostViewerPostId === nextId) postViewerRender(nextPost, comments);
+  } catch (_) {}
+}
+
+function closePostViewer() {
+  const modal = $('mortalive-post-viewer');
+  if (!modal) return;
+  window._mortalivePostViewerPostId = null;
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+}
+
+async function refreshOpenPostViewer() {
+  const postId = window._mortalivePostViewerPostId;
+  if (!postId) return;
+  const post = getPostByIdForViewer(postId);
+  const modal = $('mortalive-post-viewer');
+  if (!post || !modal?.classList.contains('open')) return;
+  const comments = _commentCache.get(postId) || [];
+  postViewerRender(post, comments);
+}
+
+function bindPostViewerInteractions() {
+  const modal = $('mortalive-post-viewer');
+  if (!modal || modal.dataset.bound) return;
+  modal.dataset.bound = '1';
+
+  modal.addEventListener('click', async (event) => {
+    const close = event.target.closest('[data-viewer-close]');
+    if (close || event.target === modal.querySelector('.mortalive-post-viewer-backdrop')) {
+      closePostViewer();
+      return;
+    }
+
+    const nav = event.target.closest('[data-viewer-nav]');
+    if (nav) {
+      event.preventDefault();
+      await stepPostViewer(nav.dataset.viewerNav === 'prev' ? -1 : 1);
+      return;
+    }
+
+    const action = event.target.closest('[data-viewer-action]');
+    if (action) {
+      const type = action.dataset.viewerAction;
+      const postId = action.dataset.postId;
+      if (type === 'like') {
+        await togglePostLike(postId);
+        await refreshOpenPostViewer();
+      } else if (type === 'comment-focus') {
+        modal.querySelector('.mortalive-post-viewer-input')?.focus();
+      } else if (type === 'copy') {
+        const url = `${location.origin}${location.pathname}#feed-post-${encodeURIComponent(postId)}`;
+        navigator.clipboard?.writeText(url).then(() => toast('Post link copied', '📋')).catch(() => toast(url, '🔗'));
+      }
+      return;
+    }
+
+    if (event.target.closest('.mortalive-post-viewer-submit')) {
+      const input = modal.querySelector('.mortalive-post-viewer-input');
+      const postId = input?.dataset.postId;
+      const content = input?.value?.trim();
+      if (!postId || !content) return;
+      input.value = '';
+      await createPostComment(postId, content);
+      await refreshOpenPostViewer();
+    }
+  });
+
+  modal.querySelector('[data-viewer-close]')?.addEventListener('click', closePostViewer);
+}
+
+function bindPostViewerKeys() {
+  if (document.body.dataset.postViewerKeysBound) return;
+  document.body.dataset.postViewerKeysBound = '1';
+  document.addEventListener('keydown', (event) => {
+    const modal = $('mortalive-post-viewer');
+    if (!modal?.classList.contains('open')) return;
+    if (event.key === 'Escape') closePostViewer();
+    else if (event.key === 'ArrowLeft') stepPostViewer(-1);
+    else if (event.key === 'ArrowRight') stepPostViewer(1);
+  });
 }
 
 function renderFeedSidebars() {
@@ -4912,6 +5175,8 @@ function initFeedPage() {
     return;
   }
   _feedInitialized = true;
+  bindPostViewerInteractions();
+  bindPostViewerKeys();
 
   document.addEventListener('click', (event) => {
     const feedRoot = event.target.closest('#pg-feed');
@@ -4929,6 +5194,20 @@ function initFeedPage() {
       const filterValue = filter.dataset.filter;
       if (filterValue === 'mine' || filterValue === 'all') setFeedFilter(filterValue);
       return;
+    }
+
+    const viewerIgnored = event.target.closest('[data-feed-action], [data-open-profile], a, input, textarea, select, option, label, .comments-section');
+    const postCard = event.target.closest('.post-card, .profile-post-card');
+    if (postCard && !viewerIgnored) {
+      const postId = postCard.dataset.postId;
+      const clickedPhoto = event.target.closest('.js-photo-open');
+      const clickedBody = event.target.closest('.post-body, .profile-post-body');
+      if (postId && (clickedPhoto || clickedBody || postCard === event.target || !viewerIgnored)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        openPostViewer(postId);
+        return;
+      }
     }
 
     const action = event.target.closest('[data-feed-action]');
@@ -5085,7 +5364,7 @@ function renderProfilePosts(posts = _profilePosts) {
     const likedClass = eng.liked ? 'liked' : '';
     const likeIcon = eng.liked ? '♥' : '♡';
     return `
-      <article class="profile-post-card" data-post-id="${sanitizeHTML(post.id)}">
+      <article class="profile-post-card" data-post-id="${sanitizeHTML(post.id)}" data-post-owner="${sanitizeHTML(post.user_id || _profilePostsOwner?.id || S.userId || '')}" data-post-type="${sanitizeHTML(post.post_type || 'text')}">
         <div class="profile-post-header">
           <div class="profile-post-mini-avatar" style="background:linear-gradient(135deg,#1a6ef5,#7c3aed)">${initial}</div>
           <div class="profile-post-author"><button type="button" class="profile-author-link" data-open-profile="${sanitizeHTML(post.user_id || _profilePostsOwner?.id || S.userId || '')}">${sanitizeHTML(ownerName)}</button></div>
@@ -5109,7 +5388,7 @@ function renderProfileGallery(posts = _profilePosts) {
   gallery.innerHTML = photos.map((p, i) => {
     const caption = sanitizeHTML(String(p.content || '').trim());
     const ownerName = sanitizeHTML(p.author?.username || _profilePostsOwner?.username || S.username || 'user');
-    return `<button type="button" class="profile-gallery-tile" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" aria-label="Open photo ${i + 1}"><img src="${sanitizeHTML(p.media_url)}" alt="${ownerName} photo post" loading="lazy" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" style="width:100%;height:100%;object-fit:cover;display:block"></button>`;
+    return `<button type="button" class="profile-gallery-tile" data-post-id="${sanitizeHTML(p.id || '')}" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" aria-label="Open photo ${i + 1}"><img src="${sanitizeHTML(p.media_url)}" alt="${ownerName} photo post" loading="lazy" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" style="width:100%;height:100%;object-fit:cover;display:block"></button>`;
   }).join('');
 }
 
@@ -5143,7 +5422,7 @@ async function hydrateProfileGallery(userId = S.userId) {
     gallery.innerHTML = photos.map((p, i) => {
       const caption = sanitizeHTML(String(p.content || '').trim());
       const ownerName = sanitizeHTML(p.author?.username || _profilePostsOwner?.username || S.username || 'user');
-      return `<button type="button" class="profile-gallery-tile" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" aria-label="Open photo ${i + 1}">` +
+      return `<button type="button" class="profile-gallery-tile" data-post-id="${sanitizeHTML(p.id || '')}" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" aria-label="Open photo ${i + 1}">` +
         `<img src="${sanitizeHTML(p.media_url)}" alt="${ownerName} photo post" loading="lazy" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" style="width:100%;height:100%;object-fit:cover;display:block"></button>`;
     }).join('');
   } catch (e) {
