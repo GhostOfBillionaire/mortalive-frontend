@@ -4917,7 +4917,7 @@ body.mortalive-progress-open .sakura-topbar {
   });
 </script>
 
-<script src="app.js?v=20260817-profile-scroll-avatar-posts-fix"></script>
+<script src="app.js?v=20260817-profile-overlay-auth-v3"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -5069,7 +5069,7 @@ body.mortalive-progress-open .sakura-topbar {
     const score=q('profile-hero-score')?.textContent || '—';
     const goal=q('progress-goal')?.textContent || 'Keep building momentum.';
     const u=window.S?.username || 'user';
-    if(q('profile-handle-modern')) q('profile-handle-modern').textContent='@'+String(u).toLowerCase().replace(/\s+/g,'_');
+    if(q('profile-handle-modern')) q('profile-handle-modern').textContent='';
     const sub=q('profile-subline-display')?.textContent || '';
     if(q('profile-details-meta')) q('profile-details-meta').textContent=sub.split('·').map(s=>s.trim()).filter(Boolean).pop() || 'Member';
     // Update hidden compat elements (used by app.js)
