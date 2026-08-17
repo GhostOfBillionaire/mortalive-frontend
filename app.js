@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-17-profile-overlay-auth-v3'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-17-feed-profile-view-auth-v4'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -4347,25 +4347,39 @@ function ensureFeedProfileOverlay() {
   const style = document.createElement('style');
   style.id = 'feed-profile-overlay-style';
   style.textContent = `
-    #feed-profile-overlay{position:fixed;inset:0;z-index:1800;display:none;align-items:flex-end;justify-content:center;background:rgba(8,14,28,.38);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:16px;}
+    #feed-profile-overlay{position:fixed;inset:0;z-index:1800;display:none;align-items:stretch;justify-content:flex-end;background:rgba(8,14,28,.28);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
     #feed-profile-overlay.open{display:flex;}
-    #feed-profile-overlay .feed-profile-sheet{width:min(720px,100%);max-height:min(88dvh,820px);overflow:auto;background:rgba(255,255,255,.97);border:1px solid var(--border);border-radius:28px;box-shadow:0 28px 90px rgba(13,17,23,.28);padding:18px;}
-    #feed-profile-overlay .feed-profile-close{width:38px;height:38px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border);font-size:18px;font-weight:800;display:grid;place-items:center;}
-    #feed-profile-overlay .feed-profile-top{display:flex;align-items:flex-start;gap:14px;}
-    #feed-profile-overlay .feed-profile-avatar{width:72px;height:72px;border-radius:22px;overflow:hidden;display:grid;place-items:center;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;font-size:28px;font-weight:900;flex:none;}
+    body.feed-profile-open{overflow:hidden;}
+    #feed-profile-overlay .feed-profile-sheet{width:min(820px,100%);height:100%;max-height:100dvh;overflow:hidden;background:var(--surface);border-left:1px solid var(--border);box-shadow:-24px 0 80px rgba(13,17,23,.20);display:flex;flex-direction:column;animation:feedProfileIn .24s var(--ease-out);}
+    @keyframes feedProfileIn{from{transform:translateX(22px);opacity:.6;}to{transform:none;opacity:1;}}
+    #feed-profile-overlay .feed-profile-nav{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.94);backdrop-filter:blur(18px);}
+    #feed-profile-overlay .feed-profile-close{width:38px;height:38px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border);font-size:18px;font-weight:800;display:grid;place-items:center;flex:none;}
+    #feed-profile-overlay .feed-profile-nav-title{font-size:14px;font-weight:900;letter-spacing:-.02em;}
+    #feed-profile-overlay .feed-profile-content{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;}
+    #feed-profile-overlay .feed-profile-cover{height:150px;background:linear-gradient(135deg,rgba(26,110,245,.16),rgba(124,58,237,.18));border-bottom:1px solid var(--border);}
+    #feed-profile-overlay .feed-profile-head{padding:0 22px 18px;}
+    #feed-profile-overlay .feed-profile-avatar{width:92px;height:92px;margin-top:-46px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;font-size:32px;font-weight:900;flex:none;border:4px solid var(--surface);box-shadow:var(--elev-2);}
     #feed-profile-overlay .feed-profile-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
-    #feed-profile-overlay .feed-profile-name{font-size:22px;font-weight:900;letter-spacing:-.04em;}
-    #feed-profile-overlay .feed-profile-handle{margin-top:3px;color:var(--on-surface-3);font-size:12.5px;font-weight:700;}
-    #feed-profile-overlay .feed-profile-status{margin-top:7px;font-size:12px;color:var(--on-surface-3);}
-    #feed-profile-overlay .feed-profile-bio{margin-top:14px;padding:14px;border-radius:18px;background:var(--surface-2);color:var(--on-surface-2);font-size:13.5px;line-height:1.65;}
-    #feed-profile-overlay .feed-profile-section{margin-top:16px;}
-    #feed-profile-overlay .feed-profile-section-title{font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:var(--on-surface-3);margin-bottom:9px;}
-    #feed-profile-overlay .feed-profile-posts{display:grid;gap:10px;}
-    #feed-profile-overlay .feed-profile-post{padding:13px 14px;border:1px solid var(--border);border-radius:18px;background:#fff;}
+    #feed-profile-overlay .feed-profile-actions{display:flex;justify-content:flex-end;margin-top:-46px;min-height:46px;}
+    #feed-profile-overlay .feed-profile-action{padding:8px 16px;border-radius:999px;border:1.5px solid var(--border-strong);background:#fff;font-size:12px;font-weight:800;}
+    #feed-profile-overlay .feed-profile-name{margin-top:10px;font-size:24px;font-weight:900;letter-spacing:-.04em;}
+    #feed-profile-overlay .feed-profile-handle{margin-top:3px;color:var(--on-surface-3);font-size:13px;font-weight:700;}
+    #feed-profile-overlay .feed-profile-status{margin-top:8px;font-size:12px;color:var(--on-surface-3);}
+    #feed-profile-overlay .feed-profile-bio{margin-top:14px;color:var(--on-surface-2);font-size:13.5px;line-height:1.65;}
+    #feed-profile-overlay .feed-profile-stats{display:flex;gap:20px;flex-wrap:wrap;margin-top:14px;}
+    #feed-profile-overlay .feed-profile-stat strong{font-size:14px;font-weight:900;color:var(--on-surface);}
+    #feed-profile-overlay .feed-profile-stat span{font-size:11px;color:var(--on-surface-3);margin-left:4px;}
+    #feed-profile-overlay .feed-profile-tabs{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--border);background:rgba(255,255,255,.96);backdrop-filter:blur(16px);}
+    #feed-profile-overlay .feed-profile-tab{padding:14px 10px;text-align:center;font-size:12.5px;font-weight:800;color:var(--on-surface-3);border-bottom:2px solid transparent;}
+    #feed-profile-overlay .feed-profile-tab.active{color:var(--on-surface);border-bottom-color:var(--primary);}
+    #feed-profile-overlay .feed-profile-section{padding:16px 22px 24px;}
+    #feed-profile-overlay .feed-profile-posts{display:grid;gap:0;}
+    #feed-profile-overlay .feed-profile-post{padding:16px 0;border-bottom:1px solid var(--border);}
+    #feed-profile-overlay .feed-profile-post:last-child{border-bottom:0;}
     #feed-profile-overlay .feed-profile-post-time{font-size:10px;color:var(--on-surface-3);margin-bottom:7px;}
-    #feed-profile-overlay .feed-profile-post-text{font-size:13.5px;line-height:1.6;word-break:break-word;}
-    #feed-profile-overlay .feed-profile-post img{width:100%;max-height:360px;object-fit:cover;border-radius:15px;margin-top:10px;display:block;}
-    @media(max-width:720px){#feed-profile-overlay{padding:8px;}#feed-profile-overlay .feed-profile-sheet{max-height:92dvh;border-radius:24px;padding:14px;}}
+    #feed-profile-overlay .feed-profile-post-text{font-size:13.5px;line-height:1.65;word-break:break-word;}
+    #feed-profile-overlay .feed-profile-post img{width:100%;max-height:460px;object-fit:cover;border-radius:16px;margin-top:10px;display:block;}
+    @media(max-width:720px){#feed-profile-overlay .feed-profile-sheet{width:100%;border-left:0;}#feed-profile-overlay .feed-profile-cover{height:132px;}#feed-profile-overlay .feed-profile-head{padding-inline:16px;}#feed-profile-overlay .feed-profile-section{padding-inline:16px;}}
   `;
   document.head.appendChild(style);
 
@@ -4373,11 +4387,11 @@ function ensureFeedProfileOverlay() {
   overlay.id = 'feed-profile-overlay';
   overlay.innerHTML = `
     <div class="feed-profile-sheet" role="dialog" aria-modal="true" aria-labelledby="feed-profile-title">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;">
-        <div style="font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--on-surface-3);">Profile</div>
-        <button class="feed-profile-close" type="button" aria-label="Close profile">×</button>
+      <div class="feed-profile-nav">
+        <button class="feed-profile-close" type="button" aria-label="Back to feed">←</button>
+        <div class="feed-profile-nav-title">Profile</div>
       </div>
-      <div id="feed-profile-overlay-content"></div>
+      <div class="feed-profile-content" id="feed-profile-overlay-content"></div>
     </div>`;
   document.body.appendChild(overlay);
 
@@ -4440,32 +4454,49 @@ async function openFeedProfileOverlay(userId) {
     const photoPosts = posts.filter(post => !!post.media_url);
 
     content.innerHTML = `
-      <div class="feed-profile-top">
+      <div class="feed-profile-cover"></div>
+      <div class="feed-profile-head">
+        <div class="feed-profile-actions"><button type="button" class="feed-profile-action">Follow</button></div>
         <div class="feed-profile-avatar">${avatarUrl ? `<img src="${avatarUrl}" alt="${sanitizeHTML(name)}" loading="lazy">` : sanitizeHTML(initial)}</div>
-        <div style="flex:1;min-width:0;">
-          <div id="feed-profile-title" class="feed-profile-name">${sanitizeHTML(name)}</div>
-          <div class="feed-profile-handle">@${sanitizeHTML(username)}</div>
-          <div class="feed-profile-status">${sanitizeHTML(status)}</div>
+        <div id="feed-profile-title" class="feed-profile-name">${sanitizeHTML(name)}</div>
+        <div class="feed-profile-handle">@${sanitizeHTML(username)}</div>
+        <div class="feed-profile-status">${sanitizeHTML(status)}</div>
+        <div class="feed-profile-bio">${sanitizeHTML(profile.bio || 'No bio yet.')}</div>
+        <div class="feed-profile-stats">
+          <div class="feed-profile-stat"><strong>${Number(profile.crockroach_score || 0).toLocaleString()}</strong><span>crockroach Score</span></div>
+          <div class="feed-profile-stat"><strong>${textPosts.length}</strong><span>Posts</span></div>
+          <div class="feed-profile-stat"><strong>${photoPosts.length}</strong><span>Photos</span></div>
         </div>
       </div>
-      <div class="feed-profile-bio">${sanitizeHTML(profile.bio || 'No bio yet.')}</div>
-      <div class="feed-profile-section">
-        <div class="feed-profile-section-title">Thoughts & polls</div>
+      <div class="feed-profile-tabs">
+        <button type="button" class="feed-profile-tab active" data-profile-tab="posts">Posts</button>
+        <button type="button" class="feed-profile-tab" data-profile-tab="photos">Photos</button>
+      </div>
+      <div class="feed-profile-section" data-profile-panel="posts">
         <div class="feed-profile-posts">${textPosts.length ? textPosts.map(post => `
           <article class="feed-profile-post">
             <div class="feed-profile-post-time">${sanitizeHTML(formatPostTime(post.created_at))}</div>
             <div class="feed-profile-post-text">${sanitizeHTML(String(post.content || '').trim())}</div>
-          </article>`).join('') : '<div style="padding:12px;color:var(--on-surface-3);font-size:12.5px;">No text posts yet.</div>'}</div>
+          </article>`).join('') : '<div style="padding:12px 0;color:var(--on-surface-3);font-size:12.5px;">No posts yet.</div>'}</div>
       </div>
-      <div class="feed-profile-section">
-        <div class="feed-profile-section-title">Photos</div>
+      <div class="feed-profile-section" data-profile-panel="photos" style="display:none;">
         <div class="feed-profile-posts">${photoPosts.length ? photoPosts.map(post => `
           <article class="feed-profile-post">
             <div class="feed-profile-post-time">${sanitizeHTML(formatPostTime(post.created_at))}</div>
             <div class="feed-profile-post-text">${sanitizeHTML(String(post.content || '').trim())}</div>
             <img src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(name)}" loading="lazy">
-          </article>`).join('') : '<div style="padding:12px;color:var(--on-surface-3);font-size:12.5px;">No photo posts yet.</div>'}</div>
+          </article>`).join('') : '<div style="padding:12px 0;color:var(--on-surface-3);font-size:12.5px;">No photos yet.</div>'}</div>
       </div>`;
+
+    content.querySelectorAll('[data-profile-tab]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const which = tab.dataset.profileTab;
+        content.querySelectorAll('[data-profile-tab]').forEach(btn => btn.classList.toggle('active', btn === tab));
+        content.querySelectorAll('[data-profile-panel]').forEach(panel => {
+          panel.style.display = panel.dataset.profilePanel === which ? '' : 'none';
+        });
+      });
+    });
   } catch (error) {
     content.innerHTML = `<div style="padding:24px;text-align:center;color:var(--danger);">${sanitizeHTML(error?.message || 'Could not load this profile.')}</div>`;
   }
