@@ -2904,6 +2904,22 @@ body.mortalive-progress-open .sakura-topbar {
 #pg-feed .compose-row{
   display:flex; gap:12px; align-items:flex-start;
 }
+#pg-feed .compose-writing-wrap{position:relative;flex:1;min-width:0;}
+#pg-feed .compose-plus-btn{position:absolute;left:10px;top:10px;z-index:4;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#fff;border:1.5px solid var(--border-strong);color:var(--on-surface);font-size:24px;line-height:1;font-weight:700;box-shadow:var(--elev-1);transition:transform .14s ease,background .14s ease,border-color .14s ease,color .14s ease;}
+#pg-feed .compose-plus-btn:hover{transform:translateY(-1px);border-color:var(--primary);color:var(--primary);background:var(--primary-alpha);}
+#pg-feed .compose-writing-wrap .compose-field{padding-left:58px;}
+#pg-feed .composer-type-menu{position:absolute;left:8px;bottom:calc(100% + 8px);z-index:20;display:none;min-width:170px;padding:7px;border:1px solid var(--border);border-radius:16px;background:rgba(255,255,255,.98);box-shadow:var(--elev-4);backdrop-filter:blur(18px);}
+#pg-feed .composer-type-menu.open{display:grid;gap:3px;animation:toastIn .16s var(--ease-out);}
+#pg-feed .composer-type-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:10px 11px;border-radius:11px;background:transparent;color:var(--on-surface);font-size:13px;font-weight:700;text-align:left;}
+#pg-feed .composer-type-menu button:hover{background:var(--surface-2);color:var(--primary);}
+#pg-feed .compose-mode-label{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:var(--on-surface-3);}
+#pg-feed .feed-structured-post{margin-top:4px;padding:14px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(180deg,#fff,var(--surface-2));}
+#pg-feed .feed-structured-title{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:var(--on-surface-3);}
+#pg-feed .feed-structured-question{margin-top:8px;font-size:14px;line-height:1.6;font-weight:700;}
+#pg-feed .feed-structured-options{display:grid;gap:8px;margin-top:12px;}
+#pg-feed .feed-structured-option{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:11px 12px;border-radius:12px;border:1px solid var(--border);background:#fff;color:var(--on-surface);font-size:13px;font-weight:700;text-align:left;transition:border-color .14s ease,background .14s ease,color .14s ease;}
+#pg-feed .feed-structured-option:hover{border-color:var(--primary);background:var(--primary-alpha);color:var(--primary);}
+#pg-feed .feed-structured-option-arrow{font-size:18px;color:var(--on-surface-3);}
 #pg-feed .compose-avatar{
   width:40px; height:40px; border-radius:50%; flex-shrink:0;
   background: linear-gradient(135deg, var(--primary), var(--secondary));
@@ -3358,6 +3374,14 @@ body.mortalive-progress-open .sakura-topbar {
   cursor:pointer; transition:all var(--dur-fast);
 }
 #pg-feed .topic-chip:hover{ background:var(--primary-alpha); border-color:rgba(26,110,245,.2); color:var(--primary); }
+#pg-feed .topic-chip{justify-content:space-between;}
+#pg-feed .topic-chip-count{font-size:10px;color:var(--on-surface-3);font-weight:800;margin-left:4px;}
+#pg-feed .topic-empty{font-size:12px;color:var(--on-surface-3);line-height:1.5;padding:2px 0;}
+.feed-hashtag{display:inline;padding:0;border:0;background:transparent;color:var(--primary);font:inherit;font-weight:700;cursor:pointer;}
+.feed-hashtag:hover{text-decoration:underline;text-underline-offset:2px;}
+.compose-hashtag-status{font-size:10.5px;font-weight:700;max-width:min(42vw,300px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.compose-hashtag-status[data-state=ok]{color:var(--on-surface-3);}
+.compose-hashtag-status[data-state=error]{color:var(--danger);}
 
 /* ── Context notification banner ────────────────────────── */
 #pg-feed .feed-banner{
@@ -3711,16 +3735,57 @@ body.mortalive-progress-open .sakura-topbar {
 #mortalive-post-viewer .mortalive-post-viewer-media-frame{
   width:100%;
   height:100%;
+  min-width:0;
+  min-height:0;
+  padding:clamp(10px,2vw,24px);
   display:grid;
   place-items:center;
+  overflow:hidden;
 }
 #mortalive-post-viewer .mortalive-post-viewer-media{
-  width:100%;
-  height:100%;
+  width:auto;
+  height:auto;
+  max-width:100%;
+  max-height:100%;
+  min-width:0;
+  min-height:0;
   object-fit:contain;
   display:block;
   background:#070a0f;
 }
+#mortalive-post-viewer .mortalive-post-viewer-text-content{display:none;}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-dialog{
+  width:min(780px,92vw);
+  height:min(86vh,860px);
+  grid-template-columns:1fr;
+  background:var(--surface);
+  color:var(--on-surface);
+}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-media-host{display:none;}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-side{background:var(--surface);color:var(--on-surface);}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-text-content{
+  display:block;
+  padding:24px 26px 8px;
+  font-size:clamp(22px,3vw,38px);
+  line-height:1.24;
+  font-weight:500;
+  letter-spacing:-.03em;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-header{color:var(--on-surface);padding-bottom:10px;}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-handle{color:var(--on-surface-3);}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-divider{background:var(--border);}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-comment-head strong{color:var(--on-surface);}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-comment-head span{color:var(--on-surface-3);}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-comment-text{color:var(--on-surface-2);}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-bottom{border-top-color:var(--border);}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-action{color:var(--on-surface-2);}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-action:hover{background:var(--surface-2);}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-likes{color:var(--on-surface);}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-comment-box{border-color:var(--border-strong);background:var(--surface-2);}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-input{color:var(--on-surface);}
+#mortalive-post-viewer.text-mode .mortalive-post-viewer-input::placeholder{color:var(--on-surface-3);}
 #mortalive-post-viewer .mortalive-post-viewer-text-stage{
   width:min(82%,760px);
   max-height:80%;
@@ -3949,6 +4014,15 @@ body.mortalive-progress-open .sakura-topbar {
 @media(max-width:640px){
   #mortalive-post-viewer .mortalive-post-viewer-dialog{
     grid-template-rows:minmax(0,58dvh) minmax(0,42dvh);
+  }
+  #mortalive-post-viewer.text-mode .mortalive-post-viewer-dialog{
+    width:100vw;
+    height:100dvh;
+    border-radius:0;
+  }
+  #mortalive-post-viewer.text-mode .mortalive-post-viewer-text-content{
+    padding:20px 18px 10px;
+    font-size:clamp(22px,6vw,32px);
   }
 }
 
@@ -4699,11 +4773,19 @@ body.mortalive-progress-open .sakura-topbar {
 <div class="compose-card" id="compose-card">
 <div class="compose-row">
 <div class="compose-avatar" id="compose-avatar">🦊</div>
-<textarea class="compose-field" id="compose-field" maxlength="500" placeholder="What's on your mind after that chat…" rows="3"></textarea>
+<div class="compose-writing-wrap">
+  <button type="button" class="compose-plus-btn" id="compose-plus" aria-label="Add post type" aria-expanded="false">+</button>
+  <div class="composer-type-menu" id="composer-type-menu" role="menu" aria-label="Post type options">
+    <button type="button" data-compose-kind="photo" role="menuitem"><span>📷</span><span>Photo</span></button>
+    <button type="button" data-compose-kind="poll" role="menuitem"><span>📊</span><span>Poll</span></button>
+    <button type="button" data-compose-kind="qna" role="menuitem"><span>❓</span><span>Q&A</span></button>
+  </div>
+  <textarea class="compose-field" id="compose-field" maxlength="500" placeholder="What's on your mind after that chat…" rows="3"></textarea>
+</div>
 </div>
 <!-- Poll builder (hidden until poll mode) -->
 <div class="poll-builder" id="poll-builder">
-<div style="font-size:13px;font-weight:700;color:var(--on-surface-2);margin-bottom:2px;">Poll options</div>
+<div id="poll-builder-title" style="font-size:13px;font-weight:700;color:var(--on-surface-2);margin-bottom:2px;">Poll options</div>
 <div id="poll-options-list">
 <div class="poll-option-row">
 <input class="poll-option-input" maxlength="80" placeholder="Option 1"/>
@@ -4724,14 +4806,15 @@ body.mortalive-progress-open .sakura-topbar {
 </div>
 </div>
 <div class="compose-toolbar">
-<button class="compose-type-btn active" id="btn-type-text">📝 Text</button>
+<span id="compose-mode-label" class="compose-mode-label">Text</span>
+<button class="compose-type-btn active" id="btn-type-text" data-compose-kind="text">📝 Text</button>
 <button class="compose-type-btn" id="btn-type-poll">📊 Poll</button>
 <button class="compose-tool photo-compose-btn" id="btn-feed-photo" type="button" title="Add photo">📷 Photo</button>
 <input id="feed-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
 <span id="feed-photo-name" class="compose-photo-name" aria-live="polite"></span>
 <div id="feed-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
 <span style="flex:1;"></span>
-<span id="char-count" style="font-size:12px;color:var(--on-surface-3);">500</span>
+<span id="compose-hashtag-status" class="compose-hashtag-status" aria-live="polite" style="display:none;"></span><span id="char-count" style="font-size:12px;color:var(--on-surface-3);">500</span>
 <button class="compose-submit" disabled="" id="compose-submit">Post</button>
 </div>
 </div>
@@ -4788,16 +4871,7 @@ body.mortalive-progress-open .sakura-topbar {
       <!-- Hot topics -->
 <div class="right-card">
 <div class="right-card-title">💬 Hot topics</div>
-<div class="hot-topics">
-<div class="topic-chip"># dating</div>
-<div class="topic-chip"># anxiety</div>
-<div class="topic-chip"># late nights</div>
-<div class="topic-chip"># career</div>
-<div class="topic-chip"># overthinking</div>
-<div class="topic-chip"># venting</div>
-<div class="topic-chip"># music</div>
-<div class="topic-chip"># identity</div>
-</div>
+<div class="hot-topics" id="hot-topics"><div class="topic-empty">Loading trending hashtags…</div></div>
 </div>
 </aside>
 </div>
@@ -4951,7 +5025,7 @@ body.mortalive-progress-open .sakura-topbar {
           <div class="profile-post-composer-box">
             <textarea id="profile-post-input" maxlength="500" placeholder="Share a thought, update, question, or conversation starter…"></textarea>
             <div class="profile-post-composer-actions">
-              <span class="profile-post-char-count" id="profile-post-char-count">0 / 500</span>
+              <span id="profile-hashtag-status" class="compose-hashtag-status" aria-live="polite" style="display:none;"></span><span class="profile-post-char-count" id="profile-post-char-count">0 / 500</span>
               <button class="profile-post-photo-btn photo-compose-btn" id="btn-profile-photo-upload" type="button">📷 Photo</button>
               <input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
               <span class="profile-photo-name" id="profile-photo-name" aria-live="polite"></span>
@@ -5241,7 +5315,7 @@ body.mortalive-progress-open .sakura-topbar {
   });
 </script>
 
-<script src="app.js?v=20260817-post-viewer-v8-routing-fix"></script>
+<script src="app.js?v=20260817-composer-types-v10"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -5634,6 +5708,7 @@ body.mortalive-progress-open .sakura-topbar {
         </div>
       </header>
       <div class="mortalive-post-viewer-divider"></div>
+      <div class="mortalive-post-viewer-text-content" aria-live="polite"></div>
       <div class="mortalive-post-viewer-caption" aria-live="polite"></div>
       <div class="mortalive-post-viewer-countline"><span class="mortalive-post-viewer-counter"></span></div>
       <div class="mortalive-post-viewer-comments" aria-live="polite"></div>
@@ -5816,3 +5891,5 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
   .profile-mini-stat:nth-child(6){border-top:1px solid var(--border);border-right:0}
 }
 </style>
+
+<style id="mortalive-v10-composer-overrides">#pg-feed #btn-type-text,#pg-feed #btn-type-poll,#pg-feed #btn-feed-photo{display:none!important;} @media(max-width:720px){#pg-feed .compose-plus-btn{left:8px;top:9px;}}</style>
