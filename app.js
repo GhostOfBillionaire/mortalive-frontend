@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-17-post-viewer-v8-routing-fix'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-17-composer-types-v10'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -549,11 +549,10 @@ async function syncScoreToSupabase() {
   try {
     const { error } = await sb.from('accounts').update({
       crockroach_score: score,
-      progress_state: progress,
       updated_at: new Date().toISOString()
     }).eq('id', S.userId);
     if (error) throw error;
-    console.log(`[Score] Synced ${score} pts and full progress to Supabase ✓`);
+    console.log(`[Score] Synced ${score} pts to Supabase ✓`);
   } catch (e) {
     console.warn('[Score] Supabase sync failed:', e?.message || e);
   }
@@ -2153,12 +2152,6 @@ async function hydrateAccountData(userId, options = {}) {
         S.crockroachScore ??
         0;
 
-      if (S.accountData?.progress_state && typeof S.accountData.progress_state === 'object') {
-        const localProgress = getCurrentProgress();
-        Object.assign(localProgress, S.accountData.progress_state);
-        persistProgress();
-      }
-
       S.username = dbUsername;
       S.crockroachScore = dbScore;
       localStorage.setItem('mortalive_username', dbUsername);
@@ -2254,12 +2247,6 @@ async function tryAutoLogin() {
         S.accountData?.crockroach_score ??
         S.accountData?.crockroachScore ??
         (Number(user.user_metadata?.crockroach_score) || 0);
-
-      if (S.accountData?.progress_state && typeof S.accountData.progress_state === 'object') {
-        const localProgress = getCurrentProgress();
-        Object.assign(localProgress, S.accountData.progress_state);
-        persistProgress();
-      }
 
       S.username = username;
       S.crockroachScore = crockroachScore;
@@ -3914,6 +3901,178 @@ function sanitizeHTML(str) {
   return div.innerHTML;
 }
 
+// ── Hashtag helpers ─────────────────────────────────────────────────────────
+// Hashtags are normalized case-insensitively for duplicate detection/storage,
+// while their original casing remains visible in the post body.
+const HASHTAG_PATTERN = /#([A-Za-z0-9_]{1,63})/g;
+const MAX_HASHTAGS_PER_POST = 24;
+const FEED_COMPOSER_MAX_OPTIONS = 6;
+let _feedComposerKind = 'text'; // text | photo | poll | qna
+let _feedComposerMenuOpen = false;
+
+function getFeedComposerKind() {
+  return _feedComposerKind;
+}
+
+function getFeedStructuredKindLabel(kind) {
+  return kind === 'qna' ? 'Q&A' : kind === 'poll' ? 'Poll' : kind === 'photo' ? 'Photo' : 'Text';
+}
+
+function getFeedComposerOptionValues() {
+  return Array.from(document.querySelectorAll('#poll-options-list .poll-option-input'))
+    .map(input => String(input.value || '').trim())
+    .filter(Boolean);
+}
+
+function ensureFeedComposerOptionRows(minimum = 2, maximum = FEED_COMPOSER_MAX_OPTIONS) {
+  const list = $('poll-options-list');
+  if (!list) return;
+  const current = list.querySelectorAll('.poll-option-row').length;
+  const target = Math.max(0, Math.min(maximum, minimum));
+  if (current >= target) return;
+  for (let i = current; i < target; i += 1) {
+    const row = document.createElement('div');
+    row.className = 'poll-option-row';
+    row.innerHTML = `
+      <input class="poll-option-input" maxlength="80" placeholder="Option ${i + 1}"/>
+      <button type="button" class="poll-remove-btn" title="Remove option" aria-label="Remove option">×</button>`;
+    list.appendChild(row);
+  }
+}
+
+function syncFeedComposerTypeUI() {
+  const kind = getFeedComposerKind();
+  const builder = $('poll-builder');
+  const field = $('compose-field');
+  const title = $('poll-builder-title');
+  const addBtn = $('poll-add-option');
+  const modeLabel = $('compose-mode-label');
+  const photoButton = $('btn-feed-photo');
+  const menu = $('composer-type-menu');
+
+  document.querySelectorAll('#pg-feed [data-compose-kind]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.composeKind === kind);
+  });
+
+  if (title) title.textContent = kind === 'qna' ? 'Q&A options' : 'Poll options';
+  if (field) field.placeholder = kind === 'qna' ? 'Ask a question…' : kind === 'poll' ? 'Ask a poll question…' : "What's on your mind after that chat…";
+  if (modeLabel) modeLabel.textContent = getFeedStructuredKindLabel(kind);
+  if (builder) builder.classList.toggle('open', kind === 'poll' || kind === 'qna');
+  if (photoButton) {
+    const allowed = kind === 'text' || kind === 'photo';
+    photoButton.style.display = allowed ? '' : 'none';
+    if (!allowed) clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
+  }
+  if (addBtn) {
+    const count = $('poll-options-list')?.querySelectorAll('.poll-option-row').length || 0;
+    addBtn.disabled = count >= FEED_COMPOSER_MAX_OPTIONS;
+    addBtn.textContent = count >= FEED_COMPOSER_MAX_OPTIONS ? 'Maximum 6 options' : '+ Add option';
+  }
+  if (menu) menu.classList.toggle('open', _feedComposerMenuOpen);
+  const plus = $('compose-plus');
+  if (plus) plus.setAttribute('aria-expanded', _feedComposerMenuOpen ? 'true' : 'false');
+}
+
+function setFeedComposerKind(kind = 'text') {
+  const next = ['text','photo','poll','qna'].includes(kind) ? kind : 'text';
+  if ((next === 'poll' || next === 'qna') && !_feedComposerMenuOpen) _feedComposerMenuOpen = false;
+  _feedComposerKind = next;
+  if (next === 'poll' || next === 'qna') ensureFeedComposerOptionRows(2, FEED_COMPOSER_MAX_OPTIONS);
+  if (next === 'photo') {
+    clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
+    $('feed-photo-input')?.click();
+  }
+  _feedComposerMenuOpen = false;
+  syncFeedComposerTypeUI();
+  syncFeedComposer();
+  if (next !== 'photo') $('compose-field')?.focus();
+}
+
+function toggleFeedComposerMenu(force) {
+  _feedComposerMenuOpen = typeof force === 'boolean' ? force : !_feedComposerMenuOpen;
+  syncFeedComposerTypeUI();
+}
+
+function validateFeedStructuredPost(kind, question, options) {
+  if (!['poll','qna'].includes(kind)) return { ok: true, options: [] };
+  if (!question.trim()) return { ok: false, message: `${kind === 'qna' ? 'Q&A' : 'Poll'} needs a question.` };
+  const values = options.map(String).map(v => v.trim()).filter(Boolean);
+  if (values.length < 2) return { ok: false, message: 'Add at least 2 options.' };
+  if (values.length > FEED_COMPOSER_MAX_OPTIONS) return { ok: false, message: 'Use a maximum of 6 options.' };
+  const seen = new Set();
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) return { ok: false, message: 'Each option must be unique.' };
+    seen.add(key);
+  }
+  return { ok: true, options: values };
+}
+
+
+function extractHashtags(text) {
+  const source = String(text || '');
+  const tags = [];
+  const seen = new Set();
+  let match;
+  HASHTAG_PATTERN.lastIndex = 0;
+  while ((match = HASHTAG_PATTERN.exec(source)) !== null) {
+    const normalized = match[1].toLowerCase();
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    tags.push(normalized);
+  }
+  HASHTAG_PATTERN.lastIndex = 0;
+  return tags;
+}
+
+function validateUniqueHashtags(text) {
+  const source = String(text || '');
+  const seen = new Set();
+  const duplicates = new Set();
+  let count = 0;
+  let match;
+  HASHTAG_PATTERN.lastIndex = 0;
+  while ((match = HASHTAG_PATTERN.exec(source)) !== null) {
+    const normalized = match[1].toLowerCase();
+    count += 1;
+    if (seen.has(normalized)) duplicates.add(normalized);
+    seen.add(normalized);
+  }
+  HASHTAG_PATTERN.lastIndex = 0;
+  if (count > MAX_HASHTAGS_PER_POST) {
+    return { ok: false, message: `Use up to ${MAX_HASHTAGS_PER_POST} hashtags per post.` };
+  }
+  if (duplicates.size) {
+    const names = Array.from(duplicates).map(tag => `#${tag}`).join(', ');
+    return { ok: false, message: `Each hashtag can only be used once per post: ${names}` };
+  }
+  return { ok: true, message: '', tags: Array.from(seen) };
+}
+
+function renderHashtagRichText(text) {
+  const safe = sanitizeHTML(String(text || ''));
+  return safe.replace(/(^|[\s([{:;,.!?])#([A-Za-z0-9_]{1,63})/g, (full, prefix, tag) => {
+    const normalized = tag.toLowerCase();
+    return `${prefix}<button type="button" class="feed-hashtag" data-feed-hashtag="${normalized}">#${tag}</button>`;
+  });
+}
+
+function syncHashtagStatus(text, statusId) {
+  const status = $(statusId);
+  const result = validateUniqueHashtags(text);
+  if (!status) return result;
+  if (result.ok) {
+    status.textContent = result.tags?.length ? `${result.tags.length} hashtag${result.tags.length === 1 ? '' : 's'}` : '';
+    status.style.display = result.tags?.length ? 'inline-flex' : 'none';
+    status.dataset.state = 'ok';
+  } else {
+    status.textContent = result.message;
+    status.style.display = 'inline-flex';
+    status.dataset.state = 'error';
+  }
+  return result;
+}
+
 
 
 // ═══════════════════════════════════════════════════════════════════
@@ -4065,7 +4224,7 @@ async function fetchFeedPage(reset = false) {
   try {
     let query = sb
       .from('posts')
-      .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size')
+      .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
       .order('created_at', { ascending: false })
       .range(_feedOffset, _feedOffset + FEED_PAGE_SIZE - 1);
 
@@ -4091,6 +4250,7 @@ async function fetchFeedPage(reset = false) {
     await hydratePostEngagement(rows.map(row => row.id));
     renderFeedPosts();
     renderFeedSidebars();
+    hydrateTrendingHashtags().catch(() => {});
   } catch (e) {
     console.warn('[Feed] fetch failed:', e?.message || e);
     if (container) {
@@ -4510,14 +4670,14 @@ async function openFeedProfileOverlay(userId) {
         <div class="feed-profile-posts">${textPosts.length ? textPosts.map(post => `
           <article class="feed-profile-post">
             <div class="feed-profile-post-time">${sanitizeHTML(formatPostTime(post.created_at))}</div>
-            <div class="feed-profile-post-text">${sanitizeHTML(String(post.content || '').trim())}</div>
+            <div class="feed-profile-post-text">${renderHashtagRichText(String(post.content || '').trim())}</div>
           </article>`).join('') : '<div style="padding:12px 0;color:var(--on-surface-3);font-size:12.5px;">No posts yet.</div>'}</div>
       </div>
       <div class="feed-profile-section" data-profile-panel="photos" style="display:none;">
         <div class="feed-profile-posts">${photoPosts.length ? photoPosts.map(post => `
           <article class="feed-profile-post">
             <div class="feed-profile-post-time">${sanitizeHTML(formatPostTime(post.created_at))}</div>
-            <div class="feed-profile-post-text">${sanitizeHTML(String(post.content || '').trim())}</div>
+            <div class="feed-profile-post-text">${renderHashtagRichText(String(post.content || '').trim())}</div>
             <img src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(name)}" loading="lazy">
           </article>`).join('') : '<div style="padding:12px 0;color:var(--on-surface-3);font-size:12.5px;">No photos yet.</div>'}</div>
       </div>`;
@@ -4640,6 +4800,20 @@ function bindHorizontalProfileStrip(strip) {
   }, { passive: false });
 }
 
+function renderStructuredFeedPost(post) {
+  const meta = post?.post_meta && typeof post.post_meta === 'object' ? post.post_meta : null;
+  const kind = meta?.kind === 'qna' ? 'qna' : meta?.kind === 'poll' ? 'poll' : null;
+  if (!kind) return '';
+  const options = Array.isArray(meta.options) ? meta.options : [];
+  const icon = kind === 'qna' ? '❓' : '📊';
+  const label = kind === 'qna' ? 'Q&A' : 'Poll';
+  return `<div class="feed-structured-post" data-structured-kind="${kind}">
+    <div class="feed-structured-title"><span>${icon}</span><span>${label}</span></div>
+    <div class="feed-structured-question">${renderHashtagRichText(post.content || '')}</div>
+    <div class="feed-structured-options">${options.map((option, index) => `<button type="button" class="feed-structured-option" data-structured-option="${index}" data-post-id="${sanitizeHTML(post.id)}"><span>${sanitizeHTML(option?.label || '')}</span><span class="feed-structured-option-arrow">›</span></button>`).join('')}</div>
+  </div>`;
+}
+
 function renderFeedPosts() {
   const openIds = _getOpenCommentIds(); // save before replacing innerHTML
   const container = $('feed-posts');
@@ -4662,7 +4836,7 @@ function renderFeedPosts() {
     const display = author.display_name || username;
     const score = Number(author.crockroach_score) || 0;
     const mine = post.user_id === S.userId;
-    const typeLabel = post.post_type === 'text' ? 'Text' : post.post_type || 'Post';
+    const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A' : post?.post_meta?.kind === 'poll' ? 'Poll' : post.post_type === 'text' ? 'Text' : post.post_type || 'Post';
     const badge = score >= 700 ? '<span class="post-badge gold">Gold</span>' : score >= 420 ? '<span class="post-badge silver">Silver</span>' : '';
     const avatarUrl = feedAvatarUrl(author.avatar_url);
     const avatarMarkup = avatarUrl
@@ -4679,7 +4853,7 @@ function renderFeedPosts() {
           </div>
           ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
         </div>
-        <div class="post-body"><div class="post-text">${sanitizeHTML(post.content || '')}</div>${post.media_url ? `<img class="feed-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">` : ''}</div>
+        <div class="post-body">${post.media_url ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><img class="feed-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">` : post?.post_meta?.kind ? renderStructuredFeedPost(post) : `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>`}</div>
         <div class="post-actions">
           <button class="action-btn like-btn ${engagement.liked ? 'liked' : ''}" type="button" data-feed-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${engagement.liked ? 'true' : 'false'}"><span class="action-icon">${engagement.liked ? '♥' : '♡'}</span><span class="like-count">${engagement.likes}</span></button>
           <button class="action-btn comment-btn" type="button" data-feed-action="comments" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">💬</span><span>${engagement.comments}</span></button>
@@ -4737,15 +4911,8 @@ function buildPostViewerAvatar(author, size = 40) {
 
 function postViewerMediaMarkup(post) {
   const mediaUrl = feedAvatarUrl(post?.media_url);
-  if (mediaUrl) {
-    return `<div class="mortalive-post-viewer-media-frame"><img class="mortalive-post-viewer-media" src="${mediaUrl}" alt="Post photo" loading="eager" decoding="async"></div>`;
-  }
-  const content = sanitizeHTML(String(post?.content || '').trim());
-  return `
-    <div class="mortalive-post-viewer-text-stage">
-      <div class="mortalive-post-viewer-text-kicker">Thought</div>
-      <div class="mortalive-post-viewer-text">${content || 'Shared a thought.'}</div>
-    </div>`;
+  if (!mediaUrl) return '';
+  return `<div class="mortalive-post-viewer-media-frame"><img class="mortalive-post-viewer-media" src="${mediaUrl}" alt="Post photo" loading="eager" decoding="async"></div>`;
 }
 
 function postViewerCommentRows(comments = []) {
@@ -4795,14 +4962,18 @@ function postViewerRender(post, comments = _commentCache.get(post?.id) || []) {
   const actionsEl = modal.querySelector('.mortalive-post-viewer-actions');
   const inputEl = modal.querySelector('.mortalive-post-viewer-input');
   const statusEl = modal.querySelector('.mortalive-post-viewer-status');
+  const textHost = modal.querySelector('.mortalive-post-viewer-text-content');
+  const isTextPost = !post.media_url;
+  modal.classList.toggle('text-mode', isTextPost);
 
-  if (mediaHost) mediaHost.innerHTML = postViewerMediaMarkup(post);
+  if (mediaHost) mediaHost.innerHTML = isTextPost ? '' : postViewerMediaMarkup(post);
+  if (textHost) textHost.innerHTML = isTextPost ? renderHashtagRichText(String(post.content || '').trim()) : '';
   if (avatarHost) avatarHost.innerHTML = buildPostViewerAvatar(author, 42);
   if (nameEl) nameEl.textContent = display;
   if (handleEl) handleEl.textContent = `@${username}${badge ? ` · ${badge}` : ''}`;
   if (captionEl) {
-    captionEl.innerHTML = captionText ? `<div class="mortalive-post-viewer-caption-author">${sanitizeHTML(display)}</div><div class="mortalive-post-viewer-caption-text">${sanitizeHTML(captionText)}</div>` : '';
-    captionEl.style.display = captionText ? '' : 'none';
+    captionEl.innerHTML = captionText ? `<div class="mortalive-post-viewer-caption-author">${sanitizeHTML(display)}</div><div class="mortalive-post-viewer-caption-text">${renderHashtagRichText(captionText)}</div>` : '';
+    captionEl.style.display = isTextPost ? 'none' : (captionText ? '' : 'none');
   }
   if (countEl) countEl.textContent = `${feedRelTime(post.created_at)}${post.post_type ? ` · ${post.post_type === 'text' ? 'Text' : post.post_type}` : ''}`;
   if (likesEl) likesEl.textContent = `${likes.toLocaleString()} ${likes === 1 ? 'like' : 'likes'}`;
@@ -4976,6 +5147,32 @@ function bindPostViewerKeys() {
   });
 }
 
+async function hydrateTrendingHashtags() {
+  const box = $('hot-topics');
+  if (!box) return;
+  if (S.isGuest || !S.userId || !sb) {
+    box.innerHTML = '<div class="topic-empty">Sign in to view trending hashtags.</div>';
+    return;
+  }
+  try {
+    const { data, error } = await sb.rpc('get_trending_hashtags', { p_limit: 8 });
+    if (error) throw error;
+    const rows = Array.isArray(data) ? data : [];
+    if (!rows.length) {
+      box.innerHTML = '<div class="topic-empty">No hashtags are trending yet.</div>';
+      return;
+    }
+    box.innerHTML = rows.map(row => {
+      const tag = String(row.tag || '').toLowerCase();
+      const count = Number(row.usage_count) || 0;
+      return `<button type="button" class="topic-chip" data-feed-hashtag="${sanitizeHTML(tag)}"><span>#${sanitizeHTML(tag)}</span><span class="topic-chip-count">${count.toLocaleString()}</span></button>`;
+    }).join('');
+  } catch (e) {
+    console.warn('[Hashtags] trending lookup failed:', e?.message || e);
+    box.innerHTML = '<div class="topic-empty">Trending hashtags are unavailable right now.</div>';
+  }
+}
+
 function renderFeedSidebars() {
   const recent = $('trending-polls-list');
   if (recent) {
@@ -5077,25 +5274,56 @@ async function submitFeedTextPost() {
   const field = $('compose-field');
   const submit = $('compose-submit');
   const photoInput = $('feed-photo-input');
+  const kind = getFeedComposerKind();
   if (!field || !submit || S.isGuest || !S.userId || !sb) { toast('Sign in to post', '🔒'); return; }
   const content = field.value.trim();
   const file = photoInput?.files?.[0] || null;
-  if (!content && !file) return;
+  if (!content && !file && !['poll','qna'].includes(kind)) return;
   if (content.length > FEED_MAX_POST_CHARS) { toast(`Posts are limited to ${FEED_MAX_POST_CHARS} characters`, '⚠️'); return; }
+
+  const hashtagCheck = validateUniqueHashtags(content);
+  if (!hashtagCheck.ok) { toast(hashtagCheck.message, '⚠️'); syncFeedComposer(); return; }
+
+  const structured = validateFeedStructuredPost(kind, content, getFeedComposerOptionValues());
+  if (!structured.ok) { toast(structured.message, '⚠️'); syncFeedComposer(); return; }
+
   try {
-    if (file) validatePhotoFile(file);
+    if (kind === 'photo' && file) validatePhotoFile(file);
+    if (['poll','qna'].includes(kind) && file) {
+      toast(`${getFeedStructuredKindLabel(kind)} posts cannot include a photo.`, '⚠️');
+      return;
+    }
+
     submit.disabled = true; submit.textContent = 'Posting…';
-    const media = file ? await uploadPhotoFile(file, 'feed') : null;
-    // posts_content_check requires >= 1 char; photo posts may have no caption, so send ' '.
+    const media = kind === 'photo' && file ? await uploadPhotoFile(file, 'feed') : null;
     const insertContent = content || (media ? ' ' : content);
-    const payload = { user_id: S.userId, content: insertContent, post_type: media ? 'photo' : 'text', visibility: 'public' };
-    if (media) { payload.media_url = media.url; payload.media_type = media.type; payload.media_size = media.size; }
+    const payload = {
+      user_id: S.userId,
+      content: insertContent,
+      post_type: media ? 'photo' : 'text',
+      visibility: 'public'
+    };
+    if (media) {
+      payload.media_url = media.url;
+      payload.media_type = media.type;
+      payload.media_size = media.size;
+    }
+    if (['poll','qna'].includes(kind)) {
+      payload.post_meta = {
+        kind,
+        options: structured.options.map((label, index) => ({ id: `option-${index + 1}`, label }))
+      };
+    }
+
     const { error } = await sb.from('posts').insert(payload);
     if (error) throw error;
     field.value = '';
+    _feedComposerKind = 'text';
+    _feedComposerMenuOpen = false;
+    resetFeedComposerOptions();
     clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
     await fetchFeedPage(true);
-    // Keep profile post strip in sync when profile page is open in background
+    hydrateTrendingHashtags().catch(() => {});
     if (S.userId && !S.isGuest) {
       _profilePosts = [];
       _postsHydrationPromise = null;
@@ -5104,14 +5332,41 @@ async function submitFeedTextPost() {
         hydrateProfileGallery(S.userId).catch(() => {});
       }
     }
-    toast(media ? 'Photo post published!' : 'Post published!', '✍️');
+    toast(media ? 'Photo post published!' : kind === 'poll' ? 'Poll published!' : kind === 'qna' ? 'Q&A published!' : 'Post published!', '✍️');
   } catch (e) {
     console.warn('[Feed] post failed:', e);
     toast(e?.message || 'Could not publish post.', '⚠️');
   } finally {
     submit.textContent = 'Post';
+    syncFeedComposerTypeUI();
     syncFeedComposer();
   }
+}
+
+function resetFeedComposerOptions() {
+  const list = $('poll-options-list');
+  if (!list) return;
+  list.innerHTML = `
+    <div class="poll-option-row"><input class="poll-option-input" maxlength="80" placeholder="Option 1"><button type="button" class="poll-remove-btn" title="Remove option" aria-label="Remove option">×</button></div>
+    <div class="poll-option-row"><input class="poll-option-input" maxlength="80" placeholder="Option 2"><button type="button" class="poll-remove-btn" title="Remove option" aria-label="Remove option">×</button></div>`;
+  ensureFeedComposerOptionRows(2, FEED_COMPOSER_MAX_OPTIONS);
+}
+
+function addFeedComposerOption() {
+  const list = $('poll-options-list');
+  if (!list) return;
+  const count = list.querySelectorAll('.poll-option-row').length;
+  if (count >= FEED_COMPOSER_MAX_OPTIONS) {
+    toast('Polls and Q&A posts can have at most 6 options.', '⚠️');
+    return;
+  }
+  const row = document.createElement('div');
+  row.className = 'poll-option-row';
+  row.innerHTML = `<input class="poll-option-input" maxlength="80" placeholder="Option ${count + 1}"><button type="button" class="poll-remove-btn" title="Remove option" aria-label="Remove option">×</button>`;
+  list.appendChild(row);
+  syncFeedComposerTypeUI();
+  syncFeedComposer();
+  row.querySelector('.poll-option-input')?.focus();
 }
 
 function syncFeedComposer() {
@@ -5122,11 +5377,17 @@ function syncFeedComposer() {
   if (!field || !submit) return;
   const len = field.value.length;
   const file = photoInput?.files?.[0] || null;
+  const kind = getFeedComposerKind();
+  const hashtagCheck = syncHashtagStatus(field.value, 'compose-hashtag-status');
+  const structured = validateFeedStructuredPost(kind, field.value, getFeedComposerOptionValues());
   if (count) count.textContent = `${Math.max(0, FEED_MAX_POST_CHARS - len)}`;
   if ($('feed-photo-name')) $('feed-photo-name').textContent = file ? `${file.name} · ${formatPhotoSize(file.size)}` : '';
   $('btn-feed-photo')?.classList.toggle('active', !!file);
-  submit.disabled = S.isGuest || !S.userId || (!len && !file) || len > FEED_MAX_POST_CHARS;
-  submit.title = S.isGuest ? 'Sign in to post' : 'Publish';
+  const validBody = kind === 'poll' || kind === 'qna' ? structured.ok : !!len || !!file;
+  const photoAllowed = kind === 'text' || kind === 'photo';
+  submit.disabled = S.isGuest || !S.userId || !validBody || (!photoAllowed && !!file) || len > FEED_MAX_POST_CHARS || !hashtagCheck.ok;
+  submit.title = !hashtagCheck.ok ? hashtagCheck.message : (!structured.ok && kind !== 'text' ? structured.message : (S.isGuest ? 'Sign in to post' : 'Publish'));
+  syncFeedComposerTypeUI();
 }
 
 function setFeedFilter(filter) {
@@ -5216,6 +5477,25 @@ function initFeedPage() {
       return;
     }
 
+    const hashtag = event.target.closest('[data-feed-hashtag]');
+    if (hashtag) {
+      event.preventDefault();
+      event.stopPropagation();
+      const tag = String(hashtag.dataset.feedHashtag || '').replace(/^#/, '').toLowerCase();
+      const compose = $('compose-field');
+      if (!tag || !compose) return;
+      const validation = validateUniqueHashtags(`${compose.value} #${tag}`);
+      if (!validation.ok) {
+        toast(validation.message, '⚠️');
+        return;
+      }
+      const current = compose.value.trim();
+      compose.value = current ? `${current} #${tag} ` : `#${tag} `;
+      syncFeedComposer();
+      compose.focus();
+      return;
+    }
+
     const viewerIgnored = event.target.closest('[data-feed-action], [data-open-profile], a, input, textarea, select, option, label, .comments-section');
     const postCard = event.target.closest('.post-card, .profile-post-card');
     if (postCard && !viewerIgnored) {
@@ -5253,12 +5533,42 @@ function initFeedPage() {
 
   $('compose-field')?.addEventListener('input', syncFeedComposer);
   $('compose-submit')?.addEventListener('click', submitFeedTextPost);
-  $('btn-type-poll')?.addEventListener('click', (event) => {
+  $('compose-plus')?.addEventListener('click', (event) => {
     event.preventDefault();
-    toast('Polls are coming after the core text-post system', '📊');
+    event.stopPropagation();
+    toggleFeedComposerMenu();
   });
-  $('btn-type-poll')?.style.setProperty('display', 'none');
-  $('poll-builder')?.style.setProperty('display', 'none');
+  document.addEventListener('click', (event) => {
+    const menu = $('composer-type-menu');
+    if (!menu || !_feedComposerMenuOpen) return;
+    if (!event.target.closest('#composer-type-menu') && !event.target.closest('#compose-plus')) {
+      _feedComposerMenuOpen = false;
+      syncFeedComposerTypeUI();
+    }
+  });
+  document.querySelectorAll('#composer-type-menu [data-compose-kind]').forEach(btn => {
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      setFeedComposerKind(btn.dataset.composeKind);
+    });
+  });
+  $('poll-add-option')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    addFeedComposerOption();
+  });
+  $('poll-options-list')?.addEventListener('click', (event) => {
+    const remove = event.target.closest('.poll-remove-btn');
+    if (!remove) return;
+    const rows = $('poll-options-list')?.querySelectorAll('.poll-option-row') || [];
+    if (rows.length <= 2) {
+      toast('Keep at least 2 options.', '⚠️');
+      return;
+    }
+    remove.closest('.poll-option-row')?.remove();
+    syncFeedComposerTypeUI();
+    syncFeedComposer();
+  });
+  $('poll-options-list')?.addEventListener('input', syncFeedComposer);
   $('compose-fab')?.addEventListener('click', () => {
     $('compose-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     setTimeout(() => $('compose-field')?.focus(), 250);
@@ -5272,8 +5582,10 @@ function initFeedPage() {
     sessionStorage.removeItem('mortalive_just_chatted');
   }
 
+  syncFeedComposerTypeUI();
   syncFeedComposer();
   syncFeedSidebar();
+  hydrateTrendingHashtags().catch(() => {});
 }
 
 function syncFeedSidebar() {
@@ -5320,7 +5632,7 @@ async function fetchProfilePosts(userId = S.userId) {
   try {
     const { data, error } = await sb
       .from('posts')
-      .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size')
+      .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(POSTS_PAGE_SIZE);
@@ -5375,7 +5687,7 @@ function renderProfilePosts(posts = _profilePosts) {
   }
 
   strip.innerHTML = textPosts.map((post) => {
-    const content = sanitizeHTML(post.content || '');
+    const content = renderHashtagRichText(post.content || '');
     const time = sanitizeHTML(formatPostTime(post.created_at));
     const type = sanitizeHTML(post.post_type || 'text');
     const ownerName = post.author?.display_name || post.author?.username || _profilePostsOwner?.display_name || _profilePostsOwner?.username || S.username || 'You';
@@ -5431,7 +5743,7 @@ async function hydrateProfileGallery(userId = S.userId) {
     const missingCaptionIds = photos.filter(photo => !String(photo.content || '').trim() && photo.id).map(photo => photo.id);
     if (missingCaptionIds.length) {
       try {
-        const { data: captionRows } = await sb.from('posts').select('id,user_id,content,media_url').in('id', missingCaptionIds);
+        const { data: captionRows } = await sb.from('posts').select('id,user_id,content,media_url,post_meta').in('id', missingCaptionIds);
         const captionById = new Map((captionRows || []).map(row => [row.id, row]));
         photos = photos.map(photo => ({ ...photo, ...(captionById.get(photo.id) || {}) }));
       } catch (e) {
@@ -5498,7 +5810,8 @@ function initProfilePostComposer() {
   const sync = () => {
     const text = input.value.trim();
     const hasPhoto = !!photoInput?.files?.[0];
-    button.disabled = (!text && !hasPhoto) || text.length > 500 || S.isGuest || !S.userId;
+    const hashtagCheck = syncHashtagStatus(text, 'profile-hashtag-status');
+    button.disabled = (!text && !hasPhoto) || text.length > 500 || S.isGuest || !S.userId || !hashtagCheck.ok;
     if (photoName) photoName.textContent = hasPhoto ? `${photoInput.files[0].name} · ${formatPhotoSize(photoInput.files[0].size)}` : '';
     const count = $('profile-post-char-count');
     if (count) {
@@ -5519,6 +5832,8 @@ function initProfilePostComposer() {
     const content = input.value.trim();
     const file = photoInput?.files?.[0] || null;
     if ((!content && !file) || content.length > 500 || S.isGuest || !S.userId) return;
+    const hashtagCheck = validateUniqueHashtags(content);
+    if (!hashtagCheck.ok) { toast(hashtagCheck.message, '⚠️'); sync(); return; }
 
     button.disabled = true;
     button.textContent = 'Posting…';
@@ -5532,7 +5847,7 @@ function initProfilePostComposer() {
       const payload = { user_id: S.userId, content: insertContent, post_type: media ? 'photo' : 'text', visibility: 'public' };
       if (media) { payload.media_url = media.url; payload.media_type = media.type; payload.media_size = media.size; }
       const { data, error: postError } = await sb.from('posts').insert(payload)
-        .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size').single();
+        .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta').single();
 
       if (postError) {
         throw postError;
@@ -5543,6 +5858,7 @@ function initProfilePostComposer() {
         await hydratePostEngagement([data.id]).catch(() => {});
         renderProfilePosts(_profilePosts);
         renderProfileGallery(_profilePosts);
+        hydrateTrendingHashtags().catch(() => {});
       }
       input.value = '';
       clearComposePhotoPreview('profile-photo-input','btn-profile-photo-upload','profile-photo-preview','profile-photo-name');
