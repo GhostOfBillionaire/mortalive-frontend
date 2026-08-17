@@ -3666,11 +3666,14 @@ ready(() => {
 
   tryAutoLogin().then(async (loggedIn) => {
     const urlParams = new URLSearchParams(window.location.search);
-    // ?user=username — shareable profile link
-    const sharedUsername = (urlParams.get('user') || '').trim().replace(/^@/, '');
+    // Detect shared profile link in either format:
+    //   /#@username  (new clean hash format, no server rewrite needed)
+    //   /?user=username  (legacy query param, still supported)
+    const hashUsername = (window.location.hash || '').replace(/^#@/, '').trim();
+    const sharedUsername = (hashUsername || urlParams.get('user') || '').trim().replace(/^@/, '');
 
     if (loggedIn) {
-      // ── Shareable profile URL: mortalive.com/?user=username ──────────
+      // ── Shareable profile URL ──────────────────────────────────────────
       if (sharedUsername) {
         window.history.replaceState(null, '', window.location.pathname);
         const found = await lookupUserByUsername(sharedUsername);
@@ -4489,7 +4492,9 @@ async function submitFeedTextPost() {
     if (file) validatePhotoFile(file);
     submit.disabled = true; submit.textContent = 'Posting…';
     const media = file ? await uploadPhotoFile(file, 'feed') : null;
-    const payload = { user_id: S.userId, content, post_type: media ? 'photo' : 'text', visibility: 'public' };
+    // posts_content_check requires >= 1 char; photo posts may have no caption, so send ' '.
+    const insertContent = content || (media ? ' ' : content);
+    const payload = { user_id: S.userId, content: insertContent, post_type: media ? 'photo' : 'text', visibility: 'public' };
     if (media) { payload.media_url = media.url; payload.media_type = media.type; payload.media_size = media.size; }
     const { error } = await sb.from('posts').insert(payload);
     if (error) throw error;
@@ -4885,15 +4890,14 @@ function initProfilePostComposer() {
     try {
       if (file) validatePhotoFile(file);
       const media = file ? await uploadPhotoFile(file, 'profile') : null;
-      const payload = { user_id: S.userId, content, post_type: media ? 'photo' : 'text', visibility: 'public' };
+      // posts_content_check requires >= 1 char; photo posts may have no caption, so send ' '.
+      const insertContent = content || (media ? ' ' : content);
+      const payload = { user_id: S.userId, content: insertContent, post_type: media ? 'photo' : 'text', visibility: 'public' };
       if (media) { payload.media_url = media.url; payload.media_type = media.type; payload.media_size = media.size; }
       const { data, error: postError } = await sb.from('posts').insert(payload)
         .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size').single();
 
       if (postError) {
-        if (String(postError.message || '').toLowerCase().includes('post_constrant_check')) {
-          throw new Error('Photo posts need the updated posts constraint. Run the latest Step 4 SQL in Supabase, then try again.');
-        }
         throw postError;
       }
       if (data) {
@@ -5002,6 +5006,8 @@ async function initPublicProfilePage(userId) {
   if ($('profile-hero-score')) $('profile-hero-score').textContent = Number(profile.crockroach_score || 0).toLocaleString();
   if ($('profile-stat-score')) $('profile-stat-score').textContent = Number(profile.crockroach_score || 0).toLocaleString();
   resetProfilePosts();
+  // Follow button + counts (non-blocking)
+  initFollowSection(userId);
   await hydrateProfilePosts(userId);
   hydrateProfileGallery(userId).catch((error) => console.warn('[Gallery] public profile hydration warning:', error));
   bindHorizontalProfileStrip($('profile-post-strip'));
@@ -5121,6 +5127,12 @@ function initProfilePage() {
 
   renderInterestsDisplay(acc.interests);
   renderLinksDisplay();
+
+  // Follow section — on own profile, hide follow button and load counts for display only
+  initFollowSection(null); // null = own profile → hides btn, still loads counts
+  if (S.userId && !S.isGuest) {
+    fetchFollowData(S.userId).then(fd => _renderFollowUI(S.userId, fd)).catch(() => {});
+  }
 
   // Progress Bar
   if ($('rank-label')) $('rank-label').textContent = `${tier.name}${tier.max < Infinity ? ' → ' + RANK_TIERS[RANK_TIERS.indexOf(tier)+1]?.name : ' (Max)'}`;
@@ -5455,6 +5467,121 @@ function toggleProfileEditMode() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// FOLLOW SYSTEM
+// ═══════════════════════════════════════════════════════════════════
+
+// In-memory cache: userId → { followers, following, isFollowing }
+const _followCache = new Map();
+
+async function fetchFollowData(profileUserId) {
+  if (!sb || !profileUserId) return { followers: 0, following: 0, isFollowing: false };
+  if (_followCache.has(profileUserId)) return _followCache.get(profileUserId);
+  try {
+    const { data, error } = await sb.rpc('get_profile_follow_data', {
+      p_profile_id: profileUserId,
+      p_viewer_id:  S.isGuest ? null : (S.userId || null)
+    });
+    if (error) throw error;
+    const result = {
+      followers:   Number(data?.followers  || 0),
+      following:   Number(data?.following  || 0),
+      isFollowing: !!data?.is_following
+    };
+    _followCache.set(profileUserId, result);
+    return result;
+  } catch (e) {
+    console.warn('[Follow] fetchFollowData failed:', e?.message || e);
+    return { followers: 0, following: 0, isFollowing: false };
+  }
+}
+
+function _renderFollowUI(profileUserId, followData) {
+  const followBtn = $('btn-follow-user');
+  const countEl = $('profile-follow-counts');
+  if (followBtn) {
+    const isFollowing = followData.isFollowing;
+    followBtn.textContent = isFollowing ? 'Following' : 'Follow';
+    followBtn.classList.toggle('profile-action-following', isFollowing);
+    followBtn.dataset.profileUserId = profileUserId;
+    followBtn.disabled = false;
+  }
+  if (countEl) {
+    countEl.textContent = `${followData.followers.toLocaleString()} followers · ${followData.following.toLocaleString()} following`;
+    countEl.style.display = '';
+  }
+  // Update mini-stat cells if present
+  const fsEl = $('profile-stat-followers');
+  const fgEl = $('profile-stat-following');
+  if (fsEl) fsEl.textContent = followData.followers.toLocaleString();
+  if (fgEl) fgEl.textContent = followData.following.toLocaleString();
+}
+
+async function initFollowSection(profileUserId) {
+  const followBtn = $('btn-follow-user');
+  if (!followBtn) return;
+
+  // Own profile — hide everything
+  if (!profileUserId || profileUserId === S.userId) {
+    followBtn.style.display = 'none';
+    const countEl = $('profile-follow-counts');
+    if (countEl) countEl.style.display = 'none';
+    return;
+  }
+
+  // Guest viewing another profile — show follow button but disable it
+  if (S.isGuest) {
+    followBtn.style.display = '';
+    followBtn.textContent = 'Follow';
+    followBtn.disabled = false;
+    followBtn.onclick = () => toast('Sign in to follow', '🔒');
+    const countEl = $('profile-follow-counts');
+    if (countEl) countEl.style.display = 'none';
+    return;
+  }
+
+  // Logged-in viewing another profile
+  followBtn.style.display = '';
+  followBtn.textContent = '…';
+  followBtn.disabled = true;
+
+  const followData = await fetchFollowData(profileUserId);
+  _renderFollowUI(profileUserId, followData);
+
+  followBtn.onclick = async () => {
+    if (S.isGuest) { toast('Sign in to follow', '🔒'); return; }
+    const cached = _followCache.get(profileUserId) || { followers: 0, following: 0, isFollowing: false };
+    const nowFollowing = !cached.isFollowing;
+
+    // Optimistic update
+    const optimistic = {
+      ...cached,
+      isFollowing: nowFollowing,
+      followers: Math.max(0, cached.followers + (nowFollowing ? 1 : -1))
+    };
+    _followCache.set(profileUserId, optimistic);
+    _renderFollowUI(profileUserId, optimistic);
+
+    try {
+      if (nowFollowing) {
+        const { error } = await sb.from('follows').insert({ follower_id: S.userId, following_id: profileUserId });
+        if (error) throw error;
+        toast('Following!', '✓');
+      } else {
+        const { error } = await sb.from('follows').delete()
+          .eq('follower_id', S.userId).eq('following_id', profileUserId);
+        if (error) throw error;
+        toast('Unfollowed', '➖');
+      }
+    } catch (e) {
+      // Roll back on failure
+      _followCache.set(profileUserId, cached);
+      _renderFollowUI(profileUserId, cached);
+      toast(e?.message || 'Could not update follow.', '⚠️');
+    }
+  };
+}
+
 // Attach Profile Events
 // Guard: idempotent — safe to call multiple times, only binds once per element.
 function bindProfileEvents() {
@@ -5603,7 +5730,8 @@ function bindProfileEvents() {
       ? (S.profileViewData?.username || '')
       : (S.accountData?.username || S.username || '');
     if (!username) { toast('Could not determine username — try again.', '⚠️'); return; }
-    const link = `${window.location.origin}${window.location.pathname}?user=${encodeURIComponent(username)}`;
+    // Clean format: mortalive.com/#@username — no server rewrite required
+    const link = `${window.location.origin}${window.location.pathname}#@${encodeURIComponent(username)}`;
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(link).then(() => toast('Profile link copied! Share it anywhere.', '📋'));
     } else {
@@ -5621,7 +5749,7 @@ function bindProfileEvents() {
     copyBtn.addEventListener('click', () => {
       const username = S.accountData?.username || S.username || '';
       if (!username) { window.toast?.('Sign in to copy your profile link', '🔒'); return; }
-      const link = `${location.origin}${location.pathname}?user=${encodeURIComponent(username)}`;
+      const link = `${location.origin}${location.pathname}#@${encodeURIComponent(username)}`;
       navigator.clipboard?.writeText(link)
         .then(() => window.toast?.('Profile link copied! Share it anywhere.', '📋'))
         .catch(() => window.toast?.(link, '🔗'));
