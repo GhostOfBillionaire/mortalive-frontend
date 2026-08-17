@@ -3991,6 +3991,30 @@ async function fetchFeedProfileDirectory(userIds) {
   } catch (e) {
     console.warn('[Feed] public profile directory lookup failed:', e?.message || e);
   }
+
+  // Some deployments expose the public directory without the avatar column,
+  // or the directory query itself can fail under a stricter RLS/view policy.
+  // Fill missing users from accounts so feed cards never regress to initials
+  // when a real profile image exists.
+  const accountFallbackIds = ids.filter(id => {
+    const row = map.get(id);
+    return !row || !feedAvatarUrl(row.avatar_url);
+  });
+  if (accountFallbackIds.length) {
+    try {
+      const { data: accountRows } = await sb
+        .from('accounts')
+        .select('id,username,display_name,crockroach_score,account_type,avatar_url')
+        .in('id', accountFallbackIds);
+      (accountRows || []).forEach(row => {
+        const current = map.get(row.id);
+        map.set(row.id, current ? { ...current, ...row } : row);
+      });
+    } catch (e) {
+      console.warn('[Feed] avatar fallback lookup failed:', e?.message || e);
+    }
+  }
+
   ids.forEach(id => {
     if (!map.has(id)) {
       const local = feedProfileFor(id);
@@ -4783,9 +4807,13 @@ function renderProfilePosts(posts = _profilePosts) {
   const countEl = $('profile-post-count');
   if (!strip) return;
 
-  if (countEl) countEl.textContent = posts.length ? `${posts.length} ${posts.length === 1 ? 'post' : 'posts'}` : 'No posts yet';
+  // This section is strictly for text/poll posts. Any post with media is
+  // intentionally routed to the Visuals/Photos section below.
+  const textPosts = (posts || []).filter(post => !post.media_url);
 
-  if (!posts.length) {
+  if (countEl) countEl.textContent = textPosts.length ? `${textPosts.length} ${textPosts.length === 1 ? 'post' : 'posts'}` : 'No text posts';
+
+  if (!textPosts.length) {
     strip.innerHTML = `
       <article class="profile-post-card profile-post-empty-card">
         <div class="profile-post-header">
@@ -4801,7 +4829,7 @@ function renderProfilePosts(posts = _profilePosts) {
     return;
   }
 
-  strip.innerHTML = posts.map((post) => {
+  strip.innerHTML = textPosts.map((post) => {
     const content = sanitizeHTML(post.content || '');
     const time = sanitizeHTML(formatPostTime(post.created_at));
     const type = sanitizeHTML(post.post_type || 'text');
@@ -4832,7 +4860,11 @@ function renderProfileGallery(posts = _profilePosts) {
   if (!gallery) return;
   const photos = (posts || []).filter(p => p.media_url);
   if (!photos.length) return;
-  gallery.innerHTML = photos.map((p, i) => `<button type="button" class="profile-gallery-tile" data-photo-url="${sanitizeHTML(p.media_url)}" aria-label="Open photo ${i+1}"><img src="${sanitizeHTML(p.media_url)}" alt="Profile photo post ${i+1}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block"></button>`).join('');
+  gallery.innerHTML = photos.map((p, i) => {
+    const caption = sanitizeHTML(String(p.content || '').trim());
+    const ownerName = sanitizeHTML(p.author?.username || _profilePostsOwner?.username || S.username || 'user');
+    return `<button type="button" class="profile-gallery-tile" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" aria-label="Open photo ${i + 1}"><img src="${sanitizeHTML(p.media_url)}" alt="${ownerName} photo post" loading="lazy" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" style="width:100%;height:100%;object-fit:cover;display:block"></button>`;
+  }).join('');
 }
 
 // Dedicated gallery fetch using the gallery_photos RPC (returns up to 24 media posts,
@@ -4844,12 +4876,30 @@ async function hydrateProfileGallery(userId = S.userId) {
   try {
     const { data, error } = await sb.rpc('gallery_photos', { p_user_id: userId, p_limit: 24 });
     if (error) throw error;
-    const photos = Array.isArray(data) ? data.filter(p => p.media_url) : [];
+    let photos = Array.isArray(data) ? data.filter(p => p.media_url) : [];
     if (!photos.length) return; // keep whatever renderProfileGallery() already drew
-    gallery.innerHTML = photos.map((p, i) =>
-      `<button type="button" class="profile-gallery-tile" data-photo-url="${sanitizeHTML(p.media_url)}" aria-label="Open photo ${i + 1}">` +
-      `<img src="${sanitizeHTML(p.media_url)}" alt="Profile gallery photo ${i + 1}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block"></button>`
-    ).join('');
+
+    // The gallery RPC may return media metadata without the original caption.
+    // Merge known post data first, then fetch any missing captions directly.
+    const knownById = new Map((_profilePosts || []).map(post => [post.id, post]));
+    photos = photos.map(photo => ({ ...photo, ...(knownById.get(photo.id) || {}) }));
+    const missingCaptionIds = photos.filter(photo => !String(photo.content || '').trim() && photo.id).map(photo => photo.id);
+    if (missingCaptionIds.length) {
+      try {
+        const { data: captionRows } = await sb.from('posts').select('id,user_id,content,media_url').in('id', missingCaptionIds);
+        const captionById = new Map((captionRows || []).map(row => [row.id, row]));
+        photos = photos.map(photo => ({ ...photo, ...(captionById.get(photo.id) || {}) }));
+      } catch (e) {
+        console.warn('[Gallery] caption hydration warning:', e?.message || e);
+      }
+    }
+
+    gallery.innerHTML = photos.map((p, i) => {
+      const caption = sanitizeHTML(String(p.content || '').trim());
+      const ownerName = sanitizeHTML(p.author?.username || _profilePostsOwner?.username || S.username || 'user');
+      return `<button type="button" class="profile-gallery-tile" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" aria-label="Open photo ${i + 1}">` +
+        `<img src="${sanitizeHTML(p.media_url)}" alt="${ownerName} photo post" loading="lazy" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" style="width:100%;height:100%;object-fit:cover;display:block"></button>`;
+    }).join('');
   } catch (e) {
     // gallery_photos RPC not yet deployed — post-strip fallback is already showing
     console.warn('[Gallery] gallery_photos RPC unavailable, using post-strip fallback:', e?.message || e);
@@ -5041,7 +5091,9 @@ async function initPublicProfilePage(userId) {
   document.body.classList.add('profile-viewing-public');
   const name = profile.display_name || profile.username || 'User';
   if ($('profile-username-display')) $('profile-username-display').textContent = name;
-  if ($('profile-subline-display')) $('profile-subline-display').textContent = `@${profile.username || 'user'} · ${profile.account_type || 'Member'}`;
+  if ($('profile-handle-modern')) $('profile-handle-modern').textContent = `@${(profile.username || 'user').toLowerCase().replace(/\s+/g, '_')}`;
+  const publicBadgeHtml = Number(profile.crockroach_score || 0) >= 700 ? '<span class="profile-badge-chip gold">⭐ Gold</span>' : Number(profile.crockroach_score || 0) >= 420 ? '<span class="profile-badge-chip silver">🔘 Silver</span>' : '';
+  if ($('profile-subline-display')) $('profile-subline-display').innerHTML = `${publicBadgeHtml}${publicBadgeHtml ? ' · ' : ''}${sanitizeHTML((profile.account_type || 'Member').charAt(0).toUpperCase() + (profile.account_type || 'Member').slice(1))}`;
   if ($('profile-bio-display')) $('profile-bio-display').textContent = profile.bio || 'Connecting with the world.';
   if ($('profile-info-goal-val')) $('profile-info-goal-val').textContent = 'Public profile';
   applyProfileAvatar(profile.avatar_url || '', name);
@@ -5095,10 +5147,14 @@ function initProfilePage() {
   const badgeHtml = score >= 700 ? `<span class="profile-badge-chip gold">⭐ Gold</span>` :
                     score >= 420 ? `<span class="profile-badge-chip silver">🔘 Silver</span>` : '';
   
+  const handleEl = $('profile-handle-modern');
+  const usernameValue = (acc.username || S.username || 'user').toLowerCase().replace(/\s+/g, '_');
+  if (handleEl) handleEl.textContent = `@${usernameValue}`;
+
   const sublineEl = $('profile-subline-display');
   if (sublineEl) {
     const actType = acc.account_type ? acc.account_type.charAt(0).toUpperCase() + acc.account_type.slice(1) : 'Member';
-    sublineEl.innerHTML = `@${(S.username || 'user').toLowerCase().replace(/\s+/g,'_')} ${badgeHtml} · ${actType}`;
+    sublineEl.innerHTML = `${badgeHtml}${badgeHtml ? ' · ' : ''}${sanitizeHTML(actType)}`;
   }
   
   if ($('profile-hero-score')) $('profile-hero-score').textContent = score.toLocaleString();
