@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-16-appjs-consent-final'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-17-profile-scroll-avatar-fix'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -3634,6 +3634,7 @@ function finishStartupSplash() {
 }
 
 ready(() => {
+  stabilizeProfileScrollAxes();
   // Hard maximum: the branded splash can never remain on screen longer than
   // 4.5 seconds, even if Supabase/Auth routing hangs unexpectedly. The normal
   // auth-driven finally() below still closes it sooner whenever possible.
@@ -3949,12 +3950,28 @@ function feedAvatarLetter(name) {
   return sanitizeHTML((value.charAt(0) || 'M').toUpperCase());
 }
 
+// Feed avatars are remote URLs from the public profile directory. Only allow
+// normal HTTP(S) image URLs into the rendered <img> so the post-card HTML
+// remains safe even if a malformed value reaches the client.
+function feedAvatarUrl(url) {
+  const value = String(url || '').trim();
+  if (!value) return '';
+  try {
+    const parsed = new URL(value, window.location.href);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return '';
+    return sanitizeHTML(parsed.href);
+  } catch (_) {
+    return '';
+  }
+}
+
 function feedProfileFor(userId) {
   if (userId && userId === S.userId) {
     return {
       username: S.accountData?.username || S.username || 'You',
       display_name: S.accountData?.display_name || S.username || 'You',
-      crockroach_score: S.accountData?.crockroach_score ?? S.crockroachScore ?? getProgressScore(getCurrentProgress())
+      crockroach_score: S.accountData?.crockroach_score ?? S.crockroachScore ?? getProgressScore(getCurrentProgress()),
+      avatar_url: S.accountData?.avatar_url || ''
     };
   }
   return null;
@@ -3967,7 +3984,7 @@ async function fetchFeedProfileDirectory(userIds) {
   try {
     const { data, error } = await sb
       .from('public_profile_directory')
-      .select('id,username,display_name,crockroach_score,account_type')
+      .select('id,username,display_name,crockroach_score,account_type,avatar_url')
       .in('id', ids);
     if (error) throw error;
     (data || []).forEach(row => map.set(row.id, row));
@@ -4323,6 +4340,27 @@ async function uploadPhotoFile(file, folder) {
   return { url: data.publicUrl, path, size: file.size, type: file.type };
 }
 
+function stabilizeProfileScrollAxes() {
+  const viewport = $('profile-feed-viewport');
+  if (!viewport || viewport.dataset.scrollAxisBound) return;
+  viewport.dataset.scrollAxisBound = '1';
+
+  // The profile viewport is the vertical scroller. Explicitly reserve the
+  // vertical gesture axis here so a horizontal swipe that begins inside the
+  // child post strip cannot be claimed by this ancestor on the own-profile
+  // layout (where the composer makes the viewport scrollable).
+  viewport.style.touchAction = 'pan-y';
+  viewport.style.overscrollBehaviorX = 'contain';
+
+  const strip = $('profile-post-strip');
+  if (strip) {
+    strip.style.touchAction = 'pan-x';
+    strip.style.overscrollBehaviorX = 'contain';
+    strip.style.overscrollBehaviorY = 'none';
+    strip.style.webkitOverflowScrolling = 'touch';
+  }
+}
+
 function bindHorizontalProfileStrip(strip) {
   if (!strip || strip.dataset.wheelBound) return;
   strip.dataset.wheelBound = '1';
@@ -4357,11 +4395,15 @@ function renderFeedPosts() {
     const mine = post.user_id === S.userId;
     const typeLabel = post.post_type === 'text' ? 'Text' : post.post_type || 'Post';
     const badge = score >= 700 ? '<span class="post-badge gold">Gold</span>' : score >= 420 ? '<span class="post-badge silver">Silver</span>' : '';
+    const avatarUrl = feedAvatarUrl(author.avatar_url);
+    const avatarMarkup = avatarUrl
+      ? `<div class="post-avatar"><img src="${avatarUrl}" alt="${sanitizeHTML(display)}" loading="lazy" decoding="async" style="width:100%;height:100%;display:block;object-fit:cover;border-radius:50%;" onerror="this.parentElement.textContent='${feedAvatarLetter(display)}';this.remove();"></div>`
+      : `<div class="post-avatar">${feedAvatarLetter(display)}</div>`;
     const engagement = engagementFor(post.id);
     return `
       <article class="post-card" data-post-id="${sanitizeHTML(post.id)}">
         <div class="post-header">
-          <div class="post-avatar">${feedAvatarLetter(display)}</div>
+          ${avatarMarkup}
           <div class="post-meta">
             <div class="post-author"><button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(post.user_id)}">${sanitizeHTML(display)} ${badge}</button></div>
             <div class="post-time">@${sanitizeHTML(username)} · ${sanitizeHTML(feedRelTime(post.created_at))} · ${sanitizeHTML(typeLabel)}</div>
@@ -5011,11 +5053,13 @@ async function initPublicProfilePage(userId) {
   await hydrateProfilePosts(userId);
   hydrateProfileGallery(userId).catch((error) => console.warn('[Gallery] public profile hydration warning:', error));
   bindHorizontalProfileStrip($('profile-post-strip'));
+  stabilizeProfileScrollAxes();
 }
 
 function initProfilePage() {
   if (S.isGuest) return;
   bindHorizontalProfileStrip($('profile-post-strip'));
+  stabilizeProfileScrollAxes();
 
   // If profile navigation/rendering wins the race against DB hydration,
   // fetch the account data now and let the hydration callback re-render.
