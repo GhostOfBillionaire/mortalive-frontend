@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-17-composer-ui-v11'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-17-composer-qna-cursor-v14'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -3907,7 +3907,8 @@ function sanitizeHTML(str) {
 const HASHTAG_PATTERN = /#([A-Za-z0-9_]{1,63})/g;
 const MAX_HASHTAGS_PER_POST = 24;
 const FEED_COMPOSER_MAX_OPTIONS = 6;
-let _feedComposerKind = 'text'; // text | photo | poll | qna
+let _feedComposerKind = 'text';
+let _feedQnaChoicesEnabled = false; // text | photo | poll | qna
 let _feedComposerMenuOpen = false;
 
 function getFeedComposerKind() {
@@ -3919,6 +3920,7 @@ function getFeedStructuredKindLabel(kind) {
 }
 
 function getFeedComposerOptionValues() {
+  if (getFeedComposerKind() === 'qna' && !_feedQnaChoicesEnabled) return [];
   return Array.from(document.querySelectorAll('#poll-options-list .poll-option-input'))
     .map(input => String(input.value || '').trim())
     .filter(Boolean);
@@ -3948,13 +3950,21 @@ function syncFeedComposerTypeUI() {
   const addBtn = $('poll-add-option');
   const modeLabel = $('compose-mode-label');
   const photoButton = $('btn-feed-photo');
+  const qnaModeRow = $('qna-mode-row');
+  const qnaToggle = $('qna-choice-toggle');
+  const qnaRandom = $('qna-random-question');
+  const optionsList = $('poll-options-list');
+  const durationRow = $('poll-duration-row');
 
   document.querySelectorAll('#pg-feed [data-compose-kind]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.composeKind === kind);
   });
 
-  if (title) title.textContent = kind === 'qna' ? 'Q&A options' : 'Poll options';
-  if (field) field.placeholder = kind === 'qna' ? 'Ask a question…' : kind === 'poll' ? 'Ask a poll question…' : "What's on your mind after that chat…";
+  const qnaOpen = kind === 'qna' && !_feedQnaChoicesEnabled;
+  if (title) title.textContent = kind === 'qna' ? (_feedQnaChoicesEnabled ? 'Q&A choices' : 'Open Q&A') : 'Poll options';
+  if (field) field.placeholder = kind === 'qna'
+    ? (_feedQnaChoicesEnabled ? 'Ask a question for people to choose from…' : 'Ask a question people can reply to…')
+    : kind === 'poll' ? 'Ask a poll question…' : "What's on your mind after that chat…";
   if (modeLabel) modeLabel.textContent = getFeedStructuredKindLabel(kind);
   if (builder) builder.classList.toggle('open', kind === 'poll' || kind === 'qna');
   if (photoButton) {
@@ -3962,15 +3972,27 @@ function syncFeedComposerTypeUI() {
     photoButton.style.display = allowed ? '' : 'none';
     if (!allowed) clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
   }
+  if (qnaModeRow) qnaModeRow.style.display = kind === 'qna' ? 'flex' : 'none';
+  if (qnaToggle) {
+    qnaToggle.textContent = _feedQnaChoicesEnabled ? 'Use open replies' : 'Add choices';
+    qnaToggle.setAttribute('aria-pressed', _feedQnaChoicesEnabled ? 'true' : 'false');
+    qnaToggle.classList.toggle('active', _feedQnaChoicesEnabled);
+  }
+  if (qnaRandom) qnaRandom.style.display = kind === 'qna' ? 'inline-flex' : 'none';
+  if (optionsList) optionsList.style.display = (kind === 'poll' || _feedQnaChoicesEnabled) ? '' : 'none';
   if (addBtn) {
-    const count = $('poll-options-list')?.querySelectorAll('.poll-option-row').length || 0;
+    const count = optionsList?.querySelectorAll('.poll-option-row').length || 0;
+    addBtn.style.display = (kind === 'poll' || _feedQnaChoicesEnabled) ? '' : 'none';
     addBtn.disabled = count >= FEED_COMPOSER_MAX_OPTIONS;
     addBtn.textContent = count >= FEED_COMPOSER_MAX_OPTIONS ? 'Maximum 6 options' : '+ Add option';
   }
+  if (durationRow) durationRow.style.display = kind === 'poll' ? 'flex' : 'none';
 }
 
 function setFeedComposerKind(kind = 'text') {
   const next = ['text','photo','poll','qna'].includes(kind) ? kind : 'text';
+  if (next === 'qna') _feedQnaChoicesEnabled = false;
+  if (next === 'poll') _feedQnaChoicesEnabled = false;
   if ((next === 'poll' || next === 'qna') && !_feedComposerMenuOpen) _feedComposerMenuOpen = false;
   _feedComposerKind = next;
   if (next === 'poll' || next === 'qna') ensureFeedComposerOptionRows(2, FEED_COMPOSER_MAX_OPTIONS);
@@ -3993,12 +4015,13 @@ function validateFeedStructuredPost(kind, question, options) {
   if (!['poll','qna'].includes(kind)) return { ok: true, options: [] };
   if (!question.trim()) return { ok: false, message: `${kind === 'qna' ? 'Q&A' : 'Poll'} needs a question.` };
   const values = options.map(String).map(v => v.trim()).filter(Boolean);
-  if (values.length < 2) return { ok: false, message: 'Add at least 2 options.' };
-  if (values.length > FEED_COMPOSER_MAX_OPTIONS) return { ok: false, message: 'Use a maximum of 6 options.' };
+  if (kind === 'qna' && !_feedQnaChoicesEnabled) return { ok: true, options: [] };
+  if (values.length < 2) return { ok: false, message: 'Add at least 2 choices.' };
+  if (values.length > FEED_COMPOSER_MAX_OPTIONS) return { ok: false, message: 'Use a maximum of 6 choices.' };
   const seen = new Set();
   for (const value of values) {
     const key = value.toLowerCase();
-    if (seen.has(key)) return { ok: false, message: 'Each option must be unique.' };
+    if (seen.has(key)) return { ok: false, message: 'Each choice must be unique.' };
     seen.add(key);
   }
   return { ok: true, options: values };
@@ -5281,6 +5304,7 @@ async function submitFeedTextPost() {
     if (['poll','qna'].includes(kind)) {
       payload.post_meta = {
         kind,
+        mode: kind === 'qna' ? (_feedQnaChoicesEnabled ? 'mcq' : 'open') : 'mcq',
         options: structured.options.map((label, index) => ({ id: `option-${index + 1}`, label }))
       };
     }
@@ -5289,6 +5313,7 @@ async function submitFeedTextPost() {
     if (error) throw error;
     field.value = '';
     _feedComposerKind = 'text';
+    _feedQnaChoicesEnabled = false;
     _feedComposerMenuOpen = false;
     resetFeedComposerOptions();
     clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
@@ -5337,6 +5362,28 @@ function addFeedComposerOption() {
   syncFeedComposerTypeUI();
   syncFeedComposer();
   row.querySelector('.poll-option-input')?.focus();
+}
+
+function getRandomQnaQuestion() {
+  const prompts = [
+    'What is one thing you would change about today?',
+    'What is something you are looking forward to this week?',
+    'What is a small habit that actually helps you?',
+    'What is a place you would go back to tomorrow?',
+    'What is an opinion you changed your mind about recently?',
+    'What is the best advice you have received?',
+    'What is one song you never get tired of?',
+    'What is something people should try at least once?'
+  ];
+  return prompts[Math.floor(Math.random() * prompts.length)];
+}
+
+function toggleFeedQnaChoices() {
+  if (getFeedComposerKind() !== 'qna') return;
+  _feedQnaChoicesEnabled = !_feedQnaChoicesEnabled;
+  if (_feedQnaChoicesEnabled) ensureFeedComposerOptionRows(2, FEED_COMPOSER_MAX_OPTIONS);
+  syncFeedComposerTypeUI();
+  syncFeedComposer();
 }
 
 function syncFeedComposer() {
@@ -5512,6 +5559,18 @@ function initFeedPage() {
   $('poll-add-option')?.addEventListener('click', (event) => {
     event.preventDefault();
     addFeedComposerOption();
+  });
+  $('qna-choice-toggle')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    toggleFeedQnaChoices();
+  });
+  $('qna-random-question')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    const field = $('compose-field');
+    if (!field || getFeedComposerKind() !== 'qna') return;
+    field.value = getRandomQnaQuestion();
+    syncFeedComposer();
+    field.focus();
   });
   $('poll-options-list')?.addEventListener('click', (event) => {
     const remove = event.target.closest('.poll-remove-btn');
