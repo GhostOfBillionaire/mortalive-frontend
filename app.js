@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-17-feed-profile-view-auth-v4'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-17-feed-profile-enhanced-v5'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -4366,6 +4366,16 @@ function ensureFeedProfileOverlay() {
     #feed-profile-overlay .feed-profile-handle{margin-top:3px;color:var(--on-surface-3);font-size:13px;font-weight:700;}
     #feed-profile-overlay .feed-profile-status{margin-top:8px;font-size:12px;color:var(--on-surface-3);}
     #feed-profile-overlay .feed-profile-bio{margin-top:14px;color:var(--on-surface-2);font-size:13.5px;line-height:1.65;}
+    #feed-profile-overlay .feed-profile-meta{display:grid;gap:9px;margin-top:14px;}
+    #feed-profile-overlay .feed-profile-meta-row{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--on-surface-2);line-height:1.5;}
+    #feed-profile-overlay .feed-profile-meta-icon{width:20px;flex:none;text-align:center;opacity:.75;}
+    #feed-profile-overlay .feed-profile-meta-value{min-width:0;word-break:break-word;}
+    #feed-profile-overlay .feed-profile-link-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+    #feed-profile-overlay .feed-profile-link{display:inline-flex;align-items:center;gap:6px;padding:8px 11px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);color:var(--primary);font-size:11.5px;font-weight:800;text-decoration:none;}
+    #feed-profile-overlay .feed-profile-link:hover{background:var(--primary-alpha);border-color:rgba(26,110,245,.16);}
+    #feed-profile-overlay .feed-profile-interests{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px;}
+    #feed-profile-overlay .feed-profile-interest{display:inline-flex;align-items:center;padding:7px 10px;border-radius:999px;background:var(--primary-alpha);border:1px solid rgba(26,110,245,.14);color:var(--primary);font-size:11px;font-weight:700;}
+    #feed-profile-overlay .feed-profile-section-label{margin-top:16px;font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--on-surface-3);}
     #feed-profile-overlay .feed-profile-stats{display:flex;gap:20px;flex-wrap:wrap;margin-top:14px;}
     #feed-profile-overlay .feed-profile-stat strong{font-size:14px;font-weight:900;color:var(--on-surface);}
     #feed-profile-overlay .feed-profile-stat span{font-size:11px;color:var(--on-surface-3);margin-left:4px;}
@@ -4443,27 +4453,48 @@ async function openFeedProfileOverlay(userId) {
   try {
     const profile = await fetchPublicProfileData(userId);
     const posts = await fetchProfilePosts(userId);
+    const [links, followData] = await Promise.all([fetchUserLinks(userId), fetchFollowData(userId)]);
     const name = profile.display_name || profile.username || 'Mortalive member';
     const username = profile.username || 'member';
     const score = Number(profile.crockroach_score || 0);
-    const badge = score >= 700 ? '⭐ Gold' : score >= 420 ? '🔘 Silver' : '';
-    const status = [badge, (profile.account_type || 'Member')].filter(Boolean).join(' · ');
+    const badge = score >= 700 ? '⭐ Gold' : score >= 420 ? '🔘 Silver' : score >= 220 ? '✨ Bronze' : '🌱 Newcomer';
+    const status = [(profile.account_type || 'Member'), badge].filter(Boolean).join(' · ');
     const avatarUrl = feedAvatarUrl(profile.avatar_url);
     const initial = feedAvatarLetter(name);
     const textPosts = posts.filter(post => !post.media_url);
     const photoPosts = posts.filter(post => !!post.media_url);
+    const detailsLabels = { professional: 'Job Title', creator: 'Content Niche', business: 'Company Name', private: 'Details', content: 'Content Niche', fun: 'Interests' };
+    const detailLabel = detailsLabels[profile.account_type] || 'Details';
+    const rawWebsite = String(profile.website || '').trim();
+    const websiteUrl = rawWebsite ? (/^https?:\/\//i.test(rawWebsite) ? rawWebsite : `https://${rawWebsite}`) : '';
+    const interests = Array.isArray(profile.interests) ? profile.interests : [];
+    const interestLabels = Object.fromEntries(PROFILE_INTERESTS.map(item => [item.id, item.label]));
+    const safeLinks = (links || []).filter(link => /^https?:\/\//i.test(String(link.url || '')) || /^[^:]+\.[^:]+$/.test(String(link.url || '').trim()));
 
     content.innerHTML = `
       <div class="feed-profile-cover"></div>
       <div class="feed-profile-head">
-        <div class="feed-profile-actions"><button type="button" class="feed-profile-action">Follow</button></div>
+        <div class="feed-profile-actions"><button type="button" class="feed-profile-action" data-feed-profile-follow="${sanitizeHTML(userId)}">${followData.isFollowing ? 'Following' : 'Follow'}</button></div>
         <div class="feed-profile-avatar">${avatarUrl ? `<img src="${avatarUrl}" alt="${sanitizeHTML(name)}" loading="lazy">` : sanitizeHTML(initial)}</div>
         <div id="feed-profile-title" class="feed-profile-name">${sanitizeHTML(name)}</div>
         <div class="feed-profile-handle">@${sanitizeHTML(username)}</div>
         <div class="feed-profile-status">${sanitizeHTML(status)}</div>
         <div class="feed-profile-bio">${sanitizeHTML(profile.bio || 'No bio yet.')}</div>
+        ${(profile.details || profile.website || profile.account_type) ? `
+          <div class="feed-profile-meta">
+            ${profile.details ? `<div class="feed-profile-meta-row"><span class="feed-profile-meta-icon">💼</span><span class="feed-profile-meta-value"><strong>${sanitizeHTML(detailLabel)}:</strong> ${sanitizeHTML(profile.details)}</span></div>` : ''}
+            ${websiteUrl ? `<div class="feed-profile-meta-row"><span class="feed-profile-meta-icon">🔗</span><a class="feed-profile-meta-value" href="${sanitizeHTML(websiteUrl)}" target="_blank" rel="noopener noreferrer">${sanitizeHTML(rawWebsite.replace(/^https?:\/\//i, ''))} ↗</a></div>` : ''}
+          </div>` : ''}
+        ${safeLinks.length ? `
+          <div class="feed-profile-section-label">Links</div>
+          <div class="feed-profile-link-list">${safeLinks.map(link => { const raw = String(link.url || '').trim(); const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`; return `<a class="feed-profile-link" href="${sanitizeHTML(url)}" target="_blank" rel="noopener noreferrer">${sanitizeHTML(link.name || 'Link')} ↗</a>`; }).join('')}</div>` : ''}
+        ${interests.length ? `
+          <div class="feed-profile-section-label">Interests</div>
+          <div class="feed-profile-interests">${interests.map(id => `<span class="feed-profile-interest">${sanitizeHTML(interestLabels[id] || id)}</span>`).join('')}</div>` : ''}
         <div class="feed-profile-stats">
-          <div class="feed-profile-stat"><strong>${Number(profile.crockroach_score || 0).toLocaleString()}</strong><span>crockroach Score</span></div>
+          <div class="feed-profile-stat"><strong>${Number(followData.followers || 0).toLocaleString()}</strong><span>Followers</span></div>
+          <div class="feed-profile-stat"><strong>${Number(followData.following || 0).toLocaleString()}</strong><span>Following</span></div>
+          <div class="feed-profile-stat"><strong>${Number(score).toLocaleString()}</strong><span>crockroach Score</span></div>
           <div class="feed-profile-stat"><strong>${textPosts.length}</strong><span>Posts</span></div>
           <div class="feed-profile-stat"><strong>${photoPosts.length}</strong><span>Photos</span></div>
         </div>
@@ -4496,6 +4527,27 @@ async function openFeedProfileOverlay(userId) {
           panel.style.display = panel.dataset.profilePanel === which ? '' : 'none';
         });
       });
+    });
+    const feedFollowBtn = content.querySelector('[data-feed-profile-follow]');
+    feedFollowBtn?.addEventListener('click', async () => {
+      if (!(await requireAuthenticatedSession())) { toast('Sign in to follow profiles.', '🔒'); return; }
+      const targetId = feedFollowBtn.dataset.feedProfileFollow;
+      try {
+        const next = !followData.isFollowing;
+        feedFollowBtn.disabled = true;
+        await toggleFollow(targetId, next);
+        followData.isFollowing = next;
+        followData.followers = Math.max(0, Number(followData.followers || 0) + (next ? 1 : -1));
+        feedFollowBtn.textContent = next ? 'Following' : 'Follow';
+        content.querySelectorAll('.feed-profile-stat').forEach(stat => {
+          const label = stat.querySelector('span')?.textContent;
+          if (label === 'Followers') stat.querySelector('strong').textContent = Number(followData.followers).toLocaleString();
+        });
+      } catch (error) {
+        toast(error?.message || 'Could not update follow status.', '⚠️');
+      } finally {
+        feedFollowBtn.disabled = false;
+      }
     });
   } catch (error) {
     content.innerHTML = `<div style="padding:24px;text-align:center;color:var(--danger);">${sanitizeHTML(error?.message || 'Could not load this profile.')}</div>`;
@@ -5233,7 +5285,7 @@ async function fetchPublicProfileData(userId) {
   if (!(await requireAuthenticatedSession())) throw new Error('Authentication required to view profiles.');
   const seed = (await fetchFeedProfileDirectory([userId])).get(userId) || { id: userId, username: 'user', display_name: 'User' };
   try {
-    const { data, error } = await sb.from('accounts').select('id,username,display_name,bio,avatar_url,crockroach_score,account_type').eq('id', userId).maybeSingle();
+    const { data, error } = await sb.from('accounts').select('id,username,display_name,bio,details,website,interests,avatar_url,crockroach_score,account_type').eq('id', userId).maybeSingle();
     if (!error && data) return { ...seed, ...data, id: userId };
   } catch (_) {}
   return { ...seed, id: userId };
