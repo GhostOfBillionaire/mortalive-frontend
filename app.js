@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-17-feed-profile-enhanced-v5'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-17-feed-profile-fullscreen-v6'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -4347,21 +4347,24 @@ function ensureFeedProfileOverlay() {
   const style = document.createElement('style');
   style.id = 'feed-profile-overlay-style';
   style.textContent = `
-    #feed-profile-overlay{position:fixed;inset:0;z-index:1800;display:none;align-items:stretch;justify-content:flex-end;background:rgba(8,14,28,.28);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
+    #feed-profile-overlay{position:fixed;top:clamp(76px,8vh,94px);right:0;bottom:0;left:0;z-index:1800;display:none;align-items:stretch;justify-content:stretch;background:var(--surface);}
     #feed-profile-overlay.open{display:flex;}
     body.feed-profile-open{overflow:hidden;}
-    #feed-profile-overlay .feed-profile-sheet{width:min(820px,100%);height:100%;max-height:100dvh;overflow:hidden;background:var(--surface);border-left:1px solid var(--border);box-shadow:-24px 0 80px rgba(13,17,23,.20);display:flex;flex-direction:column;animation:feedProfileIn .24s var(--ease-out);}
-    @keyframes feedProfileIn{from{transform:translateX(22px);opacity:.6;}to{transform:none;opacity:1;}}
+    #feed-profile-overlay .feed-profile-sheet{width:100%;height:100%;max-height:none;overflow:hidden;background:var(--surface);border:0;box-shadow:none;display:flex;flex-direction:column;animation:feedProfileIn .22s var(--ease-out);}
+    @keyframes feedProfileIn{from{opacity:.82;}to{opacity:1;}}
     #feed-profile-overlay .feed-profile-nav{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.94);backdrop-filter:blur(18px);}
     #feed-profile-overlay .feed-profile-close{width:38px;height:38px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border);font-size:18px;font-weight:800;display:grid;place-items:center;flex:none;}
     #feed-profile-overlay .feed-profile-nav-title{font-size:14px;font-weight:900;letter-spacing:-.02em;}
     #feed-profile-overlay .feed-profile-content{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;}
-    #feed-profile-overlay .feed-profile-cover{height:150px;background:linear-gradient(135deg,rgba(26,110,245,.16),rgba(124,58,237,.18));border-bottom:1px solid var(--border);}
+    #feed-profile-overlay .feed-profile-cover{height:112px;background:var(--surface);border-bottom:1px solid var(--border);}
     #feed-profile-overlay .feed-profile-head{padding:0 22px 18px;}
     #feed-profile-overlay .feed-profile-avatar{width:92px;height:92px;margin-top:-46px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;font-size:32px;font-weight:900;flex:none;border:4px solid var(--surface);box-shadow:var(--elev-2);}
     #feed-profile-overlay .feed-profile-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
     #feed-profile-overlay .feed-profile-actions{display:flex;justify-content:flex-end;margin-top:-46px;min-height:46px;}
-    #feed-profile-overlay .feed-profile-action{padding:8px 16px;border-radius:999px;border:1.5px solid var(--border-strong);background:#fff;font-size:12px;font-weight:800;}
+    #feed-profile-overlay .feed-profile-action{min-width:92px;padding:8px 16px;border-radius:999px;border:1.5px solid var(--border-strong);background:#fff;color:var(--on-surface);font-size:12px;font-weight:800;transition:background .14s ease,color .14s ease,border-color .14s ease,transform .14s ease;}
+    #feed-profile-overlay .feed-profile-action:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-alpha);}
+    #feed-profile-overlay .feed-profile-action.profile-action-following{background:var(--on-surface);color:#fff;border-color:var(--on-surface);}
+    #feed-profile-overlay .feed-profile-action:disabled{opacity:.55;cursor:not-allowed;transform:none;}
     #feed-profile-overlay .feed-profile-name{margin-top:10px;font-size:24px;font-weight:900;letter-spacing:-.04em;}
     #feed-profile-overlay .feed-profile-handle{margin-top:3px;color:var(--on-surface-3);font-size:13px;font-weight:700;}
     #feed-profile-overlay .feed-profile-status{margin-top:8px;font-size:12px;color:var(--on-surface-3);}
@@ -4389,7 +4392,7 @@ function ensureFeedProfileOverlay() {
     #feed-profile-overlay .feed-profile-post-time{font-size:10px;color:var(--on-surface-3);margin-bottom:7px;}
     #feed-profile-overlay .feed-profile-post-text{font-size:13.5px;line-height:1.65;word-break:break-word;}
     #feed-profile-overlay .feed-profile-post img{width:100%;max-height:460px;object-fit:cover;border-radius:16px;margin-top:10px;display:block;}
-    @media(max-width:720px){#feed-profile-overlay .feed-profile-sheet{width:100%;border-left:0;}#feed-profile-overlay .feed-profile-cover{height:132px;}#feed-profile-overlay .feed-profile-head{padding-inline:16px;}#feed-profile-overlay .feed-profile-section{padding-inline:16px;}}
+    @media(max-width:720px){#feed-profile-overlay{top:0;bottom:0;}#feed-profile-overlay .feed-profile-sheet{width:100%;border-left:0;}#feed-profile-overlay .feed-profile-cover{height:132px;}#feed-profile-overlay .feed-profile-head{padding-inline:16px;}#feed-profile-overlay .feed-profile-section{padding-inline:16px;}}
   `;
   document.head.appendChild(style);
 
@@ -4535,10 +4538,11 @@ async function openFeedProfileOverlay(userId) {
       try {
         const next = !followData.isFollowing;
         feedFollowBtn.disabled = true;
-        await toggleFollow(targetId, next);
-        followData.isFollowing = next;
-        followData.followers = Math.max(0, Number(followData.followers || 0) + (next ? 1 : -1));
+        const updated = await toggleFollow(targetId, next);
+        followData.isFollowing = updated.isFollowing;
+        followData.followers = updated.followers;
         feedFollowBtn.textContent = next ? 'Following' : 'Follow';
+        feedFollowBtn.classList.toggle('profile-action-following', next);
         content.querySelectorAll('.feed-profile-stat').forEach(stat => {
           const label = stat.querySelector('span')?.textContent;
           if (label === 'Followers') stat.querySelector('strong').textContent = Number(followData.followers).toLocaleString();
@@ -5817,6 +5821,38 @@ function toggleProfileEditMode() {
 // In-memory cache: userId → { followers, following, isFollowing }
 const _followCache = new Map();
 
+// Shared follow mutation used by both the original Profile page and the
+// Feed-profile view so both surfaces always use the same database behavior.
+async function toggleFollow(profileUserId, shouldFollow) {
+  const session = await requireAuthenticatedSession();
+  if (!session || !S.userId || !profileUserId || profileUserId === S.userId) {
+    throw new Error('You must be signed in to follow this profile.');
+  }
+
+  if (shouldFollow) {
+    const { error } = await sb.from('follows').insert({
+      follower_id: S.userId,
+      following_id: profileUserId
+    });
+    if (error) throw error;
+  } else {
+    const { error } = await sb.from('follows')
+      .delete()
+      .eq('follower_id', S.userId)
+      .eq('following_id', profileUserId);
+    if (error) throw error;
+  }
+
+  const current = _followCache.get(profileUserId) || { followers: 0, following: 0, isFollowing: false };
+  const next = {
+    ...current,
+    isFollowing: !!shouldFollow,
+    followers: Math.max(0, Number(current.followers || 0) + (shouldFollow ? 1 : -1))
+  };
+  _followCache.set(profileUserId, next);
+  return next;
+}
+
 async function fetchFollowData(profileUserId) {
   if (!sb || !profileUserId) return { followers: 0, following: 0, isFollowing: false };
   if (_followCache.has(profileUserId)) return _followCache.get(profileUserId);
@@ -5906,16 +5942,8 @@ async function initFollowSection(profileUserId) {
     _renderFollowUI(profileUserId, optimistic);
 
     try {
-      if (nowFollowing) {
-        const { error } = await sb.from('follows').insert({ follower_id: S.userId, following_id: profileUserId });
-        if (error) throw error;
-        toast('Following!', '✓');
-      } else {
-        const { error } = await sb.from('follows').delete()
-          .eq('follower_id', S.userId).eq('following_id', profileUserId);
-        if (error) throw error;
-        toast('Unfollowed', '➖');
-      }
+      await toggleFollow(profileUserId, nowFollowing);
+      toast(nowFollowing ? 'Following!' : 'Unfollowed', nowFollowing ? '✓' : '➖');
     } catch (e) {
       // Roll back on failure
       _followCache.set(profileUserId, cached);
