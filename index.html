@@ -3662,7 +3662,7 @@ body.mortalive-progress-open .sakura-topbar {
   align-items:center;
   justify-content:center;
   padding:clamp(18px,3vw,34px);
-  background:rgba(4,8,16,.82);
+  background:rgba(245,247,250,.94);
   backdrop-filter:blur(14px) saturate(120%);
   -webkit-backdrop-filter:blur(14px) saturate(120%);
 }
@@ -3678,8 +3678,8 @@ body.mortalive-progress-open .sakura-topbar {
   height:min(92vh,920px);
   display:grid;
   grid-template-columns:minmax(0,1.5fr) minmax(380px,.82fr);
-  background:#10141c;
-  border:1px solid rgba(255,255,255,.12);
+  background:#fff;
+  border:1px solid rgba(0,0,0,.10);
   border-radius:4px;
   overflow:hidden;
   box-shadow:0 34px 100px rgba(0,0,0,.58);
@@ -3694,8 +3694,8 @@ body.mortalive-progress-open .sakura-topbar {
   border-radius:50%;
   display:grid;
   place-items:center;
-  color:#fff;
-  background:rgba(0,0,0,.36);
+  color:var(--on-surface);
+  background:rgba(255,255,255,.94);
   border:1px solid rgba(255,255,255,.16);
   font-size:30px;
   line-height:1;
@@ -3715,8 +3715,8 @@ body.mortalive-progress-open .sakura-topbar {
   border-radius:50%;
   display:grid;
   place-items:center;
-  color:#fff;
-  background:rgba(0,0,0,.28);
+  color:var(--on-surface);
+  background:rgba(255,255,255,.94);
   border:1px solid rgba(255,255,255,.16);
   font-size:26px;
   line-height:1;
@@ -3726,7 +3726,7 @@ body.mortalive-progress-open .sakura-topbar {
 #mortalive-post-viewer .mortalive-post-viewer-media-host{
   min-width:0;
   min-height:0;
-  background:#070a0f;
+  background:#f3f4f6;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -3751,7 +3751,7 @@ body.mortalive-progress-open .sakura-topbar {
   min-height:0;
   object-fit:contain;
   display:block;
-  background:#070a0f;
+  background:#f3f4f6;
 }
 #mortalive-post-viewer .mortalive-post-viewer-text-content{display:none;}
 #mortalive-post-viewer.text-mode .mortalive-post-viewer-dialog{
@@ -4774,12 +4774,6 @@ body.mortalive-progress-open .sakura-topbar {
 <div class="compose-row">
 <div class="compose-avatar" id="compose-avatar">🦊</div>
 <div class="compose-writing-wrap">
-  <button type="button" class="compose-plus-btn" id="compose-plus" aria-label="Add post type" aria-expanded="false">+</button>
-  <div class="composer-type-menu" id="composer-type-menu" role="menu" aria-label="Post type options">
-    <button type="button" data-compose-kind="photo" role="menuitem"><span>📷</span><span>Photo</span></button>
-    <button type="button" data-compose-kind="poll" role="menuitem"><span>📊</span><span>Poll</span></button>
-    <button type="button" data-compose-kind="qna" role="menuitem"><span>❓</span><span>Q&A</span></button>
-  </div>
   <textarea class="compose-field" id="compose-field" maxlength="500" placeholder="What's on your mind after that chat…" rows="3"></textarea>
 </div>
 </div>
@@ -4806,10 +4800,16 @@ body.mortalive-progress-open .sakura-topbar {
 </div>
 </div>
 <div class="compose-toolbar">
-<span id="compose-mode-label" class="compose-mode-label">Text</span>
-<button class="compose-type-btn active" id="btn-type-text" data-compose-kind="text">📝 Text</button>
-<button class="compose-type-btn" id="btn-type-poll">📊 Poll</button>
-<button class="compose-tool photo-compose-btn" id="btn-feed-photo" type="button" title="Add photo">📷 Photo</button>
+<div class="compose-type-switch" role="group" aria-label="Post type">
+  <button class="compose-type-btn active" id="btn-type-text" type="button" data-compose-kind="text">Text</button>
+  <span class="compose-type-separator" aria-hidden="true">|</span>
+  <button class="compose-type-btn" id="btn-type-photo" type="button" data-compose-kind="photo">Photo</button>
+  <span class="compose-type-separator" aria-hidden="true">|</span>
+  <button class="compose-type-btn" id="btn-type-poll" type="button" data-compose-kind="poll">Poll</button>
+  <span class="compose-type-separator" aria-hidden="true">|</span>
+  <button class="compose-type-btn" id="btn-type-qna" type="button" data-compose-kind="qna">Q&A</button>
+</div>
+<button class="compose-tool photo-compose-btn" id="btn-feed-photo" type="button" title="Add photo" aria-hidden="true" tabindex="-1" style="display:none">📷 Photo</button>
 <input id="feed-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
 <span id="feed-photo-name" class="compose-photo-name" aria-live="polite"></span>
 <div id="feed-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
@@ -5315,7 +5315,7 @@ body.mortalive-progress-open .sakura-topbar {
   });
 </script>
 
-<script src="app.js?v=20260817-composer-types-v10"></script>
+<script src="app.js?v=20260817-composer-ui-v11"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -5696,8 +5696,6 @@ body.mortalive-progress-open .sakura-topbar {
   <div class="mortalive-post-viewer-backdrop"></div>
   <div class="mortalive-post-viewer-dialog" role="dialog" aria-modal="true" aria-label="Post viewer">
     <button type="button" class="mortalive-post-viewer-close" data-viewer-close aria-label="Close post viewer">×</button>
-    <button type="button" class="mortalive-post-viewer-nav mortalive-post-viewer-prev" data-viewer-nav="prev" aria-label="Previous post">‹</button>
-    <button type="button" class="mortalive-post-viewer-nav mortalive-post-viewer-next" data-viewer-nav="next" aria-label="Next post">›</button>
     <section class="mortalive-post-viewer-media-host" aria-label="Post media"></section>
     <aside class="mortalive-post-viewer-side">
       <header class="mortalive-post-viewer-header">
@@ -5892,4 +5890,21 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 }
 </style>
 
-<style id="mortalive-v10-composer-overrides">#pg-feed #btn-type-text,#pg-feed #btn-type-poll,#pg-feed #btn-feed-photo{display:none!important;} @media(max-width:720px){#pg-feed .compose-plus-btn{left:8px;top:9px;}}</style>
+<style id="mortalive-v11-composer-overrides">
+#pg-feed .compose-writing-wrap{position:relative;}
+#pg-feed .compose-writing-wrap .compose-field{padding-left:14px;}
+#pg-feed .compose-type-switch{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+#pg-feed .compose-type-switch .compose-type-btn{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 10px;border-radius:999px;background:transparent;color:var(--on-surface-3);border:1px solid transparent;font-size:12px;font-weight:700;line-height:1;transition:background .14s ease,color .14s ease,border-color .14s ease;}
+#pg-feed .compose-type-switch .compose-type-btn:hover{background:var(--surface-2);color:var(--on-surface);}
+#pg-feed .compose-type-switch .compose-type-btn.active{background:var(--primary-alpha);color:var(--primary);border-color:rgba(26,110,245,.16);}
+#pg-feed .compose-type-separator{color:var(--border-strong);font-size:12px;user-select:none;}
+#mortalive-post-viewer{background:rgba(245,247,250,.94);backdrop-filter:blur(12px) saturate(105%);-webkit-backdrop-filter:blur(12px) saturate(105%);}
+#mortalive-post-viewer .mortalive-post-viewer-dialog{background:#fff;border-color:rgba(0,0,0,.10);box-shadow:0 26px 80px rgba(15,23,42,.18);}
+#mortalive-post-viewer .mortalive-post-viewer-media-host{background:#f3f4f6;}
+#mortalive-post-viewer .mortalive-post-viewer-media-frame{background:#f3f4f6;}
+#mortalive-post-viewer .mortalive-post-viewer-media{background:#f3f4f6;}
+#mortalive-post-viewer .mortalive-post-viewer-nav{display:none!important;}
+#mortalive-post-viewer .mortalive-post-viewer-close{color:var(--on-surface);background:rgba(255,255,255,.92);border-color:rgba(0,0,0,.10);box-shadow:0 4px 14px rgba(15,23,42,.10);}
+#mortalive-post-viewer .mortalive-post-viewer-side{background:#fff;}
+@media(max-width:720px){#pg-feed .compose-type-switch{gap:3px;} #pg-feed .compose-type-switch .compose-type-btn{padding:7px 8px;font-size:11.5px;} #pg-feed .compose-type-separator{font-size:11px;}}
+</style>
