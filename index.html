@@ -4556,6 +4556,7 @@ body.mortalive-progress-open .sakura-topbar {
         </div>
         <div class="profile-actions-modern">
           <button class="profile-action-primary" id="btn-edit-profile" type="button">Edit profile</button>
+          <button class="profile-action-primary" id="btn-follow-user" type="button" style="display:none;">Follow</button>
           <button class="profile-action-secondary" id="btn-share-profile" type="button">Share</button>
         </div>
       </div>
@@ -4568,6 +4569,7 @@ body.mortalive-progress-open .sakura-topbar {
           <span class="profile-meta-item">•</span>
           <span class="profile-meta-item" id="profile-details-meta">Member</span>
         </div>
+        <div id="profile-follow-counts" style="display:none;margin-top:7px;font-size:12.5px;font-weight:600;color:var(--on-surface-3);"></div>
       </div>
 
       <!-- Instagram-style inline details (replaces About section) -->
@@ -4591,11 +4593,13 @@ body.mortalive-progress-open .sakura-topbar {
       </div>
 
       <!-- Stats grid -->
-      <div class="profile-mini-stats">
+      <div class="profile-mini-stats" style="grid-template-columns:repeat(6,1fr);">
         <div class="profile-mini-stat"><div class="profile-mini-stat-value" id="profile-stat-score">—</div><div class="profile-mini-stat-label">Score</div></div>
-        <div class="profile-mini-stat"><div class="profile-mini-stat-value" id="profile-stat-streak">—</div><div class="profile-mini-stat-label">Day streak</div></div>
+        <div class="profile-mini-stat"><div class="profile-mini-stat-value" id="profile-stat-streak">—</div><div class="profile-mini-stat-label">Streak</div></div>
         <div class="profile-mini-stat"><div class="profile-mini-stat-value" id="profile-stat-completions">—</div><div class="profile-mini-stat-label">Chats</div></div>
-        <div class="profile-mini-stat"><div class="profile-mini-stat-value" id="profile-stat-rank">#—</div><div class="profile-mini-stat-label">Weekly rank</div></div>
+        <div class="profile-mini-stat"><div class="profile-mini-stat-value" id="profile-stat-rank">#—</div><div class="profile-mini-stat-label">Rank</div></div>
+        <div class="profile-mini-stat"><div class="profile-mini-stat-value" id="profile-stat-followers">—</div><div class="profile-mini-stat-label">Followers</div></div>
+        <div class="profile-mini-stat"><div class="profile-mini-stat-value" id="profile-stat-following">—</div><div class="profile-mini-stat-label">Following</div></div>
       </div>
 
       <!-- Hidden compat elements (used by app.js internals) -->
@@ -5397,4 +5401,30 @@ body.profile-viewing-public #profile-post-composer,
 body.profile-viewing-public #profile-open-grid,
 body.profile-viewing-public #btn-profile-copy,
 body.profile-viewing-public #btn-profile-progress{display:none!important}
+/* Follow button is always visible on public profiles */
+body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
+</style>
+<style id="mortalive-follow-btn-css">
+/* Following state: pill turns outlined instead of filled */
+#btn-follow-user.profile-action-following{
+  background:#fff;
+  border:1.5px solid var(--border-strong);
+  color:var(--on-surface);
+  box-shadow:none;
+}
+#btn-follow-user.profile-action-following:hover{
+  background:rgba(220,38,38,.06);
+  border-color:var(--danger);
+  color:var(--danger);
+}
+/* Compact mini-stats on mobile (6 cols) */
+@media(max-width:560px){
+  .profile-mini-stats[style*="repeat(6"]{
+    grid-template-columns:repeat(3,1fr)!important;
+  }
+  .profile-mini-stat:nth-child(3){border-right:0}
+  .profile-mini-stat:nth-child(4){border-top:1px solid var(--border)}
+  .profile-mini-stat:nth-child(5){border-top:1px solid var(--border)}
+  .profile-mini-stat:nth-child(6){border-top:1px solid var(--border);border-right:0}
+}
 </style>
