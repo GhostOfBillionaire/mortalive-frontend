@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-17-profile-scroll-avatar-fix'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-17-profile-overlay-auth-v3'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -3977,14 +3977,28 @@ function feedProfileFor(userId) {
   return null;
 }
 
+async function requireAuthenticatedSession() {
+  if (S.isGuest || !S.userId || !sb?.auth?.getSession) return null;
+  try {
+    const { data, error } = await sb.auth.getSession();
+    if (error || !data?.session?.user?.id) return null;
+    if (data.session.user.id !== S.userId) return null;
+    if (data.session.access_token) S.authToken = data.session.access_token;
+    return data.session;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function fetchFeedProfileDirectory(userIds) {
+  if (!(await requireAuthenticatedSession())) return new Map();
   const ids = Array.from(new Set((userIds || []).filter(Boolean)));
   if (!ids.length || !sb) return new Map();
   const map = new Map();
   try {
     const { data, error } = await sb
       .from('public_profile_directory')
-      .select('id,username,display_name,crockroach_score,account_type,avatar_url')
+      .select('id,username,display_name,crockroach_score,account_type')
       .in('id', ids);
     if (error) throw error;
     (data || []).forEach(row => map.set(row.id, row));
@@ -4008,7 +4022,9 @@ async function fetchFeedProfileDirectory(userIds) {
         .in('id', accountFallbackIds);
       (accountRows || []).forEach(row => {
         const current = map.get(row.id);
-        map.set(row.id, current ? { ...current, ...row } : row);
+        map.set(row.id, current
+          ? { ...current, avatar_url: row.avatar_url || current.avatar_url || '', crockroach_score: row.crockroach_score ?? current.crockroach_score }
+          : row);
       });
     } catch (e) {
       console.warn('[Feed] avatar fallback lookup failed:', e?.message || e);
@@ -4026,6 +4042,10 @@ async function fetchFeedProfileDirectory(userIds) {
 
 async function fetchFeedPage(reset = false) {
   if (S.isGuest || !S.userId || !sb || _feedLoading) return;
+  if (!(await requireAuthenticatedSession())) {
+    toast('Your session has expired. Please sign in again.', '🔒');
+    return;
+  }
   if (reset) {
     _feedOffset = 0;
     _feedHasMore = true;
@@ -4320,17 +4340,155 @@ function profileHref(userId) {
   return userId ? `#profile-${encodeURIComponent(userId)}` : '#profile';
 }
 
-async function openUserProfile(userId) {
+function ensureFeedProfileOverlay() {
+  let overlay = $('feed-profile-overlay');
+  if (overlay) return overlay;
+
+  const style = document.createElement('style');
+  style.id = 'feed-profile-overlay-style';
+  style.textContent = `
+    #feed-profile-overlay{position:fixed;inset:0;z-index:1800;display:none;align-items:flex-end;justify-content:center;background:rgba(8,14,28,.38);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:16px;}
+    #feed-profile-overlay.open{display:flex;}
+    #feed-profile-overlay .feed-profile-sheet{width:min(720px,100%);max-height:min(88dvh,820px);overflow:auto;background:rgba(255,255,255,.97);border:1px solid var(--border);border-radius:28px;box-shadow:0 28px 90px rgba(13,17,23,.28);padding:18px;}
+    #feed-profile-overlay .feed-profile-close{width:38px;height:38px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border);font-size:18px;font-weight:800;display:grid;place-items:center;}
+    #feed-profile-overlay .feed-profile-top{display:flex;align-items:flex-start;gap:14px;}
+    #feed-profile-overlay .feed-profile-avatar{width:72px;height:72px;border-radius:22px;overflow:hidden;display:grid;place-items:center;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;font-size:28px;font-weight:900;flex:none;}
+    #feed-profile-overlay .feed-profile-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
+    #feed-profile-overlay .feed-profile-name{font-size:22px;font-weight:900;letter-spacing:-.04em;}
+    #feed-profile-overlay .feed-profile-handle{margin-top:3px;color:var(--on-surface-3);font-size:12.5px;font-weight:700;}
+    #feed-profile-overlay .feed-profile-status{margin-top:7px;font-size:12px;color:var(--on-surface-3);}
+    #feed-profile-overlay .feed-profile-bio{margin-top:14px;padding:14px;border-radius:18px;background:var(--surface-2);color:var(--on-surface-2);font-size:13.5px;line-height:1.65;}
+    #feed-profile-overlay .feed-profile-section{margin-top:16px;}
+    #feed-profile-overlay .feed-profile-section-title{font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:var(--on-surface-3);margin-bottom:9px;}
+    #feed-profile-overlay .feed-profile-posts{display:grid;gap:10px;}
+    #feed-profile-overlay .feed-profile-post{padding:13px 14px;border:1px solid var(--border);border-radius:18px;background:#fff;}
+    #feed-profile-overlay .feed-profile-post-time{font-size:10px;color:var(--on-surface-3);margin-bottom:7px;}
+    #feed-profile-overlay .feed-profile-post-text{font-size:13.5px;line-height:1.6;word-break:break-word;}
+    #feed-profile-overlay .feed-profile-post img{width:100%;max-height:360px;object-fit:cover;border-radius:15px;margin-top:10px;display:block;}
+    @media(max-width:720px){#feed-profile-overlay{padding:8px;}#feed-profile-overlay .feed-profile-sheet{max-height:92dvh;border-radius:24px;padding:14px;}}
+  `;
+  document.head.appendChild(style);
+
+  overlay = document.createElement('div');
+  overlay.id = 'feed-profile-overlay';
+  overlay.innerHTML = `
+    <div class="feed-profile-sheet" role="dialog" aria-modal="true" aria-labelledby="feed-profile-title">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--on-surface-3);">Profile</div>
+        <button class="feed-profile-close" type="button" aria-label="Close profile">×</button>
+      </div>
+      <div id="feed-profile-overlay-content"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const close = () => closeFeedProfileOverlay();
+  overlay.querySelector('.feed-profile-close')?.addEventListener('click', close);
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
+  if (!document.body.dataset.feedProfileEscapeBound) {
+    document.body.dataset.feedProfileEscapeBound = '1';
+    document.addEventListener('keydown', (event) => {
+      const current = $('feed-profile-overlay');
+      if (event.key === 'Escape' && current?.classList.contains('open')) closeFeedProfileOverlay();
+    });
+  }
+  return overlay;
+}
+
+function closeFeedProfileOverlay() {
+  const overlay = $('feed-profile-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('open');
+  overlay.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('feed-profile-open');
+}
+
+async function openFeedProfileOverlay(userId) {
   if (!userId) return;
+  const session = await requireAuthenticatedSession();
+  if (!session) {
+    toast('Sign in to view member profiles.', '🔒');
+    showPage('pg-auth');
+    return;
+  }
   if (S.userId === userId) {
+    closeFeedProfileOverlay();
     S.profileViewUserId = null;
     S.profileViewData = null;
     showPage('pg-profile');
     return;
   }
-  S.profileViewUserId = userId;
-  S.profileViewData = null;
-  showPage('pg-profile', { profileUserId: userId });
+
+  const overlay = ensureFeedProfileOverlay();
+  const content = $('feed-profile-overlay-content');
+  if (!content) return;
+  overlay.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('feed-profile-open');
+  content.innerHTML = '<div style="padding:24px;text-align:center;color:var(--on-surface-3);">Loading profile…</div>';
+
+  try {
+    const profile = await fetchPublicProfileData(userId);
+    const posts = await fetchProfilePosts(userId);
+    const name = profile.display_name || profile.username || 'Mortalive member';
+    const username = profile.username || 'member';
+    const score = Number(profile.crockroach_score || 0);
+    const badge = score >= 700 ? '⭐ Gold' : score >= 420 ? '🔘 Silver' : '';
+    const status = [badge, (profile.account_type || 'Member')].filter(Boolean).join(' · ');
+    const avatarUrl = feedAvatarUrl(profile.avatar_url);
+    const initial = feedAvatarLetter(name);
+    const textPosts = posts.filter(post => !post.media_url);
+    const photoPosts = posts.filter(post => !!post.media_url);
+
+    content.innerHTML = `
+      <div class="feed-profile-top">
+        <div class="feed-profile-avatar">${avatarUrl ? `<img src="${avatarUrl}" alt="${sanitizeHTML(name)}" loading="lazy">` : sanitizeHTML(initial)}</div>
+        <div style="flex:1;min-width:0;">
+          <div id="feed-profile-title" class="feed-profile-name">${sanitizeHTML(name)}</div>
+          <div class="feed-profile-handle">@${sanitizeHTML(username)}</div>
+          <div class="feed-profile-status">${sanitizeHTML(status)}</div>
+        </div>
+      </div>
+      <div class="feed-profile-bio">${sanitizeHTML(profile.bio || 'No bio yet.')}</div>
+      <div class="feed-profile-section">
+        <div class="feed-profile-section-title">Thoughts & polls</div>
+        <div class="feed-profile-posts">${textPosts.length ? textPosts.map(post => `
+          <article class="feed-profile-post">
+            <div class="feed-profile-post-time">${sanitizeHTML(formatPostTime(post.created_at))}</div>
+            <div class="feed-profile-post-text">${sanitizeHTML(String(post.content || '').trim())}</div>
+          </article>`).join('') : '<div style="padding:12px;color:var(--on-surface-3);font-size:12.5px;">No text posts yet.</div>'}</div>
+      </div>
+      <div class="feed-profile-section">
+        <div class="feed-profile-section-title">Photos</div>
+        <div class="feed-profile-posts">${photoPosts.length ? photoPosts.map(post => `
+          <article class="feed-profile-post">
+            <div class="feed-profile-post-time">${sanitizeHTML(formatPostTime(post.created_at))}</div>
+            <div class="feed-profile-post-text">${sanitizeHTML(String(post.content || '').trim())}</div>
+            <img src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(name)}" loading="lazy">
+          </article>`).join('') : '<div style="padding:12px;color:var(--on-surface-3);font-size:12.5px;">No photo posts yet.</div>'}</div>
+      </div>`;
+  } catch (error) {
+    content.innerHTML = `<div style="padding:24px;text-align:center;color:var(--danger);">${sanitizeHTML(error?.message || 'Could not load this profile.')}</div>`;
+  }
+}
+
+async function openUserProfile(userId) {
+  if (!userId) return;
+  const session = await requireAuthenticatedSession();
+  if (!session) {
+    toast('Sign in to view member profiles.', '🔒');
+    showPage('pg-auth');
+    return;
+  }
+  if (S.userId === userId) {
+    closeFeedProfileOverlay();
+    S.profileViewUserId = null;
+    S.profileViewData = null;
+    showPage('pg-profile');
+    return;
+  }
+  // Keep third-party profiles inside the authenticated feed so their data
+  // cannot overwrite the user's own profile DOM/state.
+  await openFeedProfileOverlay(userId);
 }
 
 function formatPhotoSize(bytes) {
@@ -4772,6 +4930,7 @@ let _postsHydrationPromise = null;
 
 async function fetchProfilePosts(userId = S.userId) {
   if (!userId || S.isGuest || !sb) return [];
+  if (!(await requireAuthenticatedSession())) return [];
   try {
     const { data, error } = await sb
       .from('posts')
@@ -5040,7 +5199,8 @@ function initProfilePostComposer() {
 }
 
 async function fetchPublicProfileData(userId) {
-  const seed = (await fetchFeedProfileDirectory([userId]))[userId] || { id: userId, username: 'user', display_name: 'User' };
+  if (!(await requireAuthenticatedSession())) throw new Error('Authentication required to view profiles.');
+  const seed = (await fetchFeedProfileDirectory([userId])).get(userId) || { id: userId, username: 'user', display_name: 'User' };
   try {
     const { data, error } = await sb.from('accounts').select('id,username,display_name,bio,avatar_url,crockroach_score,account_type').eq('id', userId).maybeSingle();
     if (!error && data) return { ...seed, ...data, id: userId };
@@ -5091,9 +5251,9 @@ async function initPublicProfilePage(userId) {
   document.body.classList.add('profile-viewing-public');
   const name = profile.display_name || profile.username || 'User';
   if ($('profile-username-display')) $('profile-username-display').textContent = name;
-  if ($('profile-handle-modern')) $('profile-handle-modern').textContent = `@${(profile.username || 'user').toLowerCase().replace(/\s+/g, '_')}`;
+  if ($('profile-handle-modern')) $('profile-handle-modern').textContent = '';
   const publicBadgeHtml = Number(profile.crockroach_score || 0) >= 700 ? '<span class="profile-badge-chip gold">⭐ Gold</span>' : Number(profile.crockroach_score || 0) >= 420 ? '<span class="profile-badge-chip silver">🔘 Silver</span>' : '';
-  if ($('profile-subline-display')) $('profile-subline-display').innerHTML = `${publicBadgeHtml}${publicBadgeHtml ? ' · ' : ''}${sanitizeHTML((profile.account_type || 'Member').charAt(0).toUpperCase() + (profile.account_type || 'Member').slice(1))}`;
+  if ($('profile-subline-display')) $('profile-subline-display').innerHTML = `@${sanitizeHTML((profile.username || 'user').toLowerCase().replace(/\s+/g, '_'))} ${publicBadgeHtml}${publicBadgeHtml ? ' · ' : ' · '}${sanitizeHTML((profile.account_type || 'Member').charAt(0).toUpperCase() + (profile.account_type || 'Member').slice(1))}`;
   if ($('profile-bio-display')) $('profile-bio-display').textContent = profile.bio || 'Connecting with the world.';
   if ($('profile-info-goal-val')) $('profile-info-goal-val').textContent = 'Public profile';
   applyProfileAvatar(profile.avatar_url || '', name);
@@ -5148,13 +5308,13 @@ function initProfilePage() {
                     score >= 420 ? `<span class="profile-badge-chip silver">🔘 Silver</span>` : '';
   
   const handleEl = $('profile-handle-modern');
-  const usernameValue = (acc.username || S.username || 'user').toLowerCase().replace(/\s+/g, '_');
-  if (handleEl) handleEl.textContent = `@${usernameValue}`;
+  if (handleEl) handleEl.textContent = '';
 
   const sublineEl = $('profile-subline-display');
   if (sublineEl) {
+    const usernameValue = (acc.username || S.username || 'user').toLowerCase().replace(/\s+/g, '_');
     const actType = acc.account_type ? acc.account_type.charAt(0).toUpperCase() + acc.account_type.slice(1) : 'Member';
-    sublineEl.innerHTML = `${badgeHtml}${badgeHtml ? ' · ' : ''}${sanitizeHTML(actType)}`;
+    sublineEl.innerHTML = `@${sanitizeHTML(usernameValue)} ${badgeHtml}${badgeHtml ? ' · ' : ' · '}${sanitizeHTML(actType)}`;
   }
   
   if ($('profile-hero-score')) $('profile-hero-score').textContent = score.toLocaleString();
