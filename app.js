@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-17-composer-qna-cursor-v14'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-17-qna-answer-composer-v16'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -3909,6 +3909,9 @@ const MAX_HASHTAGS_PER_POST = 24;
 const FEED_COMPOSER_MAX_OPTIONS = 6;
 let _feedComposerKind = 'text';
 let _feedQnaChoicesEnabled = false; // text | photo | poll | qna
+let _feedQnaCorrectOptionId = null;
+let _feedQnaResponseCache = new Map();
+let _feedQnaCorrectCache = new Map();
 let _feedComposerMenuOpen = false;
 
 function getFeedComposerKind() {
@@ -3922,8 +3925,7 @@ function getFeedStructuredKindLabel(kind) {
 function getFeedComposerOptionValues() {
   if (getFeedComposerKind() === 'qna' && !_feedQnaChoicesEnabled) return [];
   return Array.from(document.querySelectorAll('#poll-options-list .poll-option-input'))
-    .map(input => String(input.value || '').trim())
-    .filter(Boolean);
+    .map(input => String(input.value || '').trim());
 }
 
 function ensureFeedComposerOptionRows(minimum = 2, maximum = FEED_COMPOSER_MAX_OPTIONS) {
@@ -3936,8 +3938,16 @@ function ensureFeedComposerOptionRows(minimum = 2, maximum = FEED_COMPOSER_MAX_O
     const row = document.createElement('div');
     row.className = 'poll-option-row';
     row.innerHTML = `
+      <label class="qna-correct-wrap" title="Mark as correct answer">
+        <input type="radio" class="qna-correct-radio" name="qna-correct-option" value="option-${i + 1}" aria-label="Mark option ${i + 1} as correct">
+        <span>Correct</span>
+      </label>
       <input class="poll-option-input" maxlength="80" placeholder="Option ${i + 1}"/>
       <button type="button" class="poll-remove-btn" title="Remove option" aria-label="Remove option">×</button>`;
+    row.querySelector('.qna-correct-radio')?.addEventListener('change', (event) => {
+      _feedQnaCorrectOptionId = event.target.value;
+      syncFeedComposer();
+    });
     list.appendChild(row);
   }
 }
@@ -3980,6 +3990,10 @@ function syncFeedComposerTypeUI() {
   }
   if (qnaRandom) qnaRandom.style.display = kind === 'qna' ? 'inline-flex' : 'none';
   if (optionsList) optionsList.style.display = (kind === 'poll' || _feedQnaChoicesEnabled) ? '' : 'none';
+  document.querySelectorAll('#poll-options-list .qna-correct-wrap').forEach(el => {
+    el.style.display = kind === 'qna' && _feedQnaChoicesEnabled ? 'inline-flex' : 'none';
+  });
+  if (kind !== 'qna' || !_feedQnaChoicesEnabled) _feedQnaCorrectOptionId = null;
   if (addBtn) {
     const count = optionsList?.querySelectorAll('.poll-option-row').length || 0;
     addBtn.style.display = (kind === 'poll' || _feedQnaChoicesEnabled) ? '' : 'none';
@@ -3991,8 +4005,8 @@ function syncFeedComposerTypeUI() {
 
 function setFeedComposerKind(kind = 'text') {
   const next = ['text','photo','poll','qna'].includes(kind) ? kind : 'text';
-  if (next === 'qna') _feedQnaChoicesEnabled = false;
-  if (next === 'poll') _feedQnaChoicesEnabled = false;
+  if (next === 'qna') { _feedQnaChoicesEnabled = false; _feedQnaCorrectOptionId = null; }
+  if (next === 'poll') { _feedQnaChoicesEnabled = false; _feedQnaCorrectOptionId = null; }
   if ((next === 'poll' || next === 'qna') && !_feedComposerMenuOpen) _feedComposerMenuOpen = false;
   _feedComposerKind = next;
   if (next === 'poll' || next === 'qna') ensureFeedComposerOptionRows(2, FEED_COMPOSER_MAX_OPTIONS);
@@ -4012,19 +4026,32 @@ function toggleFeedComposerMenu(force) {
 }
 
 function validateFeedStructuredPost(kind, question, options) {
-  if (!['poll','qna'].includes(kind)) return { ok: true, options: [] };
+  if (!['poll','qna'].includes(kind)) return { ok: true, options: [], correctOptionId: null };
   if (!question.trim()) return { ok: false, message: `${kind === 'qna' ? 'Q&A' : 'Poll'} needs a question.` };
-  const values = options.map(String).map(v => v.trim()).filter(Boolean);
-  if (kind === 'qna' && !_feedQnaChoicesEnabled) return { ok: true, options: [] };
-  if (values.length < 2) return { ok: false, message: 'Add at least 2 choices.' };
-  if (values.length > FEED_COMPOSER_MAX_OPTIONS) return { ok: false, message: 'Use a maximum of 6 choices.' };
+  const raw = options.map((value, index) => ({ label: String(value || '').trim(), sourceIndex: index })).filter(item => item.label);
+  if (kind === 'qna' && !_feedQnaChoicesEnabled) return { ok: true, options: [], correctOptionId: null };
+  if (raw.length < 2) return { ok: false, message: 'Add at least 2 choices.' };
+  if (raw.length > FEED_COMPOSER_MAX_OPTIONS) return { ok: false, message: 'Use a maximum of 6 choices.' };
   const seen = new Set();
-  for (const value of values) {
-    const key = value.toLowerCase();
+  for (const item of raw) {
+    const key = item.label.toLowerCase();
     if (seen.has(key)) return { ok: false, message: 'Each choice must be unique.' };
     seen.add(key);
   }
-  return { ok: true, options: values };
+  if (kind === 'qna' && !_feedQnaCorrectOptionId) {
+    return { ok: false, message: 'Select the correct answer before posting this Q&A.' };
+  }
+  const selected = _feedQnaCorrectOptionId;
+  const correctIndex = selected ? raw.findIndex(item => selected === `option-${item.sourceIndex + 1}`) : -1;
+  if (kind === 'qna' && correctIndex < 0) {
+    return { ok: false, message: 'Select the correct answer before posting this Q&A.' };
+  }
+  const normalizedOptions = raw.map(item => ({ id: `option-${item.sourceIndex + 1}`, label: item.label }));
+  return {
+    ok: true,
+    options: normalizedOptions,
+    correctOptionId: kind === 'qna' ? selected : null
+  };
 }
 
 
@@ -4267,6 +4294,7 @@ async function fetchFeedPage(reset = false) {
     _feedOffset += rows.length;
     _feedHasMore = rows.length === FEED_PAGE_SIZE;
     await hydratePostEngagement(rows.map(row => row.id));
+    await hydrateQnaResponses(rows.filter(row => row?.post_meta?.kind === 'qna' && row?.post_meta?.mode === 'mcq').map(row => row.id));
     renderFeedPosts();
     renderFeedSidebars();
     hydrateTrendingHashtags().catch(() => {});
@@ -4819,6 +4847,80 @@ function bindHorizontalProfileStrip(strip) {
   }, { passive: false });
 }
 
+async function hydrateQnaResponses(postIds = []) {
+  if (S.isGuest || !S.userId || !sb) return;
+  const ids = Array.from(new Set((postIds || []).filter(Boolean)));
+  if (!ids.length) return;
+  try {
+    const { data, error } = await sb.rpc('get_my_qna_results', { p_post_ids: ids });
+    if (error) throw error;
+    ids.forEach(id => { _feedQnaResponseCache.delete(id); _feedQnaCorrectCache.delete(id); });
+    (data || []).forEach(row => {
+      if (row.post_id) {
+        _feedQnaResponseCache.set(row.post_id, row.option_id);
+        if (row.correct_option_id) _feedQnaCorrectCache.set(row.post_id, row.correct_option_id);
+      }
+    });
+    const ownIds = ids.filter(id => {
+      const post = Array.isArray(_feedPosts) ? _feedPosts.find(row => row.id === id) : null;
+      return post?.user_id === S.userId;
+    });
+    if (ownIds.length) {
+      const { data: ownKeys } = await sb.from('post_qna_keys').select('post_id,correct_option_id').in('post_id', ownIds);
+      (ownKeys || []).forEach(row => _feedQnaCorrectCache.set(row.post_id, row.correct_option_id));
+    }
+  } catch (e) {
+    // Fall back to the user's own response row if the helper RPC has not been deployed yet.
+    try {
+      const { data, error } = await sb.from('post_qna_responses').select('post_id,option_id').eq('user_id', S.userId).in('post_id', ids);
+      if (error) throw error;
+      ids.forEach(id => _feedQnaResponseCache.delete(id));
+      (data || []).forEach(row => _feedQnaResponseCache.set(row.post_id, row.option_id));
+    } catch (_) {
+      console.warn('[Q&A] response hydration warning:', e?.message || e);
+    }
+  }
+}
+
+async function submitQnaResponse(postId, optionId) {
+  if (S.isGuest || !S.userId || !sb) { toast('Sign in to answer', '🔒'); return; }
+  if (!postId || !optionId) return;
+  if (_feedQnaResponseCache.has(postId)) { toast('You already answered this Q&A.', 'ℹ️'); return; }
+  try {
+    const { data, error } = await sb.rpc('submit_qna_answer', {
+      p_post_id: postId,
+      p_option_id: optionId
+    });
+    if (error) throw error;
+    const result = Array.isArray(data) ? data[0] : data;
+    _feedQnaResponseCache.set(postId, result?.option_id || optionId);
+    if (result?.correct_option_id) _feedQnaCorrectCache.set(postId, result.correct_option_id);
+    renderFeedPosts();
+    toast(result?.is_correct ? 'Correct answer ✅' : 'Answer recorded — not quite.', result?.is_correct ? '✅' : '📝');
+  } catch (e) {
+    // Compatibility fallback: keep one-answer-per-user enforced by the table.
+    try {
+      const { error: insertError } = await sb.from('post_qna_responses').insert({
+        post_id: postId,
+        user_id: S.userId,
+        option_id: optionId
+      });
+      if (insertError) throw insertError;
+      _feedQnaResponseCache.set(postId, optionId);
+      renderFeedPosts();
+      toast('Answer submitted', '✅');
+    } catch (fallbackError) {
+      const message = fallbackError?.message || e?.message || 'Could not submit your answer.';
+      if (String(message).toLowerCase().includes('duplicate')) {
+        toast('You already answered this Q&A.', 'ℹ️');
+        return;
+      }
+      toast(message, '⚠️');
+    }
+  }
+}
+
+
 function renderStructuredFeedPost(post) {
   const meta = post?.post_meta && typeof post.post_meta === 'object' ? post.post_meta : null;
   const kind = meta?.kind === 'qna' ? 'qna' : meta?.kind === 'poll' ? 'poll' : null;
@@ -4826,10 +4928,20 @@ function renderStructuredFeedPost(post) {
   const options = Array.isArray(meta.options) ? meta.options : [];
   const icon = kind === 'qna' ? '❓' : '📊';
   const label = kind === 'qna' ? 'Q&A' : 'Poll';
-  return `<div class="feed-structured-post" data-structured-kind="${kind}">
-    <div class="feed-structured-title"><span>${icon}</span><span>${label}</span></div>
+  const mode = kind === 'qna' ? (meta.mode === 'mcq' ? 'mcq' : 'open') : 'mcq';
+  const responseId = kind === 'qna' ? _feedQnaResponseCache.get(post.id) : null;
+  const correctId = kind === 'qna' ? (_feedQnaCorrectCache.get(post.id) || meta.correct_option_id || null) : null;
+  const hasResult = kind === 'qna' && mode === 'mcq' && (responseId || post.user_id === S.userId);
+  return `<div class="feed-structured-post" data-structured-kind="${kind}" data-structured-mode="${mode}">
+    <div class="feed-structured-title"><span>${icon}</span><span>${label}${kind === 'qna' && mode === 'open' ? ' · Open replies' : kind === 'qna' ? ' · Multiple choice' : ''}</span></div>
     <div class="feed-structured-question">${renderHashtagRichText(post.content || '')}</div>
-    <div class="feed-structured-options">${options.map((option, index) => `<button type="button" class="feed-structured-option" data-structured-option="${index}" data-post-id="${sanitizeHTML(post.id)}"><span>${sanitizeHTML(option?.label || '')}</span><span class="feed-structured-option-arrow">›</span></button>`).join('')}</div>
+    ${mode === 'open' ? `<div class="feed-structured-open-note">Reply in the comments to share your answer.</div>` : `<div class="feed-structured-options">${options.map((option) => {
+      const optionId = String(option?.id || '');
+      const stateClass = hasResult ? (optionId === correctId ? ' qna-correct' : ' qna-incorrect') : (responseId === optionId ? ' qna-selected' : '');
+      const disabled = responseId || post.user_id === S.userId ? ' disabled' : '';
+      const resultMark = hasResult ? (optionId === correctId ? '✓' : '✕') : '';
+      return `<button type="button" class="feed-structured-option${stateClass}" data-structured-option="${sanitizeHTML(optionId)}" data-post-id="${sanitizeHTML(post.id)}"${disabled}><span>${sanitizeHTML(option?.label || '')}</span><span class="feed-structured-option-result">${resultMark || '›'}</span></button>`;
+    }).join('')}</div>`}
   </div>`;
 }
 
@@ -5305,15 +5417,27 @@ async function submitFeedTextPost() {
       payload.post_meta = {
         kind,
         mode: kind === 'qna' ? (_feedQnaChoicesEnabled ? 'mcq' : 'open') : 'mcq',
-        options: structured.options.map((label, index) => ({ id: `option-${index + 1}`, label }))
+        options: structured.options
       };
     }
 
-    const { error } = await sb.from('posts').insert(payload);
+    const { data: createdPost, error } = await sb.from('posts').insert(payload).select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta').single();
     if (error) throw error;
+    if (kind === 'qna' && structured.correctOptionId) {
+      const { error: answerKeyError } = await sb.from('post_qna_keys').insert({
+        post_id: createdPost.id,
+        owner_id: S.userId,
+        correct_option_id: structured.correctOptionId
+      });
+      if (answerKeyError) {
+        await sb.from('posts').delete().eq('id', createdPost.id).eq('user_id', S.userId);
+        throw answerKeyError;
+      }
+    }
     field.value = '';
     _feedComposerKind = 'text';
     _feedQnaChoicesEnabled = false;
+    _feedQnaCorrectOptionId = null;
     _feedComposerMenuOpen = false;
     resetFeedComposerOptions();
     clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
@@ -5342,8 +5466,16 @@ function resetFeedComposerOptions() {
   const list = $('poll-options-list');
   if (!list) return;
   list.innerHTML = `
-    <div class="poll-option-row"><input class="poll-option-input" maxlength="80" placeholder="Option 1"><button type="button" class="poll-remove-btn" title="Remove option" aria-label="Remove option">×</button></div>
-    <div class="poll-option-row"><input class="poll-option-input" maxlength="80" placeholder="Option 2"><button type="button" class="poll-remove-btn" title="Remove option" aria-label="Remove option">×</button></div>`;
+    <div class="poll-option-row">
+      <label class="qna-correct-wrap" title="Mark as correct answer"><input type="radio" class="qna-correct-radio" name="qna-correct-option" value="option-1" aria-label="Mark option 1 as correct"><span>Correct</span></label>
+      <input class="poll-option-input" maxlength="80" placeholder="Option 1"><button type="button" class="poll-remove-btn" title="Remove option" aria-label="Remove option">×</button>
+    </div>
+    <div class="poll-option-row">
+      <label class="qna-correct-wrap" title="Mark as correct answer"><input type="radio" class="qna-correct-radio" name="qna-correct-option" value="option-2" aria-label="Mark option 2 as correct"><span>Correct</span></label>
+      <input class="poll-option-input" maxlength="80" placeholder="Option 2"><button type="button" class="poll-remove-btn" title="Remove option" aria-label="Remove option">×</button>
+    </div>`;
+  list.querySelectorAll('.qna-correct-radio').forEach(radio => radio.addEventListener('change', event => { _feedQnaCorrectOptionId = event.target.value; syncFeedComposer(); }));
+  _feedQnaCorrectOptionId = null;
   ensureFeedComposerOptionRows(2, FEED_COMPOSER_MAX_OPTIONS);
 }
 
@@ -5381,7 +5513,8 @@ function getRandomQnaQuestion() {
 function toggleFeedQnaChoices() {
   if (getFeedComposerKind() !== 'qna') return;
   _feedQnaChoicesEnabled = !_feedQnaChoicesEnabled;
-  if (_feedQnaChoicesEnabled) ensureFeedComposerOptionRows(2, FEED_COMPOSER_MAX_OPTIONS);
+  if (_feedQnaChoicesEnabled) { _feedQnaCorrectOptionId = null; ensureFeedComposerOptionRows(2, FEED_COMPOSER_MAX_OPTIONS); }
+  else { _feedQnaCorrectOptionId = null; }
   syncFeedComposerTypeUI();
   syncFeedComposer();
 }
@@ -5513,6 +5646,14 @@ function initFeedPage() {
       return;
     }
 
+    const qnaOption = event.target.closest('.feed-structured-option[data-post-id][data-structured-option]');
+    if (qnaOption && !qnaOption.disabled) {
+      event.preventDefault();
+      event.stopPropagation();
+      submitQnaResponse(qnaOption.dataset.postId, qnaOption.dataset.structuredOption);
+      return;
+    }
+
     const viewerIgnored = event.target.closest('[data-feed-action], [data-open-profile], a, input, textarea, select, option, label, .comments-section');
     const postCard = event.target.closest('.post-card, .profile-post-card');
     if (postCard && !viewerIgnored) {
@@ -5580,7 +5721,13 @@ function initFeedPage() {
       toast('Keep at least 2 options.', '⚠️');
       return;
     }
-    remove.closest('.poll-option-row')?.remove();
+    const removedRow = remove.closest('.poll-option-row');
+    const removedRadio = removedRow?.querySelector('.qna-correct-radio');
+    if (removedRadio?.value === _feedQnaCorrectOptionId) _feedQnaCorrectOptionId = null;
+    removedRow?.remove();
+    document.querySelectorAll('#poll-options-list .qna-correct-radio').forEach(radio => {
+      radio.addEventListener('change', event => { _feedQnaCorrectOptionId = event.target.value; syncFeedComposer(); });
+    });
     syncFeedComposerTypeUI();
     syncFeedComposer();
   });
