@@ -2491,7 +2491,7 @@ body.reveal-ready .scroll-reveal.in-view{
   }
 }
 
-/* ── Body-class fullscreen overrides (v13) ──────────────────────────────────
+/* ── Body-class fullscreen overrides (v14) ──────────────────────────────────
    These work on every mobile browser regardless of :fullscreen CSS support.
    JS adds/removes these classes in handleFullscreenChange() and applyFsGrid(). */
 
@@ -2755,10 +2755,10 @@ body.mortalive-progress-open .sakura-topbar {
 .profile-post-strip{display:flex !important;grid-auto-flow:unset !important;grid-auto-columns:unset !important;overflow-x:auto !important;overflow-y:hidden !important;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:none;-webkit-overflow-scrolling:touch;scrollbar-width:thin;cursor:grab}
 .profile-post-strip:active{cursor:grabbing}
 .profile-post-strip .profile-post-card{flex:0 0 min(64%,520px);width:min(64%,520px);min-width:300px}
-.profile-post-strip .profile-post-media{display:block;width:100%;max-height:320px;object-fit:cover;border-radius:14px;margin-top:10px;cursor:zoom-in}
+.profile-post-strip .profile-post-media{display:block;width:100%;max-height:320px;object-fit:cover;border-radius:14px;margin-top:10px;cursor:pointer}
 .profile-author-link,.post-author-link{color:inherit;text-decoration:none;cursor:pointer}
 .profile-author-link:hover,.post-author-link:hover{text-decoration:underline;text-underline-offset:2px}
-.feed-post-media{display:block;width:100%;max-height:520px;object-fit:cover;border-radius:14px;margin-top:12px;cursor:zoom-in}
+.feed-post-media{display:block;width:100%;max-height:520px;object-fit:cover;border-radius:14px;margin-top:12px;cursor:pointer}
 @media(max-width:840px){.profile-post-strip .profile-post-card{flex-basis:86%;width:86%;min-width:280px}}
 @media(max-width:560px){.profile-post-strip .profile-post-card{flex-basis:92%;width:92%;min-width:260px}.profile-photo-name,.compose-photo-name{max-width:100px}}
 /* old mobile rules now merged into redesign CSS block above */
@@ -2907,7 +2907,7 @@ body.mortalive-progress-open .sakura-topbar {
 #pg-feed .compose-writing-wrap{position:relative;flex:1;min-width:0;}
 #pg-feed .compose-plus-btn{position:absolute;left:10px;top:10px;z-index:4;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#fff;border:1.5px solid var(--border-strong);color:var(--on-surface);font-size:24px;line-height:1;font-weight:700;box-shadow:var(--elev-1);transition:transform .14s ease,background .14s ease,border-color .14s ease,color .14s ease;}
 #pg-feed .compose-plus-btn:hover{transform:translateY(-1px);border-color:var(--primary);color:var(--primary);background:var(--primary-alpha);}
-#pg-feed .compose-writing-wrap .compose-field{padding-left:58px;}
+#pg-feed .compose-writing-wrap .compose-field{padding-left:15px;}
 #pg-feed .composer-type-menu{position:absolute;left:8px;bottom:calc(100% + 8px);z-index:20;display:none;min-width:170px;padding:7px;border:1px solid var(--border);border-radius:16px;background:rgba(255,255,255,.98);box-shadow:var(--elev-4);backdrop-filter:blur(18px);}
 #pg-feed .composer-type-menu.open{display:grid;gap:3px;animation:toastIn .16s var(--ease-out);}
 #pg-feed .composer-type-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:10px 11px;border-radius:11px;background:transparent;color:var(--on-surface);font-size:13px;font-weight:700;text-align:left;}
@@ -4780,6 +4780,14 @@ body.mortalive-progress-open .sakura-topbar {
 <!-- Poll builder (hidden until poll mode) -->
 <div class="poll-builder" id="poll-builder">
 <div id="poll-builder-title" style="font-size:13px;font-weight:700;color:var(--on-surface-2);margin-bottom:2px;">Poll options</div>
+<div id="qna-mode-row" style="display:none;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid var(--border);border-radius:12px;background:#fff;">
+  <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+    <strong style="font-size:11.5px;color:var(--on-surface-2);">Q&A format</strong>
+    <span style="font-size:10.5px;color:var(--on-surface-3);">Ask freely, or turn it into multiple choice.</span>
+  </div>
+  <button type="button" id="qna-choice-toggle" class="poll-duration-btn" aria-pressed="false">Add choices</button>
+</div>
+<button type="button" id="qna-random-question" class="poll-duration-btn" style="display:none;align-self:flex-start;">🎲 Surprise me</button>
 <div id="poll-options-list">
 <div class="poll-option-row">
 <input class="poll-option-input" maxlength="80" placeholder="Option 1"/>
@@ -5315,7 +5323,7 @@ body.mortalive-progress-open .sakura-topbar {
   });
 </script>
 
-<script src="app.js?v=20260817-post-viewer-light-text-v13"></script>
+<script src="app.js?v=20260817-composer-qna-cursor-v14"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -5892,7 +5900,7 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 
 <style id="mortalive-v11-composer-overrides">
 #pg-feed .compose-writing-wrap{position:relative;}
-#pg-feed .compose-writing-wrap .compose-field{padding-left:14px;}
+#pg-feed .compose-writing-wrap .compose-field{padding-left:15px;}
 #pg-feed .compose-type-switch{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 #pg-feed .compose-type-switch .compose-type-btn{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 10px;border-radius:999px;background:transparent;color:var(--on-surface-3);border:1px solid transparent;font-size:12px;font-weight:700;line-height:1;transition:background .14s ease,color .14s ease,border-color .14s ease;}
 #pg-feed .compose-type-switch .compose-type-btn:hover{background:var(--surface-2);color:var(--on-surface);}
