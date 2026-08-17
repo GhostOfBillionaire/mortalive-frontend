@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-17-post-viewer-v7'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-17-post-viewer-v8-routing-fix'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -4858,6 +4858,26 @@ async function openPostViewer(postOrId) {
 }
 
 window.mortaliveOpenPostViewer = openPostViewer;
+
+// Route post media to the full post viewer before the legacy profile photo
+// lightbox's global `.js-photo-open` listener can consume the same click.
+// Capture phase is intentional: index.html's legacy listener is delegated on
+// document and otherwise wins the event before the split post viewer opens.
+const postPhotoRouterRoot = document.documentElement;
+if (!postPhotoRouterRoot.dataset.mortalivePostPhotoRouterBound) {
+  postPhotoRouterRoot.dataset.mortalivePostPhotoRouterBound = '1';
+  document.addEventListener('click', (event) => {
+    const photo = event.target.closest?.('.js-photo-open');
+    if (!photo) return;
+    const postCard = photo.closest?.('#pg-feed .post-card[data-post-id], #pg-feed .profile-post-card[data-post-id], .profile-post-card[data-post-id]');
+    if (!postCard) return;
+    const postId = postCard.dataset.postId || photo.dataset.postId;
+    if (!postId) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    openPostViewer(postId);
+  }, true);
+}
 
 async function stepPostViewer(delta) {
   const sequence = Array.isArray(window._mortalivePostViewerSequence) ? window._mortalivePostViewerSequence : [];
