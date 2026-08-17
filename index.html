@@ -3640,6 +3640,10 @@ body.mortalive-progress-open .sakura-topbar {
 #profile-photo-lightbox .profile-lightbox-next{right:10px;top:50%;transform:translateY(-50%)}
 #profile-photo-lightbox .profile-lightbox-close:hover,#profile-photo-lightbox .profile-lightbox-prev:hover,#profile-photo-lightbox .profile-lightbox-next:hover{background:rgba(255,255,255,.2)}
 #profile-photo-lightbox .profile-lightbox-counter{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:2;color:#fff;font-size:11px;font-weight:700;padding:7px 10px;border-radius:999px;background:rgba(0,0,0,.34);backdrop-filter:blur(8px)}
+#profile-photo-lightbox .profile-lightbox-caption{position:absolute;left:50%;bottom:48px;transform:translateX(-50%);z-index:2;width:min(760px,calc(100% - 52px));padding:12px 15px;border-radius:16px;background:rgba(0,0,0,.46);backdrop-filter:blur(12px);color:#fff;text-align:left;box-shadow:0 12px 40px rgba(0,0,0,.24)}
+#profile-photo-lightbox .profile-lightbox-author{font-size:12px;font-weight:800;line-height:1.3;margin-bottom:3px}
+#profile-photo-lightbox .profile-lightbox-text{font-size:13px;line-height:1.5;color:rgba(255,255,255,.88);white-space:pre-wrap;overflow-wrap:anywhere}
+#profile-photo-lightbox .profile-lightbox-caption:empty{display:none}
 @media(max-width:640px){#profile-photo-lightbox{padding:12px}#profile-photo-lightbox .profile-lightbox-dialog{width:100%;height:84vh}#profile-photo-lightbox .profile-lightbox-prev{left:4px}#profile-photo-lightbox .profile-lightbox-next{right:4px}}
 </style>
 
@@ -4913,7 +4917,7 @@ body.mortalive-progress-open .sakura-topbar {
   });
 </script>
 
-<script src="app.js?v=20260816-appjs-consent-final"></script>
+<script src="app.js?v=20260817-profile-scroll-avatar-posts-fix"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -5294,6 +5298,10 @@ body.mortalive-progress-open .sakura-topbar {
     <button type="button" class="profile-lightbox-close" aria-label="Close photo viewer">×</button>
     <button type="button" class="profile-lightbox-prev" aria-label="Previous photo">‹</button>
     <img class="profile-lightbox-image" alt="Profile photo">
+    <div class="profile-lightbox-caption" aria-live="polite">
+      <div class="profile-lightbox-author"></div>
+      <div class="profile-lightbox-text"></div>
+    </div>
     <button type="button" class="profile-lightbox-next" aria-label="Next photo">›</button>
     <div class="profile-lightbox-counter" aria-live="polite"></div>
   </div>
@@ -5307,6 +5315,9 @@ body.mortalive-progress-open .sakura-topbar {
 
   const imageEl = lightbox.querySelector('.profile-lightbox-image');
   const counterEl = lightbox.querySelector('.profile-lightbox-counter');
+  const captionEl = lightbox.querySelector('.profile-lightbox-caption');
+  const authorEl = lightbox.querySelector('.profile-lightbox-author');
+  const textEl = lightbox.querySelector('.profile-lightbox-text');
   const closeBtn = lightbox.querySelector('.profile-lightbox-close');
   const prevBtn = lightbox.querySelector('.profile-lightbox-prev');
   const nextBtn = lightbox.querySelector('.profile-lightbox-next');
@@ -5324,6 +5335,11 @@ body.mortalive-progress-open .sakura-topbar {
     // Prefer dataset.photoUrl so lazily-loaded src="" still resolves correctly.
     imageEl.src = el.dataset?.photoUrl || el.currentSrc || el.src || '';
     imageEl.alt = el.alt || 'Photo';
+    const caption = String(el.dataset?.photoCaption || '').trim();
+    const author = String(el.dataset?.photoAuthor || '').trim();
+    authorEl.textContent = author ? `@${author.replace(/^@/, '')}` : '';
+    textEl.textContent = caption && caption !== ' ' ? caption : '';
+    captionEl.style.display = author || (caption && caption !== ' ') ? '' : 'none';
     counterEl.textContent = items.length > 1 ? `${index + 1} / ${items.length}` : '';
     prevBtn.style.display = items.length > 1 ? 'grid' : 'none';
     nextBtn.style.display = items.length > 1 ? 'grid' : 'none';
@@ -5344,6 +5360,9 @@ body.mortalive-progress-open .sakura-topbar {
     lightbox.classList.remove('open');
     lightbox.setAttribute('aria-hidden', 'true');
     imageEl.removeAttribute('src');
+    authorEl.textContent = '';
+    textEl.textContent = '';
+    captionEl.style.display = 'none';
     document.body.style.overflow = '';
   };
 
