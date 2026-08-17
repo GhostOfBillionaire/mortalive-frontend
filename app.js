@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-17-composer-types-v10'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-17-composer-ui-v11'; // bump this string on every deploy to confirm cache is fresh
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -3948,7 +3948,6 @@ function syncFeedComposerTypeUI() {
   const addBtn = $('poll-add-option');
   const modeLabel = $('compose-mode-label');
   const photoButton = $('btn-feed-photo');
-  const menu = $('composer-type-menu');
 
   document.querySelectorAll('#pg-feed [data-compose-kind]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.composeKind === kind);
@@ -3968,9 +3967,6 @@ function syncFeedComposerTypeUI() {
     addBtn.disabled = count >= FEED_COMPOSER_MAX_OPTIONS;
     addBtn.textContent = count >= FEED_COMPOSER_MAX_OPTIONS ? 'Maximum 6 options' : '+ Add option';
   }
-  if (menu) menu.classList.toggle('open', _feedComposerMenuOpen);
-  const plus = $('compose-plus');
-  if (plus) plus.setAttribute('aria-expanded', _feedComposerMenuOpen ? 'true' : 'false');
 }
 
 function setFeedComposerKind(kind = 'text') {
@@ -5050,23 +5046,6 @@ if (!postPhotoRouterRoot.dataset.mortalivePostPhotoRouterBound) {
   }, true);
 }
 
-async function stepPostViewer(delta) {
-  const sequence = Array.isArray(window._mortalivePostViewerSequence) ? window._mortalivePostViewerSequence : [];
-  if (sequence.length < 2) return;
-  let nextIndex = Number(window._mortalivePostViewerIndex) || 0;
-  nextIndex = (nextIndex + delta + sequence.length) % sequence.length;
-  const nextId = sequence[nextIndex];
-  const nextPost = getPostByIdForViewer(nextId);
-  if (!nextPost) return;
-  window._mortalivePostViewerIndex = nextIndex;
-  window._mortalivePostViewerPostId = nextId;
-  postViewerRender(nextPost, _commentCache.get(nextId) || []);
-  try {
-    const comments = await loadPostComments(nextId);
-    if (window._mortalivePostViewerPostId === nextId) postViewerRender(nextPost, comments);
-  } catch (_) {}
-}
-
 function closePostViewer() {
   const modal = $('mortalive-post-viewer');
   if (!modal) return;
@@ -5095,13 +5074,6 @@ function bindPostViewerInteractions() {
     const close = event.target.closest('[data-viewer-close]');
     if (close || event.target === modal.querySelector('.mortalive-post-viewer-backdrop')) {
       closePostViewer();
-      return;
-    }
-
-    const nav = event.target.closest('[data-viewer-nav]');
-    if (nav) {
-      event.preventDefault();
-      await stepPostViewer(nav.dataset.viewerNav === 'prev' ? -1 : 1);
       return;
     }
 
@@ -5142,8 +5114,6 @@ function bindPostViewerKeys() {
     const modal = $('mortalive-post-viewer');
     if (!modal?.classList.contains('open')) return;
     if (event.key === 'Escape') closePostViewer();
-    else if (event.key === 'ArrowLeft') stepPostViewer(-1);
-    else if (event.key === 'ArrowRight') stepPostViewer(1);
   });
 }
 
@@ -5533,20 +5503,7 @@ function initFeedPage() {
 
   $('compose-field')?.addEventListener('input', syncFeedComposer);
   $('compose-submit')?.addEventListener('click', submitFeedTextPost);
-  $('compose-plus')?.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    toggleFeedComposerMenu();
-  });
-  document.addEventListener('click', (event) => {
-    const menu = $('composer-type-menu');
-    if (!menu || !_feedComposerMenuOpen) return;
-    if (!event.target.closest('#composer-type-menu') && !event.target.closest('#compose-plus')) {
-      _feedComposerMenuOpen = false;
-      syncFeedComposerTypeUI();
-    }
-  });
-  document.querySelectorAll('#composer-type-menu [data-compose-kind]').forEach(btn => {
+  document.querySelectorAll('#pg-feed [data-compose-kind]').forEach(btn => {
     btn.addEventListener('click', (event) => {
       event.preventDefault();
       setFeedComposerKind(btn.dataset.composeKind);
