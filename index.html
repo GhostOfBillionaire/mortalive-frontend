@@ -5241,7 +5241,7 @@ body.mortalive-progress-open .sakura-topbar {
   });
 </script>
 
-<script src="app.js?v=20260817-post-viewer-v7"></script>
+<script src="app.js?v=20260817-post-viewer-v8-routing-fix"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -5751,6 +5751,9 @@ body.mortalive-progress-open .sakura-topbar {
     if (event.target.closest('#mortalive-post-viewer')) return;
     const photo = event.target.closest('.js-photo-open');
     if (!photo) return;
+    // Feed/profile posts have their own Instagram-style split viewer.
+    // Leave the legacy image-only lightbox for standalone gallery images.
+    if (photo.closest('#pg-feed .post-card[data-post-id], #pg-feed .profile-post-card[data-post-id], .profile-post-card[data-post-id]')) return;
     const url = photo.dataset.photoUrl || photo.currentSrc || photo.src;
     if (!url) return;
     // Reuse the same Instagram-style lightbox for feed/profile post photos.
