@@ -2,7 +2,7 @@
 <!-- Mortalive v19 — runtime configuration centralized in backend; Section 1 optimization pass applied. -->
 <html lang="en">
 <head>
-<!-- Mortalive Section 2 Talk integration v20 — Talk UI + enhancement layer loaded after app.js -->
+<!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v22 -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive — Connect with the world</title>
@@ -3981,7 +3981,632 @@ body.mortalive-progress-open .sakura-topbar {
 #pg-feed .feed-structured-option.qna-correct .feed-structured-option-result{color:var(--success);}
 #pg-feed .feed-structured-option.qna-incorrect .feed-structured-option-result{color:var(--danger);}
 </style>
-  <link rel="stylesheet" href="talk-ui-v20.css">
+  
+<style id="mortalive-talk-ui-integrated-v22">
+/* ═══════════════════════════════════════════════════════════════════════════
+   MORTALIVE — Talk Section UI Enhancement Layer  v20
+   Drop into index.html <head> after the existing <style> blocks.
+   Zero modifications to existing selectors — only new classes added.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Extra tokens ─────────────────────────────────────────────────────────── */
+:root {
+  --talk-green:    #22c55e;
+  --talk-green-a:  rgba(34,197,94,.13);
+  --talk-amber:    #f59e0b;
+  --talk-amber-a:  rgba(245,158,11,.11);
+  --talk-ring-r:   52px;     /* search ring radius */
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LOBBY — Live stats bar
+   ═══════════════════════════════════════════════════════════════════════════ */
+.talk-live-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: var(--r-full);
+  background: var(--talk-green-a);
+  border: 1px solid rgba(34,197,94,.24);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--on-surface-2);
+  margin-bottom: 18px;
+}
+
+.talk-live-bar strong { color: var(--on-surface); font-weight: 800; }
+.talk-live-bar .talk-sep { color: var(--border-strong); }
+
+.talk-live-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--talk-green);
+  flex: none;
+  position: relative;
+}
+.talk-live-dot::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid var(--talk-green);
+  opacity: .55;
+  animation: talkRingPulse 2s ease-out infinite;
+}
+@keyframes talkRingPulse {
+  0%   { transform: scale(1);   opacity: .55; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LOBBY — Mode selection cards
+   ═══════════════════════════════════════════════════════════════════════════ */
+.talk-mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.talk-mode-card {
+  position: relative;
+  padding: 16px 14px 14px;
+  border-radius: 18px;
+  border: 2px solid var(--border);
+  background: rgba(255,255,255,.96);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color var(--dur-mid) var(--ease-out),
+    box-shadow   var(--dur-mid) var(--ease-out),
+    transform    var(--dur-mid) var(--ease-spring);
+  box-shadow: 0 4px 16px rgba(15,23,42,.07), 0 1px 4px rgba(15,23,42,.04);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.talk-mode-card:hover {
+  border-color: rgba(26,110,245,.30);
+  box-shadow: 0 8px 28px rgba(26,110,245,.12), 0 2px 8px rgba(15,23,42,.06);
+  transform: translateY(-2px);
+}
+.talk-mode-card:active { transform: translateY(0) scale(.98); }
+
+.talk-mode-card.active {
+  border-color: var(--primary);
+  background: linear-gradient(160deg,rgba(26,110,245,.07) 0%,rgba(124,58,237,.04) 100%);
+  box-shadow: 0 0 0 4px rgba(26,110,245,.10), 0 8px 24px rgba(26,110,245,.14);
+}
+
+/* check badge */
+.talk-mode-check {
+  position: absolute;
+  top: 10px; right: 10px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  display: none;
+  place-items: center;
+  box-shadow: 0 2px 6px rgba(26,110,245,.30);
+}
+.talk-mode-card.active .talk-mode-check { display: grid; }
+
+.talk-mode-card-icon {
+  font-size: 26px;
+  display: block;
+  margin-bottom: 8px;
+  line-height: 1;
+}
+.talk-mode-card-name {
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  color: var(--on-surface);
+  margin-bottom: 3px;
+}
+.talk-mode-card-desc {
+  font-size: 11px;
+  color: var(--on-surface-3);
+  line-height: 1.5;
+}
+.talk-mode-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 9px;
+  padding: 3px 8px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--on-surface-3);
+  border: 1px solid var(--border);
+}
+.talk-mode-card.active .talk-mode-card-meta {
+  background: rgba(26,110,245,.10);
+  color: var(--primary);
+  border-color: rgba(26,110,245,.18);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LOBBY — Interest chip suggestions
+   ═══════════════════════════════════════════════════════════════════════════ */
+.talk-chips-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--on-surface-3);
+  display: block;
+  margin-bottom: 7px;
+}
+.talk-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.talk-interest-chip {
+  padding: 6px 11px;
+  border-radius: var(--r-full);
+  border: 1.5px solid var(--border);
+  background: var(--surface-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--on-surface-3);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.talk-interest-chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-alpha);
+  transform: translateY(-1px);
+}
+.talk-interest-chip.on {
+  border-color: var(--primary);
+  background: var(--primary-alpha);
+  color: var(--primary);
+  font-weight: 700;
+  box-shadow: 0 0 0 3px rgba(26,110,245,.09);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LOBBY — Logged-in stats strip
+   ═══════════════════════════════════════════════════════════════════════════ */
+.talk-lobby-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--surface-2);
+  margin-top: 14px;
+}
+.talk-lobby-stat {
+  padding: 11px 8px;
+  text-align: center;
+  border-right: 1px solid var(--border);
+}
+.talk-lobby-stat:last-child { border-right: 0; }
+.talk-lobby-stat-val {
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -.04em;
+  color: var(--on-surface);
+  line-height: 1;
+}
+.talk-lobby-stat:first-child .talk-lobby-stat-val { color: var(--primary); }
+.talk-lobby-stat-lbl {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--on-surface-3);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-top: 3px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MATCHING — Enhanced ring + tip + queue row
+   ═══════════════════════════════════════════════════════════════════════════ */
+.talk-search-ring {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  margin: 0 auto 20px;
+}
+.talk-search-ring-bg,
+.talk-search-ring-spin,
+.talk-search-ring-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+.talk-search-ring-bg {
+  border: 3px solid var(--surface-3);
+}
+.talk-search-ring-spin {
+  border: 3px solid transparent;
+  border-top-color: var(--primary);
+  border-right-color: var(--secondary);
+  animation: spin .86s linear infinite;
+}
+.talk-search-ring-glow {
+  inset: 14px;
+  background: radial-gradient(circle at center,rgba(26,110,245,.12) 0%,transparent 72%);
+  animation: talkGlow 2.4s ease-in-out infinite;
+}
+.talk-search-ring-icon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 34px;
+  animation: talkGlow 2.4s ease-in-out infinite;
+}
+@keyframes talkGlow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: .7; transform: scale(1.07); }
+}
+
+.talk-match-tip {
+  margin: 14px auto 0;
+  padding: 11px 15px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--on-surface-3);
+  line-height: 1.6;
+  text-align: center;
+  max-width: 320px;
+}
+#talk-match-tip-text { transition: opacity .2s ease; }
+
+.talk-match-queue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--on-surface-3);
+  font-weight: 600;
+}
+.talk-match-queue-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--talk-amber);
+  animation: talkRingPulse 2s ease-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CHAT — Session timer
+   ═══════════════════════════════════════════════════════════════════════════ */
+#chat-session-timer {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--on-surface-3);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .04em;
+  padding: 5px 10px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  min-width: 50px;
+  text-align: center;
+  flex: none;
+  transition: color var(--dur-fast);
+}
+/* Timer turns amber after 5 minutes to signal engagement */
+#chat-session-timer.long { color: var(--talk-amber); border-color: var(--talk-amber-a); background: var(--talk-amber-a); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CHAT — Quick reply chips
+   ═══════════════════════════════════════════════════════════════════════════ */
+#chat-quick-replies {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+  flex-shrink: 0;
+  -webkit-overflow-scrolling: touch;
+}
+#chat-quick-replies::-webkit-scrollbar { display: none; }
+
+.chat-qr-chip {
+  padding: 7px 13px;
+  border-radius: var(--r-full);
+  border: 1.5px solid var(--border);
+  background: var(--surface-2);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--on-surface-3);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--dur-fast);
+  flex: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.chat-qr-chip:hover,
+.chat-qr-chip:active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-alpha);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CHAT — Emoji reaction bar
+   ═══════════════════════════════════════════════════════════════════════════ */
+#chat-reaction-bar {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.chat-rx-btn {
+  width: 34px; height: 34px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 15px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    background var(--dur-fast),
+    border-color var(--dur-fast);
+  flex: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.chat-rx-btn:hover {
+  transform: scale(1.24);
+  background: var(--primary-alpha);
+  border-color: rgba(26,110,245,.22);
+}
+.chat-rx-btn:active { transform: scale(.92); }
+
+/* Floating emoji animation */
+.talk-float-emoji {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9000;
+  font-size: 28px;
+  line-height: 1;
+  animation: talkFloatUp 1.7s cubic-bezier(.16,1,.3,1) forwards;
+}
+@keyframes talkFloatUp {
+  0%   { opacity: 1; transform: translateY(0) scale(.8); }
+  35%  { opacity: 1; transform: translateY(-46px) scale(1.22); }
+  100% { opacity: 0; transform: translateY(-104px) scale(.6); }
+}
+
+/* Combined row above chat input */
+.talk-chat-extras {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.talk-chat-extras-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PROFILE — Talk Activity stats card
+   ═══════════════════════════════════════════════════════════════════════════ */
+.talk-pstats-card {
+  border: 1px solid rgba(0,0,0,.075);
+  background: rgba(255,255,255,.96);
+  backdrop-filter: blur(22px) saturate(145%);
+  -webkit-backdrop-filter: blur(22px) saturate(145%);
+  box-shadow: 0 10px 40px rgba(13,17,23,.07);
+  border-radius: 22px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.talk-pstats-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.talk-pstats-title {
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: -.02em;
+  color: var(--on-surface);
+}
+.talk-pstats-sub {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--on-surface-3);
+}
+
+/* 6-cell stats grid */
+.talk-pstats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid var(--border);
+}
+.talk-pstats-cell {
+  padding: 14px 10px;
+  text-align: center;
+  border-right: 1px solid var(--border);
+}
+.talk-pstats-cell:nth-child(3),
+.talk-pstats-cell:nth-child(6) { border-right: 0; }
+.talk-pstats-cell:nth-child(4),
+.talk-pstats-cell:nth-child(5),
+.talk-pstats-cell:nth-child(6) { border-top: 1px solid var(--border); }
+
+.talk-pstats-val {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -.04em;
+  color: var(--on-surface);
+  line-height: 1;
+}
+.talk-pstats-cell.primary .talk-pstats-val { color: var(--primary); }
+.talk-pstats-lbl {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--on-surface-3);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-top: 4px;
+}
+
+/* Completion rate bar */
+.talk-cbar {
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.talk-cbar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--on-surface-2);
+  margin-bottom: 6px;
+}
+.talk-cbar-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.talk-cbar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  transition: width .55s var(--ease-out);
+}
+
+/* Recent chats */
+.talk-pstats-recents {
+  padding: 14px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.talk-pstats-recents-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .10em;
+  color: var(--on-surface-3);
+  margin-bottom: 4px;
+}
+.talk-pstats-recent {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border-radius: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.talk-pstats-recent-ava { font-size: 22px; flex: none; }
+.talk-pstats-recent-info { flex: 1; min-width: 0; }
+.talk-pstats-recent-peer {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--on-surface);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.talk-pstats-recent-meta {
+  font-size: 11px;
+  color: var(--on-surface-3);
+  margin-top: 1px;
+}
+.talk-pstats-recent-rating {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--talk-amber);
+  flex: none;
+}
+
+/* Empty state */
+.talk-pstats-empty {
+  padding: 22px 18px;
+  text-align: center;
+  color: var(--on-surface-3);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.talk-pstats-empty-icon { font-size: 34px; margin-bottom: 10px; }
+.talk-pstats-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 9px 18px;
+  border-radius: var(--r-full);
+  background: var(--primary);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 800;
+  border: 0;
+  cursor: pointer;
+  transition: all var(--dur-fast);
+}
+.talk-pstats-cta:hover {
+  background: var(--primary-dark, #1459cc);
+  transform: translateY(-1px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Responsive
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 720px) {
+  .talk-mode-grid { gap: 8px; }
+  .talk-mode-card { padding: 13px 11px 11px; }
+  .talk-mode-card-icon { font-size: 22px; }
+  .talk-mode-card-name { font-size: 12.5px; }
+  .talk-mode-card-desc { font-size: 10.5px; }
+  .talk-mode-card-meta { font-size: 9.5px; }
+
+  .talk-lobby-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .talk-lobby-stat:nth-child(2) { border-right: 0; }
+  .talk-lobby-stat:nth-child(3),
+  .talk-lobby-stat:nth-child(4) { border-top: 1px solid var(--border); }
+
+  .talk-pstats-grid { grid-template-columns: repeat(2, 1fr); }
+  .talk-pstats-cell:nth-child(2) { border-right: 0; }
+  .talk-pstats-cell:nth-child(3) { border-right: 1px solid var(--border); border-top: 1px solid var(--border); }
+  .talk-pstats-cell:nth-child(4) { border-top: 1px solid var(--border); }
+  .talk-pstats-cell:nth-child(5) { border-top: 1px solid var(--border); }
+  .talk-pstats-cell:nth-child(6) { border-top: 1px solid var(--border); border-right: 0; }
+  .talk-pstats-cell:nth-child(3):nth-last-child(1) { border-right: 0; }
+
+  #chat-session-timer { font-size: 11px; padding: 4px 8px; }
+
+  .talk-live-bar { font-size: 11px; gap: 6px; }
+}
+</style>
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -5209,8 +5834,7 @@ body.mortalive-progress-open .sakura-topbar {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260818-section1-optimized-v19"></script>
-<script src="talk-enhancements-v20.js" defer></script>
+<script src="app.js?v=20260818-talk-integrated-v22"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
