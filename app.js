@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-18-talk-integrated-v22'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-18-supabase-new-keys-v23'; // bump this string on every deploy to confirm cache is fresh
 
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
 const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
@@ -1267,15 +1267,15 @@ async function loadPublicRuntimeConfig() {
     });
     if (!res.ok) throw new Error(`Runtime config request failed (${res.status})`);
     const config = await res.json();
-    if (!config?.supabaseUrl || !config?.supabaseAnonKey) {
-      throw new Error('Runtime config is missing Supabase public configuration.');
+    if (!config?.supabaseUrl || !config?.supabasePublishableKey) {
+      throw new Error('Runtime config is missing Supabase publishable configuration.');
     }
 
     if (!window.supabase?.createClient) {
       throw new Error('Supabase client library is unavailable.');
     }
 
-    window.sb = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
+    window.sb = supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, {
       auth: { detectSessionInUrl: true }
     });
     sb = window.sb;
