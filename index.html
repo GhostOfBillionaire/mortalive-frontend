@@ -1,6 +1,8 @@
 <!DOCTYPE html>
+<!-- Mortalive v19 — runtime configuration centralized in backend; Section 1 optimization pass applied. -->
 <html lang="en">
 <head>
+<!-- Mortalive Section 2 Talk integration v20 — Talk UI + enhancement layer loaded after app.js -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive — Connect with the world</title>
@@ -1446,29 +1448,6 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
   gap: 2px;
 }
 
-/* fullscreen feeds base — neutralised; v10 orientation blocks set grid layout */
-#video-panel:fullscreen .video-feeds,
-#video-panel:-webkit-full-screen .video-feeds,
-#video-panel:-moz-full-screen .video-feeds {
-  flex: 1;
-  width: 100vw;
-  max-width: none;
-  min-height: 0;
-  max-height: none;
-  aspect-ratio: unset;
-  gap: 0;
-  box-sizing: border-box;
-}
-
-/* Fullscreen: wrappers fill the row height instead of using aspect-ratio */
-#video-panel:fullscreen .video-wrapper,
-#video-panel:-webkit-full-screen .video-wrapper,
-#video-panel:-moz-full-screen .video-wrapper {
-  aspect-ratio: auto;
-  width: 100%;
-  height: 100%;
-}
-
 /* Each video wrapper is a square (1:1 aspect ratio) */
 .video-wrapper { 
   position: relative; 
@@ -1707,35 +1686,6 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 }
 
 /* Fullscreen video */
-/* early fullscreen base — neutralised; v10 orientation blocks handle layout */
-#video-panel:fullscreen,
-#video-panel:-webkit-full-screen,
-#video-panel:-moz-full-screen {
-  display: flex;
-  flex-direction: column;
-  background: #000;
-  padding: 0;
-  gap: 0;
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  box-sizing: border-box;
-  overflow: hidden;
-  align-items: stretch;
-  justify-content: flex-start;
-}
-#video-panel:fullscreen .video-controls,
-#video-panel:-webkit-full-screen .video-controls,
-#video-panel:-moz-full-screen .video-controls {
-  display: none;
-}
-
-#video-panel:fullscreen #btn-skip-fs,
-#video-panel:-webkit-full-screen #btn-skip-fs,
-#video-panel:-moz-full-screen #btn-skip-fs {
-  display: inline-flex;
-}
-
 /* ── Modal / overlay / toast ────────────────────────── */
 .overlay {
   display: none;
@@ -2116,7 +2066,6 @@ body.reveal-ready .scroll-reveal.in-view{
 }
 
 
-
 /* =====================================================
    Video layout patch v8 — square tiles stay square.
    Desktop: tall feed column on the left, chat on the side.
@@ -2187,48 +2136,6 @@ body.reveal-ready .scroll-reveal.in-view{
 
 #pg-chat.active .video-controls .vc-btn {
   flex: 0 0 auto;
-}
-
-/* v8 fullscreen base — neutralised; layout handled by orientation blocks in v10 */
-#video-panel:fullscreen,
-#video-panel:-webkit-full-screen,
-#video-panel:-moz-full-screen {
-  width: 100vw;
-  height: 100vh;
-  padding: 0;
-  margin: 0;
-  background: #000;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-}
-
-#video-panel:fullscreen .video-controls,
-#video-panel:-webkit-full-screen .video-controls,
-#video-panel:-moz-full-screen .video-controls {
-  display: none;
-}
-
-#video-panel:fullscreen .video-feeds,
-#video-panel:-webkit-full-screen .video-feeds,
-#video-panel:-moz-full-screen .video-feeds {
-  flex: 1;
-  width: 100vw;
-  height: 100%;
-  max-width: none;
-  max-height: none;
-  aspect-ratio: unset;
-  gap: 0;
-}
-
-#video-panel:fullscreen .video-wrapper,
-#video-panel:-webkit-full-screen .video-wrapper,
-#video-panel:-moz-full-screen .video-wrapper {
-  aspect-ratio: auto;
-  width: 100%;
-  height: 100%;
 }
 
 #video-panel:fullscreen #vid-remote,
@@ -2603,7 +2510,6 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
 
 </style>
 
-
 <style id="mortalive-profile-modal-fixes">
 /* Existing app.js uses .active for edit/profile overlays. */
 .overlay.active { display:flex; pointer-events:auto; }
@@ -2764,7 +2670,6 @@ body.mortalive-progress-open .sakura-topbar {
 /* old mobile rules now merged into redesign CSS block above */
 
 
-
 /* ═══════════════════ Integrated Feed UI from feed.html ═══════════════════ */
 
 /* ══════════════════════════════════════════════════════════════
@@ -2773,14 +2678,10 @@ body.mortalive-progress-open .sakura-topbar {
 
 /* ── Tokens (identical to main site) ───────────────────── */
 
-
 /* ── Reset ─────────────────────────────────────────────── */
 
 
-
 #pg-feed textarea{ font: inherit; }
-
-
 
 
 
@@ -3489,7 +3390,6 @@ body.mortalive-progress-open .sakura-topbar {
 #pg-feed .feed-empty h3{ font-size:18px; font-weight:800; color:var(--on-surface); margin-bottom:8px; }
 #pg-feed .feed-empty p{ font-size:14px; line-height:1.65; max-width:36ch; margin-inline:auto; }
 
-
 /* ── Step 3 engagement helpers ─────────────────────────── */
 .comments-loading,
 .comments-empty {
@@ -3651,7 +3551,6 @@ body.mortalive-progress-open .sakura-topbar {
     .startup-splash-logo,
     .startup-splash-wordmark { animation: none; }
   }
-
 
 /* Instagram-style post viewer */
 #mortalive-post-viewer{
@@ -4063,7 +3962,6 @@ body.mortalive-progress-open .sakura-topbar {
   }, 4500);
 </script>
 
-
 <style id="mortalive-v15-composer-width">
 #pg-feed .compose-row{width:100%;}
 #pg-feed .compose-writing-wrap{flex:1 1 auto;width:100%;max-width:760px;min-width:0;}
@@ -4083,6 +3981,7 @@ body.mortalive-progress-open .sakura-topbar {
 #pg-feed .feed-structured-option.qna-correct .feed-structured-option-result{color:var(--success);}
 #pg-feed .feed-structured-option.qna-incorrect .feed-structured-option-result{color:var(--danger);}
 </style>
+  <link rel="stylesheet" href="talk-ui-v20.css">
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -4104,7 +4003,6 @@ body.mortalive-progress-open .sakura-topbar {
     </a>
   </div>
 </div>
-
 
 <!-- ════════════ SHARED AUTHENTICATED TOPBAR ════════════ -->
 <div class="wrap app-topbar-wrap" id="app-topbar-wrap" style="display:none;">
@@ -4323,7 +4221,6 @@ body.mortalive-progress-open .sakura-topbar {
       </div>
     </div>
   </section>
-
 
 
   <!-- Footer -->
@@ -4725,7 +4622,6 @@ body.mortalive-progress-open .sakura-topbar {
     </div><!-- /chat-body -->
   </div><!-- /chat-shell -->
 </section>
-
 
 <!-- ═══════════════════ BLANK AUTH PAGES ═══════════════════ -->
 <!-- ═══════════════════ LIVE FEED ═══════════════════ -->
@@ -5159,7 +5055,6 @@ body.mortalive-progress-open .sakura-topbar {
   </div></div>
 </section>
 
-
 <!-- ═══════════════════ RATING MODAL ══════════════ -->
 <div class="overlay" id="rating-overlay" role="dialog" aria-modal="true" aria-labelledby="rating-title">
   <div class="modal">
@@ -5312,40 +5207,10 @@ body.mortalive-progress-open .sakura-topbar {
 
 <!-- Supabase Auth (Email OTP via Resend) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SUPABASE SETUP — EDIT THESE WITH YOUR CREDENTIALS
-  // ═══════════════════════════════════════════════════════════════════════════
-  //
-  // Find these in your Supabase dashboard → Settings → API:
-  //  - "Project URL"   → SUPABASE_URL
-  //  - "anon public" key → SUPABASE_ANON_KEY
-  //
-  // NOTE: the anon key is DESIGNED to be public/embedded in frontend code.
-  // It is not a secret — Supabase's security model relies on Row Level
-  // Security (RLS) policies on your tables, not on hiding this key. Never
-  // put your service_role/admin key here (that one stays on a server only).
-  //
-  const SUPABASE_URL = 'https://ctsmtblfuqynzfxafwly.supabase.co';  // ← EDIT THIS
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0c210YmxmdXF5bnpmeGFmd2x5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNjE0NTIsImV4cCI6MjA5NjkzNzQ1Mn0.8Yty23I6OmkJmJUG_nKQcoKJwRgjs27OdLptgH8R7dI';  // ← EDIT THIS
-
-  // detectSessionInUrl: true — the email template includes both the
-  // 6-digit code (type it on-page) AND a "Confirm & continue" button
-  // (clicking it verifies via Supabase's link directly). Both paths
-  // must converge on the same outcome — see the onAuthStateChange
-  // handler in app.js, which is what actually reconciles "verified by
-  // typing the code" and "verified by clicking the button" into one
-  // code path, sets the chosen password either way, and closes the
-  // OTP screen if it was open.
-  //
-  // Exposed as window.sb so app.js can use it (kept off `window.supabase`,
-  // which is the library namespace itself).
-  window.sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { detectSessionInUrl: true }
-  });
-</script>
-
-<script src="app.js?v=20260818-qna-gallery-security-v17"></script>
+<!-- Runtime config + app.js are loaded after the public server URL declaration above.
+     Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
+<script src="app.js?v=20260818-section1-optimized-v19"></script>
+<script src="talk-enhancements-v20.js" defer></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -5718,7 +5583,6 @@ body.mortalive-progress-open .sakura-topbar {
   });
 })();
 </script>
-
 
 
 <!-- Instagram-style post viewer: media/text canvas + details/comments panel -->
