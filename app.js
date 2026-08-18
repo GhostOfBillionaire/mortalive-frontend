@@ -1,9 +1,11 @@
-// MORTALIVE SOURCE HANDOFF — v17 — preserved in full; no lines removed.
 // FRESH BUILD MARKER — 2026-08-16 16:26 IST — redeploy this exact file
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-17-qna-answer-composer-v16'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-18-section1-optimized-v19'; // bump this string on every deploy to confirm cache is fresh
+
+// Shared typed numeric coercion for hot progress/engagement/follow paths.
+const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -15,14 +17,13 @@ console.log(`[Mortalive] ${BUILD_TAG} loaded`);
 console.log(`[Mortalive] SERVER_URL = ${SERVER_URL}`);
 console.log(`[Mortalive] Socket.io client ${typeof io === 'undefined' ? 'NOT LOADED ✗' : 'loaded ✓'}`);
 
-const ICE_CONFIG = {
+// Runtime WebRTC configuration is supplied by the authenticated backend config endpoint.
+// Keep only a public STUN fallback here so the frontend has no TURN credentials embedded.
+let ICE_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+    { urls: 'stun:stun2.l.google.com:19302' }
   ]
 };
 
@@ -208,7 +209,7 @@ const autoReplies = [
 ];const PROGRESS_KEY = 'mortalive_progress_v3';
 const PROFILE_KEY = 'mortalive_profile_v3';
 
-const PROGRESS_BADGES = [
+const PROGRESS_BADGES = Object.freeze([
   { id: 'rookie', label: 'Rookie', minScore: 0, minCompletions: 0, minStreak: 0 },
   { id: 'momentum', label: 'Momentum', minScore: 120, minCompletions: 3, minStreak: 1 },
   { id: 'streak-3', label: '3-Day Streak', minScore: 160, minCompletions: 5, minStreak: 3 },
@@ -216,9 +217,9 @@ const PROGRESS_BADGES = [
   { id: 'silver', label: 'Silver', minScore: 420, minCompletions: 15, minStreak: 4 },
   { id: 'gold', label: 'Gold', minScore: 700, minCompletions: 28, minStreak: 6 },
   { id: 'top10', label: 'Top 10%', minScore: 980, minCompletions: 40, minStreak: 7 }
-];
+]);
 
-const PROFILE_THEMES = {
+const PROFILE_THEMES = Object.freeze({
   aurora: {
     name: 'Aurora',
     accent: 'rgba(90, 177, 255, .95)',
@@ -237,7 +238,7 @@ const PROFILE_THEMES = {
     glow: 'rgba(255, 146, 86, .22)',
     frame: 'Signal Flame'
   }
-};
+});
 
 function loadJson(key, fallback) {
   try {
@@ -272,7 +273,7 @@ function weekKey(date = new Date()) {
 }
 
 function defaultProgress() {
-  return {
+  return Object.freeze({
     baseScore: 0,
     bonusScore: 0,
     completions: 0,
@@ -292,32 +293,27 @@ function defaultProgress() {
     pinnedNote: 'Connect with the world, build your crockroach Score, and unlock your profile.',
     avatarFrame: 'halo',
     lastSyncedAt: 0
-  };
+  });
 }
 
 function defaultProfile() {
-  return {
+  return Object.freeze({
     theme: 'aurora',
     frame: 'Liquid Glass',
     quote: 'Building momentum one connection at a time.',
     pinned: 'Connect with the world, build your crockroach Score, and unlock your profile.',
     accent: 'rgba(90, 177, 255, .95)',
     pattern: 'mesh'
-  };
+  });
 }
 
 function loadProgress() {
   const stored = loadJson(PROGRESS_KEY, null);
   const progress = { ...defaultProgress(), ...(stored || {}) };
-  progress.baseScore = Number.isFinite(Number(progress.baseScore)) ? Number(progress.baseScore) : 0;
-  progress.bonusScore = Number.isFinite(Number(progress.bonusScore)) ? Number(progress.bonusScore) : 0;
-  progress.completions = Number.isFinite(Number(progress.completions)) ? Number(progress.completions) : 0;
-  progress.streak = Number.isFinite(Number(progress.streak)) ? Number(progress.streak) : 0;
-  progress.bestStreak = Number.isFinite(Number(progress.bestStreak)) ? Number(progress.bestStreak) : 0;
-  progress.weeklyPoints = Number.isFinite(Number(progress.weeklyPoints)) ? Number(progress.weeklyPoints) : 0;
-  progress.weeklyCompletions = Number.isFinite(Number(progress.weeklyCompletions)) ? Number(progress.weeklyCompletions) : 0;
-  progress.totalMessages = Number.isFinite(Number(progress.totalMessages)) ? Number(progress.totalMessages) : 0;
-  progress.shareCount = Number.isFinite(Number(progress.shareCount)) ? Number(progress.shareCount) : 0;
+  for (const k of ['baseScore','bonusScore','completions','streak','bestStreak',
+                    'weeklyPoints','weeklyCompletions','totalMessages','shareCount']) {
+    progress[k] = toNum(progress[k]);
+  }
   progress.badges = Array.isArray(progress.badges) && progress.badges.length ? progress.badges : ['rookie'];
   progress.profileTheme = typeof progress.profileTheme === 'string' ? progress.profileTheme : 'aurora';
   progress.profileFrame = typeof progress.profileFrame === 'string' ? progress.profileFrame : 'Liquid Glass';
@@ -340,7 +336,7 @@ function loadProfile() {
 }
 
 function getProgressScore(progress = S.progress || defaultProgress()) {
-  return (Number(progress.baseScore) || 0) + (Number(progress.bonusScore) || 0);
+  return toNum(progress.baseScore) + toNum(progress.bonusScore);
 }
 
 function getCurrentProgress() {
@@ -363,26 +359,26 @@ function persistProfile() {
 
 function computeWeeklyRank(progress) {
   const score = getProgressScore(progress);
-  const completions = Number(progress.completions) || 0;
-  const streak = Number(progress.streak) || 0;
-  const weeklyPoints = Number(progress.weeklyPoints) || 0;
+  const completions = toNum(progress.completions);
+  const streak = toNum(progress.streak);
+  const weeklyPoints = toNum(progress.weeklyPoints);
   const power = score * 1.1 + completions * 18 + streak * 22 + weeklyPoints * 0.8;
   return clampNum(Math.round(6200 / Math.max(42, power / 5)), 1, 9999);
 }
 
 function computeTopPercentile(progress) {
   const score = getProgressScore(progress);
-  const completions = Number(progress.completions) || 0;
-  const streak = Number(progress.streak) || 0;
-  const weeklyPoints = Number(progress.weeklyPoints) || 0;
+  const completions = toNum(progress.completions);
+  const streak = toNum(progress.streak);
+  const weeklyPoints = toNum(progress.weeklyPoints);
   const power = score + completions * 12 + streak * 20 + weeklyPoints * 0.9;
   return clampNum(Math.round(100 - power / 18), 1, 99);
 }
 
 function computeGoalText(progress) {
   const score = getProgressScore(progress);
-  const completions = Number(progress.completions) || 0;
-  const streak = Number(progress.streak) || 0;
+  const completions = toNum(progress.completions);
+  const streak = toNum(progress.streak);
   const percentile = computeTopPercentile(progress);
 
   if (score < 220) return `${220 - score} more points to unlock Bronze`;
@@ -394,8 +390,8 @@ function computeGoalText(progress) {
 
 function computeUnlockedBadges(progress) {
   const score = getProgressScore(progress);
-  const completions = Number(progress.completions) || 0;
-  const streak = Number(progress.streak) || 0;
+  const completions = toNum(progress.completions);
+  const streak = toNum(progress.streak);
   return PROGRESS_BADGES.filter((badge) => {
     return score >= badge.minScore && completions >= badge.minCompletions && streak >= badge.minStreak;
   }).map((badge) => badge.label);
@@ -446,11 +442,11 @@ function streakAdvanceOnCompletion(progress) {
     const prev = new Date(`${progress.lastCompletionDay}T00:00:00Z`);
     const cur = new Date(`${today}T00:00:00Z`);
     const diff = Math.round((cur - prev) / 86400000);
-    progress.streak = diff === 1 ? (progress.streak || 0) + 1 : 1;
+    progress.streak = diff === 1 ? toNum(progress.streak) + 1 : 1;
   } else {
     progress.streak = 1;
   }
-  progress.bestStreak = Math.max(progress.bestStreak || 0, progress.streak);
+  progress.bestStreak = Math.max(toNum(progress.bestStreak), progress.streak);
   progress.lastCompletionDay = today;
   progress.lastActiveDay = today;
   return true;
@@ -469,8 +465,8 @@ function syncThemeHints() {
 
 function formatProgressLine(progress = getCurrentProgress()) {
   const score = getProgressScore(progress);
-  const completions = Number(progress.completions) || 0;
-  const streak = Number(progress.streak) || 0;
+  const completions = toNum(progress.completions);
+  const streak = toNum(progress.streak);
   const badges = Array.isArray(progress.badges) ? progress.badges.length : 0;
   const percentile = progress.topPercentile || computeTopPercentile(progress);
   const rank = progress.weeklyRank || computeWeeklyRank(progress);
@@ -523,7 +519,7 @@ function syncAuthProgress(baseScore) {
   const progress = getCurrentProgress();
   const incoming = Number(baseScore);
   if (Number.isFinite(incoming) && incoming >= 0) {
-    progress.baseScore = Math.max(Number(progress.baseScore) || 0, incoming);
+    progress.baseScore = Math.max(toNum(progress.baseScore), incoming);
   }
   updateDerivedProgress();
   persistProgress();
@@ -568,20 +564,20 @@ function awardProgress(kind, amount = 1, meta = {}) {
   const progress = getCurrentProgress();
   if (S.isGuest) return progress;
 
-  const delta = Number.isFinite(Number(amount)) ? Number(amount) : 1;
+  const delta = toNum(amount, 1) || 1;
   const source = kind || 'activity';
-  progress.bonusScore = Math.max(0, (Number(progress.bonusScore) || 0) + delta);
-  progress.weeklyPoints = Math.max(0, (Number(progress.weeklyPoints) || 0) + delta);
-  progress.totalMessages = Math.max(0, (Number(progress.totalMessages) || 0) + (meta.message ? 1 : 0));
+  progress.bonusScore = Math.max(0, toNum(progress.bonusScore) + delta);
+  progress.weeklyPoints = Math.max(0, (toNum(progress.weeklyPoints)) + delta);
+  progress.totalMessages = Math.max(0, (toNum(progress.totalMessages)) + (meta.message ? 1 : 0));
   progress.lastActiveDay = dayKey();
 
   if (meta.completion) {
-    progress.completions = Math.max(0, (Number(progress.completions) || 0) + 1);
-    progress.weeklyCompletions = Math.max(0, (Number(progress.weeklyCompletions) || 0) + 1);
+    progress.completions = Math.max(0, (toNum(progress.completions)) + 1);
+    progress.weeklyCompletions = Math.max(0, (toNum(progress.weeklyCompletions)) + 1);
     streakAdvanceOnCompletion(progress);
     const bonus = clampNum(10 + Math.floor((meta.durationMs || 0) / 20000), 10, 24);
-    progress.bonusScore = Math.max(0, (Number(progress.bonusScore) || 0) + bonus);
-    progress.weeklyPoints = Math.max(0, (Number(progress.weeklyPoints) || 0) + bonus);
+    progress.bonusScore = Math.max(0, toNum(progress.bonusScore) + bonus);
+    progress.weeklyPoints = Math.max(0, (toNum(progress.weeklyPoints)) + bonus);
   }
 
   if (meta.streakReset) {
@@ -604,7 +600,7 @@ function awardProgress(kind, amount = 1, meta = {}) {
     } else {
       toast(`Milestone reached · ${goal}`, '🏁');
     }
-  } else if (source === 'message' && (Number(progress.totalMessages) || 0) % 5 === 0) {
+  } else if (source === 'message' && (toNum(progress.totalMessages)) % 5 === 0) {
     toast(`+${delta} progress`, '✨');
   }
 
@@ -649,7 +645,7 @@ function copyProgressShareCard() {
 
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(text).then(() => {
-      progress.shareCount = (Number(progress.shareCount) || 0) + 1;
+      progress.shareCount = (toNum(progress.shareCount)) + 1;
       persistProgress();
       updateProgressText();
       toast('Share card copied', '📋');
@@ -1253,7 +1249,49 @@ function requestCameraPermission() {
 }
 
 // Supabase client — initialized in index.html as window.sb
-const sb = window.sb;
+// Supabase + TURN configuration is loaded from /api/public-config at startup.
+// The Supabase anon key is intentionally public, but keeping it out of source
+// prevents configuration drift and keeps all runtime configuration centralized.
+// Secret values (service-role/admin/TURN credentials) remain server-side.
+let sb = window.sb || null;
+let _publicConfigPromise = null;
+
+async function loadPublicRuntimeConfig() {
+  if (_publicConfigPromise) return _publicConfigPromise;
+  _publicConfigPromise = (async () => {
+    const configUrl = `${SERVER_URL.replace(/\/$/, '')}/api/public-config`;
+    const res = await fetch(configUrl, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!res.ok) throw new Error(`Runtime config request failed (${res.status})`);
+    const config = await res.json();
+    if (!config?.supabaseUrl || !config?.supabaseAnonKey) {
+      throw new Error('Runtime config is missing Supabase public configuration.');
+    }
+
+    if (!window.supabase?.createClient) {
+      throw new Error('Supabase client library is unavailable.');
+    }
+
+    window.sb = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
+      auth: { detectSessionInUrl: true }
+    });
+    sb = window.sb;
+
+    if (Array.isArray(config.iceServers) && config.iceServers.length) {
+      ICE_CONFIG = { iceServers: config.iceServers };
+    }
+
+    window.MORTALIVE_PUBLIC_CONFIG = {
+      supabaseUrl: config.supabaseUrl,
+      iceServerCount: Array.isArray(config.iceServers) ? config.iceServers.length : 0
+    };
+    return config;
+  })();
+  return _publicConfigPromise;
+}
 
 // Captured synchronously, before Supabase's client has a chance to
 // parse/strip the URL — tells "just followed a confirmation link"
@@ -3621,7 +3659,17 @@ function finishStartupSplash() {
   }, 450);
 }
 
-ready(() => {
+ready(async () => {
+  // Load public runtime configuration before binding auth/feed/profile controls.
+  // This keeps keys/configuration out of the browser source while preserving
+  // normal guest-mode startup if the backend config endpoint is temporarily unavailable.
+  try {
+    await loadPublicRuntimeConfig();
+  } catch (error) {
+    console.error('[Mortalive] Runtime config failed:', error?.message || error);
+    toast('Some account features are temporarily unavailable. Please try again shortly.', '⚠️');
+  }
+
   stabilizeProfileScrollAxes();
   // Hard maximum: the branded splash can never remain on screen longer than
   // 4.5 seconds, even if Supabase/Auth routing hangs unexpectedly. The normal
@@ -3896,10 +3944,11 @@ function renderLinksDisplay() {
 // ── XSS-safe helper: always use textContent for user data, but this
 // utility lets us safely insert a sanitized string into innerHTML
 // contexts where we must (e.g. interest chip HTML). ──
+let _sanitizeEl = null;
 function sanitizeHTML(str) {
-  const div = document.createElement('div');
-  div.textContent = String(str || '');
-  return div.innerHTML;
+  if (!_sanitizeEl) _sanitizeEl = document.createElement('div');
+  _sanitizeEl.textContent = String(str ?? '');
+  return _sanitizeEl.innerHTML;
 }
 
 // ── Hashtag helpers ─────────────────────────────────────────────────────────
@@ -4147,20 +4196,21 @@ let _feedPosts = [];
 let _feedEngagement = new Map();
 let _commentCache = new Map();
 let _commentLoading = new Set();
+const _MINUTE = 60_000, _HOUR = 3_600_000, _DAY = 86_400_000, _WEEK = 604_800_000;
 
 function feedRelTime(iso) {
-  const ts = Date.parse(iso || '');
+  const ts = Date.parse(iso ?? '');
   if (!Number.isFinite(ts)) return 'Just now';
   const diff = Math.max(0, Date.now() - ts);
-  if (diff < 60000) return 'just now';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+  if (diff < _MINUTE) return 'just now';
+  if (diff < _HOUR) return `${Math.floor(diff / _MINUTE)}m ago`;
+  if (diff < _DAY) return `${Math.floor(diff / _HOUR)}h ago`;
+  if (diff < _WEEK) return `${Math.floor(diff / _DAY)}d ago`;
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function feedAvatarLetter(name) {
-  const value = String(name || 'M').trim();
+  const value = String(name ?? 'M').trim();
   return sanitizeHTML((value.charAt(0) || 'M').toUpperCase());
 }
 
@@ -4168,7 +4218,7 @@ function feedAvatarLetter(name) {
 // normal HTTP(S) image URLs into the rendered <img> so the post-card HTML
 // remains safe even if a malformed value reaches the client.
 function feedAvatarUrl(url) {
-  const value = String(url || '').trim();
+  const value = String(url ?? '').trim();
   if (!value) return '';
   try {
     const parsed = new URL(value, window.location.href);
@@ -4336,8 +4386,8 @@ async function hydratePostEngagement(postIds) {
     if (error) throw error;
     (data || []).forEach(row => {
       _feedEngagement.set(row.post_id, {
-        likes: Number(row.like_count) || 0,
-        comments: Number(row.comment_count) || 0,
+        likes: toNum(row.like_count),
+        comments: toNum(row.comment_count),
         liked: !!row.liked_by_me
       });
     });
@@ -4675,7 +4725,7 @@ async function openFeedProfileOverlay(userId) {
     const [links, followData] = await Promise.all([fetchUserLinks(userId), fetchFollowData(userId)]);
     const name = profile.display_name || profile.username || 'Mortalive member';
     const username = profile.username || 'member';
-    const score = Number(profile.crockroach_score || 0);
+    const score = toNum(profile.crockroach_score);
     const badge = score >= 700 ? '⭐ Gold' : score >= 420 ? '🔘 Silver' : score >= 220 ? '✨ Bronze' : '🌱 Newcomer';
     const status = [(profile.account_type || 'Member'), badge].filter(Boolean).join(' · ');
     const avatarUrl = feedAvatarUrl(profile.avatar_url);
@@ -4711,9 +4761,9 @@ async function openFeedProfileOverlay(userId) {
           <div class="feed-profile-section-label">Interests</div>
           <div class="feed-profile-interests">${interests.map(id => `<span class="feed-profile-interest">${sanitizeHTML(interestLabels[id] || id)}</span>`).join('')}</div>` : ''}
         <div class="feed-profile-stats">
-          <div class="feed-profile-stat"><strong>${Number(followData.followers || 0).toLocaleString()}</strong><span>Followers</span></div>
-          <div class="feed-profile-stat"><strong>${Number(followData.following || 0).toLocaleString()}</strong><span>Following</span></div>
-          <div class="feed-profile-stat"><strong>${Number(score).toLocaleString()}</strong><span>crockroach Score</span></div>
+          <div class="feed-profile-stat"><strong>${toNum(followData.followers).toLocaleString()}</strong><span>Followers</span></div>
+          <div class="feed-profile-stat"><strong>${toNum(followData.following).toLocaleString()}</strong><span>Following</span></div>
+          <div class="feed-profile-stat"><strong>${toNum(score).toLocaleString()}</strong><span>crockroach Score</span></div>
           <div class="feed-profile-stat"><strong>${textPosts.length}</strong><span>Posts</span></div>
           <div class="feed-profile-stat"><strong>${photoPosts.length}</strong><span>Photos</span></div>
         </div>
@@ -5779,11 +5829,11 @@ function syncFeedSidebar() {
   const score = acc.crockroach_score ?? S.crockroachScore ?? getProgressScore(progress);
   setText('sidebar-name', name);
   setText('sidebar-handle', `@${username} · ${S.isGuest ? 'Guest' : 'Member'}`);
-  setText('sidebar-score', Number(score) || 0);
+  setText('sidebar-score', toNum(score) || 0);
   setText('sidebar-completions', progress.completions || 0);
   setText('sidebar-streak', progress.streak || 0);
   setText('sidebar-rank', progress.weeklyRank ? `#${progress.weeklyRank}` : '#—');
-  setText('feed-score-val', Number(score) || 0);
+  setText('feed-score-val', toNum(score) || 0);
   const avatarUrl = acc.avatar_url || '';
   const initial = feedAvatarLetter(name);
   ['sidebar-avatar', 'compose-avatar'].forEach(id => {
@@ -5829,10 +5879,10 @@ async function fetchProfilePosts(userId = S.userId) {
 }
 
 function formatPostTime(iso) {
-  const ts = Date.parse(iso || '');
+  const ts = Date.parse(iso ?? '');
   if (!Number.isFinite(ts)) return 'Just now';
   const diff = Math.max(0, Date.now() - ts);
-  const mins = Math.floor(diff / 60000);
+  const mins = Math.floor(diff / _MINUTE);
   if (mins < 1) return 'Just now';
   if (mins < 60) return `${mins}m`;
   const hours = Math.floor(mins / 60);
@@ -6137,13 +6187,13 @@ async function initPublicProfilePage(userId) {
   const name = profile.display_name || profile.username || 'User';
   if ($('profile-username-display')) $('profile-username-display').textContent = name;
   if ($('profile-handle-modern')) $('profile-handle-modern').textContent = '';
-  const publicBadgeHtml = Number(profile.crockroach_score || 0) >= 700 ? '<span class="profile-badge-chip gold">⭐ Gold</span>' : Number(profile.crockroach_score || 0) >= 420 ? '<span class="profile-badge-chip silver">🔘 Silver</span>' : '';
+  const publicBadgeHtml = toNum(profile.crockroach_score) >= 700 ? '<span class="profile-badge-chip gold">⭐ Gold</span>' : toNum(profile.crockroach_score) >= 420 ? '<span class="profile-badge-chip silver">🔘 Silver</span>' : '';
   if ($('profile-subline-display')) $('profile-subline-display').innerHTML = `@${sanitizeHTML((profile.username || 'user').toLowerCase().replace(/\s+/g, '_'))} ${publicBadgeHtml}${publicBadgeHtml ? ' · ' : ' · '}${sanitizeHTML((profile.account_type || 'Member').charAt(0).toUpperCase() + (profile.account_type || 'Member').slice(1))}`;
   if ($('profile-bio-display')) $('profile-bio-display').textContent = profile.bio || 'Connecting with the world.';
   if ($('profile-info-goal-val')) $('profile-info-goal-val').textContent = 'Public profile';
   applyProfileAvatar(profile.avatar_url || '', name);
-  if ($('profile-hero-score')) $('profile-hero-score').textContent = Number(profile.crockroach_score || 0).toLocaleString();
-  if ($('profile-stat-score')) $('profile-stat-score').textContent = Number(profile.crockroach_score || 0).toLocaleString();
+  if ($('profile-hero-score')) $('profile-hero-score').textContent = toNum(profile.crockroach_score).toLocaleString();
+  if ($('profile-stat-score')) $('profile-stat-score').textContent = toNum(profile.crockroach_score).toLocaleString();
   resetProfilePosts();
   // Follow button + counts (non-blocking)
   initFollowSection(userId);
@@ -6645,7 +6695,7 @@ async function toggleFollow(profileUserId, shouldFollow) {
   const next = {
     ...current,
     isFollowing: !!shouldFollow,
-    followers: Math.max(0, Number(current.followers || 0) + (shouldFollow ? 1 : -1))
+    followers: Math.max(0, toNum(current.followers) + (shouldFollow ? 1 : -1))
   };
   _followCache.set(profileUserId, next);
   return next;
