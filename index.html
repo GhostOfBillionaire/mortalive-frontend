@@ -4810,12 +4810,14 @@ body.mortalive-progress-open .sakura-topbar {
 <button type="button" id="qna-random-question" class="poll-duration-btn" style="display:none;align-self:flex-start;">🎲 Surprise me</button>
 <div id="poll-options-list">
 <div class="poll-option-row">
-<input class="poll-option-input" maxlength="80" placeholder="Option 1"/>
-<button class="poll-remove-btn" title="Remove">×</button>
+  <label class="qna-correct-wrap" title="Mark as correct answer"><input type="radio" class="qna-correct-radio" name="qna-correct-option" value="option-1" aria-label="Mark option 1 as correct"><span>Correct</span></label>
+  <input class="poll-option-input" maxlength="80" placeholder="Option 1"/>
+  <button type="button" class="poll-remove-btn" title="Remove option" aria-label="Remove option">×</button>
 </div>
 <div class="poll-option-row">
-<input class="poll-option-input" maxlength="80" placeholder="Option 2"/>
-<button class="poll-remove-btn" title="Remove">×</button>
+  <label class="qna-correct-wrap" title="Mark as correct answer"><input type="radio" class="qna-correct-radio" name="qna-correct-option" value="option-2" aria-label="Mark option 2 as correct"><span>Correct</span></label>
+  <input class="poll-option-input" maxlength="80" placeholder="Option 2"/>
+  <button type="button" class="poll-remove-btn" title="Remove option" aria-label="Remove option">×</button>
 </div>
 </div>
 <button class="poll-add-option" id="poll-add-option">+ Add option</button>
@@ -5343,7 +5345,7 @@ body.mortalive-progress-open .sakura-topbar {
   });
 </script>
 
-<script src="app.js?v=20260817-qna-answer-composer-v16"></script>
+<script src="app.js?v=20260818-qna-gallery-security-v17"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
