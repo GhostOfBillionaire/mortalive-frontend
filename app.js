@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-18-section1-optimized-v19'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-18-talk-integrated-v22'; // bump this string on every deploy to confirm cache is fresh
 
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
 const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
@@ -3962,6 +3962,8 @@ let _feedQnaChoicesEnabled = false; // text | photo | poll | qna
 let _feedQnaCorrectOptionId = null;
 let _feedQnaResponseCache = new Map();
 let _feedQnaCorrectCache = new Map();
+let _feedPollVoteCache = new Map();
+let _feedPollCountsCache = new Map();
 let _feedComposerMenuOpen = false;
 
 function getFeedComposerKind() {
@@ -4354,6 +4356,7 @@ async function fetchFeedPage(reset = false) {
     _feedHasMore = rows.length === FEED_PAGE_SIZE;
     await hydratePostEngagement(rows.map(row => row.id));
     await hydrateQnaResponses(rows.filter(row => row?.post_meta?.kind === 'qna' && row?.post_meta?.mode === 'mcq').map(row => row.id));
+    await hydratePollResults(rows.filter(row => row?.post_meta?.kind === 'poll').map(row => row.id));
     renderFeedPosts();
     renderFeedSidebars();
     hydrateTrendingHashtags().catch(() => {});
@@ -4941,6 +4944,57 @@ async function hydrateQnaResponses(postIds = []) {
   }
 }
 
+async function hydratePollResults(postIds = []) {
+  if (S.isGuest || !S.userId || !sb) return;
+  const ids = Array.from(new Set((postIds || []).filter(Boolean)));
+  if (!ids.length) return;
+  try {
+    const { data, error } = await sb.rpc('get_poll_results', { p_post_ids: ids });
+    if (error) throw error;
+    ids.forEach(id => { _feedPollVoteCache.delete(id); _feedPollCountsCache.delete(id); });
+    const grouped = new Map();
+    (data || []).forEach(row => {
+      const postId = row?.post_id;
+      if (!postId) return;
+      if (!grouped.has(postId)) grouped.set(postId, new Map());
+      grouped.get(postId).set(row.option_id, Number(row.vote_count) || 0);
+      if (row.user_option_id) _feedPollVoteCache.set(postId, row.user_option_id);
+    });
+    grouped.forEach((counts, postId) => _feedPollCountsCache.set(postId, counts));
+  } catch (e) {
+    console.warn('[Poll] results hydration warning:', e?.message || e);
+  }
+}
+
+async function submitPollVote(postId, optionId) {
+  if (S.isGuest || !S.userId || !sb) { toast('Sign in to vote', '🔒'); return; }
+  if (!postId || !optionId) return;
+  if (_feedPollVoteCache.has(postId)) { toast('You already voted on this poll.', 'ℹ️'); return; }
+  try {
+    const { data, error } = await sb.rpc('submit_poll_vote', {
+      p_post_id: postId,
+      p_option_id: optionId
+    });
+    if (error) throw error;
+    const result = Array.isArray(data) ? data[0] : data;
+    _feedPollVoteCache.set(postId, result?.option_id || optionId);
+    const counts = new Map();
+    (result?.counts || []).forEach(row => counts.set(row.option_id, Number(row.vote_count) || 0));
+    if (counts.size) _feedPollCountsCache.set(postId, counts);
+    renderFeedPosts();
+    toast('Vote recorded', '✅');
+  } catch (e) {
+    if (String(e?.message || '').toLowerCase().includes('already voted')) {
+      _feedPollVoteCache.set(postId, optionId);
+      await hydratePollResults([postId]);
+      renderFeedPosts();
+      toast('You already voted on this poll.', 'ℹ️');
+      return;
+    }
+    toast(e?.message || 'Could not submit your poll vote.', '⚠️');
+  }
+}
+
 async function submitQnaResponse(postId, optionId) {
   if (S.isGuest || !S.userId || !sb) { toast('Sign in to answer', '🔒'); return; }
   if (!postId || !optionId) return;
@@ -4988,18 +5042,39 @@ function renderStructuredFeedPost(post) {
   const icon = kind === 'qna' ? '❓' : '📊';
   const label = kind === 'qna' ? 'Q&A' : 'Poll';
   const mode = kind === 'qna' ? (meta.mode === 'mcq' ? 'mcq' : 'open') : 'mcq';
-  const responseId = kind === 'qna' ? _feedQnaResponseCache.get(post.id) : null;
-  const correctId = kind === 'qna' ? (_feedQnaCorrectCache.get(post.id) || meta.correct_option_id || null) : null;
-  const hasResult = kind === 'qna' && mode === 'mcq' && (responseId || post.user_id === S.userId);
-  return `<div class="feed-structured-post" data-structured-kind="${kind}" data-structured-mode="${mode}">
-    <div class="feed-structured-title"><span>${icon}</span><span>${label}${kind === 'qna' && mode === 'open' ? ' · Open replies' : kind === 'qna' ? ' · Multiple choice' : ''}</span></div>
+
+  if (kind === 'poll') {
+    const counts = _feedPollCountsCache.get(post.id) || new Map();
+    const totalVotes = Array.from(counts.values()).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    const myVote = _feedPollVoteCache.get(post.id) || null;
+    return `<div class="feed-structured-post" data-structured-kind="poll" data-structured-mode="mcq">
+      <div class="feed-structured-title"><span>${icon}</span><span>${label}</span></div>
+      <div class="feed-structured-question">${renderHashtagRichText(post.content || '')}</div>
+      <div class="feed-structured-options">${options.map((option) => {
+        const optionId = String(option?.id || '');
+        const count = Number(counts.get(optionId) || 0);
+        const pct = totalVotes ? Math.round((count / totalVotes) * 100) : 0;
+        const selected = myVote === optionId;
+        const disabled = myVote || post.user_id === S.userId ? ' disabled' : '';
+        return `<button type="button" class="feed-structured-option${selected ? ' qna-selected' : ''}" data-structured-kind="poll" data-structured-option="${sanitizeHTML(optionId)}" data-post-id="${sanitizeHTML(post.id)}"${disabled}>`+
+          `<span>${sanitizeHTML(option?.label || '')}</span><span class="feed-structured-option-result">${totalVotes ? `${pct}%` : '›'}</span></button>`;
+      }).join('')}</div>
+      <div class="feed-structured-open-note">${totalVotes} vote${totalVotes === 1 ? '' : 's'}${myVote ? ' · You voted' : ''}</div>
+    </div>`;
+  }
+
+  const responseId = _feedQnaResponseCache.get(post.id) || null;
+  const correctId = _feedQnaCorrectCache.get(post.id) || meta.correct_option_id || null;
+  const hasResult = mode === 'mcq' && (responseId || post.user_id === S.userId);
+  return `<div class="feed-structured-post" data-structured-kind="qna" data-structured-mode="${mode}">
+    <div class="feed-structured-title"><span>${icon}</span><span>${label}${mode === 'open' ? ' · Open replies' : ' · Multiple choice'}</span></div>
     <div class="feed-structured-question">${renderHashtagRichText(post.content || '')}</div>
     ${mode === 'open' ? `<div class="feed-structured-open-note">Reply in the comments to share your answer.</div>` : `<div class="feed-structured-options">${options.map((option) => {
       const optionId = String(option?.id || '');
       const stateClass = hasResult ? (optionId === correctId ? ' qna-correct' : ' qna-incorrect') : (responseId === optionId ? ' qna-selected' : '');
       const disabled = responseId || post.user_id === S.userId ? ' disabled' : '';
       const resultMark = hasResult ? (optionId === correctId ? '✓' : '✕') : '';
-      return `<button type="button" class="feed-structured-option${stateClass}" data-structured-option="${sanitizeHTML(optionId)}" data-post-id="${sanitizeHTML(post.id)}"${disabled}><span>${sanitizeHTML(option?.label || '')}</span><span class="feed-structured-option-result">${resultMark || '›'}</span></button>`;
+      return `<button type="button" class="feed-structured-option${stateClass}" data-structured-kind="qna" data-structured-option="${sanitizeHTML(optionId)}" data-post-id="${sanitizeHTML(post.id)}"${disabled}><span>${sanitizeHTML(option?.label || '')}</span><span class="feed-structured-option-result">${resultMark || '›'}</span></button>`;
     }).join('')}</div>`}
   </div>`;
 }
@@ -5708,11 +5783,15 @@ function initFeedPage() {
       return;
     }
 
-    const qnaOption = event.target.closest('.feed-structured-option[data-post-id][data-structured-option]');
-    if (qnaOption && !qnaOption.disabled) {
+    const structuredOption = event.target.closest('.feed-structured-option[data-post-id][data-structured-option]');
+    if (structuredOption && !structuredOption.disabled) {
       event.preventDefault();
       event.stopPropagation();
-      submitQnaResponse(qnaOption.dataset.postId, qnaOption.dataset.structuredOption);
+      if (structuredOption.dataset.structuredKind === 'poll') {
+        submitPollVote(structuredOption.dataset.postId, structuredOption.dataset.structuredOption);
+      } else {
+        submitQnaResponse(structuredOption.dataset.postId, structuredOption.dataset.structuredOption);
+      }
       return;
     }
 
@@ -7110,3 +7189,709 @@ document.addEventListener('DOMContentLoaded', bindProfileEvents);
 window.performAccountDeletion = performAccountDeletion;
 window.openAchievementsSheet  = openAchievementsSheet;
 window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInfoRow
+
+/* ── INTEGRATED TALK ENHANCEMENT LAYER v22 ───────────────────────────────
+   Merged from talk-enhancements-v20.js so production only needs app.js.
+   The layer remains isolated in its own IIFE and uses existing app state.
+*/
+/* ═══════════════════════════════════════════════════════════════════════════
+   MORTALIVE — Talk Section Enhancement Layer  v20
+   Load AFTER app.js. Adds data hydration and rich UI to the Talk pages
+   without touching any existing handlers or state in app.js / window.S.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+(function TalkEnhance() {
+  'use strict';
+
+  /* ── Constants ──────────────────────────────────────────────────────────── */
+  const STORE_KEY = 'mortalive_talk_v3';
+
+  const QUICK_REPLIES = [
+    'Hey 👋', 'Where are you from?', 'What do you do for fun?',
+    "What's your hot take on AI?", 'Recommend a song?',
+    'Introvert or extrovert?', 'Last thing that made you laugh?',
+    'Favourite travel spot?', 'Night owl or early bird?',
+    "What's keeping you busy lately?"
+  ];
+
+  const INTEREST_CHIPS = [
+    { e:'🎵', l:'Music' },  { e:'🎮', l:'Gaming' },
+    { e:'✈️', l:'Travel' }, { e:'📚', l:'Books' },
+    { e:'🎨', l:'Art' },    { e:'💼', l:'Business' },
+    { e:'🏋️', l:'Fitness' },{ e:'🍳', l:'Food' },
+    { e:'📸', l:'Photography' },{ e:'🤖', l:'Tech' },
+    { e:'🎭', l:'Films' },  { e:'🌿', l:'Nature' }
+  ];
+
+  const MATCH_TIPS = [
+    '💡 Completing chats earns crockroach Score',
+    '🌍 Your next match could be from any country on Earth',
+    '⭐ Rate your chats to help improve future matches',
+    '🔒 Your identity stays private — nothing is shared without your consent',
+    '⚡ Average match time is under 30 seconds when others are online',
+    '🎯 Adding a topic finds like-minded strangers faster',
+    '🧲 A high crockroach Score boosts your matching priority',
+    '💬 Text mode works without a camera — great for quieter moments',
+    '🎬 If no match is found, a recorded stream will appear automatically'
+  ];
+
+  const REACTIONS = ['😂', '❤️', '😮', '👏', '🔥'];
+
+  /* ── Tiny helpers ───────────────────────────────────────────────────────── */
+  const $   = id  => document.getElementById(id);
+  const qs  = (s, ctx = document) => ctx.querySelector(s);
+  const qsa = (s, ctx = document) => Array.from(ctx.querySelectorAll(s));
+
+  function escHTML(str) {
+    const d = document.createElement('div');
+    d.textContent = String(str ?? '');
+    return d.innerHTML;
+  }
+
+  function relTime(ts) {
+    const diff = Math.max(0, Date.now() - Number(ts || 0));
+    if (diff < 60000)    return 'just now';
+    if (diff < 3600000)  return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    return `${Math.floor(diff / 86400000)}d ago`;
+  }
+
+  function fmtDuration(secs) {
+    const s = Number(secs) || 0;
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (h > 0) return `${h}h ${m}m`;
+    return m > 0 ? `${m}m` : '<1m';
+  }
+
+  /* Safe accessors so we never error if app.js hasn't initialised yet */
+  function getS()        { return window.S || {}; }
+  function getProgress() { return getS().progress || (window.getCurrentProgress?.() || {}); }
+  function getScore()    { return window.getProgressScore?.(getProgress()) ?? 0; }
+
+  /* ── Persistent talk data ───────────────────────────────────────────────── */
+  const TalkStore = {
+    load() {
+      try { return JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch { return {}; }
+    },
+    save(data) {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch {}
+    },
+    get() {
+      const raw = this.load();
+      const p   = getProgress();
+      return {
+        totalChats: raw.totalChats  || p.completions || 0,
+        totalSec:   raw.totalSec   || 0,
+        videoCalls: raw.videoCalls || 0,
+        skips:      raw.skips      || 0,
+        sessions:   Array.isArray(raw.sessions) ? raw.sessions : [],
+        lastChatAt: raw.lastChatAt || null
+      };
+    },
+    record({ peer, emoji, mode, durationSec, rating, skipped }) {
+      const raw = this.load();
+      if (!raw.sessions) raw.sessions = [];
+      if (!skipped) {
+        raw.sessions.unshift({
+          peer:        String(peer  || 'Stranger').slice(0, 30),
+          emoji:       String(emoji || '👤').slice(0, 4),
+          mode:        mode || 'text',
+          durationSec: Number(durationSec) || 0,
+          rating:      Number.isFinite(rating) ? rating : null,
+          ts:          Date.now()
+        });
+        raw.sessions   = raw.sessions.slice(0, 60);
+        raw.totalChats = (raw.totalChats || 0) + 1;
+        raw.totalSec   = (raw.totalSec   || 0) + (Number(durationSec) || 0);
+        if (mode === 'video') raw.videoCalls = (raw.videoCalls || 0) + 1;
+        raw.lastChatAt = Date.now();
+      } else {
+        raw.skips = (raw.skips || 0) + 1;
+      }
+      this.save(raw);
+    }
+  };
+
+  /* ── Session timer ──────────────────────────────────────────────────────── */
+  let _timerIv    = null;
+  let _timerStart = null;
+  let _timerSecs  = 0;
+
+  function startTimer() {
+    _timerStart = Date.now();
+    _timerSecs  = 0;
+    const el = $('chat-session-timer');
+    if (!el) return;
+    clearInterval(_timerIv);
+    el.textContent = '00:00';
+    el.classList.remove('long');
+
+    _timerIv = setInterval(() => {
+      _timerSecs = Math.floor((Date.now() - _timerStart) / 1000);
+      const m = Math.floor(_timerSecs / 60);
+      const s = _timerSecs % 60;
+      if (el.isConnected) {
+        el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        el.classList.toggle('long', _timerSecs >= 300); // amber after 5 min
+      }
+    }, 1000);
+  }
+
+  function stopTimer() {
+    clearInterval(_timerIv);
+    _timerIv = null;
+    const elapsed = _timerStart ? Math.floor((Date.now() - _timerStart) / 1000) : 0;
+    _timerStart = null;
+    return elapsed;
+  }
+
+  /* ── Rotating tips on match page ────────────────────────────────────────── */
+  let _tipIv  = null;
+  let _tipIdx = 0;
+
+  function startTips() {
+    const el = $('talk-match-tip-text');
+    if (!el) return;
+    _tipIdx = Math.floor(Math.random() * MATCH_TIPS.length);
+    el.textContent = MATCH_TIPS[_tipIdx];
+    clearInterval(_tipIv);
+    _tipIv = setInterval(() => {
+      _tipIdx = (_tipIdx + 1) % MATCH_TIPS.length;
+      if (!el.isConnected) { clearInterval(_tipIv); return; }
+      el.style.opacity = '0';
+      setTimeout(() => {
+        if (el.isConnected) { el.textContent = MATCH_TIPS[_tipIdx]; el.style.opacity = '1'; }
+      }, 220);
+    }, 4800);
+  }
+
+  function stopTips() { clearInterval(_tipIv); _tipIv = null; }
+
+  /* ── Live-bar data refresh ──────────────────────────────────────────────── */
+  function refreshLiveBar() {
+    const countEl = $('talk-live-count');
+    const waitEl  = $('talk-avg-wait');
+    if (countEl) {
+      const n = Number(getS().onlineCount || 0);
+      countEl.textContent = n ? n.toLocaleString() : '—';
+    }
+    if (waitEl) {
+      const n = Number(getS().onlineCount || 0);
+      waitEl.textContent = n > 300 ? '<10s' : n > 80 ? '~20s' : '~30s';
+    }
+  }
+
+  /* ── Mode-card sync ─────────────────────────────────────────────────────── */
+  function syncModeCards() {
+    const grid = $('talk-mode-grid');
+    if (!grid) return;
+    const activeMode = getS().mode || 'video';
+    qsa('.talk-mode-card', grid).forEach(c =>
+      c.classList.toggle('active', c.dataset.mode === activeMode)
+    );
+    refreshModeCardCounts();
+  }
+
+  function refreshModeCardCounts() {
+    const n = Number(getS().onlineCount || 0);
+    const v = $('talk-mode-video-count');
+    const t = $('talk-mode-text-count');
+    if (v) v.textContent = n ? `~${Math.max(1, Math.round(n * .55)).toLocaleString()} available` : 'Available';
+    if (t) t.textContent = n ? `~${Math.max(1, Math.round(n * .45)).toLocaleString()} available` : 'Available';
+  }
+
+  /* ── Lobby stats strip ──────────────────────────────────────────────────── */
+  function refreshLobbyStats() {
+    const strip = $('talk-lobby-stats-strip');
+    if (!strip) return;
+
+    if (getS().isGuest) { strip.style.display = 'none'; return; }
+    strip.style.display = '';
+
+    const p    = getProgress();
+    const data = TalkStore.get();
+    const set  = (id, val) => { const el = $(id); if (el) el.textContent = val; };
+
+    set('lstat-score',  getScore().toLocaleString());
+    set('lstat-streak', `${p.streak || 0}d`);
+    set('lstat-chats',  data.totalChats.toLocaleString());
+    set('lstat-rank',   p.weeklyRank ? `#${p.weeklyRank}` : '#—');
+  }
+
+  /* ── Profile talk stats renderer ────────────────────────────────────────── */
+  function renderProfileTalkStats() {
+    const host = $('profile-talk-stats');
+    if (!host) return;
+
+    const S = getS();
+    if (S.isGuest || !S.username) { host.innerHTML = ''; return; }
+
+    const data  = TalkStore.get();
+    const p     = getProgress();
+    const score = getScore();
+
+    const total    = data.totalChats;
+    const timeStr  = data.totalSec > 0 ? fmtDuration(data.totalSec) : '0m';
+    const rate     = total > 0
+      ? Math.min(99, Math.round((total / Math.max(total + data.skips * 0.4 + 1, 1)) * 100))
+      : 0;
+
+    const recentHTML = data.sessions.slice(0, 4).map(s => `
+      <div class="talk-pstats-recent">
+        <div class="talk-pstats-recent-ava">${escHTML(s.emoji)}</div>
+        <div class="talk-pstats-recent-info">
+          <div class="talk-pstats-recent-peer">${escHTML(s.peer)}</div>
+          <div class="talk-pstats-recent-meta">${escHTML(s.mode)} · ${escHTML(fmtDuration(s.durationSec))} · ${escHTML(relTime(s.ts))}</div>
+        </div>
+        ${s.rating ? `<div class="talk-pstats-recent-rating">⭐ ${escHTML(String(s.rating))}</div>` : ''}
+      </div>`).join('');
+
+    host.innerHTML = `
+      <div class="talk-pstats-card">
+        <div class="talk-pstats-head">
+          <span class="talk-pstats-title">💬 Talk Activity</span>
+          <span class="talk-pstats-sub">${total} chat${total === 1 ? '' : 's'}</span>
+        </div>
+
+        <div class="talk-pstats-grid">
+          <div class="talk-pstats-cell primary">
+            <div class="talk-pstats-val">${total.toLocaleString()}</div>
+            <div class="talk-pstats-lbl">Total Chats</div>
+          </div>
+          <div class="talk-pstats-cell">
+            <div class="talk-pstats-val">${escHTML(timeStr)}</div>
+            <div class="talk-pstats-lbl">Talk Time</div>
+          </div>
+          <div class="talk-pstats-cell">
+            <div class="talk-pstats-val">${data.videoCalls.toLocaleString()}</div>
+            <div class="talk-pstats-lbl">Video Calls</div>
+          </div>
+          <div class="talk-pstats-cell">
+            <div class="talk-pstats-val">${(p.streak || 0)}<span style="font-size:14px">d 🔥</span></div>
+            <div class="talk-pstats-lbl">Streak</div>
+          </div>
+          <div class="talk-pstats-cell">
+            <div class="talk-pstats-val">${score.toLocaleString()}</div>
+            <div class="talk-pstats-lbl">Score</div>
+          </div>
+          <div class="talk-pstats-cell">
+            <div class="talk-pstats-val">${p.weeklyRank ? `#${p.weeklyRank}` : '—'}</div>
+            <div class="talk-pstats-lbl">Weekly Rank</div>
+          </div>
+        </div>
+
+        ${total > 0 ? `
+          <div class="talk-cbar">
+            <div class="talk-cbar-head">
+              <span>Completion rate</span><span>${rate}%</span>
+            </div>
+            <div class="talk-cbar-track">
+              <div class="talk-cbar-fill" style="width:${rate}%;"></div>
+            </div>
+          </div>` : ''}
+
+        ${recentHTML ? `
+          <div class="talk-pstats-recents">
+            <div class="talk-pstats-recents-label">Recent chats</div>
+            ${recentHTML}
+          </div>` : `
+          <div class="talk-pstats-empty">
+            <div class="talk-pstats-empty-icon">💬</div>
+            Start chatting to build your Talk history
+            <br>
+            <button class="talk-pstats-cta" type="button" onclick="window.showPage?.('pg-lobby')">
+              Find a stranger →
+            </button>
+          </div>`}
+      </div>`;
+  }
+
+  /* ── DOM Injection helpers ──────────────────────────────────────────────── */
+
+  /* LOBBY */
+  function injectLobby() {
+    const card = qs('#pg-lobby .lobby-card');
+    if (!card || card.dataset.talkInjected) return;
+    card.dataset.talkInjected = '1';
+
+    /* 1. Live stats bar — prepend before .lobby-head */
+    const head = qs('.lobby-head', card);
+    if (head) {
+      const bar = document.createElement('div');
+      bar.className = 'talk-live-bar';
+      bar.innerHTML = `
+        <span class="talk-live-dot"></span>
+        <strong id="talk-live-count">—</strong> online
+        <span class="talk-sep">·</span>
+        avg wait <strong id="talk-avg-wait">&lt;10s</strong>`;
+      card.insertBefore(bar, head);
+    }
+
+    /* 2. Mode cards — hidden original mode-switch, inject cards above it */
+    const modeSwitch = qs('.mode-switch', card);
+    if (modeSwitch) {
+      modeSwitch.style.display = 'none'; /* keep for app.js proxying */
+      const grid = document.createElement('div');
+      grid.id        = 'talk-mode-grid';
+      grid.className = 'talk-mode-grid';
+      grid.innerHTML = `
+        <button class="talk-mode-card active" data-mode="video" type="button">
+          <div class="talk-mode-check">✓</div>
+          <span class="talk-mode-card-icon">🎥</span>
+          <div class="talk-mode-card-name">Video Chat</div>
+          <div class="talk-mode-card-desc">Face-to-face with a random stranger</div>
+          <div class="talk-mode-card-meta" id="talk-mode-video-count">Available</div>
+        </button>
+        <button class="talk-mode-card" data-mode="text" type="button">
+          <div class="talk-mode-check">✓</div>
+          <span class="talk-mode-card-icon">💬</span>
+          <div class="talk-mode-card-name">Text Chat</div>
+          <div class="talk-mode-card-desc">Anonymous messaging, no camera needed</div>
+          <div class="talk-mode-card-meta" id="talk-mode-text-count">Available</div>
+        </button>`;
+      modeSwitch.parentNode.insertBefore(grid, modeSwitch);
+
+      /* Mode card clicks proxy to hidden .mode-btn buttons */
+      grid.addEventListener('click', e => {
+        const card = e.target.closest('.talk-mode-card');
+        if (!card) return;
+        const proxy = qs(`.mode-btn[data-mode="${card.dataset.mode}"]`);
+        if (proxy) proxy.click();
+        qsa('.talk-mode-card', grid).forEach(c => c.classList.toggle('active', c === card));
+      });
+    }
+
+    /* 3. Interest chip suggestions — inject after lobby-grid */
+    const lobbyGrid = qs('.lobby-grid', card);
+    if (lobbyGrid) {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'margin-top:12px;';
+      wrap.innerHTML = `
+        <div class="talk-chips-label">Quick topics</div>
+        <div id="talk-interest-chips" class="talk-chips-wrap"></div>`;
+      lobbyGrid.insertAdjacentElement('afterend', wrap);
+    }
+
+    /* 4. Stats strip — after .start-row */
+    const startRow = qs('.start-row', card);
+    if (startRow) {
+      const strip = document.createElement('div');
+      strip.id        = 'talk-lobby-stats-strip';
+      strip.className = 'talk-lobby-stats';
+      strip.style.display = 'none';
+      strip.innerHTML = `
+        <div class="talk-lobby-stat">
+          <div class="talk-lobby-stat-val" id="lstat-score">—</div>
+          <div class="talk-lobby-stat-lbl">Score</div>
+        </div>
+        <div class="talk-lobby-stat">
+          <div class="talk-lobby-stat-val" id="lstat-streak">0d</div>
+          <div class="talk-lobby-stat-lbl">Streak</div>
+        </div>
+        <div class="talk-lobby-stat">
+          <div class="talk-lobby-stat-val" id="lstat-chats">0</div>
+          <div class="talk-lobby-stat-lbl">Chats</div>
+        </div>
+        <div class="talk-lobby-stat">
+          <div class="talk-lobby-stat-val" id="lstat-rank">#—</div>
+          <div class="talk-lobby-stat-lbl">Rank</div>
+        </div>`;
+      startRow.insertAdjacentElement('afterend', strip);
+    }
+  }
+
+  /* MATCH */
+  function injectMatch() {
+    const card = qs('#pg-match .match-card');
+    if (!card || card.dataset.talkInjected) return;
+    card.dataset.talkInjected = '1';
+
+    /* Replace plain spinner with concentric ring */
+    const spinner = qs('.spinner', card);
+    if (spinner) {
+      const ring = document.createElement('div');
+      ring.className = 'talk-search-ring';
+      ring.innerHTML = `
+        <div class="talk-search-ring-bg"></div>
+        <div class="talk-search-ring-spin"></div>
+        <div class="talk-search-ring-glow"></div>
+        <div class="talk-search-ring-icon">🌐</div>`;
+      spinner.replaceWith(ring);
+    }
+
+    /* Queue info + tip — insert after .match-badge */
+    const badge = qs('.match-badge', card);
+    if (badge) {
+      const queueRow = document.createElement('div');
+      queueRow.className = 'talk-match-queue';
+      queueRow.innerHTML = `<span class="talk-match-queue-dot"></span><span>Searching live queue…</span>`;
+
+      const tip = document.createElement('div');
+      tip.className = 'talk-match-tip';
+      tip.innerHTML = `<span id="talk-match-tip-text">${MATCH_TIPS[0]}</span>`;
+
+      badge.insertAdjacentElement('afterend', tip);
+      badge.insertAdjacentElement('afterend', queueRow);
+    }
+  }
+
+  /* CHAT */
+  function injectChat() {
+    const panel = qs('#pg-chat .chat-panel');
+    if (!panel || panel.dataset.talkInjected) return;
+    panel.dataset.talkInjected = '1';
+
+    /* Session timer in topbar */
+    const actions = qs('#pg-chat .chat-topbar .top-actions');
+    if (actions) {
+      const timer = document.createElement('div');
+      timer.id = 'chat-session-timer';
+      timer.textContent = '00:00';
+      /* Insert before the first button so it appears left-ish */
+      const firstBtn = actions.querySelector('button, .conn-badge');
+      firstBtn ? actions.insertBefore(timer, firstBtn) : actions.appendChild(timer);
+    }
+
+    /* Extras row (reactions + quick replies) above chat input */
+    const chatInput = qs('.chat-input', panel);
+    if (chatInput) {
+      const extras = document.createElement('div');
+      extras.className = 'talk-chat-extras';
+      extras.innerHTML = `
+        <div class="talk-chat-extras-row">
+          <div id="chat-reaction-bar"></div>
+        </div>
+        <div id="chat-quick-replies"></div>`;
+      panel.insertBefore(extras, chatInput);
+    }
+  }
+
+  /* PROFILE — inject stats host after gallery section */
+  function injectProfileStats() {
+    if ($('profile-talk-stats')) return;
+    const gallery = $('profile-gallery-section');
+    if (!gallery) return;
+    const div = document.createElement('div');
+    div.id = 'profile-talk-stats';
+    gallery.insertAdjacentElement('afterend', div);
+  }
+
+  /* ── Interest chips (built once per lobby visit) ────────────────────────── */
+  function buildInterestChips() {
+    const wrap = $('talk-interest-chips');
+    if (!wrap || wrap.dataset.built) return;
+    wrap.dataset.built = '1';
+
+    const shuffled = [...INTEREST_CHIPS].sort(() => Math.random() - .5).slice(0, 8);
+    wrap.innerHTML = shuffled
+      .map(i => `<button class="talk-interest-chip" type="button" data-interest="${escHTML(i.l)}">${i.e} ${i.l}</button>`)
+      .join('');
+
+    const input = $('interest-input');
+    wrap.addEventListener('click', e => {
+      const chip = e.target.closest('[data-interest]');
+      if (!chip || !input) return;
+      const val = chip.dataset.interest;
+      if (chip.classList.contains('on')) {
+        chip.classList.remove('on');
+        if (input.value === val) { input.value = ''; input.dispatchEvent(new Event('input')); }
+      } else {
+        qsa('.talk-interest-chip.on', wrap).forEach(c => c.classList.remove('on'));
+        chip.classList.add('on');
+        input.value = val;
+        input.dispatchEvent(new Event('input'));
+      }
+      if (window.S) window.S.interest = input.value;
+    });
+
+    /* Keep chips in sync when user types manually */
+    input?.addEventListener('input', () => {
+      const v = input.value.toLowerCase();
+      qsa('.talk-interest-chip', wrap).forEach(c =>
+        c.classList.toggle('on', c.dataset.interest.toLowerCase() === v)
+      );
+    });
+  }
+
+  /* ── Quick replies (built fresh each chat visit) ────────────────────────── */
+  function buildQuickReplies() {
+    const wrap = $('chat-quick-replies');
+    if (!wrap) return;
+    wrap.dataset.built = '1'; /* allow rebuild on next chat */
+
+    const sample = [...QUICK_REPLIES].sort(() => Math.random() - .5).slice(0, 5);
+    wrap.innerHTML = sample
+      .map(r => `<button class="chat-qr-chip" type="button">${escHTML(r)}</button>`)
+      .join('');
+
+    wrap.addEventListener('click', e => {
+      const chip = e.target.closest('.chat-qr-chip');
+      if (!chip) return;
+      const cin = $('cin');
+      if (cin) { cin.value = chip.textContent; cin.focus(); }
+    });
+  }
+
+  /* ── Emoji reactions ────────────────────────────────────────────────────── */
+  function buildReactionBar() {
+    const bar = $('chat-reaction-bar');
+    if (!bar || bar.dataset.built) return;
+    bar.dataset.built = '1';
+
+    bar.innerHTML = REACTIONS
+      .map(r => `<button class="chat-rx-btn" type="button" title="${r}">${r}</button>`)
+      .join('');
+
+    bar.addEventListener('click', e => {
+      const btn = e.target.closest('.chat-rx-btn');
+      if (!btn) return;
+      const emoji = btn.textContent.trim();
+
+      /* Floating animation from button position */
+      const rect = btn.getBoundingClientRect();
+      const el   = document.createElement('div');
+      el.className = 'talk-float-emoji';
+      el.textContent = emoji;
+      el.style.cssText = `left:${rect.left + rect.width / 2 - 14}px;top:${rect.top}px;`;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 1700);
+
+      /* Send the emoji as a chat message */
+      const S = getS();
+      if (S.roomId && S.socket?.connected) {
+        S.socket.emit('chat', { roomId: S.roomId, text: emoji });
+      } else if (S.syntheticActive || S.stranger?.isBot) {
+        window.appendMsg?.(emoji, 'me');
+      }
+    });
+  }
+
+  /* ── Patch rating submit to persist star in session history ─────────────── */
+  function patchRatingSubmit() {
+    const btn = $('btn-submit-rating');
+    if (!btn || btn.dataset.talkPatched) return;
+    btn.dataset.talkPatched = '1';
+
+    btn.addEventListener('click', () => {
+      const litStar = qs('#stars .star.lit:last-of-type');
+      if (!litStar) return;
+      const rating = parseInt(litStar.dataset.v, 10);
+      if (!Number.isFinite(rating)) return;
+      const raw = TalkStore.load();
+      if (raw.sessions?.length) { raw.sessions[0].rating = rating; TalkStore.save(raw); }
+    }, { capture: true });
+  }
+
+  /* ── Page lifecycle ─────────────────────────────────────────────────────── */
+
+  /* Track which page we just left so we can record chat sessions */
+  let _prevPage = null;
+
+  function onPageActivated(id) {
+    /* Record a session when leaving the chat page */
+    if (_prevPage === 'pg-chat' && id !== 'pg-chat') {
+      const elapsed = stopTimer();
+      if (elapsed > 8) {
+        const S  = getS();
+        const st = S.stranger || {};
+        TalkStore.record({
+          peer:        st.name  || 'Stranger',
+          emoji:       st.emoji || '👤',
+          mode:        S.mode   || 'text',
+          durationSec: elapsed,
+          rating:      null,
+          skipped:     id === 'pg-match' /* navigated back = skip */
+        });
+      }
+    }
+    _prevPage = id;
+
+    if (id === 'pg-lobby') {
+      setTimeout(() => {
+        injectLobby();
+        buildInterestChips();
+        syncModeCards();
+        refreshLiveBar();
+        refreshLobbyStats();
+        refreshModeCardCounts();
+      }, 60);
+    }
+
+    if (id === 'pg-match') {
+      stopTips();
+      setTimeout(() => { injectMatch(); startTips(); }, 80);
+    } else {
+      stopTips();
+    }
+
+    if (id === 'pg-chat') {
+      setTimeout(() => {
+        injectChat();
+        /* Reset built flag so chips refresh each new chat */
+        const qr = $('chat-quick-replies');
+        if (qr) delete qr.dataset.built;
+        buildQuickReplies();
+        buildReactionBar();
+        startTimer();
+      }, 80);
+    }
+
+    if (id === 'pg-profile') {
+      setTimeout(() => {
+        injectProfileStats();
+        renderProfileTalkStats();
+      }, 200);
+    }
+  }
+
+  /* MutationObserver on .page elements — fires whenever .active changes */
+  function watchPages() {
+    const obs = new MutationObserver(mutations => {
+      mutations.forEach(m => {
+        if (m.type !== 'attributes') return;
+        const page = m.target;
+        if (!page.classList.contains('page')) return;
+        if (page.classList.contains('active')) onPageActivated(page.id);
+      });
+    });
+    document.querySelectorAll('.page').forEach(p =>
+      obs.observe(p, { attributes: true, attributeFilter: ['class'] })
+    );
+  }
+
+  /* ── Periodic refresh ───────────────────────────────────────────────────── */
+  setInterval(() => {
+    refreshLiveBar();
+    refreshModeCardCounts();
+    syncModeCards();
+    if ($('pg-lobby')?.classList.contains('active')) refreshLobbyStats();
+  }, 9000);
+
+  /* ── Auth state hook (app.js fires this after login/logout) ────────────── */
+  window.addEventListener('mortalive-auth-state', () => {
+    setTimeout(() => {
+      refreshLobbyStats();
+      refreshLiveBar();
+      if ($('pg-profile')?.classList.contains('active')) renderProfileTalkStats();
+    }, 180);
+  });
+
+  /* ── Bootstrap ──────────────────────────────────────────────────────────── */
+  function boot() {
+    watchPages();
+    patchRatingSubmit();
+
+    const activePage = document.querySelector('.page.active');
+    if (activePage) { _prevPage = activePage.id; onPageActivated(activePage.id); }
+
+    console.log('[TalkEnhance v20] Ready ✓');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(boot, 130), { once: true });
+  } else {
+    setTimeout(boot, 130); /* give app.js its head start */
+  }
+
+})();
