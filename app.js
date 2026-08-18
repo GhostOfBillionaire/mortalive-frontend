@@ -1,3 +1,4 @@
+// MORTALIVE SOURCE HANDOFF — v17 — preserved in full; no lines removed.
 // FRESH BUILD MARKER — 2026-08-16 16:26 IST — redeploy this exact file
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
@@ -4007,7 +4008,7 @@ function setFeedComposerKind(kind = 'text') {
   const next = ['text','photo','poll','qna'].includes(kind) ? kind : 'text';
   if (next === 'qna') { _feedQnaChoicesEnabled = false; _feedQnaCorrectOptionId = null; }
   if (next === 'poll') { _feedQnaChoicesEnabled = false; _feedQnaCorrectOptionId = null; }
-  if ((next === 'poll' || next === 'qna') && !_feedComposerMenuOpen) _feedComposerMenuOpen = false;
+  _feedComposerMenuOpen = false; // always close the type picker when a structured kind is selected
   _feedComposerKind = next;
   if (next === 'poll' || next === 'qna') ensureFeedComposerOptionRows(2, FEED_COMPOSER_MAX_OPTIONS);
   if (next === 'photo') {
@@ -4038,20 +4039,28 @@ function validateFeedStructuredPost(kind, question, options) {
     if (seen.has(key)) return { ok: false, message: 'Each choice must be unique.' };
     seen.add(key);
   }
-  if (kind === 'qna' && !_feedQnaCorrectOptionId) {
-    return { ok: false, message: 'Select the correct answer before posting this Q&A.' };
-  }
-  const selected = _feedQnaCorrectOptionId;
-  const correctIndex = selected ? raw.findIndex(item => selected === `option-${item.sourceIndex + 1}`) : -1;
-  if (kind === 'qna' && correctIndex < 0) {
-    return { ok: false, message: 'Select the correct answer before posting this Q&A.' };
-  }
   const normalizedOptions = raw.map(item => ({ id: `option-${item.sourceIndex + 1}`, label: item.label }));
-  return {
-    ok: true,
-    options: normalizedOptions,
-    correctOptionId: kind === 'qna' ? selected : null
-  };
+
+  if (kind === 'qna' && _feedQnaChoicesEnabled) {
+    // Resolve correct answer by querying the DOM at submission time rather than
+    // relying on the cached _feedQnaCorrectOptionId (whose radio `value` attribute
+    // is assigned at row-creation time and becomes stale after any row is removed).
+    const pollList = document.getElementById('poll-options-list');
+    const rows = pollList ? Array.from(pollList.querySelectorAll('.poll-option-row')) : [];
+    const checkedRowIdx = rows.findIndex(row => row.querySelector('.qna-correct-radio:checked'));
+    // Map the checked row's DOM position to the corresponding raw option entry
+    const matchedRaw = checkedRowIdx >= 0 ? raw.find(item => item.sourceIndex === checkedRowIdx) : null;
+    if (!matchedRaw) {
+      return { ok: false, message: 'Select the correct answer before posting this Q&A.' };
+    }
+    return {
+      ok: true,
+      options: normalizedOptions,
+      correctOptionId: `option-${matchedRaw.sourceIndex + 1}`
+    };
+  }
+
+  return { ok: true, options: normalizedOptions, correctOptionId: null };
 }
 
 
@@ -5393,14 +5402,17 @@ async function submitFeedTextPost() {
   if (!structured.ok) { toast(structured.message, '⚠️'); syncFeedComposer(); return; }
 
   try {
-    if (kind === 'photo' && file) validatePhotoFile(file);
+    if ((kind === 'photo' || kind === 'text') && file) validatePhotoFile(file);
     if (['poll','qna'].includes(kind) && file) {
       toast(`${getFeedStructuredKindLabel(kind)} posts cannot include a photo.`, '⚠️');
       return;
     }
 
     submit.disabled = true; submit.textContent = 'Posting…';
-    const media = kind === 'photo' && file ? await uploadPhotoFile(file, 'feed') : null;
+    // Upload photo for both 'photo' kind (Photo tab) and 'text' kind with an
+    // attachment (the 📷 button within the text composer). Both produce a
+    // photo post; only poll/qna explicitly block file attachments above.
+    const media = (kind === 'photo' || kind === 'text') && file ? await uploadPhotoFile(file, 'feed') : null;
     const insertContent = content || (media ? ' ' : content);
     const payload = {
       user_id: S.userId,
@@ -5712,6 +5724,14 @@ function initFeedPage() {
     field.value = getRandomQnaQuestion();
     syncFeedComposer();
     field.focus();
+  });
+  // Delegated handler for correct-answer radios — covers both initial HTML rows
+  // (which have no inline JS binding) and dynamically added rows.
+  $('poll-options-list')?.addEventListener('change', (event) => {
+    if (event.target.classList.contains('qna-correct-radio')) {
+      _feedQnaCorrectOptionId = event.target.value;
+      syncFeedComposer();
+    }
   });
   $('poll-options-list')?.addEventListener('click', (event) => {
     const remove = event.target.closest('.poll-remove-btn');
