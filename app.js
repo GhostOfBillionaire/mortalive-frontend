@@ -7081,111 +7081,57 @@ async function performAccountDeletion() {
   if (!confirmed) return;
 
   const userId = S.userId;
+  if (!userId || !S.authToken) {
+    toast('Your session has expired. Please sign in again.', '🔒');
+    return;
+  }
 
-  // 1. Primary path: SECURITY DEFINER RPC that deletes all rows AND the
-  //    auth.users entry in one atomic call (client anon key cannot delete
-  //    auth users directly — the RPC runs as the postgres role which can).
-  //    Run the SQL in Supabase: mortalive-delete-account.sql
-  let rpcSucceeded = false;
+  // Account deletion is intentionally a single server-side transaction.
+  // The browser no longer performs partial row deletes before Auth deletion.
   try {
-    if (userId && sb) {
-      const { error: rpcError } = await sb.rpc('delete_my_account');
-      if (rpcError) {
-        console.warn('[Delete] delete_my_account RPC failed (will fall back):', rpcError.message);
-      } else {
-        rpcSucceeded = true;
-        console.log('[Delete] delete_my_account RPC succeeded — auth user removed ✓');
-      }
+    const res = await fetch(`${SERVER_URL}/api/delete-account`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${S.authToken}`
+      },
+      body: JSON.stringify({ userId })
+    });
+
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || payload?.ok !== true) {
+      throw new Error(payload?.error || `Account deletion failed (${res.status})`);
     }
+
+    console.log('[Delete] Transactional account deletion succeeded ✓');
   } catch (e) {
-    console.warn('[Delete] delete_my_account RPC threw (will fall back):', e?.message || e);
+    console.error('[Delete] Transactional deletion failed:', e?.message || e);
+    toast(e?.message || 'Account deletion failed. Nothing was deleted.', '⚠️');
+    return;
   }
 
-  // 2. Fallback A: manual row deletion when RPC is unavailable.
-  if (!rpcSucceeded) {
-    try {
-      if (userId && sb) {
-        await sb.from('post_likes').delete().eq('user_id', userId);
-        await sb.from('post_comments').delete().eq('user_id', userId);
-        await sb.from('posts').delete().eq('user_id', userId);
-        await sb.from('user_links').delete().eq('user_id', userId);
-        await sb.from('accounts').delete().eq('id', userId);
-      }
-    } catch (e) {
-      console.warn('[Delete] DB row cleanup failed:', e?.message || e);
-    }
-
-    // Fallback B: ask server to call supabase.auth.admin.deleteUser() with
-    // the service-role key (the client anon key cannot delete auth users).
-    try {
-      const res = await fetch(`${SERVER_URL}/api/delete-account`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${S.authToken}`
-        },
-        body: JSON.stringify({ userId })
-      });
-      if (res.ok) {
-        console.log('[Delete] Server auth-delete succeeded ✓');
-      } else {
-        console.warn('[Delete] Server auth-delete returned', res.status,
-          '— deploy the /api/delete-account endpoint or run mortalive-delete-account.sql');
-      }
-    } catch (e) {
-      console.warn('[Delete] Server auth-delete failed:', e?.message || e,
-        '— NOTE: the auth.users record may remain until the SQL RPC is deployed.');
-    }
-  }
-
-  // 3. Invalidate the Supabase session token
+  // Only clear local state after the backend confirms the transaction.
   try { await sb?.auth?.signOut(); } catch (e) {}
-
-  // 4. Clear all client-side state and storage
   localStorage.removeItem('mortalive_token');
   localStorage.removeItem('mortalive_username');
   localStorage.removeItem('mortalive_user_id');
   localStorage.removeItem('mortalive_guest_name');
   localStorage.removeItem(PROGRESS_KEY);
   localStorage.removeItem(PROFILE_KEY);
+  localStorage.removeItem('mortalive_talk_v3');
 
   S.authToken = null;
-  S.username  = null;
-  S.userId    = null;
+  S.username = null;
+  S.userId = null;
   S.accountData = null;
-  S.userLinks   = [];
-  resetProfilePosts();
+  S.userLinks = [];
   S.crockroachScore = null;
-  S.isGuest   = true;
-  _autoLoginPromise = null;
+  S.isGuest = true;
 
-  toast('Account permanently deleted', '🗑️');
-  setTimeout(() => window.location.reload(), 900);
+  toast('Account deleted successfully.', '✅');
+  setTimeout(() => showPage('pg-auth'), 450);
 }
 
-// Refresh the DB-backed profile after a tab becomes visible again.
-// This recovers from temporary network/query failures without changing
-// the rest of the application state.
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible') return;
-  if (S.isGuest || !S.userId) return;
-  if (!$('pg-profile')?.classList.contains('active')) return;
-
-  hydrateAccountData(S.userId, { rerender: true }).catch((error) => {
-    console.warn('[Profile] visibility hydration warning:', error);
-  });
-});
-
-// Sync with app.js router
-window.addEventListener('mortalive-auth-state', () => {
-  if ($('pg-profile')?.classList.contains('active')) {
-    initProfilePage();
-  }
-});
-
-document.addEventListener('DOMContentLoaded', bindProfileEvents);
-
-// ── Global exports for inline-script access ──────────────────────────────────
 window.performAccountDeletion = performAccountDeletion;
 window.openAchievementsSheet  = openAchievementsSheet;
 window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInfoRow
@@ -7725,12 +7671,16 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
       .map(r => `<button class="chat-qr-chip" type="button">${escHTML(r)}</button>`)
       .join('');
 
-    wrap.addEventListener('click', e => {
-      const chip = e.target.closest('.chat-qr-chip');
-      if (!chip) return;
-      const cin = $('cin');
-      if (cin) { cin.value = chip.textContent; cin.focus(); }
-    });
+    // Bind exactly once; rebuilding the chips must not stack listeners.
+    if (!wrap.dataset.mortaliveQuickReplyBound) {
+      wrap.dataset.mortaliveQuickReplyBound = '1';
+      wrap.addEventListener('click', e => {
+        const chip = e.target.closest('.chat-qr-chip');
+        if (!chip) return;
+        const cin = $('cin');
+        if (cin) { cin.value = chip.textContent; cin.focus(); }
+      });
+    }
   }
 
   /* ── Emoji reactions ────────────────────────────────────────────────────── */
@@ -7828,9 +7778,6 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
     if (id === 'pg-chat') {
       setTimeout(() => {
         injectChat();
-        /* Reset built flag so chips refresh each new chat */
-        const qr = $('chat-quick-replies');
-        if (qr) delete qr.dataset.built;
         buildQuickReplies();
         buildReactionBar();
         startTimer();
