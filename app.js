@@ -61,7 +61,7 @@ const S = {
   userId: localStorage.getItem('mortalive_user_id') || null,
   accountData: null, // Stores DB profile data (bio, display name, etc.)
   userLinks: [],     // Stores DB profile social links
-  crockroachScore: null,
+  crokScore: null,
   isGuest: !localStorage.getItem('mortalive_token'),
   guestName: localStorage.getItem('mortalive_guest_name') || '',
   videoLayout: 'horizontal',
@@ -292,7 +292,7 @@ function defaultProgress() {
     profileTheme: 'aurora',
     profileFrame: 'Liquid Glass',
     featuredQuote: 'Building momentum one connection at a time.',
-    pinnedNote: 'Connect with the world, build your crockroach Score, and unlock your profile.',
+    pinnedNote: 'Connect with the world, build your crok Score, and unlock your profile.',
     avatarFrame: 'halo',
     lastSyncedAt: 0
   });
@@ -303,7 +303,7 @@ function defaultProfile() {
     theme: 'aurora',
     frame: 'Liquid Glass',
     quote: 'Building momentum one connection at a time.',
-    pinned: 'Connect with the world, build your crockroach Score, and unlock your profile.',
+    pinned: 'Connect with the world, build your crok Score, and unlock your profile.',
     accent: 'rgba(90, 177, 255, .95)',
     pattern: 'mesh'
   });
@@ -508,7 +508,7 @@ function updateProgressText() {
 
   const scorePill = $('score-pill-btn');
   if (scorePill) {
-    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} crockroach Score · ${summary.badges} badges`;
+    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} crok Score · ${summary.badges} badges`;
     scorePill.title = S.isGuest
       ? 'Guest sessions do not earn status'
       : `Top ${summary.percentile}% · #${summary.rank} weekly rank`;
@@ -547,7 +547,7 @@ async function syncScoreToSupabase() {
   const progress = getCurrentProgress();
   try {
     const { error } = await sb.from('accounts').update({
-      crockroach_score: score,
+      crok_score: score,
       updated_at: new Date().toISOString()
     }).eq('id', S.userId);
     if (error) throw error;
@@ -592,13 +592,13 @@ function awardProgress(kind, amount = 1, meta = {}) {
   progress.lastSyncedAt = Date.now();
 
   persistProgress();
-  scheduleSyncScoreToSupabase(); // keep Supabase accounts.crockroach_score in sync
+  scheduleSyncScoreToSupabase(); // keep Supabase accounts.crok_score in sync
   updateProgressText();
 
   if (meta.completion) {
     const goal = computeGoalText(progress);
     if (source === 'chat_complete') {
-      toast(`+${delta} crockroach Score · ${goal}`, '🧲');
+      toast(`+${delta} crok Score · ${goal}`, '🧲');
     } else {
       toast(`Milestone reached · ${goal}`, '🏁');
     }
@@ -639,7 +639,7 @@ function copyProgressShareCard() {
   const profile = getCurrentProfile();
   const text = [
     `Mortalive status`,
-    `${S.username || S.guestName || 'Guest'} · ${summary.score} crockroach Score`,
+    `${S.username || S.guestName || 'Guest'} · ${summary.score} crok Score`,
     `${summary.streak} day streak · ${summary.completions} completions`,
     `Top ${summary.percentile}% · #${summary.rank} weekly`,
     `Frame: ${profile.frame || 'Liquid Glass'}`
@@ -1130,7 +1130,7 @@ function updateIdentityDisplay() {
   const displayUsername = S.username || localStorage.getItem('mortalive_username');
 
   if (!S.isGuest && displayUsername) {
-    if (label) label.textContent = `Logged in as ${displayUsername} · 🧲 ${summary.score} crockroach Score · ${summary.streak} streak · #${summary.rank}`;
+    if (label) label.textContent = `Logged in as ${displayUsername} · 🧲 ${summary.score} crok Score · ${summary.streak} streak · #${summary.rank}`;
     if (switchBtn) switchBtn.style.display = 'none';
     if (logoutBtn) logoutBtn.style.display = '';
     if (scorePill) scorePill.style.display = '';
@@ -1433,11 +1433,11 @@ function initAuthControls() {
     return false;
   }
 
-  function afterAuthSuccess(token, username, crockroachScore, userId) {
+  function afterAuthSuccess(token, username, crokScore, userId) {
     S.authToken = token;
     S.username = username;
     S.userId = userId || null;
-    S.crockroachScore = crockroachScore;
+    S.crokScore = crokScore;
     S.isGuest = false;
 
     localStorage.setItem('mortalive_token', token);
@@ -1452,7 +1452,7 @@ function initAuthControls() {
       });
     }
 
-    syncAuthProgress(crockroachScore);
+    syncAuthProgress(crokScore);
     toast(`Welcome, ${username}!`, '🧲');
 
     // If the user arrived via a shared profile link (?user=...) but wasn't
@@ -1559,8 +1559,8 @@ function initAuthControls() {
         user.user_metadata?.username ||
         user.email?.split('@')[0] ||
         'User';
-      const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
-      afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
+      const crokScore = profile?.crok_score ?? profile?.crokScore ?? 0;
+      afterAuthSuccess(session.access_token, username, crokScore, user.id);
     } catch (e) {
       setError('login-error', 'Could not reach Supabase. Try again in a moment.');
     } finally {
@@ -1838,8 +1838,8 @@ function initAuthControls() {
           user.user_metadata?.username ||
           user.email?.split('@')[0] ||
           'User';
-        const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
-        afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
+        const crokScore = profile?.crok_score ?? profile?.crokScore ?? 0;
+        afterAuthSuccess(session.access_token, username, crokScore, user.id);
         return;
       }
 
@@ -1941,12 +1941,12 @@ function initAuthControls() {
         user.user_metadata?.username ||
         user.email?.split('@')[0] ||
         'User';
-      const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
+      const crokScore = profile?.crok_score ?? profile?.crokScore ?? 0;
 
       _otpContext = null;
       _pendingResetUser = null;
       toast('Password updated!', '✅');
-      afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
+      afterAuthSuccess(session.access_token, username, crokScore, user.id);
     } catch (e) {
       setError('reset-error', 'Could not reach Supabase. Try again in a moment.');
     } finally {
@@ -1961,7 +1961,7 @@ function initAuthControls() {
     S.userId      = null;
     S.accountData = null;
     S.userLinks   = [];
-    S.crockroachScore = null;
+    S.crokScore = null;
     S.isGuest     = true;
     S.guestName   = name.slice(0, 24) || `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
     updateProgressText();
@@ -2013,8 +2013,8 @@ function initAuthControls() {
         user.user_metadata?.username ||
         user.email?.split('@')[0] ||
         'User';
-      const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
-      afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
+      const crokScore = profile?.crok_score ?? profile?.crokScore ?? 0;
+      afterAuthSuccess(session.access_token, username, crokScore, user.id);
       return;
     }
 
@@ -2050,7 +2050,7 @@ function initAuthControls() {
       S.userId = null;
       S.accountData = null;
       S.userLinks = [];
-      S.crockroachScore = null;
+      S.crokScore = null;
       S.isGuest = true;
 
       _autoLoginPromise = null;
@@ -2188,13 +2188,13 @@ async function hydrateAccountData(userId, options = {}) {
         'User';
 
       const dbScore =
-        S.accountData?.crockroach_score ??
-        S.accountData?.crockroachScore ??
-        S.crockroachScore ??
+        S.accountData?.crok_score ??
+        S.accountData?.crokScore ??
+        S.crokScore ??
         0;
 
       S.username = dbUsername;
-      S.crockroachScore = dbScore;
+      S.crokScore = dbScore;
       localStorage.setItem('mortalive_username', dbUsername);
 
       if (rerender && $('pg-profile')?.classList.contains('active')) {
@@ -2284,19 +2284,19 @@ async function tryAutoLogin() {
         user.email?.split('@')[0] ||
         'User';
 
-      const crockroachScore =
-        S.accountData?.crockroach_score ??
-        S.accountData?.crockroachScore ??
-        (Number(user.user_metadata?.crockroach_score) || 0);
+      const crokScore =
+        S.accountData?.crok_score ??
+        S.accountData?.crokScore ??
+        (Number(user.user_metadata?.crok_score) || 0);
 
       S.username = username;
-      S.crockroachScore = crockroachScore;
+      S.crokScore = crokScore;
 
       localStorage.setItem('mortalive_username', S.username);
 
       // UI/progress enrichment is also non-auth-critical.
       try {
-        syncAuthProgress(crockroachScore);
+        syncAuthProgress(crokScore);
         updateIdentityDisplay();
         updateProgressText();
         // Pre-paint the feed sidebar avatar before any page routing runs,
@@ -2319,7 +2319,7 @@ async function tryAutoLogin() {
       S.userId = null;
       S.accountData = null;
       S.userLinks = [];
-      S.crockroachScore = null;
+      S.crokScore = null;
       S.isGuest = true;
 
       localStorage.removeItem('mortalive_token');
@@ -2395,7 +2395,7 @@ function initLobbyControls() {
     S.userId      = null;
     S.accountData = null;
     S.userLinks   = [];
-    S.crockroachScore = null;
+    S.crokScore = null;
     S.isGuest     = true;
     _autoLoginPromise = null; // allow fresh login attempt
     localStorage.removeItem('mortalive_token');
@@ -3290,7 +3290,7 @@ function beginChat() {
   const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
   setText('peer-ava', s.emoji);
   setText('peer-name', s.name);
-  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`);
+  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crok Score · connected`);
   bindTalkPeerActions();
   syncTalkPeerFollowUI();
 
@@ -4312,7 +4312,7 @@ function feedProfileFor(userId) {
     return {
       username: S.accountData?.username || S.username || 'You',
       display_name: S.accountData?.display_name || S.username || 'You',
-      crockroach_score: S.accountData?.crockroach_score ?? S.crockroachScore ?? getProgressScore(getCurrentProgress()),
+      crok_score: S.accountData?.crok_score ?? S.crokScore ?? getProgressScore(getCurrentProgress()),
       avatar_url: S.accountData?.avatar_url || ''
     };
   }
@@ -4340,7 +4340,7 @@ async function fetchFeedProfileDirectory(userIds) {
   try {
     const { data, error } = await sb
       .from('public_profile_directory')
-      .select('id,username,display_name,crockroach_score,account_type')
+      .select('id,username,display_name,crok_score,account_type')
       .in('id', ids);
     if (error) throw error;
     (data || []).forEach(row => map.set(row.id, row));
@@ -4360,12 +4360,12 @@ async function fetchFeedProfileDirectory(userIds) {
     try {
       const { data: accountRows } = await sb
         .from('accounts')
-        .select('id,username,display_name,crockroach_score,account_type,avatar_url')
+        .select('id,username,display_name,crok_score,account_type,avatar_url')
         .in('id', accountFallbackIds);
       (accountRows || []).forEach(row => {
         const current = map.get(row.id);
         map.set(row.id, current
-          ? { ...current, avatar_url: row.avatar_url || current.avatar_url || '', crockroach_score: row.crockroach_score ?? current.crockroach_score }
+          ? { ...current, avatar_url: row.avatar_url || current.avatar_url || '', crok_score: row.crok_score ?? current.crok_score }
           : row);
       });
     } catch (e) {
@@ -4424,7 +4424,7 @@ async function fetchFeedPage(reset = false) {
     const directory = await fetchFeedProfileDirectory(rows.map(row => row.user_id));
     const mapped = rows.map(row => ({
       ...row,
-      author: directory.get(row.user_id) || feedProfileFor(row.user_id) || { username: 'Mortalive member', display_name: 'Mortalive member', crockroach_score: 0 }
+      author: directory.get(row.user_id) || feedProfileFor(row.user_id) || { username: 'Mortalive member', display_name: 'Mortalive member', crok_score: 0 }
     }));
 
     _feedPosts = reset || _feedOffset === 0 ? mapped : [..._feedPosts, ...mapped];
@@ -4804,7 +4804,7 @@ async function openFeedProfileOverlay(userId) {
     const [links, followData] = await Promise.all([fetchUserLinks(userId), fetchFollowData(userId)]);
     const name = profile.display_name || profile.username || 'Mortalive member';
     const username = profile.username || 'member';
-    const score = toNum(profile.crockroach_score);
+    const score = toNum(profile.crok_score);
     const badge = score >= 700 ? '⭐ Gold' : score >= 420 ? '🔘 Silver' : score >= 220 ? '✨ Bronze' : '🌱 Newcomer';
     const status = [(profile.account_type || 'Member'), badge].filter(Boolean).join(' · ');
     const avatarUrl = feedAvatarUrl(profile.avatar_url);
@@ -4843,7 +4843,7 @@ async function openFeedProfileOverlay(userId) {
         <div class="feed-profile-stats">
           <div class="feed-profile-stat"><strong>${toNum(followData.followers).toLocaleString()}</strong><span>Followers</span></div>
           <div class="feed-profile-stat"><strong>${toNum(followData.following).toLocaleString()}</strong><span>Following</span></div>
-          <div class="feed-profile-stat"><strong>${toNum(score).toLocaleString()}</strong><span>crockroach Score</span></div>
+          <div class="feed-profile-stat"><strong>${toNum(score).toLocaleString()}</strong><span>crok Score</span></div>
           <div class="feed-profile-stat"><strong>${textPosts.length}</strong><span>Posts</span></div>
           <div class="feed-profile-stat"><strong>${photoPosts.length}</strong><span>Photos</span></div>
         </div>
@@ -4884,7 +4884,7 @@ async function openFeedProfileOverlay(userId) {
             <div class="profile-stats-row"><span class="profile-stats-key">Reels</span><strong class="profile-stats-val">${reels.length}</strong></div>
           </div>
           <div class="profile-stats-section"><div class="profile-stats-section-title">Profile</div>
-            <div class="profile-stats-row"><span class="profile-stats-key">crockroach Score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
+            <div class="profile-stats-row"><span class="profile-stats-key">crok Score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Followers</span><strong class="profile-stats-val">${toNum(followData.followers).toLocaleString()}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(followData.following).toLocaleString()}</strong></div>
           </div>
@@ -5280,7 +5280,7 @@ function renderFeedPosts() {
     const author = post.author || {};
     const username = author.username || 'member';
     const display = author.display_name || username;
-    const score = Number(author.crockroach_score) || 0;
+    const score = Number(author.crok_score) || 0;
     const mine = post.user_id === S.userId;
     const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A' : post?.post_meta?.kind === 'poll' ? 'Poll' : post.post_type === 'text' ? 'Text' : post.post_type === 'reel' ? 'Reel' : post.post_type || 'Post';
     const badge = score >= 700 ? '<span class="post-badge gold">Gold</span>' : score >= 420 ? '<span class="post-badge silver">Silver</span>' : '';
@@ -5338,7 +5338,7 @@ function getPostViewerAuthor(post) {
       username: S.accountData?.username || S.username || author.username || 'You',
       display_name: S.accountData?.display_name || S.username || author.display_name || 'You',
       avatar_url: S.accountData?.avatar_url || author.avatar_url || '',
-      crockroach_score: S.accountData?.crockroach_score ?? S.crockroachScore ?? author.crockroach_score ?? 0
+      crok_score: S.accountData?.crok_score ?? S.crokScore ?? author.crok_score ?? 0
     };
   }
   return {
@@ -5346,7 +5346,7 @@ function getPostViewerAuthor(post) {
     username: author.username || 'member',
     display_name: author.display_name || author.username || 'Member',
     avatar_url: author.avatar_url || '',
-    crockroach_score: Number(author.crockroach_score) || 0
+    crok_score: Number(author.crok_score) || 0
   };
 }
 
@@ -5399,7 +5399,7 @@ function postViewerRender(post, comments = _commentCache.get(post?.id) || []) {
   const likes = Number(engagement.likes) || 0;
   const commentsCount = Math.max(Number(engagement.comments) || 0, comments.length);
   const liked = !!engagement.liked;
-  const badge = Number(author.crockroach_score) >= 700 ? 'Gold' : Number(author.crockroach_score) >= 420 ? 'Silver' : '';
+  const badge = Number(author.crok_score) >= 700 ? 'Gold' : Number(author.crok_score) >= 420 ? 'Silver' : '';
 
   const mediaHost = modal.querySelector('.mortalive-post-viewer-media-host');
   const avatarHost = modal.querySelector('.mortalive-post-viewer-avatar');
@@ -5627,7 +5627,7 @@ function renderFeedSidebars() {
       <div class="active-user-item">
         <div class="active-user-ava">${feedAvatarLetter(author.display_name || author.username)}</div>
         <div class="active-user-info"><button type="button" class="active-user-name post-author-link" data-open-profile="${sanitizeHTML(author.id || '')}">${sanitizeHTML(author.display_name || author.username || 'Member')}</button><div class="active-user-sub">@${sanitizeHTML(author.username || 'member')}</div></div>
-        <div class="active-user-score">${Number(author.crockroach_score) || 0}</div>
+        <div class="active-user-score">${Number(author.crok_score) || 0}</div>
       </div>`).join('') : '<div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">No active posters yet.</div>';
   }
 }
@@ -6124,7 +6124,7 @@ function syncFeedSidebar() {
   const acc = S.accountData || {};
   const name = acc.display_name || acc.username || S.username || 'User';
   const username = acc.username || S.username || 'member';
-  const score = acc.crockroach_score ?? S.crockroachScore ?? getProgressScore(progress);
+  const score = acc.crok_score ?? S.crokScore ?? getProgressScore(progress);
   setText('sidebar-name', name);
   setText('sidebar-handle', `@${username} · ${S.isGuest ? 'Guest' : 'Member'}`);
   setText('sidebar-score', toNum(score) || 0);
@@ -6448,7 +6448,7 @@ async function fetchPublicProfileData(userId) {
   if (!(await requireAuthenticatedSession())) throw new Error('Authentication required to view profiles.');
   const seed = (await fetchFeedProfileDirectory([userId])).get(userId) || { id: userId, username: 'user', display_name: 'User' };
   try {
-    const { data, error } = await sb.from('accounts').select('id,username,display_name,bio,details,website,interests,avatar_url,crockroach_score,account_type').eq('id', userId).maybeSingle();
+    const { data, error } = await sb.from('accounts').select('id,username,display_name,bio,details,website,interests,avatar_url,crok_score,account_type').eq('id', userId).maybeSingle();
     if (!error && data) return { ...seed, ...data, id: userId };
   } catch (_) {}
   return { ...seed, id: userId };
@@ -6515,13 +6515,13 @@ async function initPublicProfilePage(userId) {
   const name = profile.display_name || profile.username || 'User';
   if ($('profile-username-display')) $('profile-username-display').textContent = name;
   if ($('profile-handle-modern')) $('profile-handle-modern').textContent = '';
-  const publicBadgeHtml = toNum(profile.crockroach_score) >= 700 ? '<span class="profile-badge-chip gold">⭐ Gold</span>' : toNum(profile.crockroach_score) >= 420 ? '<span class="profile-badge-chip silver">🔘 Silver</span>' : '';
+  const publicBadgeHtml = toNum(profile.crok_score) >= 700 ? '<span class="profile-badge-chip gold">⭐ Gold</span>' : toNum(profile.crok_score) >= 420 ? '<span class="profile-badge-chip silver">🔘 Silver</span>' : '';
   if ($('profile-subline-display')) $('profile-subline-display').innerHTML = `@${sanitizeHTML((profile.username || 'user').toLowerCase().replace(/\s+/g, '_'))} ${publicBadgeHtml}${publicBadgeHtml ? ' · ' : ' · '}${sanitizeHTML((profile.account_type || 'Member').charAt(0).toUpperCase() + (profile.account_type || 'Member').slice(1))}`;
   if ($('profile-bio-display')) $('profile-bio-display').textContent = profile.bio || 'Connecting with the world.';
   if ($('profile-info-goal-val')) $('profile-info-goal-val').textContent = 'Public profile';
   applyProfileAvatar(profile.avatar_url || '', name);
-  if ($('profile-hero-score')) $('profile-hero-score').textContent = toNum(profile.crockroach_score).toLocaleString();
-  if ($('profile-stat-score')) $('profile-stat-score').textContent = toNum(profile.crockroach_score).toLocaleString();
+  if ($('profile-hero-score')) $('profile-hero-score').textContent = toNum(profile.crok_score).toLocaleString();
+  if ($('profile-stat-score')) $('profile-stat-score').textContent = toNum(profile.crok_score).toLocaleString();
   if ($('profile-stat-streak')) $('profile-stat-streak').textContent = '—';
   if ($('profile-stat-completions')) $('profile-stat-completions').textContent = '—';
   if ($('profile-stat-rank')) $('profile-stat-rank').textContent = '—';
@@ -6681,7 +6681,7 @@ function initProfilePage() {
 
   // Progress Bar
   if ($('rank-label')) $('rank-label').textContent = `${tier.name}${tier.max < Infinity ? ' → ' + RANK_TIERS[RANK_TIERS.indexOf(tier)+1]?.name : ' (Max)'}`;
-  if ($('progress-label')) $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} crockroach Score`;
+  if ($('progress-label')) $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} crok Score`;
   if ($('progress-pct')) $('progress-pct').textContent = `${pct}%`;
   if ($('progress-fill')) $('progress-fill').style.width = `${pct}%`;
   if ($('progress-percentile')) $('progress-percentile').textContent = `Top ${summary.percentile}%`;
@@ -6905,7 +6905,7 @@ function openAchievementsSheet() {
       <div style="padding:18px 22px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px;">
           <div style="padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,var(--primary-alpha),rgba(124,58,237,.06));border:1px solid rgba(26,110,245,.14);">
-            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">crockroach Score</div>
+            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">crok Score</div>
             <div style="font-size:24px;font-weight:900;letter-spacing:-.04em;margin-top:4px;color:var(--primary);">${score.toLocaleString()}</div>
           </div>
           <div style="padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);">
@@ -7402,7 +7402,7 @@ async function performAccountDeletion() {
   S.userId = null;
   S.accountData = null;
   S.userLinks = [];
-  S.crockroachScore = null;
+  S.crokScore = null;
   S.isGuest = true;
 
   toast('Account deleted successfully.', '✅');
@@ -7447,13 +7447,13 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
   ];
 
   const MATCH_TIPS = [
-    '💡 Completing chats earns crockroach Score',
+    '💡 Completing chats earns crok Score',
     '🌍 Your next match could be from any country on Earth',
     '⭐ Rate your chats to help improve future matches',
     '🔒 Your identity stays private — nothing is shared without your consent',
     '⚡ Average match time is under 30 seconds when others are online',
     '🎯 Adding a topic finds like-minded strangers faster',
-    '🧲 A high crockroach Score boosts your matching priority',
+    '🧲 A high crok Score boosts your matching priority',
     '💬 Text mode works without a camera — great for quieter moments',
     '🎬 If no match is found, a recorded stream will appear automatically'
   ];
@@ -8173,7 +8173,7 @@ function renderProfileStatsPanel() {
     </div>
     <div class="profile-stats-section">
       <div class="profile-stats-section-title">Profile</div>
-      <div class="profile-stats-row"><span class="profile-stats-key">crockroach Score</span><strong class="profile-stats-val">${toNum(S.profileViewData?.crockroach_score ?? summary?.score).toLocaleString()}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">crok Score</span><strong class="profile-stats-val">${toNum(S.profileViewData?.crok_score ?? summary?.score).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Followers</span><strong class="profile-stats-val">${toNum(follow?.followers ?? _followCache.get(S.userId)?.followers).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(follow?.following ?? _followCache.get(S.userId)?.following).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Streak</span><strong class="profile-stats-val">${publicView ? '—' : `${toNum(summary?.streak)}d`}</strong></div>
