@@ -5913,6 +5913,54 @@ JS Bugs (app.js)
   .profile-post-strip.expanded { grid-template-columns:1fr !important; }
 }
 </style>
+
+<style id="mortalive-profile-natural-scroll-v29">
+/* Mortalive v29 — Main Profile uses the same natural document scrolling model as Feed-profile.
+   The full profile header scrolls away with its content; nothing remains pinned over posts. */
+#pg-profile {
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  height: auto !important;
+  min-height: 100dvh;
+}
+
+#pg-profile .profile-wrap {
+  min-height: 0 !important;
+}
+
+#pg-profile .modern-profile-card.profile-top-sticky {
+  position: relative !important;
+  top: auto !important;
+  z-index: 1 !important;
+  box-shadow: 0 10px 40px rgba(13,17,23,.07) !important;
+}
+
+#pg-profile .profile-tabs-bar {
+  position: relative !important;
+  top: auto !important;
+  z-index: 1 !important;
+}
+
+#pg-profile .profile-feed-viewport {
+  max-height: none !important;
+  height: auto !important;
+  overflow: visible !important;
+  overscroll-behavior: auto !important;
+}
+
+/* Scroll progress stays in normal flow, so it can never cover the fixed app topbar. */
+#pg-profile .profile-scroll-progress {
+  position: relative !important;
+  top: auto !important;
+  z-index: 1 !important;
+  opacity: 0 !important;
+}
+
+#pg-profile .modern-profile-card.profile-top-sticky.is-scrolled {
+  box-shadow: 0 10px 40px rgba(13,17,23,.07) !important;
+  border-bottom-color: rgba(0,0,0,.075) !important;
+}
+</style>
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -7162,7 +7210,7 @@ JS Bugs (app.js)
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260819-profile-reels-audit-v27"></script>
+<script src="app.js?v=20260819-profile-flow-v29"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
