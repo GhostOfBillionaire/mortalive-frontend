@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-18-supabase-new-keys-v23'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-19-profile-reels-audit-v27'; // bump this string on every deploy to confirm cache is fresh
 
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
 const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
@@ -2681,6 +2681,7 @@ function initSocket() {
       name: (data.peer && data.peer.name) || 'Stranger',
       score: data.peer && typeof data.peer.score === 'number' ? data.peer.score : null,
       emoji: (data.peer && data.peer.emoji) || '👤',
+      userId: data.peer && data.peer.id ? data.peer.id : null,
       isGuest: !!(data.peer && data.peer.isGuest)
     };
     beginChat();
@@ -3218,6 +3219,67 @@ function scheduleReplyMaybeBot() {
   }
 }
 
+function syncTalkPeerFollowUI() {
+  const wrap = $('talk-peer-actions');
+  const followBtn = $('btn-follow-peer');
+  const peer = S.stranger || {};
+  if (!wrap || !followBtn) return;
+
+  const userId = peer.userId || null;
+  const eligible = !!(userId && !peer.isGuest && !peer.isBot && !S.isGuest && S.userId && userId !== S.userId);
+  wrap.style.display = eligible ? 'flex' : 'none';
+  if (!eligible) {
+    followBtn.style.display = 'none';
+    return;
+  }
+
+  followBtn.style.display = '';
+  followBtn.disabled = true;
+  followBtn.textContent = '…';
+
+  fetchFollowData(userId).then((data) => {
+    if (!eligible || S.stranger?.userId !== userId) return;
+    followBtn.disabled = false;
+    followBtn.textContent = data.isFollowing ? '✓ Following' : '+ Follow';
+    followBtn.classList.toggle('talk-peer-following', !!data.isFollowing);
+  }).catch(() => {
+    if (eligible && S.stranger?.userId === userId) {
+      followBtn.disabled = false;
+      followBtn.textContent = '+ Follow';
+    }
+  });
+}
+
+function bindTalkPeerActions() {
+  const wrap = $('talk-peer-actions');
+  const followBtn = $('btn-follow-peer');
+  if (!wrap || !followBtn || wrap.dataset.bound) return;
+  wrap.dataset.bound = '1';
+
+  followBtn.addEventListener('click', async () => {
+    const peer = S.stranger || {};
+    const targetId = peer.userId;
+    if (!targetId || peer.isGuest || peer.isBot || S.isGuest) {
+      toast('Sign in to follow people you meet.', '🔒');
+      return;
+    }
+    try {
+      const cached = _followCache.get(targetId) || await fetchFollowData(targetId);
+      const next = !cached.isFollowing;
+      followBtn.disabled = true;
+      const updated = await toggleFollow(targetId, next);
+      followBtn.textContent = updated.isFollowing ? '✓ Following' : '+ Follow';
+      followBtn.classList.toggle('talk-peer-following', !!updated.isFollowing);
+      toast(updated.isFollowing ? `Following @${peer.name}` : `Unfollowed @${peer.name}`, updated.isFollowing ? '✓' : '➖');
+    } catch (error) {
+      toast(error?.message || 'Could not update follow.', '⚠️');
+    } finally {
+      if (S.stranger?.userId === targetId) followBtn.disabled = false;
+    }
+  });
+
+}
+
 function beginChat() {
   resetChatProgress();
   const msgs = $('chat-msgs');
@@ -3227,6 +3289,8 @@ function beginChat() {
   setText('peer-ava', s.emoji);
   setText('peer-name', s.name);
   setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`);
+  bindTalkPeerActions();
+  syncTalkPeerFollowUI();
 
   const panel = $('video-panel');
   
@@ -3971,7 +4035,7 @@ function getFeedComposerKind() {
 }
 
 function getFeedStructuredKindLabel(kind) {
-  return kind === 'qna' ? 'Q&A' : kind === 'poll' ? 'Poll' : kind === 'photo' ? 'Photo' : 'Text';
+  return kind === 'qna' ? 'Q&A' : kind === 'poll' ? 'Poll' : kind === 'photo' ? 'Photo' : kind === 'reel' ? 'Reel' : 'Text';
 }
 
 function getFeedComposerOptionValues() {
@@ -4012,6 +4076,7 @@ function syncFeedComposerTypeUI() {
   const addBtn = $('poll-add-option');
   const modeLabel = $('compose-mode-label');
   const photoButton = $('btn-feed-photo');
+  const reelButton = $('btn-feed-reel');
   const qnaModeRow = $('qna-mode-row');
   const qnaToggle = $('qna-choice-toggle');
   const qnaRandom = $('qna-random-question');
@@ -4026,13 +4091,19 @@ function syncFeedComposerTypeUI() {
   if (title) title.textContent = kind === 'qna' ? (_feedQnaChoicesEnabled ? 'Q&A choices' : 'Open Q&A') : 'Poll options';
   if (field) field.placeholder = kind === 'qna'
     ? (_feedQnaChoicesEnabled ? 'Ask a question for people to choose from…' : 'Ask a question people can reply to…')
-    : kind === 'poll' ? 'Ask a poll question…' : "What's on your mind after that chat…";
+    : kind === 'poll' ? 'Ask a poll question…'
+    : kind === 'reel' ? 'Add a caption to your reel…'
+    : "What's on your mind after that chat…";
   if (modeLabel) modeLabel.textContent = getFeedStructuredKindLabel(kind);
   if (builder) builder.classList.toggle('open', kind === 'poll' || kind === 'qna');
   if (photoButton) {
     const allowed = kind === 'text' || kind === 'photo';
     photoButton.style.display = allowed ? '' : 'none';
     if (!allowed) clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
+  }
+  if (reelButton) {
+    reelButton.style.display = 'none';
+    reelButton.classList.toggle('active', kind === 'reel' && !!$('feed-reel-input')?.files?.[0]);
   }
   if (qnaModeRow) qnaModeRow.style.display = kind === 'qna' ? 'flex' : 'none';
   if (qnaToggle) {
@@ -4056,7 +4127,7 @@ function syncFeedComposerTypeUI() {
 }
 
 function setFeedComposerKind(kind = 'text') {
-  const next = ['text','photo','poll','qna'].includes(kind) ? kind : 'text';
+  const next = ['text','photo','reel','poll','qna'].includes(kind) ? kind : 'text';
   if (next === 'qna') { _feedQnaChoicesEnabled = false; _feedQnaCorrectOptionId = null; }
   if (next === 'poll') { _feedQnaChoicesEnabled = false; _feedQnaCorrectOptionId = null; }
   _feedComposerMenuOpen = false; // always close the type picker when a structured kind is selected
@@ -4065,6 +4136,9 @@ function setFeedComposerKind(kind = 'text') {
   if (next === 'photo') {
     clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
     $('feed-photo-input')?.click();
+  }
+  if (next === 'reel') {
+    $('feed-reel-input')?.click();
   }
   _feedComposerMenuOpen = false;
   syncFeedComposerTypeUI();
@@ -4616,7 +4690,7 @@ function ensureFeedProfileOverlay() {
   const style = document.createElement('style');
   style.id = 'feed-profile-overlay-style';
   style.textContent = `
-    #feed-profile-overlay{position:fixed;top:clamp(76px,8vh,94px);right:0;bottom:0;left:0;z-index:1800;display:none;align-items:stretch;justify-content:stretch;background:var(--surface);}
+    #feed-profile-overlay{position:fixed;top:88px;right:0;bottom:0;left:0;z-index:1800;display:none;align-items:stretch;justify-content:stretch;background:var(--surface);}
     #feed-profile-overlay.open{display:flex;}
     body.feed-profile-open{overflow:hidden;}
     #feed-profile-overlay .feed-profile-sheet{width:100%;height:100%;max-height:none;overflow:hidden;background:var(--surface);border:0;box-shadow:none;display:flex;flex-direction:column;animation:feedProfileIn .22s var(--ease-out);}
@@ -4624,7 +4698,7 @@ function ensureFeedProfileOverlay() {
     #feed-profile-overlay .feed-profile-nav{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.94);backdrop-filter:blur(18px);}
     #feed-profile-overlay .feed-profile-close{width:38px;height:38px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border);font-size:18px;font-weight:800;display:grid;place-items:center;flex:none;}
     #feed-profile-overlay .feed-profile-nav-title{font-size:14px;font-weight:900;letter-spacing:-.02em;}
-    #feed-profile-overlay .feed-profile-content{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;}
+    #feed-profile-overlay .feed-profile-content{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;} #feed-profile-overlay .feed-profile-tabs{position:sticky;top:0;z-index:4;background:rgba(255,255,255,.96);backdrop-filter:blur(14px);display:flex;overflow-x:auto;} #feed-profile-overlay .feed-profile-tab{padding:12px 16px;border:0;border-bottom:2px solid transparent;background:transparent;font-weight:800;color:var(--on-surface-3);white-space:nowrap;} #feed-profile-overlay .feed-profile-tab.active{color:var(--primary);border-bottom-color:var(--primary);}
     #feed-profile-overlay .feed-profile-cover{height:112px;background:var(--surface);border-bottom:1px solid var(--border);}
     #feed-profile-overlay .feed-profile-head{padding:0 22px 18px;}
     #feed-profile-overlay .feed-profile-avatar{width:92px;height:92px;margin-top:-46px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;font-size:32px;font-weight:900;flex:none;border:4px solid var(--surface);box-shadow:var(--elev-2);}
@@ -4734,7 +4808,8 @@ async function openFeedProfileOverlay(userId) {
     const avatarUrl = feedAvatarUrl(profile.avatar_url);
     const initial = feedAvatarLetter(name);
     const textPosts = posts.filter(post => !post.media_url);
-    const photoPosts = posts.filter(post => !!post.media_url);
+    const photoPosts = posts.filter(post => !!post.media_url && post.post_type !== 'reel');
+    const reels = posts.filter(post => post.post_type === 'reel' && !!post.media_url);
     const detailsLabels = { professional: 'Job Title', creator: 'Content Niche', business: 'Company Name', private: 'Details', content: 'Content Niche', fun: 'Interests' };
     const detailLabel = detailsLabels[profile.account_type] || 'Details';
     const rawWebsite = String(profile.website || '').trim();
@@ -4774,6 +4849,8 @@ async function openFeedProfileOverlay(userId) {
       <div class="feed-profile-tabs">
         <button type="button" class="feed-profile-tab active" data-profile-tab="posts">Posts</button>
         <button type="button" class="feed-profile-tab" data-profile-tab="photos">Photos</button>
+        <button type="button" class="feed-profile-tab" data-profile-tab="reels">Reels</button>
+        <button type="button" class="feed-profile-tab" data-profile-tab="stats">Stats</button>
       </div>
       <div class="feed-profile-section" data-profile-panel="posts">
         <div class="feed-profile-posts">${textPosts.length ? textPosts.map(post => `
@@ -4789,6 +4866,27 @@ async function openFeedProfileOverlay(userId) {
             <div class="feed-profile-post-text">${renderHashtagRichText(String(post.content || '').trim())}</div>
             <img src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(name)}" loading="lazy">
           </article>`).join('') : '<div style="padding:12px 0;color:var(--on-surface-3);font-size:12.5px;">No photos yet.</div>'}</div>
+      </div>
+      <div class="feed-profile-section" data-profile-panel="reels" style="display:none;">
+        <div class="profile-reels-grid">${reels.length ? reels.map((post, i) => `
+          <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open reel ${i + 1}">
+            <video class="reel-thumb-bg" src="${sanitizeHTML(post.media_url)}" muted playsinline preload="metadata"></video>
+            <span class="reel-thumb-play">▶</span>
+          </button>`).join('') : '<div class="reels-empty-state"><div class="reels-empty-icon">🎬</div><div class="reels-empty-title">No reels yet</div></div>'}</div>
+      </div>
+      <div class="feed-profile-section" data-profile-panel="stats" style="display:none;">
+        <div class="profile-stats-panel">
+          <div class="profile-stats-section"><div class="profile-stats-section-title">Content</div>
+            <div class="profile-stats-row"><span class="profile-stats-key">Posts</span><strong class="profile-stats-val">${textPosts.length}</strong></div>
+            <div class="profile-stats-row"><span class="profile-stats-key">Photos</span><strong class="profile-stats-val">${photoPosts.length}</strong></div>
+            <div class="profile-stats-row"><span class="profile-stats-key">Reels</span><strong class="profile-stats-val">${reels.length}</strong></div>
+          </div>
+          <div class="profile-stats-section"><div class="profile-stats-section-title">Profile</div>
+            <div class="profile-stats-row"><span class="profile-stats-key">crockroach Score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
+            <div class="profile-stats-row"><span class="profile-stats-key">Followers</span><strong class="profile-stats-val">${toNum(followData.followers).toLocaleString()}</strong></div>
+            <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(followData.following).toLocaleString()}</strong></div>
+          </div>
+        </div>
       </div>`;
 
     content.querySelectorAll('[data-profile-tab]').forEach(tab => {
@@ -4798,6 +4896,7 @@ async function openFeedProfileOverlay(userId) {
         content.querySelectorAll('[data-profile-panel]').forEach(panel => {
           panel.style.display = panel.dataset.profilePanel === which ? '' : 'none';
         });
+        if (content) content.scrollTop = 0;
       });
     });
     const feedFollowBtn = content.querySelector('[data-feed-profile-follow]');
@@ -4856,6 +4955,28 @@ function formatPhotoSize(bytes) {
 const PHOTO_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 const PHOTO_UPLOAD_BUCKET = 'mortalive-media';
 const PHOTO_UPLOAD_TYPES = new Set(['image/jpeg','image/png','image/webp']);
+const REEL_UPLOAD_MAX_BYTES = 60 * 1024 * 1024;
+const REEL_UPLOAD_TYPES = new Set(['video/mp4','video/webm','video/quicktime']);
+function validateReelFile(file) {
+  if (!file) throw new Error('Choose a reel video first.');
+  if (!REEL_UPLOAD_TYPES.has(file.type)) throw new Error('Use MP4, WebM, or MOV videos.');
+  if (file.size > REEL_UPLOAD_MAX_BYTES) throw new Error('Reels must be 60 MB or smaller.');
+  return file;
+}
+async function uploadReelFile(file, folder = 'reels') {
+  validateReelFile(file);
+  if (!S.userId || S.isGuest || !sb) throw new Error('Sign in to upload reels.');
+  const ext = file.type === 'video/webm' ? 'webm' : file.type === 'video/quicktime' ? 'mov' : 'mp4';
+  const path = `${S.userId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2,10)}.${ext}`;
+  const { error } = await sb.storage.from(PHOTO_UPLOAD_BUCKET).upload(path, file, {
+    cacheControl: '31536000', upsert: false, contentType: file.type
+  });
+  if (error) throw error;
+  const { data } = sb.storage.from(PHOTO_UPLOAD_BUCKET).getPublicUrl(path);
+  if (!data?.publicUrl) throw new Error('Could not create the public reel URL.');
+  return { url: data.publicUrl, path, size: file.size, type: file.type };
+}
+
 
 function validatePhotoFile(file) {
   if (!file) throw new Error('Choose a photo first.');
@@ -4883,12 +5004,13 @@ function stabilizeProfileScrollAxes() {
   if (!viewport || viewport.dataset.scrollAxisBound) return;
   viewport.dataset.scrollAxisBound = '1';
 
-  // The profile viewport is the vertical scroller. Explicitly reserve the
-  // vertical gesture axis here so a horizontal swipe that begins inside the
-  // child post strip cannot be claimed by this ancestor on the own-profile
-  // layout (where the composer makes the viewport scrollable).
-  viewport.style.touchAction = 'pan-y';
-  viewport.style.overscrollBehaviorX = 'contain';
+  // The profile page is now the single vertical scroll root. The viewport is
+  // only a visual wrapper and must not claim either gesture axis.
+  viewport.style.touchAction = 'auto';
+  viewport.style.overscrollBehaviorX = 'none';
+  viewport.style.overscrollBehaviorY = 'none';
+  viewport.style.overflow = 'visible';
+  viewport.style.maxHeight = 'none';
 
   const strip = $('profile-post-strip');
   if (strip) {
@@ -4902,11 +5024,68 @@ function stabilizeProfileScrollAxes() {
 function bindHorizontalProfileStrip(strip) {
   if (!strip || strip.dataset.wheelBound) return;
   strip.dataset.wheelBound = '1';
+
   strip.addEventListener('wheel', (event) => {
-    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    // Native horizontal trackpad gestures already carry the intended axis.
+    if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+
+    const maxScroll = strip.scrollWidth - strip.clientWidth;
+    if (maxScroll < 4) return;
+
+    const atStart = strip.scrollLeft <= 2;
+    const atEnd = strip.scrollLeft >= maxScroll - 2;
+
+    // At the horizontal boundaries, release the wheel event so the profile
+    // page can continue scrolling vertically.
+    if (event.deltaY < 0 && atStart) return;
+    if (event.deltaY > 0 && atEnd) return;
+
+    // Only consume vertical-wheel movement while the strip has horizontal
+    // room in the intended direction.
     strip.scrollLeft += event.deltaY;
     event.preventDefault();
   }, { passive: false });
+}
+
+function initProfileScrollProgress() {
+  const page = $('pg-profile');
+  if (!page) return;
+
+  if (!$('profile-scroll-progress-bar')) {
+    const bar = document.createElement('div');
+    bar.id = 'profile-scroll-progress-bar';
+    bar.className = 'profile-scroll-progress';
+    const wrap = page.querySelector('.profile-wrap');
+    if (wrap) {
+      const sticky = wrap.querySelector('.profile-top-sticky');
+      if (sticky) sticky.insertAdjacentElement('afterend', bar);
+      else wrap.prepend(bar);
+    }
+  }
+
+  if (page._mortaliveProfileScrollHandler) {
+    page.removeEventListener('scroll', page._mortaliveProfileScrollHandler);
+  }
+
+  const onScroll = () => {
+    const scrollable = Math.max(0, page.scrollHeight - page.clientHeight);
+    const pct = scrollable > 0
+      ? Math.round((page.scrollTop / scrollable) * 100)
+      : 0;
+    page.style.setProperty('--scroll-pct', `${pct}%`);
+  };
+
+  page._mortaliveProfileScrollHandler = onScroll;
+  page.addEventListener('scroll', onScroll, { passive: true });
+  const sticky = page.querySelector('.modern-profile-card.profile-top-sticky');
+  if (sticky) {
+    const syncShadow = () => sticky.classList.toggle('is-scrolled', page.scrollTop > 8);
+    if (page._mortaliveProfileShadowHandler) page.removeEventListener('scroll', page._mortaliveProfileShadowHandler);
+    page._mortaliveProfileShadowHandler = syncShadow;
+    page.addEventListener('scroll', syncShadow, { passive: true });
+    syncShadow();
+  }
+  onScroll();
 }
 
 async function hydrateQnaResponses(postIds = []) {
@@ -5101,7 +5280,7 @@ function renderFeedPosts() {
     const display = author.display_name || username;
     const score = Number(author.crockroach_score) || 0;
     const mine = post.user_id === S.userId;
-    const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A' : post?.post_meta?.kind === 'poll' ? 'Poll' : post.post_type === 'text' ? 'Text' : post.post_type || 'Post';
+    const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A' : post?.post_meta?.kind === 'poll' ? 'Poll' : post.post_type === 'text' ? 'Text' : post.post_type === 'reel' ? 'Reel' : post.post_type || 'Post';
     const badge = score >= 700 ? '<span class="post-badge gold">Gold</span>' : score >= 420 ? '<span class="post-badge silver">Silver</span>' : '';
     const avatarUrl = feedAvatarUrl(author.avatar_url);
     const avatarMarkup = avatarUrl
@@ -5118,7 +5297,11 @@ function renderFeedPosts() {
           </div>
           ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
         </div>
-        <div class="post-body">${post.media_url ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><img class="feed-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">` : post?.post_meta?.kind ? renderStructuredFeedPost(post) : `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>`}</div>
+        <div class="post-body">${post.post_type === 'reel' && post.media_url
+          ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video src="${sanitizeHTML(post.media_url)}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
+          : post.media_url
+            ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><img class="feed-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">`
+            : post?.post_meta?.kind ? renderStructuredFeedPost(post) : `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>`}</div>
         <div class="post-actions">
           <button class="action-btn like-btn ${engagement.liked ? 'liked' : ''}" type="button" data-feed-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${engagement.liked ? 'true' : 'false'}"><span class="action-icon">${engagement.liked ? '♥' : '♡'}</span><span class="like-count">${engagement.likes}</span></button>
           <button class="action-btn comment-btn" type="button" data-feed-action="comments" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">💬</span><span>${engagement.comments}</span></button>
@@ -5273,6 +5456,10 @@ async function openPostViewer(postOrId) {
   }
   const post = typeof postOrId === 'string' ? getPostByIdForViewer(postOrId) : postOrId;
   if (!post?.id) return;
+  if (post.post_type === 'reel' && post.media_url) {
+    openReelViewer(post, collectAvailableReels());
+    return;
+  }
 
   const modal = $('mortalive-post-viewer');
   if (!modal) return;
@@ -5513,11 +5700,13 @@ async function submitFeedTextPost() {
   const field = $('compose-field');
   const submit = $('compose-submit');
   const photoInput = $('feed-photo-input');
+  const reelInput = $('feed-reel-input');
   const kind = getFeedComposerKind();
   if (!field || !submit || S.isGuest || !S.userId || !sb) { toast('Sign in to post', '🔒'); return; }
   const content = field.value.trim();
-  const file = photoInput?.files?.[0] || null;
+  const file = kind === 'reel' ? (reelInput?.files?.[0] || null) : (photoInput?.files?.[0] || null);
   if (!content && !file && !['poll','qna'].includes(kind)) return;
+  if (kind === 'reel' && !file) { toast('Choose a reel video first.', '⚠️'); return; }
   if (content.length > FEED_MAX_POST_CHARS) { toast(`Posts are limited to ${FEED_MAX_POST_CHARS} characters`, '⚠️'); return; }
 
   const hashtagCheck = validateUniqueHashtags(content);
@@ -5528,21 +5717,21 @@ async function submitFeedTextPost() {
 
   try {
     if ((kind === 'photo' || kind === 'text') && file) validatePhotoFile(file);
+    if (kind === 'reel' && file) validateReelFile(file);
     if (['poll','qna'].includes(kind) && file) {
-      toast(`${getFeedStructuredKindLabel(kind)} posts cannot include a photo.`, '⚠️');
+      toast(`${getFeedStructuredKindLabel(kind)} posts cannot include an attachment.`, '⚠️');
       return;
     }
 
     submit.disabled = true; submit.textContent = 'Posting…';
-    // Upload photo for both 'photo' kind (Photo tab) and 'text' kind with an
-    // attachment (the 📷 button within the text composer). Both produce a
-    // photo post; only poll/qna explicitly block file attachments above.
-    const media = (kind === 'photo' || kind === 'text') && file ? await uploadPhotoFile(file, 'feed') : null;
+    const media = (kind === 'photo' || kind === 'text') && file ? await uploadPhotoFile(file, 'feed')
+      : kind === 'reel' && file ? await uploadReelFile(file, 'feed-reels')
+      : null;
     const insertContent = content || (media ? ' ' : content);
     const payload = {
       user_id: S.userId,
       content: insertContent,
-      post_type: media ? 'photo' : 'text',
+      post_type: kind === 'reel' ? 'reel' : (media ? 'photo' : 'text'),
       visibility: 'public'
     };
     if (media) {
@@ -5578,6 +5767,8 @@ async function submitFeedTextPost() {
     _feedComposerMenuOpen = false;
     resetFeedComposerOptions();
     clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
+    if ($('feed-reel-input')) $('feed-reel-input').value = '';
+    if ($('feed-reel-name')) $('feed-reel-name').textContent = '';
     await fetchFeedPage(true);
     hydrateTrendingHashtags().catch(() => {});
     if (S.userId && !S.isGuest) {
@@ -5588,7 +5779,7 @@ async function submitFeedTextPost() {
         hydrateProfileGallery(S.userId).catch(() => {});
       }
     }
-    toast(media ? 'Photo post published!' : kind === 'poll' ? 'Poll published!' : kind === 'qna' ? 'Q&A published!' : 'Post published!', '✍️');
+    toast(kind === 'reel' ? 'Reel published!' : media ? 'Photo post published!' : kind === 'poll' ? 'Poll published!' : kind === 'qna' ? 'Q&A published!' : 'Post published!', kind === 'reel' ? '🎬' : '✍️');
   } catch (e) {
     console.warn('[Feed] post failed:', e);
     toast(e?.message || 'Could not publish post.', '⚠️');
@@ -5661,18 +5852,24 @@ function syncFeedComposer() {
   const submit = $('compose-submit');
   const count = $('char-count');
   const photoInput = $('feed-photo-input');
+  const reelInput = $('feed-reel-input');
   if (!field || !submit) return;
   const len = field.value.length;
-  const file = photoInput?.files?.[0] || null;
   const kind = getFeedComposerKind();
+  const file = kind === 'reel' ? (reelInput?.files?.[0] || null) : (photoInput?.files?.[0] || null);
   const hashtagCheck = syncHashtagStatus(field.value, 'compose-hashtag-status');
   const structured = validateFeedStructuredPost(kind, field.value, getFeedComposerOptionValues());
   if (count) count.textContent = `${Math.max(0, FEED_MAX_POST_CHARS - len)}`;
-  if ($('feed-photo-name')) $('feed-photo-name').textContent = file ? `${file.name} · ${formatPhotoSize(file.size)}` : '';
-  $('btn-feed-photo')?.classList.toggle('active', !!file);
-  const validBody = kind === 'poll' || kind === 'qna' ? structured.ok : !!len || !!file;
-  const photoAllowed = kind === 'text' || kind === 'photo';
-  submit.disabled = S.isGuest || !S.userId || !validBody || (!photoAllowed && !!file) || len > FEED_MAX_POST_CHARS || !hashtagCheck.ok;
+  if ($('feed-photo-name')) $('feed-photo-name').textContent = kind === 'reel' ? '' : (file ? `${file.name} · ${formatPhotoSize(file.size)}` : '');
+  if ($('feed-reel-name') && kind === 'reel') $('feed-reel-name').textContent = file ? `${file.name} · ${formatPhotoSize(file.size)}` : '';
+  $('btn-feed-photo')?.classList.toggle('active', kind !== 'reel' && !!file);
+  const validBody = kind === 'poll' || kind === 'qna'
+    ? structured.ok
+    : !!len || !!file;
+  const attachmentAllowed = kind === 'text' || kind === 'photo' || kind === 'reel';
+  submit.disabled = S.isGuest || !S.userId || !validBody || (!attachmentAllowed && !!file)
+    || (kind === 'reel' && !file)
+    || len > FEED_MAX_POST_CHARS || !hashtagCheck.ok;
   submit.title = !hashtagCheck.ok ? hashtagCheck.message : (!structured.ok && kind !== 'text' ? structured.message : (S.isGuest ? 'Sign in to post' : 'Publish'));
   syncFeedComposerTypeUI();
 }
@@ -5736,6 +5933,26 @@ function initFeedPage() {
     });
   }
 
+
+  const reelBtn = $('btn-feed-reel');
+  const reelInput = $('feed-reel-input');
+  if (reelBtn && reelInput && !reelBtn.dataset.bound) {
+    reelBtn.dataset.bound = '1';
+    reelBtn.addEventListener('click', () => reelInput.click());
+    reelInput.addEventListener('change', () => {
+      const file = reelInput.files?.[0];
+      if (!file) { if ($('feed-reel-name')) $('feed-reel-name').textContent=''; syncFeedComposer(); return; }
+      try {
+        validateReelFile(file);
+        if ($('feed-reel-name')) $('feed-reel-name').textContent = `${file.name} · ${formatPhotoSize(file.size)}`;
+      } catch (e) {
+        reelInput.value = '';
+        if ($('feed-reel-name')) $('feed-reel-name').textContent = '';
+        toast(e.message, '⚠️');
+      }
+      syncFeedComposer();
+    });
+  }
 
   if (_feedInitialized) {
     syncFeedComposer();
@@ -5978,7 +6195,7 @@ function renderProfilePosts(posts = _profilePosts) {
 
   // This section is strictly for text/poll posts. Any post with media is
   // intentionally routed to the Visuals/Photos section below.
-  const textPosts = (posts || []).filter(post => !post.media_url);
+  const textPosts = (posts || []).filter(post => !post.media_url && post.post_type !== 'reel');
 
   if (countEl) countEl.textContent = textPosts.length ? `${textPosts.length} ${textPosts.length === 1 ? 'post' : 'posts'}` : 'No text posts';
 
@@ -6022,13 +6239,22 @@ function renderProfilePosts(posts = _profilePosts) {
         </div>
       </article>`;
   }).join('');
+  refreshProfileTabCounts(posts);
 }
 
 function renderProfileGallery(posts = _profilePosts) {
   const gallery = $('profile-gallery');
   if (!gallery) return;
-  const photos = (posts || []).filter(p => p.media_url);
-  if (!photos.length) return;
+  const photos = (posts || []).filter(p => p.media_url && p.post_type !== 'reel');
+  if (!photos.length) {
+    gallery.innerHTML = `
+      <div class="profile-gallery-tile">
+        <div class="profile-gallery-placeholder">
+          <div><strong>No photos yet</strong><span>Photo posts will appear here.</span></div>
+        </div>
+      </div>`;
+    return;
+  }
   gallery.innerHTML = photos.map((p, i) => {
     const caption = sanitizeHTML(String(p.content || '').trim());
     const ownerName = sanitizeHTML(p.author?.username || _profilePostsOwner?.username || S.username || 'user');
@@ -6046,7 +6272,7 @@ async function hydrateProfileGallery(userId = S.userId) {
     const { data, error } = await sb.rpc('gallery_photos', { p_user_id: userId, p_limit: 24 });
     if (error) throw error;
     let photos = Array.isArray(data) ? data.filter(p => p.media_url) : [];
-    if (!photos.length) return; // keep whatever renderProfileGallery() already drew
+    if (!photos.length) { renderProfileGallery([]); return; }
 
     // The gallery RPC may return media metadata without the original caption.
     // Merge known post data first, then fetch any missing captions directly.
@@ -6090,6 +6316,8 @@ async function hydrateProfilePosts(userId = S.userId, options = {}) {
         }
         renderProfilePosts(posts);
         renderProfileGallery(posts);
+        renderProfileReels(posts);
+        refreshProfileTabs(posts);
       }
       return posts;
     })
@@ -6170,6 +6398,8 @@ function initProfilePostComposer() {
         await hydratePostEngagement([data.id]).catch(() => {});
         renderProfilePosts(_profilePosts);
         renderProfileGallery(_profilePosts);
+        renderProfileReels(_profilePosts);
+        refreshProfileTabs(_profilePosts);
         hydrateTrendingHashtags().catch(() => {});
       }
       input.value = '';
@@ -6225,10 +6455,27 @@ async function fetchPublicProfileData(userId) {
 function applyProfileAvatar(url, name) {
   const avatar = $('profile-avatar');
   if (!avatar) return;
+  const displayName = String(name || 'U');
+  const initial = displayName.charAt(0).toUpperCase() || 'U';
   avatar.textContent = '';
-  avatar.style.background = url ? `url("${url}") center/cover no-repeat` : 'linear-gradient(135deg,#1a6ef5,#7c3aed)';
   avatar.dataset.photoUrl = url || '';
-  if (!url) avatar.textContent = (name || 'U').charAt(0).toUpperCase();
+  avatar.style.background = 'linear-gradient(135deg,#1a6ef5,#7c3aed)';
+  if (!url) {
+    avatar.textContent = initial;
+    return;
+  }
+  const img = document.createElement('img');
+  img.alt = `${displayName} profile picture`;
+  img.src = url;
+  img.loading = 'eager';
+  img.decoding = 'async';
+  img.style.cssText = 'width:100%;height:100%;display:block;object-fit:cover;border-radius:inherit;';
+  img.onerror = () => {
+    img.remove();
+    avatar.textContent = initial;
+    avatar.style.background = 'linear-gradient(135deg,#1a6ef5,#7c3aed)';
+  };
+  avatar.appendChild(img);
 }
 
 async function changeProfilePhoto() {
@@ -6273,19 +6520,41 @@ async function initPublicProfilePage(userId) {
   applyProfileAvatar(profile.avatar_url || '', name);
   if ($('profile-hero-score')) $('profile-hero-score').textContent = toNum(profile.crockroach_score).toLocaleString();
   if ($('profile-stat-score')) $('profile-stat-score').textContent = toNum(profile.crockroach_score).toLocaleString();
+  if ($('profile-stat-streak')) $('profile-stat-streak').textContent = '—';
+  if ($('profile-stat-completions')) $('profile-stat-completions').textContent = '—';
+  if ($('profile-stat-rank')) $('profile-stat-rank').textContent = '—';
+  if ($('btn-edit-profile')) $('btn-edit-profile').style.display = 'none';
+  if ($('btn-change-profile-photo')) $('btn-change-profile-photo').style.display = 'none';
+  if ($('profile-post-composer')) $('profile-post-composer').style.display = 'none';
+  if ($('profile-info-goal-val')) {
+    $('profile-info-goal-val').onclick = () => toast('Public profile stats are shown here.', '👤');
+    $('profile-info-goal-val').style.cursor = 'default';
+  }
   resetProfilePosts();
   // Follow button + counts (non-blocking)
-  initFollowSection(userId);
+  await initFollowSection(userId);
   await hydrateProfilePosts(userId);
   hydrateProfileGallery(userId).catch((error) => console.warn('[Gallery] public profile hydration warning:', error));
   bindHorizontalProfileStrip($('profile-post-strip'));
   stabilizeProfileScrollAxes();
+  initProfileScrollProgress();
+  initProfileTabs();
+  renderProfileReels(_profilePosts);
+  refreshProfileTabs(_profilePosts);
+  $('profile-tabs-bar')?.querySelectorAll('.profile-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.profileTab === 'posts'));
+  $('pg-profile')?.querySelectorAll('.profile-tab-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.profilePanel === 'posts'));
+  document.querySelectorAll('[data-reel-upload-cta]').forEach(btn => btn.style.display = S.profileViewUserId ? 'none' : 'inline-flex');
+  renderProfileStatsPanel();
 }
 
 function initProfilePage() {
   if (S.isGuest) return;
   bindHorizontalProfileStrip($('profile-post-strip'));
   stabilizeProfileScrollAxes();
+  initProfileScrollProgress();
+  initProfileTabs();
+  $('profile-tabs-bar')?.querySelectorAll('.profile-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.profileTab === 'posts'));
+  $('pg-profile')?.querySelectorAll('.profile-tab-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.profilePanel === 'posts'));
 
   // If profile navigation/rendering wins the race against DB hydration,
   // fetch the account data now and let the hydration callback re-render.
@@ -6461,11 +6730,17 @@ function initProfilePage() {
     goalPill.textContent = computeGoalText(getCurrentProgress());
     goalPill.style.cursor = 'pointer';
     goalPill.title = 'View achievements & score breakdown';
-    if (!goalPill.dataset.achBound) {
-      goalPill.dataset.achBound = '1';
-      goalPill.addEventListener('click', openAchievementsSheet);
-    }
+    goalPill.onclick = () => {
+      if (S.profileViewUserId) {
+        toast('Public profile stats are shown here.', '👤');
+        return;
+      }
+      openAchievementsSheet();
+    };
   }
+  if ($('btn-edit-profile')) $('btn-edit-profile').style.display = '';
+  if ($('btn-change-profile-photo')) $('btn-change-profile-photo').style.display = '';
+  if ($('profile-post-composer')) $('profile-post-composer').style.display = '';
 }
 
 function renderEditInterests(selectedInterests) {
@@ -7842,3 +8117,286 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
   }
 
 })();
+
+
+// ── Profile/Reels enhancement layer (v27) ───────────────────────────────────
+function collectAvailableReels(source = _profilePosts) {
+  const pool = Array.isArray(source) ? source.filter(p => p?.post_type === 'reel' && p.media_url) : [];
+  const byId = new Map(pool.map(p => [p.id, p]));
+  return Array.from(byId.values());
+}
+
+function renderProfileReels(posts = _profilePosts) {
+  const grid = $('profile-reels-grid');
+  const count = $('profile-reel-count');
+  if (!grid) return;
+  const reels = collectAvailableReels(posts);
+  if (count) count.textContent = reels.length.toLocaleString();
+  if (!reels.length) {
+    grid.innerHTML = `
+      <div class="reels-empty-state">
+        <div class="reels-empty-icon">🎬</div>
+        <div class="reels-empty-title">No reels yet</div>
+        <div class="reels-empty-sub">Share a short video and let people discover your moment.</div>
+        ${!S.profileViewUserId ? '<button class="reels-empty-cta" type="button" data-reel-upload-cta>+ Upload reel</button>' : ''}
+      </div>`;
+    return;
+  }
+  grid.innerHTML = reels.map((p, i) => {
+    const caption = String(p.content || '').trim();
+    return `<button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(p.id)}" aria-label="Open reel ${i + 1}">
+      <video class="reel-thumb-bg" src="${sanitizeHTML(p.media_url)}" muted playsinline preload="metadata"></video>
+      <span class="reel-thumb-play">▶</span>
+      ${caption ? `<span class="reel-thumb-views">${sanitizeHTML(caption.slice(0,28))}${caption.length>28?'…':''}</span>` : ''}
+    </button>`;
+  }).join('');
+}
+
+function renderProfileStatsPanel() {
+  const host = $('profile-stats-panel');
+  if (!host) return;
+  const publicView = !!S.profileViewUserId;
+  const p = publicView ? null : getCurrentProgress();
+  const summary = p ? formatProgressLine(p) : null;
+  const follow = S.profileViewUserId ? (_followCache.get(S.profileViewUserId) || {followers:0,following:0}) : null;
+  const postCount = (_profilePosts || []).filter(p => !p.media_url && p?.post_type !== 'reel').length;
+  const photoCount = (_profilePosts || []).filter(p => p.media_url && p?.post_type !== 'reel').length;
+  const reelCount = collectAvailableReels().length;
+  host.innerHTML = `
+    <div class="profile-stats-section">
+      <div class="profile-stats-section-title">Content</div>
+      <div class="profile-stats-row"><span class="profile-stats-key">Text posts</span><strong class="profile-stats-val">${postCount}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">Photos</span><strong class="profile-stats-val">${photoCount}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">Reels</span><strong class="profile-stats-val">${reelCount}</strong></div>
+    </div>
+    <div class="profile-stats-section">
+      <div class="profile-stats-section-title">Profile</div>
+      <div class="profile-stats-row"><span class="profile-stats-key">crockroach Score</span><strong class="profile-stats-val">${toNum(S.profileViewData?.crockroach_score ?? summary?.score).toLocaleString()}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">Followers</span><strong class="profile-stats-val">${toNum(follow?.followers ?? _followCache.get(S.userId)?.followers).toLocaleString()}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(follow?.following ?? _followCache.get(S.userId)?.following).toLocaleString()}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">Streak</span><strong class="profile-stats-val">${publicView ? '—' : `${toNum(summary?.streak)}d`}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">Weekly rank</span><strong class="profile-stats-val">${publicView ? '—' : `#${toNum(summary?.rank)}`}</strong></div>
+    </div>`;
+}
+
+function initProfileTabs() {
+  const bar = $('profile-tabs-bar');
+  const page = $('pg-profile');
+  if (!bar || !page) return;
+  const syncStickyHeight = () => {
+    const sticky = page.querySelector('.modern-profile-card.profile-top-sticky');
+    if (sticky) page.style.setProperty('--profile-sticky-height', `${Math.ceil(sticky.getBoundingClientRect().height)}px`);
+  };
+  syncStickyHeight();
+  if (!bar.dataset.bound) {
+    bar.dataset.bound = '1';
+    window.addEventListener('resize', syncStickyHeight, { passive: true });
+    $('profile-open-grid')?.addEventListener('click', () => {
+      const strip = $('profile-post-strip');
+      const btn = $('profile-open-grid');
+      if (!strip || !btn) return;
+      const expanded = strip.classList.toggle('expanded');
+      btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      btn.textContent = expanded ? 'Collapse grid ↙' : 'Open grid ↗';
+      if (expanded) strip.scrollLeft = 0;
+    });
+    bar.addEventListener('click', (event) => {
+      const btn = event.target.closest('.profile-tab-btn');
+      if (!btn) return;
+      const tab = btn.dataset.profileTab;
+      bar.querySelectorAll('.profile-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+      page.querySelectorAll('.profile-tab-panel').forEach(panel => {
+        panel.classList.toggle('active', panel.dataset.profilePanel === tab);
+      });
+      page.scrollTo({ top: 0, behavior: 'instant' in document.documentElement.style ? 'instant' : 'auto' });
+      if (tab === 'reels') renderProfileReels(_profilePosts);
+      if (tab === 'stats') renderProfileStatsPanel();
+    });
+  }
+  if (!bar.querySelector('.profile-tab-btn.active')) bar.querySelector('.profile-tab-btn[data-profile-tab="posts"]')?.classList.add('active');
+}
+function refreshProfileTabCounts(posts = _profilePosts) {
+  const sets = {
+    posts: (posts || []).filter(p => !p.media_url && p?.post_type !== 'reel').length,
+    photos: (posts || []).filter(p => p.media_url && p?.post_type !== 'reel').length,
+    reels: collectAvailableReels(posts).length
+  };
+  Object.entries(sets).forEach(([key, value]) => {
+    const el = document.querySelector(`.profile-tab-btn[data-profile-tab="${key}"] .tab-count`);
+    if (el) el.textContent = value;
+  });
+}
+
+function refreshProfileTabs(posts = _profilePosts) {
+  initProfileTabs();
+  refreshProfileTabCounts(posts);
+  renderProfileReels(posts);
+  renderProfileStatsPanel();
+}
+
+function ensureReelViewer() {
+  let viewer = $('reel-viewer');
+  if (viewer) return viewer;
+  viewer = document.createElement('div');
+  viewer.id = 'reel-viewer';
+  viewer.setAttribute('aria-hidden','true');
+  viewer.innerHTML = `
+    <div class="rv-progress"><div class="rv-progress-fill"></div></div>
+    <div class="rv-topbar"><div class="rv-topbar-title">Reels</div><button class="rv-topbar-btn" type="button" data-reel-close aria-label="Close">×</button></div>
+    <div class="rv-video-wrap">
+      <video id="rv-video" playsinline preload="metadata"></video>
+      <button class="rv-tap-area" type="button" aria-label="Play or pause"></button>
+      <div class="rv-pause-flash">▶</div>
+      <button class="rv-nav-btn rv-nav-prev" type="button" data-reel-prev aria-label="Previous reel">‹</button>
+      <button class="rv-nav-btn rv-nav-next" type="button" data-reel-next aria-label="Next reel">›</button>
+      <button class="rv-mute-badge" type="button" data-reel-mute aria-label="Toggle mute">🔇</button>
+      <div class="rv-sidebar">
+        <button class="rv-action-btn" type="button" data-reel-action="like"><span class="rv-action-icon">♡</span><span class="rv-action-label">Like</span></button>
+        <button class="rv-action-btn" type="button" data-reel-action="comment"><span class="rv-action-icon">💬</span><span class="rv-action-label">Comment</span></button>
+        <button class="rv-action-btn" type="button" data-reel-action="follow"><span class="rv-action-icon">＋</span><span class="rv-action-label">Follow</span></button>
+        <button class="rv-action-btn" type="button" data-reel-action="share"><span class="rv-action-icon">↗</span><span class="rv-action-label">Share</span></button>
+      </div>
+      <div class="rv-bottom">
+        <div class="rv-author-row"><div class="rv-author-avatar" id="rv-author-avatar"></div><div><div class="rv-author-name" id="rv-author-name"></div><div class="rv-author-handle" id="rv-author-handle"></div></div></div>
+        <div class="rv-caption" id="rv-caption"></div>
+        <div class="rv-duration-badge" id="rv-duration"></div>
+      </div>
+      <div class="rv-loading" id="rv-loading"><div class="rv-loading-spinner"></div></div>
+      <div class="rv-comments-sheet" id="rv-comments-sheet">
+        <div class="rv-comments-handle"></div><div class="rv-comments-title" id="rv-comments-title">Comments</div>
+        <div class="rv-comments-list" id="rv-comments-list"></div>
+        <div class="rv-comment-input-row"><input class="rv-comment-input" id="rv-comment-input" maxlength="300" placeholder="Add a comment…"><button class="rv-comment-send" type="button" id="rv-comment-send">Send</button></div>
+      </div>
+    </div>`;
+  document.body.appendChild(viewer);
+  let current = [];
+  let index = 0;
+
+  const render = async () => {
+    current = Array.isArray(viewer._mortaliveReelCollection) ? viewer._mortaliveReelCollection : current;
+    index = Number.isInteger(viewer._mortaliveReelIndex) ? viewer._mortaliveReelIndex : index;
+    const post = current[index];
+    if (!post) return;
+    const video = $('rv-video');
+    const loading = $('rv-loading');
+    loading?.classList.add('show');
+    video.pause();
+    video.src = post.media_url;
+    video.load();
+    const author = getPostViewerAuthor(post);
+    const avatar = $('rv-author-avatar');
+    if (avatar) {
+      avatar.innerHTML = buildPostViewerAvatar(author, 40);
+    }
+    $('rv-author-name').textContent = author.display_name || author.username || 'Member';
+    $('rv-author-handle').textContent = `@${author.username || 'member'}`;
+    $('rv-caption').innerHTML = renderHashtagRichText(String(post.content || '').trim());
+    $('rv-duration').textContent = post.media_size ? `${Math.max(1, Math.round(post.media_size / 1024 / 1024))} MB` : 'Reel';
+    const eng = engagementFor(post.id);
+    const likeBtn = viewer.querySelector('[data-reel-action="like"]');
+    likeBtn?.classList.toggle('liked', !!eng.liked);
+    likeBtn?.querySelector('.rv-action-icon')?.replaceChildren(document.createTextNode(eng.liked ? '♥' : '♡'));
+    const followBtn = viewer.querySelector('[data-reel-action="follow"]');
+    if (followBtn) {
+      const fd = post.user_id && post.user_id !== S.userId ? await fetchFollowData(post.user_id) : {isFollowing:false};
+      followBtn.style.display = post.user_id === S.userId ? 'none' : 'flex';
+      followBtn.querySelector('.rv-action-icon').textContent = fd.isFollowing ? '✓' : '＋';
+      followBtn.querySelector('.rv-action-label').textContent = fd.isFollowing ? 'Following' : 'Follow';
+      followBtn.dataset.followState = fd.isFollowing ? '1' : '0';
+    }
+    const comments = await loadPostComments(post.id);
+    $('rv-comments-title').textContent = `${comments.length} comments`;
+    $('rv-comments-list').innerHTML = postViewerCommentRows(comments).replaceAll('mortalive-post-viewer-comment','rv-comment-item').replaceAll('mortalive-post-viewer-comment-copy','rv-comment-body').replaceAll('mortalive-post-viewer-comment-head','rv-comment-author').replaceAll('mortalive-post-viewer-comment-text','rv-comment-text');
+    $('rv-comments-sheet').classList.remove('open');
+    video.onloadeddata = () => loading?.classList.remove('show');
+    video.ontimeupdate = () => {
+      const pct = video.duration ? (video.currentTime / video.duration) * 100 : 0;
+      viewer.querySelector('.rv-progress-fill').style.width = `${pct}%`;
+    };
+    video.onended = () => {
+      if (index < current.length - 1) { index += 1; viewer._mortaliveReelIndex=index; render(); } else video.currentTime = 0;
+    };
+    try { await video.play(); } catch (_) {}
+    viewer.querySelector('[data-reel-prev]').disabled = index <= 0;
+    viewer.querySelector('[data-reel-next]').disabled = index >= current.length - 1;
+  };
+
+  viewer._mortaliveRenderReel = render;
+  viewer.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-reel-close]')) { viewer.classList.remove('open'); viewer.setAttribute('aria-hidden','true'); document.body.style.overflow=''; return; }
+    if (e.target.closest('[data-reel-prev]')) { if (index>0){ index--; viewer._mortaliveReelIndex=index; render(); } return; }
+    if (e.target.closest('[data-reel-next]')) { if(index<current.length-1){ index++; viewer._mortaliveReelIndex=index; render(); } return; }
+    if (e.target.closest('.rv-tap-area')) {
+      const v=$('rv-video'); if(v.paused){ try{await v.play();}catch(_){}} else v.pause();
+      return;
+    }
+    if (e.target.closest('[data-reel-mute]')) {
+      const v=$('rv-video'); v.muted=!v.muted; e.target.textContent=v.muted?'🔇':'🔊'; return;
+    }
+    const action=e.target.closest('[data-reel-action]'); if(!action) return;
+    current = Array.isArray(viewer._mortaliveReelCollection) ? viewer._mortaliveReelCollection : current; index = Number.isInteger(viewer._mortaliveReelIndex) ? viewer._mortaliveReelIndex : index; const post=current[index];
+    if (!post) return;
+    if (action.dataset.reelAction==='like'){ await togglePostLike(post.id); render(); }
+    if (action.dataset.reelAction==='comment'){ $('rv-comments-sheet').classList.toggle('open'); }
+    if (action.dataset.reelAction==='share'){
+      const url=`${location.origin}${location.pathname}#feed-post-${encodeURIComponent(post.id)}`;
+      navigator.clipboard?.writeText(url).then(()=>toast('Reel link copied','📋')).catch(()=>toast(url,'🔗'));
+    }
+    if (action.dataset.reelAction==='follow' && post.user_id && post.user_id!==S.userId){
+      const fd=await fetchFollowData(post.user_id); const next=!fd.isFollowing;
+      try{ await toggleFollow(post.user_id,next); render(); toast(next?'Following!':'Unfollowed',next?'✓':'➖'); }catch(err){toast(err?.message||'Could not update follow.','⚠️');}
+    }
+  });
+  $('rv-comment-send')?.addEventListener('click', async ()=>{
+    const post=current[index], input=$('rv-comment-input'); const content=input?.value?.trim();
+    if(!post||!content) return;
+    input.value='';
+    await createPostComment(post.id,content);
+    await render();
+  });
+  viewer.querySelector('[data-reel-close]')?.addEventListener('click',()=>{viewer.classList.remove('open');viewer.setAttribute('aria-hidden','true');document.body.style.overflow='';});
+  return viewer;
+
+  // Unreachable? kept below intentionally no
+}
+function openReelViewer(post, collection = []) {
+  if (S.isGuest || !S.userId) { toast('Sign in to view reels', '🔒'); return; }
+  const viewer = ensureReelViewer();
+  const all = Array.isArray(collection) && collection.length ? collection : [post];
+  const ids = all.map(p => p.id);
+  const start = Math.max(0, ids.indexOf(post.id));
+  viewer._mortaliveReelCollection = all;
+  viewer._mortaliveReelIndex = start;
+  // trigger renderer stored on the viewer
+  viewer._mortaliveRenderReel?.();
+  viewer.classList.add('open');
+  viewer.setAttribute('aria-hidden','false');
+  document.body.style.overflow='hidden';
+}
+function bindReelNavigationClicks() {
+  // delegated grid/feed opening
+  if (document.body.dataset.reelOpenBound) return;
+  document.body.dataset.reelOpenBound='1';
+  document.addEventListener('click', event => {
+    const tile = event.target.closest?.('[data-reel-post-id]');
+    if (!tile) return;
+    event.preventDefault();
+    const id = tile.dataset.reelPostId;
+    const post = getPostByIdForViewer(id) || _profilePosts.find(p=>p.id===id);
+    if (post?.media_url && post.post_type === 'reel') {
+      const collection = document.body.classList.contains('profile-viewing-public') ? collectAvailableReels(_profilePosts) : collectAvailableReels(_profilePosts);
+      openReelViewer(post, collection);
+    }
+  });
+}
+bindReelNavigationClicks();
+
+document.addEventListener('click', (event) => {
+  const cta = event.target.closest?.('[data-reel-upload-cta]');
+  if (!cta || S.profileViewUserId) return;
+  showPage('pg-feed');
+  setTimeout(() => {
+    setFeedComposerKind?.('reel');
+    setTimeout(() => $('feed-reel-input')?.click(), 0);
+  }, 60);
+});
