@@ -1,3 +1,4 @@
+// MORTALIVE SOURCE HANDOFF — latest uploaded app.js source; preserve this file as the current baseline.
 // FRESH BUILD MARKER — 2026-08-16 16:26 IST — redeploy this exact file
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
