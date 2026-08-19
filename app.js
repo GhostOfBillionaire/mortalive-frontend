@@ -3,7 +3,8 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-19-profile-reels-audit-v27'; // bump this string on every deploy to confirm cache is fresh
+// Mortalive v29 — main Profile now scrolls as one continuous document flow, matching Feed-profile behavior.
+const BUILD_TAG = 'mortalive-build-2026-08-19-profile-flow-v29'; // bump this string on every deploy to confirm cache is fresh
 
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
 const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
