@@ -5,7 +5,7 @@
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v22 -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Mortalive: Human conversation, restored</title>
+<title>Mortalive — Connect with the world</title>
   <!-- Social/share preview metadata -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Mortalive">
@@ -1365,6 +1365,13 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 }
 .peer-name { font-size: 15px; font-weight: 800; letter-spacing: -.02em; }
 .peer-sub { font-size: 12px; color: var(--on-surface-3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.talk-peer-actions{display:none;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap;}
+.talk-peer-action{min-height:30px;padding:5px 10px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--on-surface-2);font-size:11px;font-weight:800;transition:all .14s ease;}
+.talk-peer-action:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-alpha);}
+.talk-peer-action.follow{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 3px 10px rgba(26,110,245,.20);}
+.talk-peer-action.follow:hover{background:var(--primary-dark);border-color:var(--primary-dark);color:#fff;}
+.talk-peer-action.follow.talk-peer-following{background:var(--on-surface);border-color:var(--on-surface);}
+@media(max-width:720px){.talk-peer-actions{gap:5px}.talk-peer-action{min-height:28px;font-size:10.5px;padding:5px 9px}.chat-peer{align-items:flex-start}.chat-topbar .chat-peer>div:last-child{min-width:0;}}
 
 .top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .icon-btn {
@@ -2638,12 +2645,11 @@ body.mortalive-progress-open .sakura-topbar {
   .profile-mini-stat-value{font-size:16px}
 }
 .profile-feed-viewport{min-height:0;max-height:min(72vh,800px);overflow-x:hidden;overflow-y:auto;scrollbar-width:thin;overscroll-behavior-y:contain;border-radius:24px}.profile-section-card{border-radius:22px;overflow:clip}.profile-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px 12px}.profile-section-title-wrap{display:flex;align-items:center;gap:9px}.profile-section-kicker{color:var(--on-surface-3);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}.profile-section-title{font-size:15px;font-weight:900}.profile-open-grid-btn{padding:8px 11px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);font-size:10.5px;font-weight:800;color:var(--on-surface-2)}
-.profile-thoughts{transition:max-height .28s var(--ease-out),opacity .2s ease,transform .28s var(--ease-out);max-height:460px}.profile-thoughts.collapsed-for-gallery{max-height:0;opacity:0;transform:translateY(-8px);overflow:hidden;pointer-events:none}body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#edit-modal{position:fixed!important;inset:0!important;z-index:5000!important;pointer-events:none}#edit-modal.active{display:flex!important;pointer-events:auto!important}#edit-modal .modal{position:relative;z-index:5001;pointer-events:auto}
+body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#edit-modal{position:fixed!important;inset:0!important;z-index:5000!important;pointer-events:none}#edit-modal.active{display:flex!important;pointer-events:auto!important}#edit-modal .modal{position:relative;z-index:5001;pointer-events:auto}
 .profile-post-composer{padding:0 18px 16px}.profile-post-composer-box{padding:12px;border-radius:16px;background:var(--surface-2);border:1px solid var(--border)}.profile-post-composer textarea{width:100%;min-height:76px;resize:vertical;border:1px solid var(--border-strong);border-radius:14px;background:#fff;color:var(--on-surface);padding:11px 12px;font:inherit;font-size:13px;line-height:1.5;outline:none}.profile-post-composer textarea:focus{border-color:var(--primary);box-shadow:0 0 0 4px var(--primary-alpha)}.profile-post-composer-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}.profile-post-char-count{font-size:10.5px;color:var(--on-surface-3)}.profile-post-submit{border:0;border-radius:999px;padding:9px 15px;background:linear-gradient(145deg,var(--primary),var(--secondary));color:#fff;font-size:11px;font-weight:800;cursor:pointer}.profile-post-submit:disabled{opacity:.45;cursor:not-allowed}.profile-post-error{display:none;margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(220,38,38,.07);border:1px solid rgba(220,38,38,.16);color:var(--danger);font-size:11px}.profile-post-empty-card{justify-content:flex-start}.profile-post-empty-card .profile-post-body{max-width:44ch}
 .profile-post-strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(300px,64%);gap:12px;overflow-x:auto;overflow-y:hidden;padding:0 18px 16px;scroll-snap-type:x mandatory;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:none;-webkit-overflow-scrolling:touch}.profile-post-strip.expanded{grid-auto-columns:minmax(420px,74%)}.profile-post-card{scroll-snap-align:start;aspect-ratio:16/9;min-height:220px;border-radius:20px;display:flex;flex-direction:column;border:1px solid var(--border);background:#fff;padding:14px;box-shadow:0 4px 16px rgba(13,17,23,.035)}.profile-post-header{display:flex;align-items:center;gap:9px;margin-bottom:10px}.profile-post-mini-avatar{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:900}.profile-post-author{font-size:11.5px;font-weight:800}.profile-post-time{margin-left:auto;color:var(--on-surface-3);font-size:10px}.profile-post-body{font-size:14px;line-height:1.55}.profile-post-footer{margin-top:13px;padding-top:11px;border-top:1px solid var(--border);display:flex;gap:13px;color:var(--on-surface-3);font-size:10.5px;font-weight:700}.profile-poll-box{margin-top:11px;padding:11px;border-radius:15px;background:var(--surface-2)}.profile-poll-option{position:relative;overflow:hidden;margin-top:7px;min-height:32px;padding:7px 9px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-radius:10px;border:1px solid var(--border);background:#fff;font-size:10.5px;font-weight:700}.profile-poll-option-fill{position:absolute;inset:0 auto 0 0;background:rgba(26,110,245,.08)}.profile-poll-option span{position:relative;z-index:1}.profile-poll-percent{color:var(--on-surface-3)}
 .profile-gallery-section{margin-top:12px;min-height:360px}.profile-gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;padding:0 3px 3px}.profile-gallery-tile{position:relative;aspect-ratio:1/1;overflow:hidden;background:var(--surface-3)}.profile-gallery-tile{cursor:pointer;user-select:none}.profile-gallery-tile img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .24s ease}.profile-gallery-tile:hover img{transform:scale(1.025)}.profile-gallery-tile:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}.profile-gallery-placeholder{cursor:default}.profile-gallery-tile.large{grid-column:span 1;grid-row:span 1}.profile-gallery-placeholder{aspect-ratio:1/1;display:grid;place-items:center;text-align:center;padding:18px;color:var(--on-surface-3);background:linear-gradient(135deg,rgba(26,110,245,.06),rgba(124,58,237,.07)),var(--surface-2)}.profile-gallery-placeholder strong{display:block;color:var(--on-surface);font-size:13px;margin-bottom:4px}.profile-gallery-placeholder span{font-size:10.5px;line-height:1.5}.profile-extra-strip{display:grid;gap:12px;margin-top:12px;padding-bottom:8px}.profile-achievements-card{padding:16px}.profile-achievements-card .section-head{padding:0 0 10px;margin-bottom:0}.profile-achievements-card .badges-grid{padding:0;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}.profile-about-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:0 16px 16px}.profile-about-box{padding:12px;border-radius:15px;background:var(--surface-2);border:1px solid var(--border)}.profile-about-label{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;font-weight:800;color:var(--on-surface-3)}.profile-about-value{margin-top:5px;font-size:12px;line-height:1.55;color:var(--on-surface);word-break:break-word}/* Scroll focus is intentionally layout-stable: never collapse/remove content while the viewport is scrolling. */
-.profile-top-sticky{transition:opacity .2s ease,transform .2s ease}.profile-feed-viewport.gallery-focus .profile-top-sticky{opacity:.92;transform:translateY(-2px)}.profile-feed-viewport.gallery-focus .profile-thoughts{margin-top:0;max-height:460px;opacity:1;transform:none;overflow:visible;pointer-events:auto}
-/* ── Social photo + profile navigation enhancements ── */
+.profile-top-sticky{transition:opacity .2s ease,transform .2s ease}/* ── Social photo + profile navigation enhancements ── */
 .profile-avatar-editable{position:relative}
 .profile-avatar-change-btn{position:absolute;right:-4px;bottom:-4px;width:30px;height:30px;border-radius:50%;background:#fff;border:1px solid var(--border-strong);box-shadow:var(--elev-2);display:grid;place-items:center;font-size:13px;z-index:3;cursor:pointer}
 .profile-post-photo-btn,.compose-tool{padding:7px 10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);font-size:11px;font-weight:800;color:var(--on-surface-2);cursor:pointer}
@@ -4607,6 +4613,1305 @@ body.mortalive-progress-open .sakura-topbar {
   .talk-live-bar { font-size: 11px; gap: 6px; }
 }
 </style>
+
+<style id="mortalive-profile-scroll-v25">
+/* ═══════════════════════════════════════════════════════════════════
+   MORTALIVE — Profile Scroll Fix  (paste as new <style> in index.html)
+   Fixes: PC scroll lock, vertical-inside-strip sticking, no sticky header
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Let the profile page scroll naturally ───────────────────────
+   The original `overflow:hidden` turned #pg-profile into a dead zone;
+   all scrolling was forced through the nested .profile-feed-viewport,
+   which had a 72vh cap and no scroll-chaining to the page.              */
+#pg-profile {
+  overflow-x: hidden;
+  overflow-y: auto;          /* was: hidden  */
+  height: 100dvh;            /* constrain so sticky works within this container */
+}
+
+/* ── 2. Unwrap the nested scroll viewport ───────────────────────────
+   .profile-feed-viewport was the only scrollable area. With #pg-profile
+   now scrollable we no longer need a secondary scroll root, so make it
+   a plain visual passthrough.                                           */
+.profile-feed-viewport {
+  max-height: none !important;
+  overflow: visible !important;
+  overscroll-behavior: unset;
+}
+
+/* Undo the mobile override that also set a restricted max-height.       */
+@media (max-width: 840px) {
+  .profile-feed-viewport {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+
+/* ── 3. Make the profile card genuinely sticky ──────────────────────
+   .profile-top-sticky had `transition` but NO `position:sticky`, so it
+   never actually stuck — it just sat at the top while the viewport
+   beneath scrolled. Now it sticks to the page's scroll container.       */
+.modern-profile-card.profile-top-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  /* Frosted glass so content scrolling under it stays readable */
+  background: rgba(255, 255, 255, 0.96) !important;
+  backdrop-filter: blur(22px) saturate(155%);
+  -webkit-backdrop-filter: blur(22px) saturate(155%);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  /* Lift shadow when content is scrolling beneath */
+  box-shadow: 0 4px 24px rgba(13, 17, 23, 0.08), 0 1px 4px rgba(13, 17, 23, 0.04);
+  border-radius: 26px;
+}
+
+/* Offset the sticky card below the fixed authenticated app-topbar.
+   Desktop topbar ≈ 60px at top:16px → total clearance needed ~84px.    */
+body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky {
+  top: 88px;
+}
+
+/* Mobile topbar is taller (wraps into 2 rows).                          */
+@media (max-width: 720px) {
+  body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky {
+    top: 134px;
+  }
+}
+
+/* ── 4. Profile wrap: remove min-height floor ──────────────────────
+   The 100dvh min-height on .profile-wrap forced the page to always be
+   at least fullscreen-tall even on short content, which prevented the
+   sticky from working on short profiles. Let content drive the height.  */
+#pg-profile .profile-wrap {
+  min-height: unset;
+  padding-bottom: 96px;  /* comfortable bottom breathing room */
+}
+
+/* ── 5. Content shell: guarantee visible flow ───────────────────────  */
+.profile-content-shell {
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 0;
+}
+
+/* ── 6. Strip: enable vertical scroll-chaining ──────────────────────
+   `overscroll-behavior: auto none` means:
+     - x axis  → contained (strip, don't pull-to-refresh the page)
+     - y axis  → auto     (bubble to page when the strip has no more
+                            horizontal content OR is at a boundary)
+   This replaces the JS preventDefault() approach that swallowed all
+   vertical wheel events while hovering over the strip.                  */
+.profile-post-strip {
+  overscroll-behavior: contain auto !important;
+  /* Keep touch locked to horizontal on touch devices */
+  touch-action: pan-x !important;
+}
+
+/* ── 7. Gallery section: clean min-height ───────────────────────────  */
+.profile-gallery-section {
+  min-height: unset;
+}
+
+/* ── 8. Feed-profile overlay: tighten up the scroll area ───────────
+   The feed profile overlay (openFeedProfileOverlay) is a fixed full-
+   screen sheet. Ensure its inner content scrolls without body overflow
+   leakage on Safari/iOS.                                                */
+#feed-profile-overlay .feed-profile-content {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── 9. Subtle scroll progress indicator ───────────────────────────
+   A thin coloured bar under the sticky card tracks scroll depth —
+   gives tactile feedback that the page IS scrolling (key reassurance
+   after the scroll was previously broken).                              */
+.profile-scroll-progress {
+  position: sticky;
+  top: 0;                /* sits right below the sticky card visually */
+  z-index: 24;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--primary) var(--scroll-pct, 0%),
+    transparent   var(--scroll-pct, 0%)
+  );
+  border-radius: 0 0 3px 3px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+#pg-profile:hover .profile-scroll-progress {
+  opacity: 1;
+}
+
+/* ── 10. Public-profile viewing: same scroll rules apply ────────────  */
+body.profile-viewing-public #pg-profile {
+  overflow-y: auto;
+}
+</style>
+
+<style id="mortalive-profile-reels-v27-css">
+COMPLETE CSS FOR REEL SYSTEM, PROFILE TAB AND AUDIT FIXES
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MORTALIVE — Profile Reels System + Audit Fixes  v1
+   Paste as a new <style> block in index.html (after existing styles, 
+   before </body>). These selectors are specific enough to override 
+   existing rules without !important wars.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ────────────────────────────────────────────────────────────────────
+   AUDIT FIX 5 — profile-section-card overflow clips the post strip
+   ──────────────────────────────────────────────────────────────────── */
+.profile-thoughts.profile-section-card {
+  overflow: visible;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   AUDIT FIX 11 — Gallery min-height creates dead space
+   ──────────────────────────────────────────────────────────────────── */
+.profile-gallery-section {
+  min-height: unset;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   AUDIT FIX 12 — Mini-stats 6-col on narrow phones
+   ──────────────────────────────────────────────────────────────────── */
+@media (max-width: 440px) {
+  .profile-mini-stats[style*="repeat(6"] {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  .profile-mini-stats[style*="repeat(6"] .profile-mini-stat:nth-child(3) {
+    border-right: 0;
+  }
+  .profile-mini-stats[style*="repeat(6"] .profile-mini-stat:nth-child(n+4) {
+    border-top: 1px solid var(--border);
+  }
+  .profile-mini-stats[style*="repeat(6"] .profile-mini-stat:nth-child(6) {
+    border-right: 0;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   AUDIT FIX 13 — Sticky card scroll shadow (activated by JS class)
+   ──────────────────────────────────────────────────────────────────── */
+.modern-profile-card.profile-top-sticky.is-scrolled {
+  box-shadow:
+    0 8px 32px rgba(13, 17, 23, 0.10),
+    0 2px 8px  rgba(13, 17, 23, 0.06);
+  border-bottom-color: rgba(0, 0, 0, 0.10);
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   PROFILE SECTION TABS
+   Posts · Photos · Reels · Stats
+   Sits between .modern-profile-card and .profile-content-shell
+   ──────────────────────────────────────────────────────────────────── */
+.profile-tabs-bar {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  overflow-x: auto;
+  scrollbar-width: none;
+  position: sticky;
+  z-index: 22;           /* below sticky card (25) but above content */
+  margin-bottom: 12px;
+  border-radius: 0 0 20px 20px;
+  gap: 0;
+}
+.profile-tabs-bar::-webkit-scrollbar { display: none; }
+
+/* Offset the tab bar below the sticky header + its own sticky offset */
+body.mortalive-app-topbar-visible .profile-tabs-bar {
+  top: calc(88px + 320px);  /* topbar + approx sticky card height; JS updates this */
+}
+
+.profile-tab-btn {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 22px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--on-surface-3);
+  background: transparent;
+  border: 0;
+  border-bottom: 2.5px solid transparent;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color         var(--dur-fast) var(--ease-out),
+    border-color  var(--dur-fast) var(--ease-out),
+    background    var(--dur-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+.profile-tab-btn:hover {
+  background: var(--surface-2);
+  color: var(--on-surface);
+}
+.profile-tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+.profile-tab-btn .tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--on-surface-3);
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.profile-tab-btn.active .tab-count {
+  background: var(--primary-alpha);
+  color: var(--primary);
+}
+
+/* Content panels — each tab shows one panel */
+.profile-tab-panel {
+  display: none;
+}
+.profile-tab-panel.active {
+  display: block;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   REELS STRIP (profile page — thumbnail grid, 3 columns, 9:16 tiles)
+   ──────────────────────────────────────────────────────────────────── */
+.profile-reels-section {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(13, 17, 23, 0.04);
+}
+
+.profile-reels-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  padding: 2px;
+}
+
+.reel-thumb {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  background: #111;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: transform 0.18s var(--ease-spring);
+  -webkit-tap-highlight-color: transparent;
+}
+.reel-thumb:hover { transform: scale(0.97); }
+.reel-thumb:active { transform: scale(0.94); }
+
+.reel-thumb-bg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: linear-gradient(135deg, #1a1f2e, #111420);
+}
+
+/* Video element used for thumbnail capture / lazy preview */
+.reel-thumb-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.reel-thumb:hover .reel-thumb-video {
+  opacity: 1;
+}
+
+/* Gradient overlay — darkens bottom for text legibility */
+.reel-thumb::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    transparent 50%,
+    rgba(0, 0, 0, 0.72) 100%
+  );
+  z-index: 1;
+  pointer-events: none;
+}
+
+.reel-thumb-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0.9;
+  transition: opacity 0.15s ease, transform 0.15s var(--ease-spring);
+}
+.reel-thumb:hover .reel-thumb-play {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+.reel-thumb-duration {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  z-index: 2;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(4px);
+}
+
+.reel-thumb-views {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Upload reel tile */
+.reel-thumb-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 2px dashed var(--border-strong);
+  border-radius: 4px;
+  aspect-ratio: 9 / 16;
+  cursor: pointer;
+  color: var(--on-surface-3);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  padding: 12px;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.reel-thumb-upload:hover {
+  border-color: var(--primary);
+  background: var(--primary-alpha);
+  color: var(--primary);
+}
+.reel-thumb-upload-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+/* Empty state for reels */
+.reels-empty-state {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--on-surface-3);
+  gap: 10px;
+}
+.reels-empty-icon { font-size: 40px; }
+.reels-empty-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--on-surface);
+}
+.reels-empty-sub {
+  font-size: 13px;
+  line-height: 1.65;
+  max-width: 28ch;
+  margin-inline: auto;
+}
+.reels-empty-cta {
+  margin-top: 6px;
+  padding: 10px 20px;
+  border-radius: var(--r-full);
+  background: linear-gradient(145deg, var(--primary), var(--secondary));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  border: 0;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(26, 110, 245, 0.28);
+  transition: transform 0.14s var(--ease-spring), box-shadow 0.14s;
+}
+.reels-empty-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(26, 110, 245, 0.36);
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   REEL UPLOAD PROGRESS BAR (inside composer area)
+   ──────────────────────────────────────────────────────────────────── */
+.reel-upload-progress {
+  display: none;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.reel-upload-progress.active { display: block; }
+.reel-upload-progress-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--on-surface-2);
+  margin-bottom: 8px;
+}
+.reel-upload-progress-track {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.reel-upload-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  transition: width 0.3s var(--ease-out);
+  width: 0%;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   REEL VIEWER OVERLAY  — TikTok/Instagram style full-screen player
+   ──────────────────────────────────────────────────────────────────── */
+#reel-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: #000;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+#reel-viewer.open {
+  display: flex;
+  animation: reelViewerIn 0.22s var(--ease-out) both;
+}
+@keyframes reelViewerIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Top bar */
+.rv-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: env(safe-area-inset-top, 12px) 16px 12px;
+  padding-top: max(env(safe-area-inset-top, 0px), 12px);
+  background: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent);
+}
+.rv-topbar-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+.rv-topbar-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.14s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.rv-topbar-btn:hover { background: rgba(255, 255, 255, 0.18); }
+
+/* Progress bar — thin strip at top showing position in reel */
+.rv-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.25);
+  z-index: 11;
+}
+.rv-progress-fill {
+  height: 100%;
+  background: #fff;
+  border-radius: 0 2px 2px 0;
+  transition: width 0.25s linear;
+  width: 0%;
+}
+
+/* Video area */
+.rv-video-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#rv-video {
+  /* Portrait video fills height; landscape videos get black bars */
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  display: block;
+  background: #000;
+}
+
+/* On mobile, cover to fill the screen (portrait only) */
+@media (max-width: 600px) and (orientation: portrait) {
+  #rv-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+/* Tap-to-pause overlay */
+.rv-tap-area {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  cursor: pointer;
+}
+
+/* Pause icon flash */
+.rv-pause-flash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  color: #fff;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.rv-pause-flash.show {
+  opacity: 1;
+  animation: pauseFlashAnim 0.65s ease forwards;
+}
+@keyframes pauseFlashAnim {
+  0%   { opacity: 1; transform: translate(-50%, -50%) scale(0.8); }
+  40%  { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.3); }
+}
+
+/* Prev/Next nav buttons (desktop) */
+.rv-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 8;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  font-size: 22px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: background 0.14s, transform 0.14s var(--ease-spring);
+  -webkit-tap-highlight-color: transparent;
+}
+.rv-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-50%) scale(1.08);
+}
+.rv-nav-prev { left: 12px; }
+.rv-nav-next { right: 12px; }
+
+/* Hide nav on mobile (use swipe instead) */
+@media (max-width: 640px) {
+  .rv-nav-btn { display: none; }
+}
+
+/* Right sidebar — action buttons */
+.rv-sidebar {
+  position: absolute;
+  right: 14px;
+  bottom: 100px;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+.rv-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 0;
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.rv-action-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: transform 0.15s var(--ease-spring), background 0.15s;
+}
+.rv-action-btn:hover .rv-action-icon,
+.rv-action-btn:active .rv-action-icon {
+  transform: scale(1.14);
+  background: rgba(255, 255, 255, 0.24);
+}
+.rv-action-btn.liked .rv-action-icon {
+  background: rgba(255, 75, 110, 0.25);
+  border-color: rgba(255, 75, 110, 0.45);
+  animation: heartPop 0.35s var(--ease-spring);
+}
+@keyframes heartPop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+.rv-action-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+
+/* Reel author / caption bar at bottom */
+.rv-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 80px;        /* leave space for sidebar */
+  z-index: 8;
+  padding: 0 16px 24px;
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 24px);
+  background: linear-gradient(to top, rgba(0,0,0,0.68), transparent);
+}
+.rv-author-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.rv-author-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2.5px solid #fff;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  flex: none;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+}
+.rv-author-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.rv-author-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+.rv-author-handle {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
+  margin-top: 1px;
+}
+.rv-caption {
+  font-size: 13.5px;
+  color: #fff;
+  line-height: 1.55;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.45);
+  word-break: break-word;
+  max-height: 60px;
+  overflow: hidden;
+  position: relative;
+}
+.rv-caption.expanded {
+  max-height: none;
+}
+.rv-caption-more {
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  display: inline;
+}
+.rv-duration-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 3px 8px;
+  border-radius: var(--r-full);
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Mute indicator */
+.rv-mute-badge {
+  position: absolute;
+  top: 62px;
+  right: 14px;
+  z-index: 9;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1.5px solid rgba(255,255,255,0.25);
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: background 0.14s, transform 0.14s var(--ease-spring);
+  -webkit-tap-highlight-color: transparent;
+}
+.rv-mute-badge:hover {
+  background: rgba(255,255,255,0.2);
+  transform: scale(1.1);
+}
+
+/* Reel counter indicator (1/N) */
+.rv-counter {
+  position: absolute;
+  top: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.rv-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.35);
+  transition: background 0.2s, transform 0.2s;
+  flex: none;
+}
+.rv-dot.active {
+  background: #fff;
+  transform: scale(1.3);
+}
+/* Only show dots when ≤12 reels; hide on large lists */
+.rv-counter[data-count="0"],
+.rv-counter[data-many="true"] {
+  display: none;
+}
+
+/* Swipe-to-next hint (shows on first open, fades out) */
+.rv-swipe-hint {
+  position: absolute;
+  bottom: 140px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  animation: swipeHintAnim 2.4s ease-in-out 0.6s forwards;
+}
+@keyframes swipeHintAnim {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(6px); }
+  20%  { opacity: 0.9; transform: translateX(-50%) translateY(0); }
+  75%  { opacity: 0.9; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+}
+.rv-swipe-hint-arrow {
+  font-size: 20px;
+  color: rgba(255,255,255,0.7);
+}
+.rv-swipe-hint-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Loading spinner inside viewer */
+.rv-loading {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 7;
+  background: rgba(0,0,0,0.6);
+}
+.rv-loading.show { display: flex; }
+.rv-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.2);
+  border-top-color: #fff;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Desktop: constrain to centre column with side black bars */
+@media (min-width: 800px) {
+  #rv-video {
+    max-height: 100vh;
+    max-width: min(56vh, 420px); /* 9:16 = 56.25vh */
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   REEL COMMENT SHEET (slides up from bottom)
+   ──────────────────────────────────────────────────────────────────── */
+.rv-comments-sheet {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 15;
+  background: rgba(20, 22, 32, 0.96);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border-radius: 24px 24px 0 0;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  max-height: 65dvh;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.3s var(--ease-out);
+}
+.rv-comments-sheet.open {
+  transform: translateY(0);
+}
+.rv-comments-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.3);
+  margin: 12px auto 0;
+  flex: none;
+}
+.rv-comments-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  text-align: center;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex: none;
+}
+.rv-comments-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.rv-comment-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.rv-comment-ava {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  flex: none;
+}
+.rv-comment-body { flex: 1; min-width: 0; }
+.rv-comment-author {
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.9);
+  margin-bottom: 2px;
+}
+.rv-comment-text {
+  font-size: 13px;
+  color: rgba(255,255,255,0.78);
+  line-height: 1.5;
+  word-break: break-word;
+}
+.rv-comment-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 16px;
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  flex: none;
+}
+.rv-comment-input {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: var(--r-full);
+  border: 1.5px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  font-size: 13.5px;
+  outline: none;
+  transition: border-color 0.14s, background 0.14s;
+}
+.rv-comment-input::placeholder { color: rgba(255,255,255,0.38); }
+.rv-comment-input:focus {
+  border-color: rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.12);
+}
+.rv-comment-send {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--primary);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   FEED: Reel post cards (inline in feed, click to open viewer)
+   ──────────────────────────────────────────────────────────────────── */
+.feed-reel-card {
+  position: relative;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  aspect-ratio: 9 / 16;
+  max-height: 480px;
+  background: #111;
+  cursor: pointer;
+}
+.feed-reel-card video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.feed-reel-card::after {
+  content: '▶';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 36px;
+  color: rgba(255,255,255,0.9);
+  background: rgba(0,0,0,0.3);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   PROFILE STATS PANEL (tab: Stats)
+   ──────────────────────────────────────────────────────────────────── */
+.profile-stats-panel {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(13,17,23,0.04);
+}
+.profile-stats-section {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.profile-stats-section:last-child { border-bottom: 0; }
+.profile-stats-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--on-surface-3);
+  margin-bottom: 12px;
+}
+.profile-stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.profile-stats-row:last-child { border-bottom: 0; }
+.profile-stats-key { color: var(--on-surface-3); font-weight: 600; }
+.profile-stats-val { color: var(--on-surface); font-weight: 800; }
+.profile-rank-tier {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--r-full);
+  font-size: 12px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--primary-alpha), var(--secondary-alpha));
+  color: var(--primary);
+  border: 1px solid rgba(26,110,245,0.18);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FULL AUDIT REPORT OF THE PROFILE SECTION
+
+# Mortalive Profile Section — Full Audit Report
+
+## 🔴 Critical Bugs (breaking functionality)
+
+| # | Location | Problem | Fix |
+|---|----------|---------|-----|
+| 1 | `index.html` `#pg-profile` | `overflow:hidden` kills all page-level scrolling | Changed to `overflow-y:auto` (prev patch) |
+| 2 | `.profile-feed-viewport` | `max-height:min(72vh,800px)` clips content on tall screens | Remove cap (prev patch) |
+| 3 | `app.js` `bindHorizontalProfileStrip` | `preventDefault()` on ALL vertical wheel → page never scrolls past strip | Scroll-chaining with boundary check (prev patch) |
+| 4 | `.profile-top-sticky` | No `position:sticky` — card is statically positioned, not really sticky | Add `position:sticky; top:0` (prev patch) |
+| 5 | `profile-section-card { overflow:clip }` | Clips the horizontal post-strip scrollbar and overflowing cards | Change to `overflow:visible` on the thoughts section |
+
+## 🟠 Significant Gaps (missing features)
+
+| # | Problem | Impact |
+|---|---------|--------|
+| 6 | **Reels section entirely missing** | Major content type gap vs. competitors |
+| 7 | **No profile content tabs** (Posts · Photos · Reels · Stats) | All sections stacked — hard to navigate, no UX hierarchy |
+| 8 | **Video upload not supported** in composer | Reels can't be created |
+| 9 | **`openFeedProfileOverlay`** has Posts/Photos tabs but no Reels tab | Inconsistent profile view |
+| 10 | Feed split-viewer doesn't handle `post_type='reel'` | Reel posts would open as broken image viewer |
+
+## 🟡 UI Polish Issues
+
+| # | Location | Problem |
+|---|----------|---------|
+| 11 | `.profile-gallery-section { min-height:360px }` | Dead whitespace when gallery has no real photos |
+| 12 | Profile mini-stats 6-col grid on mobile (<400px) | 6 equal columns at 390px = each ~55px — too cramped |
+| 13 | Sticky card has no scroll-activated shadow | No visual feedback that content is beneath it |
+| 14 | `profile-thoughts.collapsed-for-gallery` CSS | Orphaned rule — the JS that applied this class was removed; dead CSS |
+| 15 | `.profile-thoughts.collapsed-for-gallery { ... }  /* JS never adds this class */
+.profile-top-sticky { transition: opacity, transform }  /* no longer needed with sticky */
+```
+
+## Summary of New Deliverables
+
+1. **profile-scroll-fix.css** + **profile-scroll-fix.js** — scroll/sticky bug fixes (prev)  
+2. **profile-reels.css** — full reel strip + reel viewer CSS  
+3. **profile-reels-html.html** — HTML snippets to insert into index.html  
+4. **profile-reels.js** — complete JS: upload, viewer, tabs, audit fixes
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Catalogued nine bugs spanning CSS layout conflicts and JavaScript data-leakage issues.
+=============
+
+CSS Bugs (index.html)
+─────────────────────
+1. L2641 .profile-thoughts { max-height:460px }
+   Section is clipped at 460px — composer alone is ~130px, strip cards are
+   min-height:220px, so any profile with posts clips content.
+   Companion: .profile-section-card { overflow:clip } (L2640) doubles the clip.
+   collapsed-for-gallery CSS class transitions from 460→0 but the class is
+   NEVER set by any JS — so the 460px is a permanent active cap, not a toggle.
+
+2. L2631+2661 .profile-post-strip.expanded { grid-auto-columns:... } is inert
+   because L2661 overrides display to flex !important. grid-auto-columns has
+   zero effect on a flex container → "Open grid ↗" button is visually broken.
+
+3. L6404-6407 .profile-mini-stat:nth-child(3/4/5/6) border rules are NOT
+   scoped to .profile-mini-stats — they bleed to any nth .profile-mini-stat
+   on the page (lobby stats strip, etc.).
+
+4. L2550+2648 .profile-live-dot (right:2px bottom:2px, 14×14px) is visually
+   covered by .profile-avatar-change-btn (right:-4px bottom:-4px, 30×30px).
+   Both are absolute children of .profile-avatar-shell. Camera button
+   completely obscures the online dot.
+
+5. app.js L4619 #feed-profile-overlay { top:clamp(76px,8vh,94px) }
+   8vh on a 900px-tall screen = 72px → clamped to 76px < the 88px topbar
+   bottom. Overlay banner overlaps the fixed app topbar on most laptop screens.
+
+6. profile-scroll-fix.css .profile-scroll-progress { position:sticky; top:0 }
+   The bar is inserted AFTER the sticky card (top:88px) but sticks at top:0
+   of the same scroll container, landing behind the fixed app topbar. Invisible.
+
+JS Bugs (app.js)
+────────────────
+7. initPublicProfilePage() sets profile-stat-score correctly for the viewed
+   user but leaves profile-stat-streak / -completions / -rank showing the
+   LOGGED-IN USER's own data (last written by initProfilePage).
+
+8. Goal pill (#profile-info-goal-val) click handler is bound in initProfilePage
+   with dataset.achBound='1' guard. When navigating to a public profile, the
+   guard prevents rebinding so the pill still opens the viewer's OWN achievement
+   sheet, not the subject's.
+
+9. openFeedProfileOverlay() tab-switch handler (L4795-4802) never resets
+   content.scrollTop — switching Posts→Photos leaves the panel mid-scroll.
+
+10. applyProfileAvatar(url) clears textContent then sets background-image.
+    If the URL is broken/404, the div is blank — no fallback initial-letter.
+
+
+
+
+/* v27 audit overrides */
+#pg-profile .profile-thoughts.profile-section-card { overflow: visible; max-height: none; }
+#pg-profile .profile-gallery-section { min-height: unset; }
+#pg-profile .profile-live-dot { right: 8px; bottom: 8px; z-index: 3; }
+#pg-profile .profile-avatar-change-btn { z-index: 5; }
+@media (max-width: 440px) {
+  #pg-profile .profile-mini-stats { grid-template-columns: repeat(3,1fr) !important; }
+  #pg-profile .profile-mini-stat:nth-child(3),
+  #pg-profile .profile-mini-stat:nth-child(6) { border-right: 0; }
+  #pg-profile .profile-mini-stat:nth-child(n+4) { border-top: 1px solid var(--border); }
+}
+.modern-profile-card.profile-top-sticky.is-scrolled {
+  box-shadow: 0 8px 32px rgba(13,17,23,.10), 0 2px 8px rgba(13,17,23,.06);
+  border-bottom-color: rgba(0,0,0,.10);
+}
+.profile-scroll-progress { top: 88px; }
+@media (max-width:720px){
+  .profile-scroll-progress { top: 134px; }
+  #feed-profile-overlay { top: 134px !important; }
+}
+.profile-tabs-bar { top: calc(88px + var(--profile-sticky-height, 320px)); }
+@media(max-width:720px){ .profile-tabs-bar { top: calc(134px + var(--profile-sticky-height, 320px)) !important; } }
+.profile-tab-panel { display:none; }
+.profile-tab-panel.active { display:block; }
+.feed-reel-card { height:min(560px,70vh); max-height:none; }
+.feed-reel-card video { width:100%; height:100%; object-fit:cover; }
+.feed-reel-play { position:absolute; inset:0; display:grid; place-items:center; font-size:38px; color:#fff; text-shadow:0 2px 12px rgba(0,0,0,.5); background:rgba(0,0,0,.12); pointer-events:none; }
+.profile-reels-section { margin-top:12px; }
+.profile-stats-panel { margin-top:12px; }
+@media(max-width:640px){
+  .feed-reel-card { height:min(72vh,560px); }
+}
+
+
+<style id="mortalive-profile-grid-override-v27">
+.profile-post-strip.expanded {
+  display:grid !important;
+  grid-auto-flow:row !important;
+  grid-auto-columns:unset !important;
+  grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  overflow-x:hidden !important;
+  overflow-y:visible !important;
+  cursor:default !important;
+}
+.profile-post-strip.expanded .profile-post-card {
+  width:100% !important;
+  min-width:0 !important;
+  flex:none !important;
+}
+@media(max-width:720px){
+  .profile-post-strip.expanded { grid-template-columns:1fr !important; }
+}
+</style>
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -5180,6 +6485,9 @@ body.mortalive-progress-open .sakura-topbar {
         <div>
           <div class="peer-name" id="peer-name">Stranger</div>
           <div class="peer-sub" id="peer-score">Random chat · connected</div>
+          <div class="talk-peer-actions" id="talk-peer-actions" style="display:none;">
+            <button class="talk-peer-action follow" id="btn-follow-peer" type="button">+ Follow</button>
+          </div>
         </div>
       </div>
       <div class="top-actions">
@@ -5356,6 +6664,8 @@ body.mortalive-progress-open .sakura-topbar {
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-photo" type="button" data-compose-kind="photo">Photo</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
+  <button class="compose-type-btn" id="btn-type-reel" type="button" data-compose-kind="reel">Reel</button>
+  <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-poll" type="button" data-compose-kind="poll">Poll</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-qna" type="button" data-compose-kind="qna">Q&A</button>
@@ -5364,6 +6674,9 @@ body.mortalive-progress-open .sakura-topbar {
 <input id="feed-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
 <span id="feed-photo-name" class="compose-photo-name" aria-live="polite"></span>
 <div id="feed-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
+<button class="compose-tool" id="btn-feed-reel" type="button" title="Add reel" style="display:none">🎬 Reel</button>
+<input id="feed-reel-input" type="file" accept="video/mp4,video/webm,video/quicktime" hidden>
+<span id="feed-reel-name" class="compose-photo-name" aria-live="polite"></span>
 <span style="flex:1;"></span>
 <span id="compose-hashtag-status" class="compose-hashtag-status" aria-live="polite" style="display:none;"></span><span id="char-count" style="font-size:12px;color:var(--on-surface-3);">500</span>
 <button class="compose-submit" disabled="" id="compose-submit">Post</button>
@@ -5569,8 +6882,15 @@ body.mortalive-progress-open .sakura-topbar {
       </div>
     </div>
 
+
+    <nav class="profile-tabs-bar" id="profile-tabs-bar" aria-label="Profile sections">
+      <button type="button" class="profile-tab-btn active" data-profile-tab="posts">Posts <span class="tab-count">0</span></button>
+      <button type="button" class="profile-tab-btn" data-profile-tab="photos">Photos <span class="tab-count">0</span></button>
+      <button type="button" class="profile-tab-btn" data-profile-tab="reels">Reels <span class="tab-count" id="profile-reel-count">0</span></button>
+      <button type="button" class="profile-tab-btn" data-profile-tab="stats">Stats</button>
+    </nav>
     <div class="profile-content-shell"><div class="profile-feed-viewport" id="profile-feed-viewport">
-      <section class="profile-section-card profile-thoughts" id="profile-thoughts-section">
+      <section class="profile-section-card profile-thoughts profile-tab-panel active" id="profile-thoughts-section" data-profile-panel="posts">
         <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Live identity</span><span class="profile-section-title">Thoughts & polls</span><span id="profile-post-count" style="font-size:10px;color:var(--on-surface-3);font-weight:700">Loading…</span></div><button class="profile-open-grid-btn" id="profile-open-grid" type="button" aria-expanded="false">Open grid ↗</button></div>
         <div class="profile-post-composer" id="profile-post-composer">
           <div class="profile-post-composer-box">
@@ -5599,7 +6919,7 @@ body.mortalive-progress-open .sakura-topbar {
         </div>
       </section>
 
-      <section class="profile-section-card profile-gallery-section" id="profile-gallery-section">
+      <section class="profile-section-card profile-gallery-section profile-tab-panel" id="profile-gallery-section" data-profile-panel="photos">
         <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Visuals</span><span class="profile-section-title">Photos</span></div><span style="font-size:10.5px;color:var(--on-surface-3);font-weight:700">Grid</span></div>
         <div class="profile-gallery" id="profile-gallery">
           <div class="profile-gallery-tile"><div class="profile-gallery-placeholder"><div><strong>Your visual identity starts here</strong><span>Add photos, creator work, travel moments, products, or highlights.</span></div></div></div>
@@ -5608,6 +6928,13 @@ body.mortalive-progress-open .sakura-topbar {
           <div class="profile-gallery-tile"><div class="profile-gallery-placeholder"><div><strong>Photo</strong><span>1:1 tile</span></div></div></div><div class="profile-gallery-tile"><div class="profile-gallery-placeholder"><div><strong>Photo</strong><span>1:1 tile</span></div></div></div>
         </div>
       </section>
+
+
+      <section class="profile-reels-section profile-tab-panel" id="profile-reels-section" data-profile-panel="reels">
+        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Short video</span><span class="profile-section-title">Reels</span><span data-profile-reel-count-label style="font-size:10px;color:var(--on-surface-3);font-weight:700">0</span></div><button type="button" class="reels-empty-cta" data-reel-upload-cta style="margin:0;padding:7px 12px;display:none;">+ Reel</button></div>
+        <div class="profile-reels-grid" id="profile-reels-grid"></div>
+      </section>
+      <section class="profile-stats-panel profile-tab-panel" id="profile-stats-panel" data-profile-panel="stats"></section>
 
       <!-- All legacy compat IDs kept hidden — app.js references them internally -->
       <div style="display:none" aria-hidden="true">
@@ -5834,7 +7161,7 @@ body.mortalive-progress-open .sakura-topbar {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260818-stability-security-v24"></script>
+<script src="app.js?v=20260819-profile-reels-audit-v27"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
