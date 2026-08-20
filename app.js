@@ -5,7 +5,8 @@
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
 // Mortalive v29 — main Profile now scrolls as one continuous document flow, matching Feed-profile behavior.
-const BUILD_TAG = 'mortalive-build-2026-08-20-motion-hardening-v31'; // bump this string on every deploy to confirm cache is fresh
+// Mortalive v32 — Messages integration merged into the v31 motion-hardening baseline; preserve this file as current source.
+const BUILD_TAG = 'mortalive-build-2026-08-20-messages-integration-v32'; // bump this string on every deploy to confirm cache is fresh
 
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
 const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
@@ -831,6 +832,11 @@ function showPage(id, options = {}) {
       fetchFeedPage(true);
     }
   }
+
+  if (id === 'pg-messages') {
+    if (typeof initMessagesPage === 'function') initMessagesPage();
+  }
+
 }
 
 function toast(msg, icon = '✅') {
@@ -4257,6 +4263,257 @@ function syncHashtagStatus(text, statusId) {
 }
 
 
+
+// ── MESSAGES PAGE ────────────────────────────────────────────────────────────
+let _messagesInitialized = false;
+const _msgsState = { conversations: [], activeId: null, unsubscribe: null };
+
+// LocalStorage keys — same as the standalone messages.html, so any demo
+// data seeded there is immediately visible here too.
+const _MSG_CONV_KEY = 'mortalive_conversations_v1';
+const _MSG_MSGS_KEY = 'mortalive_dm_messages_v1';
+
+// ── Pipeline stubs (swap each for a real fetch when the API is ready) ────────
+
+async function msgFetchConversations() {
+  // TODO: GET /api/conversations  Authorization: Bearer <S.authToken>
+  try { return JSON.parse(localStorage.getItem(_MSG_CONV_KEY)) || []; } catch { return []; }
+}
+
+async function msgFetchMessages(conversationId) {
+  // TODO: GET /api/conversations/:id/messages?limit=50
+  try {
+    const all = JSON.parse(localStorage.getItem(_MSG_MSGS_KEY)) || {};
+    return all[conversationId] || [];
+  } catch { return []; }
+}
+
+async function msgPostMessage(conversationId, text) {
+  // TODO: POST /api/conversations/:id/messages  { text }
+  const thread = await msgFetchMessages(conversationId);
+  const msg = { id: 'm' + Date.now(), from: 'me', text, ts: Date.now() };
+  thread.push(msg);
+  try {
+    const all = JSON.parse(localStorage.getItem(_MSG_MSGS_KEY)) || {};
+    all[conversationId] = thread;
+    localStorage.setItem(_MSG_MSGS_KEY, JSON.stringify(all));
+  } catch {}
+  const convs = await msgFetchConversations();
+  const conv = convs.find(c => c.id === conversationId);
+  if (conv) { conv.lastMessage = 'you: ' + text; conv.lastMessageAt = msg.ts; conv.unread = 0; }
+  try { localStorage.setItem(_MSG_CONV_KEY, JSON.stringify(convs)); } catch {}
+  return msg;
+}
+
+function msgSubscribeToConversation(conversationId, onMessage) {
+  // TODO: replace with Supabase Realtime channel:
+  // sb.channel('conversation:' + conversationId)
+  //   .on('postgres_changes', { event:'INSERT', schema:'public', table:'messages',
+  //        filter:`conversation_id=eq.${conversationId}` }, p => onMessage(p.new))
+  //   .subscribe()
+  return () => {}; // no-op until Realtime is wired
+}
+
+async function msgMarkRead(conversationId) {
+  // TODO: PATCH /api/conversations/:id/read
+  const convs = await msgFetchConversations();
+  const conv = convs.find(c => c.id === conversationId);
+  if (conv) { conv.unread = 0; }
+  try { localStorage.setItem(_MSG_CONV_KEY, JSON.stringify(convs)); } catch {}
+}
+
+// ── Rendering helpers ─────────────────────────────────────────────────────────
+
+function escMsgHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function msgRelTime(ts) {
+  const d = Date.now() - ts;
+  if (d < 60000)    return 'now';
+  if (d < 3600000)  return Math.floor(d / 60000)  + 'm';
+  if (d < 86400000) return Math.floor(d / 3600000) + 'h';
+  return Math.floor(d / 86400000) + 'd';
+}
+
+function renderMsgSidebar() {
+  const list = document.getElementById('msg-conv-list');
+  const sub  = document.getElementById('msg-sidebar-sub');
+  if (!list) return;
+  const convs = _msgsState.conversations;
+
+  if (!convs.length) {
+    if (sub) sub.textContent = 'No conversations yet';
+    list.innerHTML = `
+      <div class="sidebar-empty">
+        <div class="icon">📭</div>
+        <h3>Nothing here yet</h3>
+        <p>Messages open up once you've connected with someone in chat.</p>
+        <a class="empty-cta" href="#" data-top-page="pg-lobby">Start a chat →</a>
+        <button class="empty-cta ghost" id="msg-btn-preview-demo"
+                type="button" style="margin-top:4px;">Preview with sample data</button>
+      </div>`;
+    return;
+  }
+
+  if (sub) sub.textContent = convs.length + ' conversation' + (convs.length === 1 ? '' : 's');
+  list.innerHTML = [...convs]
+    .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
+    .map(c => `
+      <div class="conv-item${c.id === _msgsState.activeId ? ' active' : ''}"
+           data-id="${escMsgHtml(c.id)}">
+        <div class="conv-avatar">
+          ${escMsgHtml(c.peerEmoji || '👤')}
+          ${c.online ? '<span class="conv-online-dot"></span>' : ''}
+        </div>
+        <div class="conv-meta">
+          <div class="conv-row-top">
+            <span class="conv-name">${escMsgHtml(c.peerName)}</span>
+            <span class="conv-time">${msgRelTime(c.lastMessageAt)}</span>
+          </div>
+          <div class="conv-row-top">
+            <span class="conv-preview${c.unread ? ' unread' : ''}">${escMsgHtml(c.lastMessage || '')}</span>
+            ${c.unread ? `<span class="unread-badge">${c.unread}</span>` : ''}
+          </div>
+        </div>
+      </div>`).join('');
+}
+
+function renderMsgThread(messages) {
+  const el = document.getElementById('msg-thread-messages');
+  if (!el) return;
+  el.innerHTML = messages.map(m => `
+    <div class="msg-row ${m.from === 'me' ? 'me' : 'them'}">
+      <div>
+        <div class="msg-bubble">${escMsgHtml(m.text)}</div>
+        <div class="msg-time">${new Date(m.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
+      </div>
+    </div>`).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+async function msgOpenConversation(id) {
+  _msgsState.activeId = id;
+  const conv = _msgsState.conversations.find(c => c.id === id);
+  if (!conv) return;
+
+  document.getElementById('msg-thread-empty').style.display  = 'none';
+  document.getElementById('msg-thread-active').style.display = 'flex';
+  document.getElementById('msg-shell')?.classList.add('thread-open');
+
+  document.getElementById('msg-peer-ava').textContent  = conv.peerEmoji || '👤';
+  document.getElementById('msg-peer-name').textContent = conv.peerName;
+  const statusEl = document.getElementById('msg-peer-status');
+  statusEl.textContent = conv.online ? 'Online' : 'Offline';
+  statusEl.className   = 'thread-peer-status' + (conv.online ? ' online' : '');
+
+  const messages = await msgFetchMessages(id);
+  renderMsgThread(messages);
+
+  if (conv.unread) { conv.unread = 0; await msgMarkRead(id); }
+  renderMsgSidebar();
+
+  document.getElementById('msg-composer-send').disabled = false;
+  document.getElementById('msg-composer-input')?.focus();
+
+  if (_msgsState.unsubscribe) _msgsState.unsubscribe();
+  _msgsState.unsubscribe = msgSubscribeToConversation(id, async () => {
+    const updated = await msgFetchMessages(id);
+    if (_msgsState.activeId === id) renderMsgThread(updated);
+  });
+}
+
+function msgBackToList() {
+  document.getElementById('msg-shell')?.classList.remove('thread-open');
+}
+
+async function msgSendCurrentMessage() {
+  const input = document.getElementById('msg-composer-input');
+  const text  = input?.value.trim();
+  if (!text || !_msgsState.activeId) return;
+  input.value = '';
+  await msgPostMessage(_msgsState.activeId, text);
+  const messages = await msgFetchMessages(_msgsState.activeId);
+  renderMsgThread(messages);
+  _msgsState.conversations = await msgFetchConversations();
+  renderMsgSidebar();
+}
+
+function msgSeedDemoData() {
+  const now = Date.now();
+  const convs = [
+    { id:'c1', peerName:'Nova_82',    peerEmoji:'🦊', online:true,
+      lastMessage:'hey, that was a fun chat!',    lastMessageAt:now-720000,   unread:2 },
+    { id:'c2', peerName:'Theorist_X', peerEmoji:'🎭', online:false,
+      lastMessage:'you: totally agree with that', lastMessageAt:now-18000000,  unread:0 },
+    { id:'c3', peerName:'Mira_Glow',  peerEmoji:'🌸', online:true,
+      lastMessage:'small world lol',              lastMessageAt:now-93600000, unread:0 }
+  ];
+  try { localStorage.setItem(_MSG_CONV_KEY, JSON.stringify(convs)); } catch {}
+  const msgs = {
+    c1: [
+      { id:'m1', from:'them', text:'hey! good talking earlier',    ts:now-2400000 },
+      { id:'m2', from:'me',   text:'you too, that was a good one', ts:now-2100000 },
+      { id:'m3', from:'them', text:'hey, that was a fun chat!',    ts:now-720000  }
+    ],
+    c2: [
+      { id:'m4', from:'them', text:'do you think so?',        ts:now-18060000 },
+      { id:'m5', from:'me',   text:'totally agree with that', ts:now-18000000 }
+    ],
+    c3: [{ id:'m6', from:'them', text:'small world lol', ts:now-93600000 }]
+  };
+  try { localStorage.setItem(_MSG_MSGS_KEY, JSON.stringify(msgs)); } catch {}
+}
+
+// ── initMessagesPage ──────────────────────────────────────────────────────────
+
+function initMessagesPage() {
+  if (_messagesInitialized) {
+    // Re-entry: refresh sidebar in case conversations changed since last visit
+    msgFetchConversations().then(convs => {
+      _msgsState.conversations = convs;
+      renderMsgSidebar();
+    });
+    return;
+  }
+  _messagesInitialized = true;
+
+  // One-time event delegation — scoped entirely to #pg-messages
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('#pg-messages')) return;
+
+    const backBtn  = event.target.closest('#msg-thread-back');
+    if (backBtn)   { msgBackToList(); return; }
+
+    const sendBtn  = event.target.closest('#msg-composer-send');
+    if (sendBtn)   { msgSendCurrentMessage(); return; }
+
+    const convItem = event.target.closest('.conv-item[data-id]');
+    if (convItem)  { msgOpenConversation(convItem.dataset.id); return; }
+
+    const demoCta  = event.target.closest('#msg-btn-preview-demo');
+    if (demoCta) {
+      msgSeedDemoData();
+      msgFetchConversations().then(convs => {
+        _msgsState.conversations = convs;
+        renderMsgSidebar();
+      });
+      return;
+    }
+  });
+
+  document.getElementById('msg-composer-input')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); msgSendCurrentMessage(); }
+  });
+
+  // Initial load
+  msgFetchConversations().then(convs => {
+    _msgsState.conversations = convs;
+    renderMsgSidebar();
+  });
+}
+
+window.initMessagesPage = initMessagesPage;
 
 // ═══════════════════════════════════════════════════════════════════
 // MORTALIVE FEED — Supabase-backed integration (Step 2)
