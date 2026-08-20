@@ -7,7 +7,7 @@
 // Mortalive v29 — main Profile now scrolls as one continuous document flow, matching Feed-profile behavior.
 // Mortalive v32 — Messages integration merged into the v31 motion-hardening baseline; preserve this file as current source.
 // Mortalive v33 — Messages shell fix: close page boundary + remove demo chat UI/data seed.
-const BUILD_TAG = 'mortalive-build-2026-08-20-profile-hardening-v35'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-20-profile-actions-v36'; // bump this string on every deploy to confirm cache is fresh
 
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
 const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
@@ -7717,14 +7717,15 @@ async function initFollowSection(profileUserId) {
 // Attach Profile Events
 // Guard: idempotent — safe to call multiple times, only binds once per element.
 function bindProfileEvents() {
-  // Hard guard against double-binding (e.g. auth-state listener re-triggering)
-  if (document.body.dataset.profileEventsBound) return;
-  document.body.dataset.profileEventsBound = '1';
-
-  document.addEventListener('click', (e) => {
-    const profileBtn = e.target.closest?.('[data-open-profile]');
-    if (profileBtn) { e.preventDefault(); openUserProfile(profileBtn.dataset.openProfile); return; }
-  });
+  // Dynamic profile markup can be recreated during hydration/re-render.
+  // Delegation handlers bind once; current DOM controls are rebound below.
+  if (!document.body.dataset.profileEventsBound) {
+    document.body.dataset.profileEventsBound = '1';
+      document.addEventListener('click', (e) => {
+      const profileBtn = e.target.closest?.('[data-open-profile]');
+      if (profileBtn) { e.preventDefault(); openUserProfile(profileBtn.dataset.openProfile); return; }
+    });
+  }
 
   const avatarInput = $('profile-avatar-input');
   const avatarButton = $('btn-change-profile-photo');
@@ -7734,7 +7735,11 @@ function bindProfileEvents() {
     avatarInput.addEventListener('change', () => changeProfilePhoto());
   }
 
-  $('btn-edit-cancel-inline')?.addEventListener('click', toggleProfileEditMode);
+  const inlineEditCancel = $('btn-edit-cancel-inline');
+  if (inlineEditCancel && inlineEditCancel.dataset.profileBound !== '1') {
+    inlineEditCancel.dataset.profileBound = '1';
+    inlineEditCancel.addEventListener('click', toggleProfileEditMode);
+  }
 
   // Profile post strip: like buttons (data-profile-action="like")
   // Uses document delegation so it survives re-renders of the strip
@@ -7788,7 +7793,9 @@ function bindProfileEvents() {
   // older inline id as well so the JS remains compatible with both layouts.
   const profileSaveButton = $('btn-edit-save') || $('btn-edit-save-inline');
 
-  profileSaveButton?.addEventListener('click', async () => {
+  if (profileSaveButton && profileSaveButton.dataset.profileSaveBound !== '1') {
+    profileSaveButton.dataset.profileSaveBound = '1';
+    profileSaveButton.addEventListener('click', async () => {
     const newName = $('edit-display-name')?.value.trim() || '';
     const newBio = $('edit-bio')?.value.trim() || '';
     const newDetails = $('edit-details')?.value.trim() || '';
@@ -7875,63 +7882,87 @@ function bindProfileEvents() {
     } finally {
       if(btn) { btn.disabled = false; btn.textContent = 'Save Changes'; }
     }
-  });
+    });
+  }
 
-  if (!document.body.dataset.profileHeaderActionsBound) {
-    document.body.dataset.profileHeaderActionsBound = '1';
-    document.addEventListener('click', (event) => {
-      const editBtn = event.target.closest?.('#btn-edit-profile');
-      if (editBtn) {
-        event.preventDefault();
-        if (!S.profileViewUserId) toggleProfileEditMode();
-        return;
-      }
-      const shareBtn = event.target.closest?.('#btn-share-profile');
-      if (!shareBtn) return;
+  // Current header controls are rebound after every profile hydration/re-render.
+  const editProfileBtn = $('btn-edit-profile');
+  if (editProfileBtn) {
+    editProfileBtn.onclick = (event) => {
+      event.preventDefault();
+      if (!S.profileViewUserId) toggleProfileEditMode();
+    };
+  }
+
+  const shareProfileBtn = $('btn-share-profile');
+  if (shareProfileBtn) {
+    shareProfileBtn.onclick = async (event) => {
       event.preventDefault();
       const username = S.profileViewUserId
         ? (S.profileViewData?.username || '')
         : (S.accountData?.username || S.username || '');
-      if (!username) { toast('Could not determine username — try again.', '⚠️'); return; }
-      const link = `${window.location.origin}${window.location.pathname}#@${encodeURIComponent(username)}`;
-      const copyPromise = navigator.clipboard?.writeText?.(link);
-      if (copyPromise?.then) {
-        copyPromise.then(() => toast('Profile link copied! Share it anywhere.', '📋')).catch(() => toast(link, '🔗'));
+      await copyProfileShareLink(username);
+    };
+  }
+
+  async function copyProfileShareLink(username) {
+    const cleanUsername = String(username || '').trim().replace(/^@/, '');
+    if (!cleanUsername || !isValidUsername(cleanUsername)) {
+      toast('Could not determine a valid username — try again.', '⚠️');
+      return;
+    }
+    const link = `${window.location.origin}/?user=${encodeURIComponent(cleanUsername)}`;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
       } else {
-        toast(link, '🔗');
+        const input = document.createElement('input');
+        input.value = link;
+        input.setAttribute('readonly', '');
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        input.remove();
       }
+      toast('Profile link copied! Share it anywhere.', '📋');
+    } catch (_) {
+      toast(link, '🔗');
+    }
+  }
+
+  const copyBtn = $('btn-profile-copy');
+  if (copyBtn) {
+    copyBtn.onclick = async (event) => {
+      event.preventDefault();
+      const username = S.profileViewUserId
+        ? (S.profileViewData?.username || '')
+        : (S.accountData?.username || S.username || '');
+      await copyProfileShareLink(username);
+    };
+  }
+
+  const profileLogoutBtn = $('btn-profile-logout');
+  if (profileLogoutBtn && profileLogoutBtn.dataset.profileBound !== '1') {
+    profileLogoutBtn.dataset.profileBound = '1';
+    profileLogoutBtn.addEventListener('click', async () => {
+      const confirmed = await showConfirmDialog({
+        title: 'Log out?',
+        body: 'You can always sign back in with your email and password.',
+        confirmLabel: 'Log out',
+        cancelLabel: 'Stay',
+        danger: false
+      });
+      if (confirmed) $('btn-logout')?.click();
     });
   }
 
-  // Override the inline-HTML handler on btn-profile-copy (which incorrectly
-  // used '#profile') by cloning the element to clear all prior listeners,
-  // then re-binding with the correct ?user=username shareable URL.
-  const copyBtnOld = $('btn-profile-copy');
-  if (copyBtnOld) {
-    const copyBtn = copyBtnOld.cloneNode(true);
-    copyBtnOld.parentNode?.replaceChild(copyBtn, copyBtnOld);
-    copyBtn.addEventListener('click', () => {
-      const username = S.accountData?.username || S.username || '';
-      if (!username) { window.toast?.('Sign in to copy your profile link', '🔒'); return; }
-      const link = `${location.origin}${location.pathname}#@${encodeURIComponent(username)}`;
-      navigator.clipboard?.writeText(link)
-        .then(() => window.toast?.('Profile link copied! Share it anywhere.', '📋'))
-        .catch(() => window.toast?.(link, '🔗'));
-    });
+  const deleteAccountBtn = $('btn-delete-account');
+  if (deleteAccountBtn && deleteAccountBtn.dataset.profileBound !== '1') {
+    deleteAccountBtn.dataset.profileBound = '1';
+    deleteAccountBtn.addEventListener('click', performAccountDeletion);
   }
-
-  $('btn-profile-logout')?.addEventListener('click', async () => {
-    const confirmed = await showConfirmDialog({
-      title: 'Log out?',
-      body: 'You can always sign back in with your email and password.',
-      confirmLabel: 'Log out',
-      cancelLabel: 'Stay',
-      danger: false
-    });
-    if (confirmed) $('btn-logout')?.click();
-  });
-
-  $('btn-delete-account')?.addEventListener('click', performAccountDeletion);
 }
 
 // Shared deletion flow — called from both the profile menu button AND the
