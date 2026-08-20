@@ -2,6 +2,7 @@
 <!DOCTYPE html>
 <!-- MORTALIVE SOURCE HANDOFF — latest uploaded index.html source; preserve this file as the current baseline. -->
 <!-- Mortalive v30 — authenticated post reporting added with dedicated post_reports storage. -->
+<!-- Mortalive v32 — Messages integration merged into the v31 motion-hardening baseline; preserve this file as current source. -->
 <html lang="en">
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v22 -->
@@ -81,6 +82,7 @@
   --dur-fast: 140ms;
   --dur-mid:  220ms;
   --dur-slow: 360ms;
+  --tabbar-h: 62px;
 }
 
 /* ── Reset ──────────────────────────────────────────── */
@@ -2518,6 +2520,214 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
 }
 
 </style>
+<style id="mortalive-messages-inline-css">
+/* ── Messages page — fully scoped to #pg-messages ────────────────────── */
+
+#pg-messages.active {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+#pg-messages .msg-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  max-width: 1180px;
+  width: 100%;
+  margin: 0 auto;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+#pg-messages .conv-sidebar {
+  width: 340px;
+  min-width: 280px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+#pg-messages .sidebar-head { padding: 18px 18px 12px; flex-shrink: 0; }
+#pg-messages .sidebar-title { font-size: 20px; font-weight: 800; letter-spacing: -.03em; }
+#pg-messages .sidebar-sub  { font-size: 12.5px; color: var(--on-surface-3); margin-top: 3px; }
+
+#pg-messages .conv-list { flex: 1; overflow-y: auto; padding: 4px 8px 12px; }
+
+#pg-messages .conv-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px; border-radius: var(--r-md);
+  cursor: pointer; transition: background var(--dur-fast);
+  position: relative;
+}
+#pg-messages .conv-item:hover  { background: var(--surface-2); }
+#pg-messages .conv-item.active { background: var(--primary-alpha); }
+
+#pg-messages .conv-avatar {
+  width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  display: grid; place-items: center; font-size: 20px;
+  border: 2px solid rgba(255,255,255,.8); position: relative;
+}
+#pg-messages .conv-online-dot {
+  position: absolute; bottom: 0; right: 0; width: 11px; height: 11px;
+  border-radius: 50%; background: var(--success); border: 2px solid var(--surface);
+}
+
+#pg-messages .conv-meta { flex: 1; min-width: 0; }
+#pg-messages .conv-row-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+}
+#pg-messages .conv-name {
+  font-size: 14px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#pg-messages .conv-time { font-size: 11px; color: var(--on-surface-3); flex-shrink: 0; }
+#pg-messages .conv-preview {
+  font-size: 12.5px; color: var(--on-surface-3); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#pg-messages .conv-preview.unread { color: var(--on-surface); font-weight: 600; }
+#pg-messages .unread-badge {
+  min-width: 19px; height: 19px; border-radius: var(--r-full);
+  background: var(--primary); color: #fff; font-size: 10.5px; font-weight: 800;
+  display: grid; place-items: center; padding: 0 5px; flex-shrink: 0; margin-left: 6px;
+}
+
+#pg-messages .sidebar-empty,
+#pg-messages .thread-empty {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center; padding: 40px 24px; gap: 10px; color: var(--on-surface-3);
+}
+#pg-messages .sidebar-empty .icon,
+#pg-messages .thread-empty  .icon { font-size: 40px; opacity: .5; }
+#pg-messages .sidebar-empty h3,
+#pg-messages .thread-empty  h3 { font-size: 16px; font-weight: 800; color: var(--on-surface); }
+#pg-messages .sidebar-empty p,
+#pg-messages .thread-empty  p  { font-size: 13px; line-height: 1.6; max-width: 30ch; }
+
+#pg-messages .empty-cta {
+  margin-top: 6px; padding: 10px 18px; border-radius: var(--r-full);
+  background: linear-gradient(145deg, var(--primary), var(--secondary));
+  color: #fff; font-size: 13px; font-weight: 700;
+  box-shadow: 0 4px 14px rgba(26,110,245,.28);
+  display: inline-block; border: 0; cursor: pointer;
+}
+#pg-messages .empty-cta.ghost {
+  background: var(--surface-2); color: var(--on-surface-2);
+  border: 1px solid var(--border); box-shadow: none;
+}
+
+#pg-messages .thread-pane {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0;
+}
+#pg-messages .thread-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+#pg-messages .thread-back {
+  display: none; width: 34px; height: 34px; border-radius: 50%;
+  align-items: center; justify-content: center;
+  font-size: 18px; color: var(--on-surface-2); flex-shrink: 0;
+}
+#pg-messages .thread-back:hover { background: var(--surface-2); }
+
+#pg-messages .thread-peer-ava {
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  display: grid; place-items: center; font-size: 18px;
+}
+#pg-messages .thread-peer-name   { font-size: 15px; font-weight: 800; letter-spacing: -.02em; }
+#pg-messages .thread-peer-status { font-size: 12px; color: var(--on-surface-3); margin-top: 1px; }
+#pg-messages .thread-peer-status.online { color: var(--success); font-weight: 600; }
+
+#pg-messages .thread-messages {
+  flex: 1; overflow-y: auto; padding: 18px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+
+#pg-messages .msg-row { display: flex; max-width: 74%; margin-bottom: 3px; }
+#pg-messages .msg-row.them { align-self: flex-start; }
+#pg-messages .msg-row.me   { align-self: flex-end; }
+
+#pg-messages .msg-bubble {
+  padding: 9px 13px; border-radius: 16px 16px 16px 4px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  font-size: 13.5px; line-height: 1.55; word-break: break-word;
+}
+#pg-messages .msg-row.me .msg-bubble {
+  background: var(--primary-alpha); border-color: rgba(26,110,245,.18);
+  border-radius: 16px 16px 4px 16px;
+}
+#pg-messages .msg-time { font-size: 10px; color: var(--on-surface-3); margin-top: 3px; }
+#pg-messages .msg-row.me .msg-time { text-align: right; }
+
+#pg-messages .composer-wrap {
+  border-top: 1px solid var(--border); padding: 12px 16px; flex-shrink: 0;
+}
+#pg-messages .composer-hint { font-size: 11px; color: var(--on-surface-3); margin-bottom: 8px; }
+#pg-messages .composer-row  { display: flex; gap: 9px; align-items: center; }
+
+#pg-messages .composer-input {
+  flex: 1; padding: 12px 15px; border-radius: var(--r-full);
+  border: 1.5px solid var(--border-strong); background: var(--surface-2);
+  color: var(--on-surface); font-size: 14px; outline: none;
+  transition: border-color var(--dur-fast), background var(--dur-fast);
+}
+#pg-messages .composer-input:focus {
+  border-color: var(--primary); background: var(--surface);
+}
+#pg-messages .composer-send {
+  width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(145deg, var(--primary), var(--secondary));
+  color: #fff; display: grid; place-items: center; font-size: 16px;
+  box-shadow: 0 4px 12px rgba(26,110,245,.28);
+  transition: transform var(--dur-fast);
+}
+#pg-messages .composer-send:hover:not(:disabled) { transform: scale(1.06); }
+#pg-messages .composer-send:disabled { opacity: .4; cursor: not-allowed; }
+
+#pg-messages .bottom-tabbar { display: none; }
+#pg-messages.active .bottom-tabbar {
+  display: flex;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 90;
+  height: var(--tabbar-h);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  background: rgba(255,255,255,.96);
+  backdrop-filter: blur(16px) saturate(160%);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -2px 12px rgba(0,0,0,.05);
+  align-items: stretch;
+}
+#pg-messages .tab-item {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 2px; color: var(--on-surface-3); transition: color var(--dur-fast);
+}
+#pg-messages .tab-item .tab-icon  { font-size: 19px; line-height: 1; }
+#pg-messages .tab-item .tab-label { font-size: 10.5px; font-weight: 700; }
+#pg-messages .tab-item.active     { color: var(--primary); }
+
+@media (max-width: 780px) {
+  #pg-messages.active { padding-bottom: var(--tabbar-h); }
+  #pg-messages .msg-shell  { border-left: 0; border-right: 0; }
+  #pg-messages .conv-sidebar { width: 100%; border-right: 0; }
+  #pg-messages .thread-pane {
+    position: fixed;
+    inset: 58px 0 var(--tabbar-h);
+    background: var(--surface);
+    z-index: 20;
+  }
+  #pg-messages .msg-shell.thread-open .conv-sidebar          { display: none; }
+  #pg-messages .msg-shell:not(.thread-open) .thread-pane     { display: none; }
+  #pg-messages .thread-back { display: flex; }
+}
+</style>
+
 
 <style id="mortalive-profile-modal-fixes">
 /* Existing app.js uses .active for edit/profile overlays. */
@@ -6861,18 +7071,47 @@ JS Bugs (app.js)
 </div>
 </section>
 
-<section id="pg-messages" class="page blank-app-page">
-  <div class="wrap" style="display:flex;justify-content:center;">
-    <div class="card blank-card">
-      <span class="blank-kicker">Messages</span>
-      <h2 class="blank-title">Coming soon</h2>
-      <p class="blank-copy">This page is intentionally empty for now. It will become the Mortalive messages area in a later update without touching the working login, guest, or Talk flows.</p>
-      <div class="blank-actions">
-        <button class="btn btn-primary" type="button" onclick="showPage('pg-lobby')">Back to Talk</button>
+<section id="pg-messages" class="page">
+
+  <!-- Two-pane shell -->
+  <main class="msg-shell" id="msg-shell">
+
+    <!-- Conversation sidebar -->
+    <aside class="conv-sidebar">
+      <div class="sidebar-head">
+        <div class="sidebar-title">Messages</div>
+        <div class="sidebar-sub" id="msg-sidebar-sub">Loading…</div>
       </div>
-    </div>
-  </div>
-</section>
+      <div class="conv-list" id="msg-conv-list"></div>
+    </aside>
+
+    <!-- Thread pane -->
+    <section class="thread-pane" id="msg-thread-pane">
+      <div class="thread-empty" id="msg-thread-empty">
+        <div class="icon">💬</div>
+        <h3>Select a conversation</h3>
+        <p>Pick someone from the list to see your messages.</p>
+      </div>
+      <div id="msg-thread-active" style="display:none;flex:1;min-height:0;flex-direction:column;">
+        <div class="thread-header">
+          <button class="thread-back" id="msg-thread-back">←</button>
+          <div class="thread-peer-ava" id="msg-peer-ava">👤</div>
+          <div>
+            <div class="thread-peer-name" id="msg-peer-name">—</div>
+            <div class="thread-peer-status" id="msg-peer-status">offline</div>
+          </div>
+        </div>
+        <div class="thread-messages" id="msg-thread-messages"></div>
+        <div class="composer-wrap">
+          <div class="composer-hint">Messages are saved locally until the API is connected.</div>
+          <div class="composer-row">
+            <input class="composer-input" id="msg-composer-input"
+                   placeholder="Write a message…" maxlength="1000" autocomplete="off">
+            <button class="composer-send" id="msg-composer-send" disabled>➤</button>
+          </div>
+        </div>
+      </div>
+    </section>
 
 <!-- ═══════════════════ PROFILE ═══════════════════════ -->
 <section id="pg-profile" class="page">
@@ -7251,7 +7490,7 @@ JS Bugs (app.js)
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260820-motion-hardening-v31"></script>
+<script src="app.js?v=20260820-messages-integration-v32"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
