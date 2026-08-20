@@ -2,6 +2,7 @@
 <!DOCTYPE html>
 <!-- MORTALIVE SOURCE HANDOFF — v34 main baseline. Preserve all existing source and page boundaries. -->
 <!-- Mortalive v30 — authenticated post reporting added with dedicated post_reports storage. -->
+<!-- Mortalive v35 — username hardening, profile actions, video naming, report modal fix. -->
 <!-- Mortalive v32 — Messages integration merged into the v31 motion-hardening baseline; preserve this file as current source. -->
 <html lang="en">
 <head>
@@ -3550,6 +3551,10 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
 #pg-feed .feed-banner-close:hover{ background:rgba(0,0,0,.06); }
 
 /* ── Share modal ────────────────────────────────────────── */
+/* Global modal overlay — report modal is moved to <body> so it must retain fixed positioning outside #pg-feed. */
+.modal-overlay{display:none;position:fixed;inset:0;z-index:2100;padding:18px;background:rgba(8,14,28,.48);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);align-items:center;justify-content:center;overflow:auto;}
+.modal-overlay.open{display:flex;}
+.modal-overlay .modal-box{width:min(460px,100%);max-height:min(86dvh,720px);overflow:auto;background:#fff;border:1px solid var(--border);border-radius:var(--r-xl);box-shadow:var(--elev-4);padding:28px;}
 #pg-feed .modal-overlay{
   display:none; position:fixed; inset:0; z-index:200;
   align-items:center; justify-content:center;
@@ -6553,7 +6558,7 @@ JS Bugs (app.js)
         <div id="auth-signup-form" style="display:none;">
           <div class="field">
             <label for="signup-username">Username</label>
-            <input id="signup-username" type="text" autocomplete="username" placeholder="3–24 chars: letters, numbers, _" maxlength="24">
+            <input id="signup-username" maxlength="24" type="text" autocomplete="username" placeholder="3–24 chars: letters, numbers, _" maxlength="24">
             <div id="signup-username-status" class="username-status" style="display:none;"></div>
           </div>
           <div class="field">
@@ -6964,7 +6969,7 @@ JS Bugs (app.js)
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-photo" type="button" data-compose-kind="photo">Photo</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
-  <button class="compose-type-btn" id="btn-type-reel" type="button" data-compose-kind="reel">Reel</button>
+  <button class="compose-type-btn" id="btn-type-reel" type="button" data-compose-kind="reel">Video</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-poll" type="button" data-compose-kind="poll">Poll</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
@@ -6974,7 +6979,7 @@ JS Bugs (app.js)
 <input id="feed-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
 <span id="feed-photo-name" class="compose-photo-name" aria-live="polite"></span>
 <div id="feed-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
-<button class="compose-tool" id="btn-feed-reel" type="button" title="Add reel" style="display:none">🎬 Reel</button>
+<button class="compose-tool" id="btn-feed-reel" type="button" title="Add video" style="display:none">🎬 Video</button>
 <input id="feed-reel-input" type="file" accept="video/mp4,video/webm,video/quicktime" hidden>
 <span id="feed-reel-name" class="compose-photo-name" aria-live="polite"></span>
 <span style="flex:1;"></span>
@@ -7224,7 +7229,7 @@ JS Bugs (app.js)
     <nav class="profile-tabs-bar" id="profile-tabs-bar" aria-label="Profile sections">
       <button type="button" class="profile-tab-btn active" data-profile-tab="posts">Posts <span class="tab-count">0</span></button>
       <button type="button" class="profile-tab-btn" data-profile-tab="photos">Photos <span class="tab-count">0</span></button>
-      <button type="button" class="profile-tab-btn" data-profile-tab="reels">Motions <span class="tab-count" id="profile-reel-count">0</span></button>
+      <button type="button" class="profile-tab-btn" data-profile-tab="reels">Videos <span class="tab-count" id="profile-reel-count">0</span></button>
       <button type="button" class="profile-tab-btn" data-profile-tab="stats">Stats</button>
     </nav>
     <div class="profile-content-shell"><div class="profile-feed-viewport" id="profile-feed-viewport">
@@ -7269,7 +7274,7 @@ JS Bugs (app.js)
 
 
       <section class="profile-reels-section profile-tab-panel" id="profile-reels-section" data-profile-panel="reels">
-        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Short video</span><span class="profile-section-title">Motions</span><span data-profile-reel-count-label style="font-size:10px;color:var(--on-surface-3);font-weight:700">0</span></div><button type="button" class="reels-empty-cta" data-reel-upload-cta style="margin:0;padding:7px 12px;display:none;">+ Motion</button></div>
+        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Short video</span><span class="profile-section-title">Videos</span><span data-profile-reel-count-label style="font-size:10px;color:var(--on-surface-3);font-weight:700">0</span></div><button type="button" class="reels-empty-cta" data-reel-upload-cta style="margin:0;padding:7px 12px;display:none;">+ Video</button></div>
         <div class="profile-reels-grid" id="profile-reels-grid"></div>
       </section>
       <section class="profile-stats-panel profile-tab-panel" id="profile-stats-panel" data-profile-panel="stats"></section>
@@ -7499,7 +7504,7 @@ JS Bugs (app.js)
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260820-messages-presence-v34"></script>
+<script src="app.js?v=20260820-profile-hardening-v35"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
