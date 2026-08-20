@@ -1,6 +1,7 @@
+<!---- Mortalive v31 — Motion hardening applied to v30 baseline. ---->
 <!DOCTYPE html>
 <!-- MORTALIVE SOURCE HANDOFF — latest uploaded index.html source; preserve this file as the current baseline. -->
-<!-- Mortalive v19 — runtime configuration centralized in backend; Section 1 optimization pass applied. -->
+<!-- Mortalive v30 — authenticated post reporting added with dedicated post_reports storage. -->
 <html lang="en">
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v22 -->
@@ -3021,6 +3022,31 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
 }
 #pg-feed .post-more-btn:hover{ background:var(--surface-2); color:var(--on-surface); }
 
+#pg-feed .post-more-wrap,
+.profile-post-card .post-more-wrap{position:relative;flex-shrink:0}
+#pg-feed .post-more-popover,
+.profile-post-card .post-more-popover{
+  display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:120;min-width:170px;padding:6px;
+  border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.98);
+  box-shadow:0 18px 44px rgba(13,17,23,.16)
+}
+#pg-feed .post-more-popover.open,
+.profile-post-card .post-more-popover.open{display:block}
+#pg-feed .post-more-popover .popover-item,
+.profile-post-card .post-more-popover .popover-item{
+  width:100%;display:flex;align-items:center;gap:9px;padding:10px 11px;border-radius:10px;
+  font-size:12px;font-weight:800;color:var(--on-surface);text-align:left
+}
+#pg-feed .post-more-popover .popover-item:hover,
+.profile-post-card .post-more-popover .popover-item:hover{background:var(--surface-2)}
+#pg-feed .post-more-popover .popover-item.danger:hover,
+.profile-post-card .post-more-popover .popover-item.danger:hover{background:rgba(220,38,38,.07);color:var(--danger)}
+.profile-post-card .post-more-btn{
+  width:30px;height:30px;border-radius:10px;display:grid;place-items:center;color:var(--on-surface-3);
+  font-size:16px;background:transparent
+}
+.profile-post-card .post-more-btn:hover{background:var(--surface-2);color:var(--on-surface)}
+
 /* Post body */
 #pg-feed .post-body{ padding:14px 18px; }
 #pg-feed .post-text{
@@ -3365,6 +3391,21 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
   font-size:13.5px; font-weight:600;
 }
 #pg-feed .report-option:hover{ background:var(--danger-alpha); border-color:rgba(220,38,38,.2); color:var(--danger); }
+
+/* Report modal can be moved to <body> so it works from Feed and Profile. */
+#report-modal{z-index:2100}
+#report-modal .report-option{
+  display:flex;align-items:center;gap:12px;padding:12px 15px;border-radius:var(--r-md);
+  border:1px solid var(--border);background:var(--surface-2);margin-bottom:8px;cursor:pointer;
+  transition:all var(--dur-fast);font-size:13.5px;font-weight:600;color:var(--on-surface)
+}
+#report-modal .report-option:hover{background:var(--danger-alpha);border-color:rgba(220,38,38,.2);color:var(--danger)}
+#report-modal .modal-close{
+  display:flex;align-items:center;justify-content:center;width:100%;margin-top:6px;padding:11px;
+  border-radius:var(--r-sm);background:var(--surface-2);border:1px solid var(--border);
+  font-size:13.5px;font-weight:600;color:var(--on-surface-3);transition:all var(--dur-fast)
+}
+#report-modal .modal-close:hover{background:var(--surface-3)}
 
 /* ── More options popover ───────────────────────────────── */
 #pg-feed .popover{
@@ -5007,7 +5048,7 @@ body.mortalive-app-topbar-visible .profile-tabs-bar {
   font-weight: 700;
 }
 
-/* Upload reel tile */
+/* Upload motion tile */
 .reel-thumb-upload {
   display: flex;
   flex-direction: column;
@@ -6008,7 +6049,7 @@ JS Bugs (app.js)
         <div class="live-dot"></div>
         <span id="app-topbar-online-count">—</span> online
       </div>
-      <div class="topbar-stat app-topbar-score" id="app-topbar-score-pill" title="Open crok Score">
+      <div class="topbar-stat app-topbar-score" id="app-topbar-score-pill" title="Open Croks Score">
         🧲 <span id="app-topbar-score-val">—</span>
       </div>
     </div>
@@ -6274,7 +6315,7 @@ JS Bugs (app.js)
                    placeholder="Pick a name for this session" autocomplete="off">
             <div class="help-row">
               <span>No account needed</span>
-              <span>Guests don't earn crok Score</span>
+              <span>Guests don't earn Croks Score</span>
             </div>
           </div>
           <button class="btn btn-primary btn-wide" id="btn-continue-guest" style="margin-top:14px;">
@@ -6653,7 +6694,7 @@ JS Bugs (app.js)
 <div class="sidebar-card" style="text-align:center;">
 <div style="font-size:28px;margin-bottom:8px;">🌐</div>
 <div style="font-size:14px;font-weight:700;margin-bottom:4px;">Start a new chat</div>
-<div style="font-size:12.5px;color:var(--on-surface-3);margin-bottom:14px;line-height:1.6;">Every chat earns crok Score and unlocks badges.</div>
+<div style="font-size:12.5px;color:var(--on-surface-3);margin-bottom:14px;line-height:1.6;">Every chat earns Croks Score and unlocks badges.</div>
 <a href="#" class="feed-nav-link" data-feed-target="pg-lobby" style="display:block;padding:11px;border-radius:var(--r-sm);background:linear-gradient(145deg,var(--primary),var(--secondary));color:#fff;font-size:13.5px;font-weight:700;text-align:center;box-shadow:0 4px 14px rgba(26,110,245,.28);">
           Connect now →
         </a>
@@ -6806,7 +6847,7 @@ JS Bugs (app.js)
 <button class="modal-close" id="share-modal-close">Cancel</button>
 </div>
 </div>
-<div class="modal-overlay" id="report-modal">
+<div class="modal-overlay" id="report-modal" aria-hidden="true" role="dialog" aria-modal="true">
 <div class="modal-box">
 <div class="modal-title">Report post</div>
 <div class="modal-sub">What's wrong with this post? Your report is anonymous.</div>
@@ -6880,7 +6921,7 @@ JS Bugs (app.js)
       <div class="profile-bio-row">
         <p class="profile-bio-modern" id="profile-bio-display">—</p>
         <div class="profile-meta-row">
-          <span class="profile-meta-item">🧲 <strong id="profile-hero-score">—</strong> crok Score</span>
+          <span class="profile-meta-item">🧲 <strong id="profile-hero-score">—</strong> Croks Score</span>
           <span class="profile-meta-item">•</span>
           <span class="profile-meta-item" id="profile-details-meta">Member</span>
         </div>
@@ -6935,7 +6976,7 @@ JS Bugs (app.js)
     <nav class="profile-tabs-bar" id="profile-tabs-bar" aria-label="Profile sections">
       <button type="button" class="profile-tab-btn active" data-profile-tab="posts">Posts <span class="tab-count">0</span></button>
       <button type="button" class="profile-tab-btn" data-profile-tab="photos">Photos <span class="tab-count">0</span></button>
-      <button type="button" class="profile-tab-btn" data-profile-tab="reels">Reels <span class="tab-count" id="profile-reel-count">0</span></button>
+      <button type="button" class="profile-tab-btn" data-profile-tab="reels">Motions <span class="tab-count" id="profile-reel-count">0</span></button>
       <button type="button" class="profile-tab-btn" data-profile-tab="stats">Stats</button>
     </nav>
     <div class="profile-content-shell"><div class="profile-feed-viewport" id="profile-feed-viewport">
@@ -6980,7 +7021,7 @@ JS Bugs (app.js)
 
 
       <section class="profile-reels-section profile-tab-panel" id="profile-reels-section" data-profile-panel="reels">
-        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Short video</span><span class="profile-section-title">Reels</span><span data-profile-reel-count-label style="font-size:10px;color:var(--on-surface-3);font-weight:700">0</span></div><button type="button" class="reels-empty-cta" data-reel-upload-cta style="margin:0;padding:7px 12px;display:none;">+ Reel</button></div>
+        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Short video</span><span class="profile-section-title">Motions</span><span data-profile-reel-count-label style="font-size:10px;color:var(--on-surface-3);font-weight:700">0</span></div><button type="button" class="reels-empty-cta" data-reel-upload-cta style="margin:0;padding:7px 12px;display:none;">+ Motion</button></div>
         <div class="profile-reels-grid" id="profile-reels-grid"></div>
       </section>
       <section class="profile-stats-panel profile-tab-panel" id="profile-stats-panel" data-profile-panel="stats"></section>
@@ -7100,7 +7141,7 @@ JS Bugs (app.js)
     </div>
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
       <div style="padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);">
-        <div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.10em;">crok Score</div>
+        <div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.10em;">Croks Score</div>
         <div id="progress-score" style="font-size:28px;font-weight:800;line-height:1.1;margin-top:6px;">0</div>
       </div>
       <div style="padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);">
@@ -7210,7 +7251,7 @@ JS Bugs (app.js)
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260819-profile-flow-v29"></script>
+<script src="app.js?v=20260820-motion-hardening-v31"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -7823,4 +7864,21 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 #mortalive-post-viewer .mortalive-post-viewer-side .mortalive-post-viewer-text-content{color:var(--on-surface);}
 
 @media(max-width:720px){#pg-feed .compose-type-switch{gap:3px;} #pg-feed .compose-type-switch .compose-type-btn{padding:7px 8px;font-size:11.5px;} #pg-feed .compose-type-separator{font-size:11px;}}
+</style>
+
+<style id="mortalive-motion-hardening-v31">
+body.reel-viewer-open #app-bottomnav{
+  pointer-events:none !important;
+  visibility:hidden !important;
+}
+.rv-comments-sheet{
+  padding-bottom:max(env(safe-area-inset-bottom, 0px), 0px);
+  max-height:calc(65dvh - env(safe-area-inset-bottom, 0px));
+}
+.rv-comment-input-row{
+  padding-bottom:max(env(safe-area-inset-bottom, 16px), 16px);
+}
+#reel-viewer.opening{
+  pointer-events:none;
+}
 </style>
