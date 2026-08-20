@@ -1,10 +1,11 @@
+// Mortalive v31 — Motion hardening: max 2 min, portrait-only uploads, secure comments, viewer lifecycle/autoplay, Croks Score UI.
 // MORTALIVE SOURCE HANDOFF — latest uploaded app.js source; preserve this file as the current baseline.
 // FRESH BUILD MARKER — 2026-08-16 16:26 IST — redeploy this exact file
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
 // Mortalive v29 — main Profile now scrolls as one continuous document flow, matching Feed-profile behavior.
-const BUILD_TAG = 'mortalive-build-2026-08-19-profile-flow-v29'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-20-motion-hardening-v31'; // bump this string on every deploy to confirm cache is fresh
 
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
 const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
@@ -61,7 +62,7 @@ const S = {
   userId: localStorage.getItem('mortalive_user_id') || null,
   accountData: null, // Stores DB profile data (bio, display name, etc.)
   userLinks: [],     // Stores DB profile social links
-  crokScore: null,
+  crockroachScore: null,
   isGuest: !localStorage.getItem('mortalive_token'),
   guestName: localStorage.getItem('mortalive_guest_name') || '',
   videoLayout: 'horizontal',
@@ -292,7 +293,7 @@ function defaultProgress() {
     profileTheme: 'aurora',
     profileFrame: 'Liquid Glass',
     featuredQuote: 'Building momentum one connection at a time.',
-    pinnedNote: 'Connect with the world, build your crok Score, and unlock your profile.',
+    pinnedNote: 'Connect with the world, build your Croks Score, and unlock your profile.',
     avatarFrame: 'halo',
     lastSyncedAt: 0
   });
@@ -303,7 +304,7 @@ function defaultProfile() {
     theme: 'aurora',
     frame: 'Liquid Glass',
     quote: 'Building momentum one connection at a time.',
-    pinned: 'Connect with the world, build your crok Score, and unlock your profile.',
+    pinned: 'Connect with the world, build your Croks Score, and unlock your profile.',
     accent: 'rgba(90, 177, 255, .95)',
     pattern: 'mesh'
   });
@@ -508,7 +509,7 @@ function updateProgressText() {
 
   const scorePill = $('score-pill-btn');
   if (scorePill) {
-    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} crok Score · ${summary.badges} badges`;
+    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} Croks Score · ${summary.badges} badges`;
     scorePill.title = S.isGuest
       ? 'Guest sessions do not earn status'
       : `Top ${summary.percentile}% · #${summary.rank} weekly rank`;
@@ -547,7 +548,7 @@ async function syncScoreToSupabase() {
   const progress = getCurrentProgress();
   try {
     const { error } = await sb.from('accounts').update({
-      crok_score: score,
+      crockroach_score: score,
       updated_at: new Date().toISOString()
     }).eq('id', S.userId);
     if (error) throw error;
@@ -592,13 +593,13 @@ function awardProgress(kind, amount = 1, meta = {}) {
   progress.lastSyncedAt = Date.now();
 
   persistProgress();
-  scheduleSyncScoreToSupabase(); // keep Supabase accounts.crok_score in sync
+  scheduleSyncScoreToSupabase(); // keep Supabase accounts.crockroach_score in sync
   updateProgressText();
 
   if (meta.completion) {
     const goal = computeGoalText(progress);
     if (source === 'chat_complete') {
-      toast(`+${delta} crok Score · ${goal}`, '🧲');
+      toast(`+${delta} Croks Score · ${goal}`, '🧲');
     } else {
       toast(`Milestone reached · ${goal}`, '🏁');
     }
@@ -639,7 +640,7 @@ function copyProgressShareCard() {
   const profile = getCurrentProfile();
   const text = [
     `Mortalive status`,
-    `${S.username || S.guestName || 'Guest'} · ${summary.score} crok Score`,
+    `${S.username || S.guestName || 'Guest'} · ${summary.score} Croks Score`,
     `${summary.streak} day streak · ${summary.completions} completions`,
     `Top ${summary.percentile}% · #${summary.rank} weekly`,
     `Frame: ${profile.frame || 'Liquid Glass'}`
@@ -1130,7 +1131,7 @@ function updateIdentityDisplay() {
   const displayUsername = S.username || localStorage.getItem('mortalive_username');
 
   if (!S.isGuest && displayUsername) {
-    if (label) label.textContent = `Logged in as ${displayUsername} · 🧲 ${summary.score} crok Score · ${summary.streak} streak · #${summary.rank}`;
+    if (label) label.textContent = `Logged in as ${displayUsername} · 🧲 ${summary.score} Croks Score · ${summary.streak} streak · #${summary.rank}`;
     if (switchBtn) switchBtn.style.display = 'none';
     if (logoutBtn) logoutBtn.style.display = '';
     if (scorePill) scorePill.style.display = '';
@@ -1433,11 +1434,11 @@ function initAuthControls() {
     return false;
   }
 
-  function afterAuthSuccess(token, username, crokScore, userId) {
+  function afterAuthSuccess(token, username, crockroachScore, userId) {
     S.authToken = token;
     S.username = username;
     S.userId = userId || null;
-    S.crokScore = crokScore;
+    S.crockroachScore = crockroachScore;
     S.isGuest = false;
 
     localStorage.setItem('mortalive_token', token);
@@ -1452,7 +1453,7 @@ function initAuthControls() {
       });
     }
 
-    syncAuthProgress(crokScore);
+    syncAuthProgress(crockroachScore);
     toast(`Welcome, ${username}!`, '🧲');
 
     // If the user arrived via a shared profile link (?user=...) but wasn't
@@ -1559,8 +1560,8 @@ function initAuthControls() {
         user.user_metadata?.username ||
         user.email?.split('@')[0] ||
         'User';
-      const crokScore = profile?.crok_score ?? profile?.crokScore ?? 0;
-      afterAuthSuccess(session.access_token, username, crokScore, user.id);
+      const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
+      afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
     } catch (e) {
       setError('login-error', 'Could not reach Supabase. Try again in a moment.');
     } finally {
@@ -1838,8 +1839,8 @@ function initAuthControls() {
           user.user_metadata?.username ||
           user.email?.split('@')[0] ||
           'User';
-        const crokScore = profile?.crok_score ?? profile?.crokScore ?? 0;
-        afterAuthSuccess(session.access_token, username, crokScore, user.id);
+        const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
+        afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
         return;
       }
 
@@ -1941,12 +1942,12 @@ function initAuthControls() {
         user.user_metadata?.username ||
         user.email?.split('@')[0] ||
         'User';
-      const crokScore = profile?.crok_score ?? profile?.crokScore ?? 0;
+      const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
 
       _otpContext = null;
       _pendingResetUser = null;
       toast('Password updated!', '✅');
-      afterAuthSuccess(session.access_token, username, crokScore, user.id);
+      afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
     } catch (e) {
       setError('reset-error', 'Could not reach Supabase. Try again in a moment.');
     } finally {
@@ -1961,7 +1962,7 @@ function initAuthControls() {
     S.userId      = null;
     S.accountData = null;
     S.userLinks   = [];
-    S.crokScore = null;
+    S.crockroachScore = null;
     S.isGuest     = true;
     S.guestName   = name.slice(0, 24) || `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
     updateProgressText();
@@ -2013,8 +2014,8 @@ function initAuthControls() {
         user.user_metadata?.username ||
         user.email?.split('@')[0] ||
         'User';
-      const crokScore = profile?.crok_score ?? profile?.crokScore ?? 0;
-      afterAuthSuccess(session.access_token, username, crokScore, user.id);
+      const crockroachScore = profile?.crockroach_score ?? profile?.crockroachScore ?? 0;
+      afterAuthSuccess(session.access_token, username, crockroachScore, user.id);
       return;
     }
 
@@ -2050,7 +2051,7 @@ function initAuthControls() {
       S.userId = null;
       S.accountData = null;
       S.userLinks = [];
-      S.crokScore = null;
+      S.crockroachScore = null;
       S.isGuest = true;
 
       _autoLoginPromise = null;
@@ -2188,13 +2189,13 @@ async function hydrateAccountData(userId, options = {}) {
         'User';
 
       const dbScore =
-        S.accountData?.crok_score ??
-        S.accountData?.crokScore ??
-        S.crokScore ??
+        S.accountData?.crockroach_score ??
+        S.accountData?.crockroachScore ??
+        S.crockroachScore ??
         0;
 
       S.username = dbUsername;
-      S.crokScore = dbScore;
+      S.crockroachScore = dbScore;
       localStorage.setItem('mortalive_username', dbUsername);
 
       if (rerender && $('pg-profile')?.classList.contains('active')) {
@@ -2284,19 +2285,19 @@ async function tryAutoLogin() {
         user.email?.split('@')[0] ||
         'User';
 
-      const crokScore =
-        S.accountData?.crok_score ??
-        S.accountData?.crokScore ??
-        (Number(user.user_metadata?.crok_score) || 0);
+      const crockroachScore =
+        S.accountData?.crockroach_score ??
+        S.accountData?.crockroachScore ??
+        (Number(user.user_metadata?.crockroach_score) || 0);
 
       S.username = username;
-      S.crokScore = crokScore;
+      S.crockroachScore = crockroachScore;
 
       localStorage.setItem('mortalive_username', S.username);
 
       // UI/progress enrichment is also non-auth-critical.
       try {
-        syncAuthProgress(crokScore);
+        syncAuthProgress(crockroachScore);
         updateIdentityDisplay();
         updateProgressText();
         // Pre-paint the feed sidebar avatar before any page routing runs,
@@ -2319,7 +2320,7 @@ async function tryAutoLogin() {
       S.userId = null;
       S.accountData = null;
       S.userLinks = [];
-      S.crokScore = null;
+      S.crockroachScore = null;
       S.isGuest = true;
 
       localStorage.removeItem('mortalive_token');
@@ -2395,7 +2396,7 @@ function initLobbyControls() {
     S.userId      = null;
     S.accountData = null;
     S.userLinks   = [];
-    S.crokScore = null;
+    S.crockroachScore = null;
     S.isGuest     = true;
     _autoLoginPromise = null; // allow fresh login attempt
     localStorage.removeItem('mortalive_token');
@@ -3290,7 +3291,7 @@ function beginChat() {
   const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
   setText('peer-ava', s.emoji);
   setText('peer-name', s.name);
-  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crok Score · connected`);
+  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} Croks Score · connected`);
   bindTalkPeerActions();
   syncTalkPeerFollowUI();
 
@@ -4037,7 +4038,7 @@ function getFeedComposerKind() {
 }
 
 function getFeedStructuredKindLabel(kind) {
-  return kind === 'qna' ? 'Q&A' : kind === 'poll' ? 'Poll' : kind === 'photo' ? 'Photo' : kind === 'reel' ? 'Reel' : 'Text';
+  return kind === 'qna' ? 'Q&A' : kind === 'poll' ? 'Poll' : kind === 'photo' ? 'Photo' : kind === 'reel' ? 'Motion' : 'Text';
 }
 
 function getFeedComposerOptionValues() {
@@ -4094,7 +4095,7 @@ function syncFeedComposerTypeUI() {
   if (field) field.placeholder = kind === 'qna'
     ? (_feedQnaChoicesEnabled ? 'Ask a question for people to choose from…' : 'Ask a question people can reply to…')
     : kind === 'poll' ? 'Ask a poll question…'
-    : kind === 'reel' ? 'Add a caption to your reel…'
+    : kind === 'reel' ? 'Add a caption to your motion…'
     : "What's on your mind after that chat…";
   if (modeLabel) modeLabel.textContent = getFeedStructuredKindLabel(kind);
   if (builder) builder.classList.toggle('open', kind === 'poll' || kind === 'qna');
@@ -4312,7 +4313,7 @@ function feedProfileFor(userId) {
     return {
       username: S.accountData?.username || S.username || 'You',
       display_name: S.accountData?.display_name || S.username || 'You',
-      crok_score: S.accountData?.crok_score ?? S.crokScore ?? getProgressScore(getCurrentProgress()),
+      crockroach_score: S.accountData?.crockroach_score ?? S.crockroachScore ?? getProgressScore(getCurrentProgress()),
       avatar_url: S.accountData?.avatar_url || ''
     };
   }
@@ -4340,7 +4341,7 @@ async function fetchFeedProfileDirectory(userIds) {
   try {
     const { data, error } = await sb
       .from('public_profile_directory')
-      .select('id,username,display_name,crok_score,account_type')
+      .select('id,username,display_name,crockroach_score,account_type')
       .in('id', ids);
     if (error) throw error;
     (data || []).forEach(row => map.set(row.id, row));
@@ -4360,12 +4361,12 @@ async function fetchFeedProfileDirectory(userIds) {
     try {
       const { data: accountRows } = await sb
         .from('accounts')
-        .select('id,username,display_name,crok_score,account_type,avatar_url')
+        .select('id,username,display_name,crockroach_score,account_type,avatar_url')
         .in('id', accountFallbackIds);
       (accountRows || []).forEach(row => {
         const current = map.get(row.id);
         map.set(row.id, current
-          ? { ...current, avatar_url: row.avatar_url || current.avatar_url || '', crok_score: row.crok_score ?? current.crok_score }
+          ? { ...current, avatar_url: row.avatar_url || current.avatar_url || '', crockroach_score: row.crockroach_score ?? current.crockroach_score }
           : row);
       });
     } catch (e) {
@@ -4424,7 +4425,7 @@ async function fetchFeedPage(reset = false) {
     const directory = await fetchFeedProfileDirectory(rows.map(row => row.user_id));
     const mapped = rows.map(row => ({
       ...row,
-      author: directory.get(row.user_id) || feedProfileFor(row.user_id) || { username: 'Mortalive member', display_name: 'Mortalive member', crok_score: 0 }
+      author: directory.get(row.user_id) || feedProfileFor(row.user_id) || { username: 'Mortalive member', display_name: 'Mortalive member', crockroach_score: 0 }
     }));
 
     _feedPosts = reset || _feedOffset === 0 ? mapped : [..._feedPosts, ...mapped];
@@ -4804,7 +4805,7 @@ async function openFeedProfileOverlay(userId) {
     const [links, followData] = await Promise.all([fetchUserLinks(userId), fetchFollowData(userId)]);
     const name = profile.display_name || profile.username || 'Mortalive member';
     const username = profile.username || 'member';
-    const score = toNum(profile.crok_score);
+    const score = toNum(profile.crockroach_score);
     const badge = score >= 700 ? '⭐ Gold' : score >= 420 ? '🔘 Silver' : score >= 220 ? '✨ Bronze' : '🌱 Newcomer';
     const status = [(profile.account_type || 'Member'), badge].filter(Boolean).join(' · ');
     const avatarUrl = feedAvatarUrl(profile.avatar_url);
@@ -4843,7 +4844,7 @@ async function openFeedProfileOverlay(userId) {
         <div class="feed-profile-stats">
           <div class="feed-profile-stat"><strong>${toNum(followData.followers).toLocaleString()}</strong><span>Followers</span></div>
           <div class="feed-profile-stat"><strong>${toNum(followData.following).toLocaleString()}</strong><span>Following</span></div>
-          <div class="feed-profile-stat"><strong>${toNum(score).toLocaleString()}</strong><span>crok Score</span></div>
+          <div class="feed-profile-stat"><strong>${toNum(score).toLocaleString()}</strong><span>Croks Score</span></div>
           <div class="feed-profile-stat"><strong>${textPosts.length}</strong><span>Posts</span></div>
           <div class="feed-profile-stat"><strong>${photoPosts.length}</strong><span>Photos</span></div>
         </div>
@@ -4851,7 +4852,7 @@ async function openFeedProfileOverlay(userId) {
       <div class="feed-profile-tabs">
         <button type="button" class="feed-profile-tab active" data-profile-tab="posts">Posts</button>
         <button type="button" class="feed-profile-tab" data-profile-tab="photos">Photos</button>
-        <button type="button" class="feed-profile-tab" data-profile-tab="reels">Reels</button>
+        <button type="button" class="feed-profile-tab" data-profile-tab="reels">Motions</button>
         <button type="button" class="feed-profile-tab" data-profile-tab="stats">Stats</button>
       </div>
       <div class="feed-profile-section" data-profile-panel="posts">
@@ -4871,7 +4872,7 @@ async function openFeedProfileOverlay(userId) {
       </div>
       <div class="feed-profile-section" data-profile-panel="reels" style="display:none;">
         <div class="profile-reels-grid">${reels.length ? reels.map((post, i) => `
-          <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open reel ${i + 1}">
+          <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open motion ${i + 1}">
             <video class="reel-thumb-bg" src="${sanitizeHTML(post.media_url)}" muted playsinline preload="metadata"></video>
             <span class="reel-thumb-play">▶</span>
           </button>`).join('') : '<div class="reels-empty-state"><div class="reels-empty-icon">🎬</div><div class="reels-empty-title">No reels yet</div></div>'}</div>
@@ -4881,10 +4882,10 @@ async function openFeedProfileOverlay(userId) {
           <div class="profile-stats-section"><div class="profile-stats-section-title">Content</div>
             <div class="profile-stats-row"><span class="profile-stats-key">Posts</span><strong class="profile-stats-val">${textPosts.length}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Photos</span><strong class="profile-stats-val">${photoPosts.length}</strong></div>
-            <div class="profile-stats-row"><span class="profile-stats-key">Reels</span><strong class="profile-stats-val">${reels.length}</strong></div>
+            <div class="profile-stats-row"><span class="profile-stats-key">Motions</span><strong class="profile-stats-val">${reels.length}</strong></div>
           </div>
           <div class="profile-stats-section"><div class="profile-stats-section-title">Profile</div>
-            <div class="profile-stats-row"><span class="profile-stats-key">crok Score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
+            <div class="profile-stats-row"><span class="profile-stats-key">Croks Score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Followers</span><strong class="profile-stats-val">${toNum(followData.followers).toLocaleString()}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(followData.following).toLocaleString()}</strong></div>
           </div>
@@ -4958,16 +4959,66 @@ const PHOTO_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 const PHOTO_UPLOAD_BUCKET = 'mortalive-media';
 const PHOTO_UPLOAD_TYPES = new Set(['image/jpeg','image/png','image/webp']);
 const REEL_UPLOAD_MAX_BYTES = 60 * 1024 * 1024;
+const REEL_UPLOAD_MAX_SECONDS = 120;
 const REEL_UPLOAD_TYPES = new Set(['video/mp4','video/webm','video/quicktime']);
+
 function validateReelFile(file) {
-  if (!file) throw new Error('Choose a reel video first.');
+  if (!file) throw new Error('Choose a short video first.');
   if (!REEL_UPLOAD_TYPES.has(file.type)) throw new Error('Use MP4, WebM, or MOV videos.');
-  if (file.size > REEL_UPLOAD_MAX_BYTES) throw new Error('Reels must be 60 MB or smaller.');
+  if (file.size > REEL_UPLOAD_MAX_BYTES) throw new Error('Short videos must be 60 MB or smaller.');
   return file;
 }
+
+function inspectReelVideoFile(file) {
+  return new Promise((resolve, reject) => {
+    validateReelFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    let settled = false;
+
+    const cleanup = () => {
+      try { URL.revokeObjectURL(objectUrl); } catch (e) {}
+      video.removeAttribute('src');
+      video.load();
+    };
+    const fail = (message) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(message));
+    };
+
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    video.onloadedmetadata = () => {
+      if (settled) return;
+      const duration = Number(video.duration);
+      const width = Number(video.videoWidth);
+      const height = Number(video.videoHeight);
+
+      if (!Number.isFinite(duration) || duration <= 0) return fail('Could not read the video duration.');
+      if (duration > REEL_UPLOAD_MAX_SECONDS + 0.25) return fail('Short videos must be 2 minutes or shorter.');
+      if (!width || !height) return fail('Could not read the video dimensions.');
+      if (height <= width) return fail('Short videos must be portrait (vertical), not landscape or square.');
+
+      settled = true;
+      cleanup();
+      resolve({
+        durationSeconds: Math.round(duration * 10) / 10,
+        width,
+        height,
+        orientation: 'portrait'
+      });
+    };
+    video.onerror = () => fail('This video could not be read. Try another file.');
+    video.src = objectUrl;
+  });
+}
+
 async function uploadReelFile(file, folder = 'reels') {
-  validateReelFile(file);
-  if (!S.userId || S.isGuest || !sb) throw new Error('Sign in to upload reels.');
+  const metadata = await inspectReelVideoFile(file);
+  if (!S.userId || S.isGuest || !sb) throw new Error('Sign in to upload short videos.');
   const ext = file.type === 'video/webm' ? 'webm' : file.type === 'video/quicktime' ? 'mov' : 'mp4';
   const path = `${S.userId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2,10)}.${ext}`;
   const { error } = await sb.storage.from(PHOTO_UPLOAD_BUCKET).upload(path, file, {
@@ -4975,8 +5026,8 @@ async function uploadReelFile(file, folder = 'reels') {
   });
   if (error) throw error;
   const { data } = sb.storage.from(PHOTO_UPLOAD_BUCKET).getPublicUrl(path);
-  if (!data?.publicUrl) throw new Error('Could not create the public reel URL.');
-  return { url: data.publicUrl, path, size: file.size, type: file.type };
+  if (!data?.publicUrl) throw new Error('Could not create the short-video URL.');
+  return { url: data.publicUrl, path, size: file.size, type: file.type, ...metadata };
 }
 
 
@@ -5280,7 +5331,7 @@ function renderFeedPosts() {
     const author = post.author || {};
     const username = author.username || 'member';
     const display = author.display_name || username;
-    const score = Number(author.crok_score) || 0;
+    const score = Number(author.crockroach_score) || 0;
     const mine = post.user_id === S.userId;
     const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A' : post?.post_meta?.kind === 'poll' ? 'Poll' : post.post_type === 'text' ? 'Text' : post.post_type === 'reel' ? 'Reel' : post.post_type || 'Post';
     const badge = score >= 700 ? '<span class="post-badge gold">Gold</span>' : score >= 420 ? '<span class="post-badge silver">Silver</span>' : '';
@@ -5297,7 +5348,14 @@ function renderFeedPosts() {
             <div class="post-author"><button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(post.user_id)}">${sanitizeHTML(display)} ${badge}</button></div>
             <div class="post-time">@${sanitizeHTML(username)} · ${sanitizeHTML(feedRelTime(post.created_at))} · ${sanitizeHTML(typeLabel)}</div>
           </div>
-          ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
+          <div class="post-more-wrap">
+            <button class="post-more-btn" type="button" data-feed-action="more" data-post-id="${sanitizeHTML(post.id)}" title="More options" aria-label="More options">⋯</button>
+            <div class="post-more-popover" data-post-id="${sanitizeHTML(post.id)}">
+              ${mine
+                ? `<button type="button" class="popover-item danger" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}">🗑️ Delete post</button>`
+                : `<button type="button" class="popover-item danger" data-feed-action="report" data-post-id="${sanitizeHTML(post.id)}">🚩 Report post</button>`}
+            </div>
+          </div>
         </div>
         <div class="post-body">${post.post_type === 'reel' && post.media_url
           ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video src="${sanitizeHTML(post.media_url)}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
@@ -5315,6 +5373,32 @@ function renderFeedPosts() {
   }).join('');
   // Restore any comment sections that were open before the innerHTML was replaced
   if (openIds.length) _restoreOpenCommentSections(openIds);
+  bindFeedReelAutoplay();
+}
+
+let _feedReelObserver = null;
+function bindFeedReelAutoplay() {
+  if (!window.IntersectionObserver) return;
+  if (!_feedReelObserver) {
+    _feedReelObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const video = entry.target.querySelector('video');
+        if (!video) return;
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+          video.muted = true;
+          const promise = video.play();
+          if (promise && typeof promise.catch === 'function') promise.catch(() => {});
+        } else {
+          video.pause();
+        }
+      });
+    }, { threshold: [0, 0.5] });
+  }
+  document.querySelectorAll('.feed-reel-card').forEach((card) => {
+    if (card.dataset.reelAutoplayBound === '1') return;
+    card.dataset.reelAutoplayBound = '1';
+    _feedReelObserver.observe(card);
+  });
 }
 
 
@@ -5338,7 +5422,7 @@ function getPostViewerAuthor(post) {
       username: S.accountData?.username || S.username || author.username || 'You',
       display_name: S.accountData?.display_name || S.username || author.display_name || 'You',
       avatar_url: S.accountData?.avatar_url || author.avatar_url || '',
-      crok_score: S.accountData?.crok_score ?? S.crokScore ?? author.crok_score ?? 0
+      crockroach_score: S.accountData?.crockroach_score ?? S.crockroachScore ?? author.crockroach_score ?? 0
     };
   }
   return {
@@ -5346,7 +5430,7 @@ function getPostViewerAuthor(post) {
     username: author.username || 'member',
     display_name: author.display_name || author.username || 'Member',
     avatar_url: author.avatar_url || '',
-    crok_score: Number(author.crok_score) || 0
+    crockroach_score: Number(author.crockroach_score) || 0
   };
 }
 
@@ -5399,7 +5483,7 @@ function postViewerRender(post, comments = _commentCache.get(post?.id) || []) {
   const likes = Number(engagement.likes) || 0;
   const commentsCount = Math.max(Number(engagement.comments) || 0, comments.length);
   const liked = !!engagement.liked;
-  const badge = Number(author.crok_score) >= 700 ? 'Gold' : Number(author.crok_score) >= 420 ? 'Silver' : '';
+  const badge = Number(author.crockroach_score) >= 700 ? 'Gold' : Number(author.crockroach_score) >= 420 ? 'Silver' : '';
 
   const mediaHost = modal.querySelector('.mortalive-post-viewer-media-host');
   const avatarHost = modal.querySelector('.mortalive-post-viewer-avatar');
@@ -5459,7 +5543,7 @@ async function openPostViewer(postOrId) {
   const post = typeof postOrId === 'string' ? getPostByIdForViewer(postOrId) : postOrId;
   if (!post?.id) return;
   if (post.post_type === 'reel' && post.media_url) {
-    openReelViewer(post, collectAvailableReels());
+    openReelViewer(post, collectAvailableMotions());
     return;
   }
 
@@ -5627,7 +5711,7 @@ function renderFeedSidebars() {
       <div class="active-user-item">
         <div class="active-user-ava">${feedAvatarLetter(author.display_name || author.username)}</div>
         <div class="active-user-info"><button type="button" class="active-user-name post-author-link" data-open-profile="${sanitizeHTML(author.id || '')}">${sanitizeHTML(author.display_name || author.username || 'Member')}</button><div class="active-user-sub">@${sanitizeHTML(author.username || 'member')}</div></div>
-        <div class="active-user-score">${Number(author.crok_score) || 0}</div>
+        <div class="active-user-score">${Number(author.crockroach_score) || 0}</div>
       </div>`).join('') : '<div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">No active posters yet.</div>';
   }
 }
@@ -5708,7 +5792,7 @@ async function submitFeedTextPost() {
   const content = field.value.trim();
   const file = kind === 'reel' ? (reelInput?.files?.[0] || null) : (photoInput?.files?.[0] || null);
   if (!content && !file && !['poll','qna'].includes(kind)) return;
-  if (kind === 'reel' && !file) { toast('Choose a reel video first.', '⚠️'); return; }
+  if (kind === 'reel' && !file) { toast('Choose a motion video first.', '⚠️'); return; }
   if (content.length > FEED_MAX_POST_CHARS) { toast(`Posts are limited to ${FEED_MAX_POST_CHARS} characters`, '⚠️'); return; }
 
   const hashtagCheck = validateUniqueHashtags(content);
@@ -5740,6 +5824,16 @@ async function submitFeedTextPost() {
       payload.media_url = media.url;
       payload.media_type = media.type;
       payload.media_size = media.size;
+    }
+    if (kind === 'reel' && media) {
+      payload.post_meta = {
+        kind: 'reel',
+        mode: 'portrait',
+        duration_seconds: media.durationSeconds,
+        width: media.width,
+        height: media.height,
+        orientation: media.orientation
+      };
     }
     if (['poll','qna'].includes(kind)) {
       payload.post_meta = {
@@ -5781,7 +5875,7 @@ async function submitFeedTextPost() {
         hydrateProfileGallery(S.userId).catch(() => {});
       }
     }
-    toast(kind === 'reel' ? 'Reel published!' : media ? 'Photo post published!' : kind === 'poll' ? 'Poll published!' : kind === 'qna' ? 'Q&A published!' : 'Post published!', kind === 'reel' ? '🎬' : '✍️');
+    toast(kind === 'reel' ? 'Motion published!' : media ? 'Photo post published!' : kind === 'poll' ? 'Poll published!' : kind === 'qna' ? 'Q&A published!' : 'Post published!', kind === 'reel' ? '🎬' : '✍️');
   } catch (e) {
     console.warn('[Feed] post failed:', e);
     toast(e?.message || 'Could not publish post.', '⚠️');
@@ -5885,7 +5979,8 @@ function setFeedFilter(filter) {
 }
 
 async function deleteFeedPost(postId) {
-  const post = _feedPosts.find(row => row.id === postId);
+  const post = _feedPosts.find(row => row.id === postId)
+    || (_profilePosts || []).find(row => row.id === postId);
   if (!post || post.user_id !== S.userId || !sb) return;
   const confirmed = await showConfirmDialog({
     title: 'Delete this post?',
@@ -5899,13 +5994,105 @@ async function deleteFeedPost(postId) {
     const { error } = await sb.from('posts').delete().eq('id', postId).eq('user_id', S.userId);
     if (error) throw error;
     _feedPosts = _feedPosts.filter(row => row.id !== postId);
+    _profilePosts = (_profilePosts || []).filter(row => row.id !== postId);
     _feedEngagement.delete(postId);
     _commentCache.delete(postId);
     renderFeedPosts();
     renderFeedSidebars();
+    if (typeof renderProfilePosts === 'function') renderProfilePosts(_profilePosts);
     toast('Post deleted', '🗑️');
   } catch (e) {
     toast(e?.message || 'Could not delete the post.', '⚠️');
+  }
+}
+
+
+// ── Post reporting ──────────────────────────────────────────────────────────
+// Post reports live in a dedicated table so moderation can distinguish
+// content reports from other report types. The authenticated reporter is
+// stored server-side through Supabase RLS and is never exposed in the UI.
+let _feedReportPostId = null;
+
+function closeFeedReportModal() {
+  const modal = $('report-modal');
+  if (!modal) return;
+  modal.classList.remove('open', 'active');
+  modal.setAttribute('aria-hidden', 'true');
+  _feedReportPostId = null;
+}
+
+function openFeedReportModal(postId) {
+  if (!postId) return;
+  if (S.isGuest || !S.userId || !sb) {
+    toast('Sign in to report posts', '🔒');
+    return;
+  }
+  _feedReportPostId = postId;
+  const modal = $('report-modal');
+  if (!modal) {
+    toast('Report form is unavailable right now.', '⚠️');
+    return;
+  }
+  // The modal is declared with the Feed markup, but reports can also be
+  // initiated from Profile posts. Move it to body before opening so a hidden
+  // page container can never suppress the fixed overlay.
+  if (modal.parentElement !== document.body) document.body.appendChild(modal);
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+async function submitFeedPostReport(reason) {
+  const postId = _feedReportPostId;
+  if (!postId || !reason) return;
+
+  if (S.isGuest || !S.userId || !sb) {
+    closeFeedReportModal();
+    toast('Sign in to report posts', '🔒');
+    return;
+  }
+
+  const sessionOk = await requireAuthenticatedSession();
+  if (!sessionOk) {
+    closeFeedReportModal();
+    toast('Your session expired — please sign in again.', '🔒');
+    return;
+  }
+
+  const post = getPostByIdForViewer(postId)
+    || (_profilePosts || []).find(row => row.id === postId)
+    || (_feedPosts || []).find(row => row.id === postId);
+
+  if (post?.user_id === S.userId) {
+    closeFeedReportModal();
+    toast('You cannot report your own post.', 'ℹ️');
+    return;
+  }
+
+  const allowedReasons = new Set(['spam', 'harassment', 'inappropriate', 'misinformation', 'other']);
+  const normalizedReason = allowedReasons.has(reason) ? reason : 'other';
+
+  try {
+    const { error } = await sb.from('post_reports').insert({
+      post_id: postId,
+      reporter_id: S.userId,
+      reason: normalizedReason
+    });
+
+    if (error) {
+      if (error.code === '23505') {
+        closeFeedReportModal();
+        toast('You already reported this post.', 'ℹ️');
+        return;
+      }
+      throw error;
+    }
+
+    closeFeedReportModal();
+    document.querySelectorAll('.post-more-popover.open').forEach(el => el.classList.remove('open'));
+    toast('Report submitted. Thank you for helping keep Mortalive safe.', '🚩');
+  } catch (error) {
+    console.warn('[Reports] post report failed:', error?.message || error);
+    toast(error?.message || 'Could not submit the report.', '⚠️');
   }
 }
 
@@ -6014,6 +6201,29 @@ function initFeedPage() {
       return;
     }
 
+    const moreButton = event.target.closest('[data-feed-action="more"]');
+    if (moreButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const activePopover = moreButton.parentElement?.querySelector('.post-more-popover');
+      document.querySelectorAll('#pg-feed .post-more-popover.open, .profile-post-card .post-more-popover.open')
+        .forEach(popover => {
+          if (popover !== activePopover) popover.classList.remove('open');
+        });
+      activePopover?.classList.toggle('open');
+      return;
+    }
+
+    const reportButton = event.target.closest('[data-feed-action="report"]');
+    if (reportButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      document.querySelectorAll('#pg-feed .post-more-popover.open, .profile-post-card .post-more-popover.open')
+        .forEach(popover => popover.classList.remove('open'));
+      openFeedReportModal(reportButton.dataset.postId);
+      return;
+    }
+
     const viewerIgnored = event.target.closest('[data-feed-action], [data-open-profile], a, input, textarea, select, option, label, .comments-section');
     const postCard = event.target.closest('.post-card, .profile-post-card');
     if (postCard && !viewerIgnored) {
@@ -6107,6 +6317,24 @@ function initFeedPage() {
   $('load-more-btn')?.addEventListener('click', () => fetchFeedPage(false));
   $('banner-close')?.addEventListener('click', () => { if ($('context-banner')) $('context-banner').style.display = 'none'; });
 
+  if (!document.body.dataset.feedReportModalBound) {
+    document.body.dataset.feedReportModalBound = '1';
+    document.addEventListener('click', (event) => {
+      const reason = event.target.closest('#report-modal .report-option[data-reason]');
+      if (reason) {
+        event.preventDefault();
+        submitFeedPostReport(reason.dataset.reason);
+        return;
+      }
+      if (event.target.closest('#report-modal-close') || event.target.id === 'report-modal') {
+        closeFeedReportModal();
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeFeedReportModal();
+    });
+  }
+
   const justChatted = sessionStorage.getItem('mortalive_just_chatted');
   if (justChatted && $('context-banner')) {
     $('context-banner').style.display = 'flex';
@@ -6124,7 +6352,7 @@ function syncFeedSidebar() {
   const acc = S.accountData || {};
   const name = acc.display_name || acc.username || S.username || 'User';
   const username = acc.username || S.username || 'member';
-  const score = acc.crok_score ?? S.crokScore ?? getProgressScore(progress);
+  const score = acc.crockroach_score ?? S.crockroachScore ?? getProgressScore(progress);
   setText('sidebar-name', name);
   setText('sidebar-handle', `@${username} · ${S.isGuest ? 'Guest' : 'Member'}`);
   setText('sidebar-score', toNum(score) || 0);
@@ -6232,6 +6460,14 @@ function renderProfilePosts(posts = _profilePosts) {
           <div class="profile-post-mini-avatar" style="background:linear-gradient(135deg,#1a6ef5,#7c3aed)">${initial}</div>
           <div class="profile-post-author"><button type="button" class="profile-author-link" data-open-profile="${sanitizeHTML(post.user_id || _profilePostsOwner?.id || S.userId || '')}">${sanitizeHTML(ownerName)}</button></div>
           <div class="profile-post-time">${time}</div>
+          <div class="post-more-wrap">
+            <button type="button" class="post-more-btn profile-more-btn" data-feed-action="more" data-post-id="${sanitizeHTML(post.id)}" title="More options" aria-label="More options">⋯</button>
+            <div class="post-more-popover" data-post-id="${sanitizeHTML(post.id)}">
+              ${post.user_id === S.userId
+                ? `<button type="button" class="popover-item danger" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}">🗑️ Delete post</button>`
+                : `<button type="button" class="popover-item danger" data-feed-action="report" data-post-id="${sanitizeHTML(post.id)}">🚩 Report post</button>`}
+            </div>
+          </div>
         </div>
         <div class="profile-post-body">${content}${post.media_url ? `<img class="profile-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Shared photo" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">` : ''}</div>
         <div class="profile-post-footer">
@@ -6318,7 +6554,7 @@ async function hydrateProfilePosts(userId = S.userId, options = {}) {
         }
         renderProfilePosts(posts);
         renderProfileGallery(posts);
-        renderProfileReels(posts);
+        renderProfileMotions(posts);
         refreshProfileTabs(posts);
       }
       return posts;
@@ -6400,7 +6636,7 @@ function initProfilePostComposer() {
         await hydratePostEngagement([data.id]).catch(() => {});
         renderProfilePosts(_profilePosts);
         renderProfileGallery(_profilePosts);
-        renderProfileReels(_profilePosts);
+        renderProfileMotions(_profilePosts);
         refreshProfileTabs(_profilePosts);
         hydrateTrendingHashtags().catch(() => {});
       }
@@ -6448,7 +6684,7 @@ async function fetchPublicProfileData(userId) {
   if (!(await requireAuthenticatedSession())) throw new Error('Authentication required to view profiles.');
   const seed = (await fetchFeedProfileDirectory([userId])).get(userId) || { id: userId, username: 'user', display_name: 'User' };
   try {
-    const { data, error } = await sb.from('accounts').select('id,username,display_name,bio,details,website,interests,avatar_url,crok_score,account_type').eq('id', userId).maybeSingle();
+    const { data, error } = await sb.from('accounts').select('id,username,display_name,bio,details,website,interests,avatar_url,crockroach_score,account_type').eq('id', userId).maybeSingle();
     if (!error && data) return { ...seed, ...data, id: userId };
   } catch (_) {}
   return { ...seed, id: userId };
@@ -6515,13 +6751,13 @@ async function initPublicProfilePage(userId) {
   const name = profile.display_name || profile.username || 'User';
   if ($('profile-username-display')) $('profile-username-display').textContent = name;
   if ($('profile-handle-modern')) $('profile-handle-modern').textContent = '';
-  const publicBadgeHtml = toNum(profile.crok_score) >= 700 ? '<span class="profile-badge-chip gold">⭐ Gold</span>' : toNum(profile.crok_score) >= 420 ? '<span class="profile-badge-chip silver">🔘 Silver</span>' : '';
+  const publicBadgeHtml = toNum(profile.crockroach_score) >= 700 ? '<span class="profile-badge-chip gold">⭐ Gold</span>' : toNum(profile.crockroach_score) >= 420 ? '<span class="profile-badge-chip silver">🔘 Silver</span>' : '';
   if ($('profile-subline-display')) $('profile-subline-display').innerHTML = `@${sanitizeHTML((profile.username || 'user').toLowerCase().replace(/\s+/g, '_'))} ${publicBadgeHtml}${publicBadgeHtml ? ' · ' : ' · '}${sanitizeHTML((profile.account_type || 'Member').charAt(0).toUpperCase() + (profile.account_type || 'Member').slice(1))}`;
   if ($('profile-bio-display')) $('profile-bio-display').textContent = profile.bio || 'Connecting with the world.';
   if ($('profile-info-goal-val')) $('profile-info-goal-val').textContent = 'Public profile';
   applyProfileAvatar(profile.avatar_url || '', name);
-  if ($('profile-hero-score')) $('profile-hero-score').textContent = toNum(profile.crok_score).toLocaleString();
-  if ($('profile-stat-score')) $('profile-stat-score').textContent = toNum(profile.crok_score).toLocaleString();
+  if ($('profile-hero-score')) $('profile-hero-score').textContent = toNum(profile.crockroach_score).toLocaleString();
+  if ($('profile-stat-score')) $('profile-stat-score').textContent = toNum(profile.crockroach_score).toLocaleString();
   if ($('profile-stat-streak')) $('profile-stat-streak').textContent = '—';
   if ($('profile-stat-completions')) $('profile-stat-completions').textContent = '—';
   if ($('profile-stat-rank')) $('profile-stat-rank').textContent = '—';
@@ -6541,7 +6777,7 @@ async function initPublicProfilePage(userId) {
   stabilizeProfileScrollAxes();
   initProfileScrollProgress();
   initProfileTabs();
-  renderProfileReels(_profilePosts);
+  renderProfileMotions(_profilePosts);
   refreshProfileTabs(_profilePosts);
   $('profile-tabs-bar')?.querySelectorAll('.profile-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.profileTab === 'posts'));
   $('pg-profile')?.querySelectorAll('.profile-tab-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.profilePanel === 'posts'));
@@ -6681,7 +6917,7 @@ function initProfilePage() {
 
   // Progress Bar
   if ($('rank-label')) $('rank-label').textContent = `${tier.name}${tier.max < Infinity ? ' → ' + RANK_TIERS[RANK_TIERS.indexOf(tier)+1]?.name : ' (Max)'}`;
-  if ($('progress-label')) $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} crok Score`;
+  if ($('progress-label')) $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} Croks Score`;
   if ($('progress-pct')) $('progress-pct').textContent = `${pct}%`;
   if ($('progress-fill')) $('progress-fill').style.width = `${pct}%`;
   if ($('progress-percentile')) $('progress-percentile').textContent = `Top ${summary.percentile}%`;
@@ -6905,7 +7141,7 @@ function openAchievementsSheet() {
       <div style="padding:18px 22px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px;">
           <div style="padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,var(--primary-alpha),rgba(124,58,237,.06));border:1px solid rgba(26,110,245,.14);">
-            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">crok Score</div>
+            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">Croks Score</div>
             <div style="font-size:24px;font-weight:900;letter-spacing:-.04em;margin-top:4px;color:var(--primary);">${score.toLocaleString()}</div>
           </div>
           <div style="padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);">
@@ -7190,7 +7426,28 @@ function bindProfileEvents() {
       const action = btn.dataset.profileAction;
       const postId = btn.dataset.postId;
       if (!postId) return;
-      if (action === 'like') togglePostLike(postId);
+      if (action === 'like') {
+        togglePostLike(postId);
+      } else if (action === 'more') {
+        const popover = btn.parentElement?.querySelector('.post-more-popover');
+        document.querySelectorAll('.post-more-popover.open').forEach(pop => {
+          if (pop !== popover) pop.classList.remove('open');
+        });
+        popover?.classList.toggle('open');
+      } else if (action === 'report') {
+        document.querySelectorAll('.post-more-popover.open').forEach(pop => pop.classList.remove('open'));
+        openFeedReportModal(postId);
+      } else if (action === 'delete') {
+        deleteFeedPost(postId);
+      }
+    });
+  }
+
+  if (!document.body.dataset.postMoreOutsideClickBound) {
+    document.body.dataset.postMoreOutsideClickBound = '1';
+    document.addEventListener('click', (event) => {
+      if (event.target.closest('.post-more-wrap')) return;
+      document.querySelectorAll('.post-more-popover.open').forEach(pop => pop.classList.remove('open'));
     });
   }
 
@@ -7402,7 +7659,7 @@ async function performAccountDeletion() {
   S.userId = null;
   S.accountData = null;
   S.userLinks = [];
-  S.crokScore = null;
+  S.crockroachScore = null;
   S.isGuest = true;
 
   toast('Account deleted successfully.', '✅');
@@ -7447,13 +7704,13 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
   ];
 
   const MATCH_TIPS = [
-    '💡 Completing chats earns crok Score',
+    '💡 Completing chats earns Croks Score',
     '🌍 Your next match could be from any country on Earth',
     '⭐ Rate your chats to help improve future matches',
     '🔒 Your identity stays private — nothing is shared without your consent',
     '⚡ Average match time is under 30 seconds when others are online',
     '🎯 Adding a topic finds like-minded strangers faster',
-    '🧲 A high crok Score boosts your matching priority',
+    '🧲 A high Croks Score boosts your matching priority',
     '💬 Text mode works without a camera — great for quieter moments',
     '🎬 If no match is found, a recorded stream will appear automatically'
   ];
@@ -8121,37 +8378,56 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
 })();
 
 
-// ── Profile/Reels enhancement layer (v27) ───────────────────────────────────
-function collectAvailableReels(source = _profilePosts) {
+// ── Profile/Motions enhancement layer (v27) ───────────────────────────────────
+function collectAvailableMotions(source = _profilePosts) {
   const pool = Array.isArray(source) ? source.filter(p => p?.post_type === 'reel' && p.media_url) : [];
   const byId = new Map(pool.map(p => [p.id, p]));
   return Array.from(byId.values());
 }
 
-function renderProfileReels(posts = _profilePosts) {
+function renderProfileMotions(posts = _profilePosts) {
   const grid = $('profile-reels-grid');
   const count = $('profile-reel-count');
   if (!grid) return;
-  const reels = collectAvailableReels(posts);
+  const reels = collectAvailableMotions(posts);
   if (count) count.textContent = reels.length.toLocaleString();
   if (!reels.length) {
     grid.innerHTML = `
       <div class="reels-empty-state">
         <div class="reels-empty-icon">🎬</div>
-        <div class="reels-empty-title">No reels yet</div>
-        <div class="reels-empty-sub">Share a short video and let people discover your moment.</div>
-        ${!S.profileViewUserId ? '<button class="reels-empty-cta" type="button" data-reel-upload-cta>+ Upload reel</button>' : ''}
+        <div class="reels-empty-title">No motions yet</div>
+        <div class="reels-empty-sub">Share a short vertical video and let people discover your moment.</div>
+        ${!S.profileViewUserId ? '<button class="reels-empty-cta" type="button" data-reel-upload-cta>+ Upload motion</button>' : ''}
       </div>`;
     return;
   }
+
   grid.innerHTML = reels.map((p, i) => {
     const caption = String(p.content || '').trim();
-    return `<button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(p.id)}" aria-label="Open reel ${i + 1}">
+    const duration = Number(p?.post_meta?.duration_seconds);
+    const durationLabel = Number.isFinite(duration) && duration > 0
+      ? `${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, '0')}`
+      : '';
+    return `<button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(p.id)}" aria-label="Open motion ${i + 1}">
       <video class="reel-thumb-bg" src="${sanitizeHTML(p.media_url)}" muted playsinline preload="metadata"></video>
       <span class="reel-thumb-play">▶</span>
+      ${durationLabel ? `<span class="reel-thumb-duration">${durationLabel}</span>` : ''}
       ${caption ? `<span class="reel-thumb-views">${sanitizeHTML(caption.slice(0,28))}${caption.length>28?'…':''}</span>` : ''}
     </button>`;
   }).join('');
+
+  grid.querySelectorAll('.reel-thumb video').forEach((video) => {
+    video.addEventListener('loadedmetadata', () => {
+      const duration = Number(video.duration);
+      if (!Number.isFinite(duration) || duration <= 0) return;
+      const thumb = video.closest('.reel-thumb');
+      if (!thumb || thumb.querySelector('.reel-thumb-duration')) return;
+      const badge = document.createElement('span');
+      badge.className = 'reel-thumb-duration';
+      badge.textContent = `${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, '0')}`;
+      thumb.appendChild(badge);
+    }, { once: true });
+  });
 }
 
 function renderProfileStatsPanel() {
@@ -8163,17 +8439,17 @@ function renderProfileStatsPanel() {
   const follow = S.profileViewUserId ? (_followCache.get(S.profileViewUserId) || {followers:0,following:0}) : null;
   const postCount = (_profilePosts || []).filter(p => !p.media_url && p?.post_type !== 'reel').length;
   const photoCount = (_profilePosts || []).filter(p => p.media_url && p?.post_type !== 'reel').length;
-  const reelCount = collectAvailableReels().length;
+  const reelCount = collectAvailableMotions().length;
   host.innerHTML = `
     <div class="profile-stats-section">
       <div class="profile-stats-section-title">Content</div>
       <div class="profile-stats-row"><span class="profile-stats-key">Text posts</span><strong class="profile-stats-val">${postCount}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Photos</span><strong class="profile-stats-val">${photoCount}</strong></div>
-      <div class="profile-stats-row"><span class="profile-stats-key">Reels</span><strong class="profile-stats-val">${reelCount}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">Motions</span><strong class="profile-stats-val">${reelCount}</strong></div>
     </div>
     <div class="profile-stats-section">
       <div class="profile-stats-section-title">Profile</div>
-      <div class="profile-stats-row"><span class="profile-stats-key">crok Score</span><strong class="profile-stats-val">${toNum(S.profileViewData?.crok_score ?? summary?.score).toLocaleString()}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">Croks Score</span><strong class="profile-stats-val">${toNum(S.profileViewData?.crockroach_score ?? summary?.score).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Followers</span><strong class="profile-stats-val">${toNum(follow?.followers ?? _followCache.get(S.userId)?.followers).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(follow?.following ?? _followCache.get(S.userId)?.following).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Streak</span><strong class="profile-stats-val">${publicView ? '—' : `${toNum(summary?.streak)}d`}</strong></div>
@@ -8211,7 +8487,7 @@ function initProfileTabs() {
         panel.classList.toggle('active', panel.dataset.profilePanel === tab);
       });
       page.scrollTo({ top: 0, behavior: 'instant' in document.documentElement.style ? 'instant' : 'auto' });
-      if (tab === 'reels') renderProfileReels(_profilePosts);
+      if (tab === 'reels') renderProfileMotions(_profilePosts);
       if (tab === 'stats') renderProfileStatsPanel();
     });
   }
@@ -8221,7 +8497,7 @@ function refreshProfileTabCounts(posts = _profilePosts) {
   const sets = {
     posts: (posts || []).filter(p => !p.media_url && p?.post_type !== 'reel').length,
     photos: (posts || []).filter(p => p.media_url && p?.post_type !== 'reel').length,
-    reels: collectAvailableReels(posts).length
+    reels: collectAvailableMotions(posts).length
   };
   Object.entries(sets).forEach(([key, value]) => {
     const el = document.querySelector(`.profile-tab-btn[data-profile-tab="${key}"] .tab-count`);
@@ -8232,8 +8508,27 @@ function refreshProfileTabCounts(posts = _profilePosts) {
 function refreshProfileTabs(posts = _profilePosts) {
   initProfileTabs();
   refreshProfileTabCounts(posts);
-  renderProfileReels(posts);
+  renderProfileMotions(posts);
   renderProfileStatsPanel();
+}
+
+function closeReelViewer() {
+  const viewer = $('reel-viewer');
+  const video = $('rv-video');
+  if (video) {
+    video.pause();
+    video.currentTime = 0;
+    video.removeAttribute('src');
+    video.load();
+  }
+  if (viewer) {
+    viewer.classList.remove('open', 'opening');
+    viewer.setAttribute('aria-hidden', 'true');
+    viewer._mortaliveReelCollection = [];
+    viewer._mortaliveReelIndex = 0;
+  }
+  document.body.style.overflow = '';
+  document.body.classList.remove('reel-viewer-open');
 }
 
 function ensureReelViewer() {
@@ -8244,17 +8539,17 @@ function ensureReelViewer() {
   viewer.setAttribute('aria-hidden','true');
   viewer.innerHTML = `
     <div class="rv-progress"><div class="rv-progress-fill"></div></div>
-    <div class="rv-topbar"><div class="rv-topbar-title">Reels</div><button class="rv-topbar-btn" type="button" data-reel-close aria-label="Close">×</button></div>
+    <div class="rv-topbar"><div class="rv-topbar-title">Motions</div><button class="rv-topbar-btn" type="button" data-reel-close aria-label="Close motion viewer">×</button></div>
     <div class="rv-video-wrap">
       <video id="rv-video" playsinline preload="metadata"></video>
-      <button class="rv-tap-area" type="button" aria-label="Play or pause"></button>
+      <button class="rv-tap-area" type="button" aria-label="Play or pause" aria-pressed="false"></button>
       <div class="rv-pause-flash">▶</div>
-      <button class="rv-nav-btn rv-nav-prev" type="button" data-reel-prev aria-label="Previous reel">‹</button>
-      <button class="rv-nav-btn rv-nav-next" type="button" data-reel-next aria-label="Next reel">›</button>
-      <button class="rv-mute-badge" type="button" data-reel-mute aria-label="Toggle mute">🔇</button>
+      <button class="rv-nav-btn rv-nav-prev" type="button" data-reel-prev aria-label="Previous motion">‹</button>
+      <button class="rv-nav-btn rv-nav-next" type="button" data-reel-next aria-label="Next motion">›</button>
+      <button class="rv-mute-badge" type="button" data-reel-mute aria-label="Unmute video">🔇</button>
       <div class="rv-sidebar">
-        <button class="rv-action-btn" type="button" data-reel-action="like"><span class="rv-action-icon">♡</span><span class="rv-action-label">Like</span></button>
-        <button class="rv-action-btn" type="button" data-reel-action="comment"><span class="rv-action-icon">💬</span><span class="rv-action-label">Comment</span></button>
+        <button class="rv-action-btn" type="button" data-reel-action="like" aria-pressed="false"><span class="rv-action-icon">♡</span><span class="rv-action-label">Like</span></button>
+        <button class="rv-action-btn" type="button" data-reel-action="comment" aria-label="Open comments"><span class="rv-action-icon">💬</span><span class="rv-action-label">Comment</span></button>
         <button class="rv-action-btn" type="button" data-reel-action="follow"><span class="rv-action-icon">＋</span><span class="rv-action-label">Follow</span></button>
         <button class="rv-action-btn" type="button" data-reel-action="share"><span class="rv-action-icon">↗</span><span class="rv-action-label">Share</span></button>
       </div>
@@ -8267,12 +8562,21 @@ function ensureReelViewer() {
       <div class="rv-comments-sheet" id="rv-comments-sheet">
         <div class="rv-comments-handle"></div><div class="rv-comments-title" id="rv-comments-title">Comments</div>
         <div class="rv-comments-list" id="rv-comments-list"></div>
-        <div class="rv-comment-input-row"><input class="rv-comment-input" id="rv-comment-input" maxlength="300" placeholder="Add a comment…"><button class="rv-comment-send" type="button" id="rv-comment-send">Send</button></div>
+        <div class="rv-comment-input-row"><input class="rv-comment-input" id="rv-comment-input" maxlength="300" aria-label="Comment on this motion" placeholder="Add a comment…"><button class="rv-comment-send" type="button" id="rv-comment-send">Send</button></div>
       </div>
     </div>`;
   document.body.appendChild(viewer);
   let current = [];
   let index = 0;
+
+  const syncMuteUi = (video) => {
+    const muteBtn = viewer.querySelector('[data-reel-mute]');
+    const muted = !!video?.muted;
+    if (muteBtn) {
+      muteBtn.textContent = muted ? '🔇' : '🔊';
+      muteBtn.setAttribute('aria-label', muted ? 'Unmute video' : 'Mute video');
+    }
+  };
 
   const render = async () => {
     current = Array.isArray(viewer._mortaliveReelCollection) ? viewer._mortaliveReelCollection : current;
@@ -8284,20 +8588,29 @@ function ensureReelViewer() {
     loading?.classList.add('show');
     video.pause();
     video.src = post.media_url;
+    video.muted = sessionStorage.getItem('mortalive.reel-muted') !== '0';
+    syncMuteUi(video);
     video.load();
+
     const author = getPostViewerAuthor(post);
     const avatar = $('rv-author-avatar');
-    if (avatar) {
-      avatar.innerHTML = buildPostViewerAvatar(author, 40);
-    }
+    if (avatar) avatar.innerHTML = buildPostViewerAvatar(author, 40);
     $('rv-author-name').textContent = author.display_name || author.username || 'Member';
     $('rv-author-handle').textContent = `@${author.username || 'member'}`;
     $('rv-caption').innerHTML = renderHashtagRichText(String(post.content || '').trim());
-    $('rv-duration').textContent = post.media_size ? `${Math.max(1, Math.round(post.media_size / 1024 / 1024))} MB` : 'Reel';
+
+    const storedDuration = Number(post?.post_meta?.duration_seconds);
+    $('rv-duration').textContent =
+      Number.isFinite(storedDuration) && storedDuration > 0
+        ? `${Math.floor(storedDuration / 60)}:${String(Math.floor(storedDuration % 60)).padStart(2, '0')}`
+        : 'Short video';
+
     const eng = engagementFor(post.id);
     const likeBtn = viewer.querySelector('[data-reel-action="like"]');
     likeBtn?.classList.toggle('liked', !!eng.liked);
+    likeBtn?.setAttribute('aria-pressed', eng.liked ? 'true' : 'false');
     likeBtn?.querySelector('.rv-action-icon')?.replaceChildren(document.createTextNode(eng.liked ? '♥' : '♡'));
+
     const followBtn = viewer.querySelector('[data-reel-action="follow"]');
     if (followBtn) {
       const fd = post.user_id && post.user_id !== S.userId ? await fetchFollowData(post.user_id) : {isFollowing:false};
@@ -8306,18 +8619,43 @@ function ensureReelViewer() {
       followBtn.querySelector('.rv-action-label').textContent = fd.isFollowing ? 'Following' : 'Follow';
       followBtn.dataset.followState = fd.isFollowing ? '1' : '0';
     }
+
     const comments = await loadPostComments(post.id);
     $('rv-comments-title').textContent = `${comments.length} comments`;
-    $('rv-comments-list').innerHTML = postViewerCommentRows(comments).replaceAll('mortalive-post-viewer-comment','rv-comment-item').replaceAll('mortalive-post-viewer-comment-copy','rv-comment-body').replaceAll('mortalive-post-viewer-comment-head','rv-comment-author').replaceAll('mortalive-post-viewer-comment-text','rv-comment-text');
+    $('rv-comments-list').innerHTML = postViewerCommentRows(comments)
+      .replaceAll('mortalive-post-viewer-comment','rv-comment-item')
+      .replaceAll('mortalive-post-viewer-comment-copy','rv-comment-body')
+      .replaceAll('mortalive-post-viewer-comment-head','rv-comment-author')
+      .replaceAll('mortalive-post-viewer-comment-text','rv-comment-text');
     $('rv-comments-sheet').classList.remove('open');
+
+    video.onloadedmetadata = () => {
+      const duration = Number(video.duration);
+      if (Number.isFinite(duration) && duration > 0) {
+        $('rv-duration').textContent = `${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, '0')}`;
+      }
+    };
     video.onloadeddata = () => loading?.classList.remove('show');
     video.ontimeupdate = () => {
       const pct = video.duration ? (video.currentTime / video.duration) * 100 : 0;
       viewer.querySelector('.rv-progress-fill').style.width = `${pct}%`;
     };
-    video.onended = () => {
-      if (index < current.length - 1) { index += 1; viewer._mortaliveReelIndex=index; render(); } else video.currentTime = 0;
+    video.onplay = () => viewer.querySelector('.rv-tap-area')?.setAttribute('aria-pressed', 'false');
+    video.onpause = () => viewer.querySelector('.rv-tap-area')?.setAttribute('aria-pressed', 'true');
+    video.onvolumechange = () => {
+      sessionStorage.setItem('mortalive.reel-muted', video.muted ? '1' : '0');
+      syncMuteUi(video);
     };
+    video.onended = () => {
+      if (index < current.length - 1) {
+        index += 1;
+        viewer._mortaliveReelIndex = index;
+        render();
+      } else {
+        video.currentTime = 0;
+      }
+    };
+
     try { await video.play(); } catch (_) {}
     viewer.querySelector('[data-reel-prev]').disabled = index <= 0;
     viewer.querySelector('[data-reel-next]').disabled = index >= current.length - 1;
@@ -8325,55 +8663,95 @@ function ensureReelViewer() {
 
   viewer._mortaliveRenderReel = render;
   viewer.addEventListener('click', async (e) => {
-    if (e.target.closest('[data-reel-close]')) { viewer.classList.remove('open'); viewer.setAttribute('aria-hidden','true'); document.body.style.overflow=''; return; }
-    if (e.target.closest('[data-reel-prev]')) { if (index>0){ index--; viewer._mortaliveReelIndex=index; render(); } return; }
-    if (e.target.closest('[data-reel-next]')) { if(index<current.length-1){ index++; viewer._mortaliveReelIndex=index; render(); } return; }
+    if (e.target.closest('[data-reel-close]')) { closeReelViewer(); return; }
+    if (e.target.closest('[data-reel-prev]')) { if (index > 0) { index--; viewer._mortaliveReelIndex = index; render(); } return; }
+    if (e.target.closest('[data-reel-next]')) { if (index < current.length - 1) { index++; viewer._mortaliveReelIndex = index; render(); } return; }
+    if (e.target === viewer) { closeReelViewer(); return; }
     if (e.target.closest('.rv-tap-area')) {
-      const v=$('rv-video'); if(v.paused){ try{await v.play();}catch(_){}} else v.pause();
+      const v = $('rv-video');
+      if (v.paused) { try { await v.play(); } catch (_) {} } else v.pause();
       return;
     }
     if (e.target.closest('[data-reel-mute]')) {
-      const v=$('rv-video'); v.muted=!v.muted; e.target.textContent=v.muted?'🔇':'🔊'; return;
+      const v = $('rv-video');
+      v.muted = !v.muted;
+      sessionStorage.setItem('mortalive.reel-muted', v.muted ? '1' : '0');
+      syncMuteUi(v);
+      return;
     }
-    const action=e.target.closest('[data-reel-action]'); if(!action) return;
-    current = Array.isArray(viewer._mortaliveReelCollection) ? viewer._mortaliveReelCollection : current; index = Number.isInteger(viewer._mortaliveReelIndex) ? viewer._mortaliveReelIndex : index; const post=current[index];
-    if (!post) return;
-    if (action.dataset.reelAction==='like'){ await togglePostLike(post.id); render(); }
-    if (action.dataset.reelAction==='comment'){ $('rv-comments-sheet').classList.toggle('open'); }
-    if (action.dataset.reelAction==='share'){
-      const url=`${location.origin}${location.pathname}#feed-post-${encodeURIComponent(post.id)}`;
-      navigator.clipboard?.writeText(url).then(()=>toast('Reel link copied','📋')).catch(()=>toast(url,'🔗'));
-    }
-    if (action.dataset.reelAction==='follow' && post.user_id && post.user_id!==S.userId){
-      const fd=await fetchFollowData(post.user_id); const next=!fd.isFollowing;
-      try{ await toggleFollow(post.user_id,next); render(); toast(next?'Following!':'Unfollowed',next?'✓':'➖'); }catch(err){toast(err?.message||'Could not update follow.','⚠️');}
-    }
-  });
-  $('rv-comment-send')?.addEventListener('click', async ()=>{
-    const post=current[index], input=$('rv-comment-input'); const content=input?.value?.trim();
-    if(!post||!content) return;
-    input.value='';
-    await createPostComment(post.id,content);
-    await render();
-  });
-  viewer.querySelector('[data-reel-close]')?.addEventListener('click',()=>{viewer.classList.remove('open');viewer.setAttribute('aria-hidden','true');document.body.style.overflow='';});
-  return viewer;
 
-  // Unreachable? kept below intentionally no
+    const action = e.target.closest('[data-reel-action]');
+    if (!action) return;
+    current = Array.isArray(viewer._mortaliveReelCollection) ? viewer._mortaliveReelCollection : current;
+    index = Number.isInteger(viewer._mortaliveReelIndex) ? viewer._mortaliveReelIndex : index;
+    const post = current[index];
+    if (!post) return;
+
+    if (action.dataset.reelAction === 'like') {
+      await togglePostLike(post.id);
+      refreshProfileTabCounts(_profilePosts);
+      renderProfileStatsPanel();
+      await render();
+      return;
+    }
+    if (action.dataset.reelAction === 'comment') { $('rv-comments-sheet').classList.toggle('open'); return; }
+    if (action.dataset.reelAction === 'share') {
+      const url = `${location.origin}${location.pathname}#feed-post-${encodeURIComponent(post.id)}`;
+      navigator.clipboard?.writeText(url).then(() => toast('Motion link copied','📋')).catch(() => toast(url,'🔗'));
+      return;
+    }
+    if (action.dataset.reelAction === 'follow' && post.user_id && post.user_id !== S.userId) {
+      const fd = await fetchFollowData(post.user_id);
+      const next = !fd.isFollowing;
+      try {
+        await toggleFollow(post.user_id, next);
+        await render();
+        toast(next ? 'Following!' : 'Unfollowed', next ? '✓' : '➖');
+      } catch (err) {
+        toast(err?.message || 'Could not update follow.','⚠️');
+      }
+    }
+  });
+
+  $('rv-comment-send')?.addEventListener('click', async () => {
+    const post = current[index];
+    const input = $('rv-comment-input');
+    const raw = input?.value?.trim().slice(0, 300) || '';
+    const content = raw.replace(/<[^>]*>/g, '').trim();
+    if (!post || !content) {
+      toast('Add a comment to share your thoughts.', '💭');
+      return;
+    }
+    input.value = '';
+    try {
+      await createPostComment(post.id, content);
+      await render();
+    } catch (error) {
+      toast(error?.message || 'Could not add comment.', '⚠️');
+    }
+  });
+
+  viewer.querySelector('[data-reel-close]')?.addEventListener('click', closeReelViewer);
+  return viewer;
 }
+
 function openReelViewer(post, collection = []) {
-  if (S.isGuest || !S.userId) { toast('Sign in to view reels', '🔒'); return; }
+  if (S.isGuest || !S.userId) { toast('Sign in to view short videos', '🔒'); return; }
   const viewer = ensureReelViewer();
+  if (viewer.classList.contains('opening')) return;
+  viewer.classList.add('opening');
+
   const all = Array.isArray(collection) && collection.length ? collection : [post];
   const ids = all.map(p => p.id);
   const start = Math.max(0, ids.indexOf(post.id));
   viewer._mortaliveReelCollection = all;
   viewer._mortaliveReelIndex = start;
-  // trigger renderer stored on the viewer
   viewer._mortaliveRenderReel?.();
   viewer.classList.add('open');
   viewer.setAttribute('aria-hidden','false');
   document.body.style.overflow='hidden';
+  document.body.classList.add('reel-viewer-open');
+  setTimeout(() => viewer.classList.remove('opening'), 120);
 }
 function bindReelNavigationClicks() {
   // delegated grid/feed opening
@@ -8386,12 +8764,21 @@ function bindReelNavigationClicks() {
     const id = tile.dataset.reelPostId;
     const post = getPostByIdForViewer(id) || _profilePosts.find(p=>p.id===id);
     if (post?.media_url && post.post_type === 'reel') {
-      const collection = document.body.classList.contains('profile-viewing-public') ? collectAvailableReels(_profilePosts) : collectAvailableReels(_profilePosts);
+      const collection = document.body.classList.contains('profile-viewing-public') ? collectAvailableMotions(_profilePosts) : collectAvailableMotions(_profilePosts);
       openReelViewer(post, collection);
     }
   });
 }
 bindReelNavigationClicks();
+
+if (!document.body.dataset.reelKeyboardBound) {
+  document.body.dataset.reelKeyboardBound = '1';
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && $('reel-viewer')?.classList.contains('open')) {
+      closeReelViewer();
+    }
+  });
+}
 
 document.addEventListener('click', (event) => {
   const cta = event.target.closest?.('[data-reel-upload-cta]');
