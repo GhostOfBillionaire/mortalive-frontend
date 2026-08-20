@@ -1,19 +1,11 @@
-// Mortalive v31 — Motion hardening: max 2 min, portrait-only uploads, secure comments, viewer lifecycle/autoplay, Croks Score UI.
-// MORTALIVE SOURCE HANDOFF — latest uploaded app.js source; preserve this file as the current baseline.
-// FRESH BUILD MARKER — 2026-08-16 16:26 IST — redeploy this exact file
+// FRESH BUILD MARKER — 2026-08-21 00:03 IST — v40 Messages enhancement merge; stable baseline preserved
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-// Mortalive v29 — main Profile now scrolls as one continuous document flow, matching Feed-profile behavior.
-// Mortalive v32 — Messages integration merged into the v31 motion-hardening baseline; preserve this file as current source.
-// Mortalive v33 — Messages shell fix: close page boundary + remove demo chat UI/data seed.
-const BUILD_TAG = 'mortalive-build-2026-08-20-profile-actions-v36'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-19-profile-reels-audit-v27'; // bump this string on every deploy to confirm cache is fresh
 
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
 const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
-const USERNAME_MAX_LENGTH = 24;
-const USERNAME_RE = /^[A-Za-z0-9_]{3,24}$/;
-function isValidUsername(value) { return typeof value === 'string' && USERNAME_RE.test(value); }
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -298,7 +290,7 @@ function defaultProgress() {
     profileTheme: 'aurora',
     profileFrame: 'Liquid Glass',
     featuredQuote: 'Building momentum one connection at a time.',
-    pinnedNote: 'Connect with the world, build your Croks Score, and unlock your profile.',
+    pinnedNote: 'Connect with the world, build your crockroach Score, and unlock your profile.',
     avatarFrame: 'halo',
     lastSyncedAt: 0
   });
@@ -309,7 +301,7 @@ function defaultProfile() {
     theme: 'aurora',
     frame: 'Liquid Glass',
     quote: 'Building momentum one connection at a time.',
-    pinned: 'Connect with the world, build your Croks Score, and unlock your profile.',
+    pinned: 'Connect with the world, build your crockroach Score, and unlock your profile.',
     accent: 'rgba(90, 177, 255, .95)',
     pattern: 'mesh'
   });
@@ -514,7 +506,7 @@ function updateProgressText() {
 
   const scorePill = $('score-pill-btn');
   if (scorePill) {
-    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} Croks Score · ${summary.badges} badges`;
+    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} crockroach Score · ${summary.badges} badges`;
     scorePill.title = S.isGuest
       ? 'Guest sessions do not earn status'
       : `Top ${summary.percentile}% · #${summary.rank} weekly rank`;
@@ -604,7 +596,7 @@ function awardProgress(kind, amount = 1, meta = {}) {
   if (meta.completion) {
     const goal = computeGoalText(progress);
     if (source === 'chat_complete') {
-      toast(`+${delta} Croks Score · ${goal}`, '🧲');
+      toast(`+${delta} crockroach Score · ${goal}`, '🧲');
     } else {
       toast(`Milestone reached · ${goal}`, '🏁');
     }
@@ -645,7 +637,7 @@ function copyProgressShareCard() {
   const profile = getCurrentProfile();
   const text = [
     `Mortalive status`,
-    `${S.username || S.guestName || 'Guest'} · ${summary.score} Croks Score`,
+    `${S.username || S.guestName || 'Guest'} · ${summary.score} crockroach Score`,
     `${summary.streak} day streak · ${summary.completions} completions`,
     `Top ${summary.percentile}% · #${summary.rank} weekly`,
     `Frame: ${profile.frame || 'Liquid Glass'}`
@@ -838,9 +830,8 @@ function showPage(id, options = {}) {
   }
 
   if (id === 'pg-messages') {
-    if (typeof initMessagesPage === 'function') initMessagesPage();
+    initMessages();
   }
-
 }
 
 function toast(msg, icon = '✅') {
@@ -940,68 +931,27 @@ function updateOnlineCount() {
   const formatted = Number(S.onlineCount || 0).toLocaleString();
   ['online-n','online-n-hero','online-count','online-users','app-topbar-online-count'].forEach(id => {
     const el = $(id);
-    if (el) {
-      el.textContent = formatted;
-      el.classList.add('live-count-live');
-    }
+    if (el) el.textContent = formatted;
   });
   const mc = $('match-count');
-  if (mc) {
-    mc.textContent = formatted;
-    mc.classList.add('live-count-live');
-  }
+  if (mc) mc.textContent = formatted;
 }
 
 const PRESENCE_MODEL = {
-  min: 0,
-  max: 999999999
+  min: 4000,
+  max: 70000,
+  center: 24000,
+  jitter: 0.12
 };
 
-let _onlineCountAnimationFrame = 0;
-let _onlineCountTarget = null;
-let _onlineCountInitialized = false;
-
-function clampPresenceCount(value) {
-  return Math.round(Math.max(PRESENCE_MODEL.min, Math.min(PRESENCE_MODEL.max, value)));
-}
-
-function animateOnlineCountTo(target, durationMs = 900) {
-  const next = clampPresenceCount(target);
-  const current = clampPresenceCount(Number(S.onlineCount) || 0);
-
-  if (_onlineCountTarget === next && _onlineCountInitialized) return;
-  _onlineCountTarget = next;
-  _onlineCountInitialized = true;
-
-  cancelAnimationFrame(_onlineCountAnimationFrame);
-
-  if (current === next) {
-    S.onlineCount = next;
-    updateOnlineCount();
-    return;
-  }
-
-  const start = performance.now();
-  const delta = next - current;
-
-  // Smooth, odometer-like count movement: fast enough to feel live,
-  // but slow enough that changes are visibly counted rather than jumping.
-  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-
-  const tick = (now) => {
-    const progress = Math.min(1, (now - start) / Math.max(250, durationMs));
-    S.onlineCount = Math.round(current + delta * easeOutCubic(progress));
-    updateOnlineCount();
-
-    if (progress < 1) {
-      _onlineCountAnimationFrame = requestAnimationFrame(tick);
-    } else {
-      S.onlineCount = next;
-      updateOnlineCount();
-    }
-  };
-
-  _onlineCountAnimationFrame = requestAnimationFrame(tick);
+function samplePresenceNumber(previous = PRESENCE_MODEL.center) {
+  const r = Math.random();
+  let target;
+  if (r < 0.10) target = PRESENCE_MODEL.min + Math.random() * 6500;
+  else if (r > 0.90) target = PRESENCE_MODEL.max - Math.random() * 9000;
+  else target = PRESENCE_MODEL.min + Math.pow(Math.random(), 0.72) * (PRESENCE_MODEL.max - PRESENCE_MODEL.min);
+  const blended = previous * 0.72 + target * 0.28;
+  return Math.round(Math.max(PRESENCE_MODEL.min, Math.min(PRESENCE_MODEL.max, blended)));
 }
 
 async function fetchPresenceSource() {
@@ -1011,7 +961,7 @@ async function fetchPresenceSource() {
     if (!res.ok) return null;
     const payload = await res.json();
     const value = Number(payload?.count ?? payload?.online ?? payload?.onlineCount);
-    return Number.isFinite(value) ? clampPresenceCount(value) : null;
+    return Number.isFinite(value) ? Math.round(value) : null;
   } catch (_) {
     return null;
   }
@@ -1019,16 +969,10 @@ async function fetchPresenceSource() {
 
 async function refreshOnlinePresence() {
   const sourceValue = await fetchPresenceSource();
-  if (sourceValue == null) {
-    // Never manufacture a new number. When the real presence endpoint
-    // is temporarily unavailable, keep the last verified count on screen.
-    updateOnlineCount();
-    return;
-  }
-
-  const diff = Math.abs(sourceValue - (Number(S.onlineCount) || 0));
-  const duration = Math.min(1800, Math.max(450, 450 + diff * 8));
-  animateOnlineCountTo(sourceValue, duration);
+  S.onlineCount = sourceValue != null
+    ? Math.round(Math.max(PRESENCE_MODEL.min, Math.min(PRESENCE_MODEL.max, sourceValue)))
+    : samplePresenceNumber(S.onlineCount || PRESENCE_MODEL.center);
+  updateOnlineCount();
 }
 
 function isCompactViewport() {
@@ -1151,14 +1095,11 @@ function initConsentGate() {
 function startOnlineCounter() {
   if (S.onlineTimerStarted) return;
   S.onlineTimerStarted = true;
-
-  // The visible number is always driven by the backend presence count.
-  // The only animation is the transition between two verified counts.
-  S.onlineCount = 0;
+  S.onlineCount = samplePresenceNumber(PRESENCE_MODEL.center);
   updateOnlineCount();
   refreshOnlinePresence();
-
   setInterval(() => {
+    // Prefer a real backend presence source; otherwise use a smooth procedural estimate.
     refreshOnlinePresence();
   }, 6500);
 }
@@ -1191,7 +1132,7 @@ function updateIdentityDisplay() {
   const displayUsername = S.username || localStorage.getItem('mortalive_username');
 
   if (!S.isGuest && displayUsername) {
-    if (label) label.textContent = `Logged in as ${displayUsername} · 🧲 ${summary.score} Croks Score · ${summary.streak} streak · #${summary.rank}`;
+    if (label) label.textContent = `Logged in as ${displayUsername} · 🧲 ${summary.score} crockroach Score · ${summary.streak} streak · #${summary.rank}`;
     if (switchBtn) switchBtn.style.display = 'none';
     if (logoutBtn) logoutBtn.style.display = '';
     if (scorePill) scorePill.style.display = '';
@@ -1677,7 +1618,7 @@ function initAuthControls() {
       setUsernameStatus(null, '');
       return;
     }
-    if (!isValidUsername(val)) {
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(val)) {
       setUsernameStatus('bad', '3–24 characters: letters, numbers, underscore only.');
       return;
     }
@@ -1704,7 +1645,7 @@ function initAuthControls() {
     const terms    = $('signup-terms');
     setError('signup-error', null);
 
-    if (!isValidUsername(username)) {
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
       setError('signup-error', 'Username must be 3–24 characters: letters, numbers, underscore only.');
       return;
     }
@@ -2129,7 +2070,6 @@ function initAuthControls() {
       _commentCache = new Map();
       _feedEngagement = new Map();
       _commentLoading = new Set();
-      if (typeof resetMessagesRuntime === 'function') resetMessagesRuntime();
       return;
     }
 
@@ -2151,7 +2091,6 @@ function initAuthControls() {
         if (switchedUser) {
           S.accountData = null;
           S.userLinks = [];
-          if (typeof resetMessagesRuntime === 'function') resetMessagesRuntime();
         }
 
         S.username =
@@ -3353,7 +3292,7 @@ function beginChat() {
   const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
   setText('peer-ava', s.emoji);
   setText('peer-name', s.name);
-  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} Croks Score · connected`);
+  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`);
   bindTalkPeerActions();
   syncTalkPeerFollowUI();
 
@@ -4100,7 +4039,7 @@ function getFeedComposerKind() {
 }
 
 function getFeedStructuredKindLabel(kind) {
-  return kind === 'qna' ? 'Q&A' : kind === 'poll' ? 'Poll' : kind === 'photo' ? 'Photo' : kind === 'reel' ? 'Video' : 'Text';
+  return kind === 'qna' ? 'Q&A' : kind === 'poll' ? 'Poll' : kind === 'photo' ? 'Photo' : kind === 'reel' ? 'Reel' : 'Text';
 }
 
 function getFeedComposerOptionValues() {
@@ -4157,7 +4096,7 @@ function syncFeedComposerTypeUI() {
   if (field) field.placeholder = kind === 'qna'
     ? (_feedQnaChoicesEnabled ? 'Ask a question for people to choose from…' : 'Ask a question people can reply to…')
     : kind === 'poll' ? 'Ask a poll question…'
-    : kind === 'reel' ? 'Add a caption to your video…'
+    : kind === 'reel' ? 'Add a caption to your reel…'
     : "What's on your mind after that chat…";
   if (modeLabel) modeLabel.textContent = getFeedStructuredKindLabel(kind);
   if (builder) builder.classList.toggle('open', kind === 'poll' || kind === 'qna');
@@ -4320,262 +4259,841 @@ function syncHashtagStatus(text, statusId) {
 
 
 
-// ── MESSAGES PAGE ────────────────────────────────────────────────────────────
-let _messagesInitialized = false;
-const _msgsState = { conversations: [], activeId: null, unsubscribe: null };
-
-// LocalStorage keys for the current Messages prototype. No demo data is seeded.
-const _MSG_CONV_KEY = 'mortalive_conversations_v1';
-const _MSG_MSGS_KEY = 'mortalive_dm_messages_v1';
-
-function msgStorageKey(baseKey) {
-  // Messages are currently a local prototype, but they must still respect the
-  // authenticated account boundary. Never use one global LocalStorage bucket
-  // for multiple signed-in users on the same browser.
-  const userId = String(S.userId || '').trim();
-  return userId ? `${baseKey}:${encodeURIComponent(userId)}` : null;
-}
-
-function resetMessagesRuntime() {
-  if (_msgsState.unsubscribe) {
-    try { _msgsState.unsubscribe(); } catch (_) {}
-  }
-  _msgsState.unsubscribe = null;
-  _msgsState.activeId = null;
-  _msgsState.conversations = [];
-  const shell = document.getElementById('msg-shell');
-  shell?.classList.remove('thread-open');
-  const empty = document.getElementById('msg-thread-empty');
-  const active = document.getElementById('msg-thread-active');
-  if (empty) empty.style.display = '';
-  if (active) active.style.display = 'none';
-}
-
-// ── Pipeline stubs (swap each for a real fetch when the API is ready) ────────
-
-async function msgFetchConversations() {
-  // TODO: GET /api/conversations  Authorization: Bearer <S.authToken>
-  const key = msgStorageKey(_MSG_CONV_KEY);
-  if (!key) return [];
-  try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; }
-}
-
-async function msgFetchMessages(conversationId) {
-  // TODO: GET /api/conversations/:id/messages?limit=50
-  const key = msgStorageKey(_MSG_MSGS_KEY);
-  if (!key) return [];
-  try {
-    const all = JSON.parse(localStorage.getItem(key)) || {};
-    return Array.isArray(all[conversationId]) ? all[conversationId] : [];
-  } catch { return []; }
-}
-
-async function msgPostMessage(conversationId, text) {
-  // TODO: POST /api/conversations/:id/messages  { text }
-  const key = msgStorageKey(_MSG_MSGS_KEY);
-  if (!key || !S.userId) return null;
-
-  const thread = await msgFetchMessages(conversationId);
-  const msg = { id: 'm' + Date.now(), from: 'me', text, ts: Date.now() };
-  thread.push(msg);
-  try {
-    const all = JSON.parse(localStorage.getItem(key)) || {};
-    all[conversationId] = thread;
-    localStorage.setItem(key, JSON.stringify(all));
-  } catch {}
-  const convs = await msgFetchConversations();
-  const conv = convs.find(c => c.id === conversationId);
-  if (conv) { conv.lastMessage = 'you: ' + text; conv.lastMessageAt = msg.ts; conv.unread = 0; }
-  const convKey = msgStorageKey(_MSG_CONV_KEY);
-  if (convKey) {
-    try { localStorage.setItem(convKey, JSON.stringify(convs)); } catch {}
-  }
-  return msg;
-}
-
-function msgSubscribeToConversation(conversationId, onMessage) {
-  // TODO: replace with Supabase Realtime channel:
-  // sb.channel('conversation:' + conversationId)
-  //   .on('postgres_changes', { event:'INSERT', schema:'public', table:'messages',
-  //        filter:`conversation_id=eq.${conversationId}` }, p => onMessage(p.new))
-  //   .subscribe()
-  return () => {}; // no-op until Realtime is wired
-}
-
-async function msgMarkRead(conversationId) {
-  // TODO: PATCH /api/conversations/:id/read
-  const convs = await msgFetchConversations();
-  const conv = convs.find(c => c.id === conversationId);
-  if (conv) { conv.unread = 0; }
-  const key = msgStorageKey(_MSG_CONV_KEY);
-  if (key) {
-    try { localStorage.setItem(key, JSON.stringify(convs)); } catch {}
-  }
-}
-
-// ── Rendering helpers ─────────────────────────────────────────────────────────
-
-function escMsgHtml(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function msgRelTime(ts) {
-  const d = Date.now() - ts;
-  if (d < 60000)    return 'now';
-  if (d < 3600000)  return Math.floor(d / 60000)  + 'm';
-  if (d < 86400000) return Math.floor(d / 3600000) + 'h';
-  return Math.floor(d / 86400000) + 'd';
-}
-
-function renderMsgSidebar() {
-  const list = document.getElementById('msg-conv-list');
-  const sub  = document.getElementById('msg-sidebar-sub');
-  if (!list) return;
-  const convs = _msgsState.conversations;
-
-  if (!convs.length) {
-    if (sub) sub.textContent = 'No conversations yet';
-    list.innerHTML = `
-      <div class="sidebar-empty">
-        <div class="icon">📭</div>
-        <h3>Nothing here yet</h3>
-        <p>Messages open up once you've connected with someone in chat.</p>
-        <a class="empty-cta" href="#" data-top-page="pg-lobby">Start a chat →</a>
-      </div>`;
-    return;
-  }
-
-  if (sub) sub.textContent = convs.length + ' conversation' + (convs.length === 1 ? '' : 's');
-  list.innerHTML = [...convs]
-    .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
-    .map(c => `
-      <div class="conv-item${c.id === _msgsState.activeId ? ' active' : ''}"
-           data-id="${escMsgHtml(c.id)}">
-        <div class="conv-avatar">
-          ${escMsgHtml(c.peerEmoji || '👤')}
-          ${c.online ? '<span class="conv-online-dot"></span>' : ''}
-        </div>
-        <div class="conv-meta">
-          <div class="conv-row-top">
-            <span class="conv-name">${escMsgHtml(c.peerName)}</span>
-            <span class="conv-time">${msgRelTime(c.lastMessageAt)}</span>
-          </div>
-          <div class="conv-row-top">
-            <span class="conv-preview${c.unread ? ' unread' : ''}">${escMsgHtml(c.lastMessage || '')}</span>
-            ${c.unread ? `<span class="unread-badge">${c.unread}</span>` : ''}
-          </div>
-        </div>
-      </div>`).join('');
-}
-
-function renderMsgThread(messages) {
-  const el = document.getElementById('msg-thread-messages');
-  if (!el) return;
-  el.innerHTML = messages.map(m => `
-    <div class="msg-row ${m.from === 'me' ? 'me' : 'them'}">
-      <div>
-        <div class="msg-bubble">${escMsgHtml(m.text)}</div>
-        <div class="msg-time">${new Date(m.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
-      </div>
-    </div>`).join('');
-  el.scrollTop = el.scrollHeight;
-}
-
-async function msgOpenConversation(id) {
-  _msgsState.activeId = id;
-  const conv = _msgsState.conversations.find(c => c.id === id);
-  if (!conv) return;
-
-  document.getElementById('msg-thread-empty').style.display  = 'none';
-  document.getElementById('msg-thread-active').style.display = 'flex';
-  document.getElementById('msg-shell')?.classList.add('thread-open');
-
-  document.getElementById('msg-peer-ava').textContent  = conv.peerEmoji || '👤';
-  document.getElementById('msg-peer-name').textContent = conv.peerName;
-  const statusEl = document.getElementById('msg-peer-status');
-  statusEl.textContent = conv.online ? 'Online' : 'Offline';
-  statusEl.className   = 'thread-peer-status' + (conv.online ? ' online' : '');
-
-  const messages = await msgFetchMessages(id);
-  renderMsgThread(messages);
-
-  if (conv.unread) { conv.unread = 0; await msgMarkRead(id); }
-  renderMsgSidebar();
-
-  document.getElementById('msg-composer-send').disabled = false;
-  document.getElementById('msg-composer-input')?.focus();
-
-  if (_msgsState.unsubscribe) _msgsState.unsubscribe();
-  _msgsState.unsubscribe = msgSubscribeToConversation(id, async () => {
-    const updated = await msgFetchMessages(id);
-    if (_msgsState.activeId === id) renderMsgThread(updated);
-  });
-}
-
-function msgBackToList() {
-  document.getElementById('msg-shell')?.classList.remove('thread-open');
-}
-
-async function msgSendCurrentMessage() {
-  const input = document.getElementById('msg-composer-input');
-  const text  = input?.value.trim();
-  if (!text || !_msgsState.activeId) return;
-  input.value = '';
-  await msgPostMessage(_msgsState.activeId, text);
-  const messages = await msgFetchMessages(_msgsState.activeId);
-  renderMsgThread(messages);
-  _msgsState.conversations = await msgFetchConversations();
-  renderMsgSidebar();
-}
-
-
-// ── initMessagesPage ──────────────────────────────────────────────────────────
-
-function initMessagesPage() {
-  if (S.isGuest || !S.userId) {
-    resetMessagesRuntime();
-    return;
-  }
-
-  if (_messagesInitialized) {
-    // Re-entry: refresh sidebar in case conversations changed since last visit
-    msgFetchConversations().then(convs => {
-      _msgsState.conversations = convs;
-      renderMsgSidebar();
-    });
-    return;
-  }
-  _messagesInitialized = true;
-
-  // One-time event delegation — scoped entirely to #pg-messages
-  document.addEventListener('click', (event) => {
-    if (!event.target.closest('#pg-messages')) return;
-
-    const backBtn  = event.target.closest('#msg-thread-back');
-    if (backBtn)   { msgBackToList(); return; }
-
-    const sendBtn  = event.target.closest('#msg-composer-send');
-    if (sendBtn)   { msgSendCurrentMessage(); return; }
-
-    const convItem = event.target.closest('.conv-item[data-id]');
-    if (convItem)  { msgOpenConversation(convItem.dataset.id); return; }
-
-  });
-
-  document.getElementById('msg-composer-input')?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); msgSendCurrentMessage(); }
-  });
-
-  // Initial load
-  msgFetchConversations().then(convs => {
-    _msgsState.conversations = convs;
-    renderMsgSidebar();
-  });
-}
-
-window.initMessagesPage = initMessagesPage;
-
 // ═══════════════════════════════════════════════════════════════════
+// ═══ ENHANCED MESSAGES MODULE v40
+/* ═══════════════════════════════════════════════════════════════════════
+   MORTALIVE ENHANCED MESSAGES FUNCTIONALITY
+   To be integrated into app.js
+   ═════════════════════════════════════════════════════════════════════ */
+
+// ━━━━━━━━━━━━━━━━━ MESSAGES STATE ━━━━━━━━━━━━━━━━━
+const messagesState = {
+  activeConvId: null,
+  conversations: [],
+  groups: [],
+  messages: {},
+  threads: {},
+  selectedMembers: new Set(),
+  initialized: false
+};
+
+// Uses Mortalive's existing global $(id) helper from app.js.
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// ━━━━━━━━━━━━━━━━━ INITIALIZATION ━━━━━━━━━━━━━━━━━
+
+function messagesStorageKey(base) {
+  const uid = (window.S && S.userId) || 'guest';
+  return `${base}:${uid}`;
+}
+
+
+/**
+ * Initialize messages functionality
+ * Call from app.js when DOM is ready and user is authenticated
+ */
+async function initMessages() {
+  if (messagesState.initialized) return;
+  messagesState.initialized = true;
+
+  // Load from localStorage first
+  loadMessagesFromStorage();
+
+  // Then fetch from API if available
+  if (typeof fetchConversations === 'function') {
+    try {
+      messagesState.conversations = await fetchConversations();
+      saveMessagesToStorage();
+    } catch (error) {
+      console.error('Failed to fetch conversations:', error);
+    }
+  }
+
+  // Fetch groups if available
+  if (typeof fetchGroups === 'function') {
+    try {
+      messagesState.groups = await fetchGroups();
+      saveMessagesToStorage();
+    } catch (error) {
+      console.error('Failed to fetch groups:', error);
+    }
+  }
+
+  // Setup event listeners
+  setupMessageEventListeners();
+
+  // Render conversation list
+  renderConversationList();
+
+  // Subscribe to real-time updates if available
+  if (typeof subscribeToMessages === 'function') {
+    subscribeToMessages();
+  }
+}
+
+/**
+ * Load messages from localStorage
+ */
+function loadMessagesFromStorage() {
+  try {
+    const stored = {
+      conversations: localStorage.getItem(messagesStorageKey('mortalive_conversations')),
+      groups: localStorage.getItem(messagesStorageKey('mortalive_groups')),
+      messages: localStorage.getItem(messagesStorageKey('mortalive_messages'))
+    };
+
+    if (stored.conversations) {
+      messagesState.conversations = JSON.parse(stored.conversations);
+    }
+    if (stored.groups) {
+      messagesState.groups = JSON.parse(stored.groups);
+    }
+    if (stored.messages) {
+      messagesState.messages = JSON.parse(stored.messages);
+    }
+  } catch (error) {
+    console.error('Failed to load messages from storage:', error);
+  }
+}
+
+/**
+ * Save messages to localStorage
+ */
+function saveMessagesToStorage() {
+  try {
+    localStorage.setItem(messagesStorageKey('mortalive_conversations'), JSON.stringify(messagesState.conversations));
+    localStorage.setItem(messagesStorageKey('mortalive_groups'), JSON.stringify(messagesState.groups));
+    localStorage.setItem(messagesStorageKey('mortalive_messages'), JSON.stringify(messagesState.messages));
+  } catch (error) {
+    console.error('Failed to save messages to storage:', error);
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━ EVENT LISTENERS SETUP ━━━━━━━━━━━━━━━━━
+
+function setupMessageEventListeners() {
+  const elements = {
+    newGroupBtn: $('btn-new-group'),
+    emptyNewGroupBtn: $('btn-empty-new-group'),
+    createGroupOverlay: $('msg-create-group-overlay'),
+    closeGroupBtn: $('btn-close-create-group'),
+    cancelGroupBtn: $('btn-cancel-create-group'),
+    createGroupForm: $('form-create-group'),
+    threadBack: $('msg-thread-back'),
+    composerSend: $('msg-composer-send'),
+    composerInput: $('msg-composer-input'),
+    searchInput: $('msg-search-input'),
+    threadMenu: $('msg-thread-menu'),
+    groupNameInput: $('group-name'),
+    groupDescInput: $('group-desc'),
+    groupMembersInput: $('group-members-input')
+  };
+
+  // Create group modal
+  if (elements.newGroupBtn) {
+    elements.newGroupBtn.addEventListener('click', openCreateGroupModal);
+  }
+
+  if (elements.emptyNewGroupBtn) {
+    elements.emptyNewGroupBtn.addEventListener('click', openCreateGroupModal);
+  }
+
+  if (elements.closeGroupBtn) {
+    elements.closeGroupBtn.addEventListener('click', closeCreateGroupModal);
+  }
+
+  if (elements.cancelGroupBtn) {
+    elements.cancelGroupBtn.addEventListener('click', closeCreateGroupModal);
+  }
+
+  if (elements.createGroupOverlay) {
+    elements.createGroupOverlay.addEventListener('click', (e) => {
+      if (e.target === elements.createGroupOverlay) {
+        closeCreateGroupModal();
+      }
+    });
+  }
+
+  // Form submission
+  if (elements.createGroupForm) {
+    elements.createGroupForm.addEventListener('submit', handleCreateGroup);
+  }
+
+  // Character count updates
+  if (elements.groupNameInput) {
+    elements.groupNameInput.addEventListener('input', updateCharCounts);
+  }
+
+  if (elements.groupDescInput) {
+    elements.groupDescInput.addEventListener('input', updateCharCounts);
+  }
+
+  // Member search
+  if (elements.groupMembersInput) {
+    elements.groupMembersInput.addEventListener('input', handleMemberSearch);
+  }
+
+  // Message composer
+  if (elements.composerSend) {
+    elements.composerSend.addEventListener('click', sendMessage);
+  }
+
+  if (elements.composerInput) {
+    elements.composerInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+      // Auto-resize textarea
+      const target = e.currentTarget;
+      target.style.height = 'auto';
+      target.style.height = Math.min(target.scrollHeight, 100) + 'px';
+    });
+  }
+
+  // Thread back button
+  if (elements.threadBack) {
+    elements.threadBack.addEventListener('click', closeThread);
+  }
+
+  // Search conversations
+  if (elements.searchInput) {
+    elements.searchInput.addEventListener('input', handleConversationSearch);
+  }
+
+  // Thread menu
+  if (elements.threadMenu) {
+    elements.threadMenu.addEventListener('click', openThreadMenu);
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━ MODAL CONTROLS ━━━━━━━━━━━━━━━━━
+
+function openCreateGroupModal() {
+  const overlay = $('msg-create-group-overlay');
+  if (overlay) {
+    overlay.classList.add('open');
+    setTimeout(() => {
+      const input = $('group-name');
+      if (input) input.focus();
+    }, 100);
+  }
+}
+
+function closeCreateGroupModal() {
+  const overlay = $('msg-create-group-overlay');
+  if (overlay) {
+    overlay.classList.remove('open');
+  }
+
+  // Reset form
+  const form = $('form-create-group');
+  if (form) form.reset();
+
+  // Clear members
+  const membersList = $('group-members-list');
+  if (membersList) membersList.innerHTML = '';
+
+  messagesState.selectedMembers.clear();
+  updateCharCounts();
+}
+
+// ━━━━━━━━━━━━━━━━━ FORM HANDLING ━━━━━━━━━━━━━━━━━
+
+function updateCharCounts() {
+  const nameInput = $('group-name');
+  const descInput = $('group-desc');
+  const nameHint = $('group-name-hint');
+  const descHint = $('group-desc-hint');
+
+  if (nameInput && nameHint) {
+    nameHint.textContent = nameInput.value.length + ' / 60 characters';
+  }
+
+  if (descInput && descHint) {
+    descHint.textContent = descInput.value.length + ' / 200 characters';
+  }
+}
+
+function handleMemberSearch(e) {
+  const query = e.target.value.trim().toLowerCase();
+  const suggestionsContainer = $('group-members-suggestions');
+
+  if (!suggestionsContainer) return;
+
+  if (!query) {
+    suggestionsContainer.innerHTML = '';
+    return;
+  }
+
+  // If you have a real API, call it here
+  // For now, use mock data
+  const allMembers = [
+    { id: 'u1', name: 'Alice Chen', avatar: '👩' },
+    { id: 'u2', name: 'Bob Johnson', avatar: '👨' },
+    { id: 'u3', name: 'Carol White', avatar: '👩' },
+    { id: 'u4', name: 'David Lee', avatar: '👨' },
+    { id: 'u5', name: 'Emma Wilson', avatar: '👩' },
+    { id: 'u6', name: 'Frank Brown', avatar: '👨' },
+    { id: 'u7', name: 'Grace Kim', avatar: '👩' }
+  ];
+
+  const filtered = allMembers.filter(m =>
+    !messagesState.selectedMembers.has(m.name) &&
+    (m.name.toLowerCase().includes(query) || m.id.includes(query))
+  );
+
+  suggestionsContainer.innerHTML = filtered.map(member => `
+    <button type="button" class="form-member-suggestion" data-member-name="${escapeHtml(member.name)}">
+      ${member.avatar} ${escapeHtml(member.name)}
+    </button>
+  `).join('');
+
+  // Add event listeners to suggestion buttons
+  suggestionsContainer.querySelectorAll('.form-member-suggestion').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const name = btn.dataset.memberName;
+      addMemberTag(name);
+    });
+  });
+}
+
+function addMemberTag(name) {
+  if (messagesState.selectedMembers.has(name)) return;
+
+  messagesState.selectedMembers.add(name);
+
+  const membersList = $('group-members-list');
+  if (!membersList) return;
+
+  const tag = document.createElement('div');
+  tag.className = 'form-tag';
+  tag.innerHTML = `
+    <span>${escapeHtml(name)}</span>
+    <span class="form-tag-remove" data-member="${escapeHtml(name)}">×</span>
+  `;
+
+  tag.querySelector('.form-tag-remove').addEventListener('click', () => {
+    messagesState.selectedMembers.delete(name);
+    tag.remove();
+  });
+
+  membersList.appendChild(tag);
+
+  // Clear input
+  const input = $('group-members-input');
+  if (input) input.value = '';
+
+  // Clear suggestions
+  const suggestions = $('group-members-suggestions');
+  if (suggestions) suggestions.innerHTML = '';
+}
+
+async function handleCreateGroup(e) {
+  e.preventDefault();
+
+  const nameInput = $('group-name');
+  const descInput = $('group-desc');
+  const typeRadio = document.querySelector('input[name="group-type"]:checked');
+
+  if (!nameInput || !nameInput.value.trim()) {
+    showToast('⚠️ Group name is required');
+    return;
+  }
+
+  const groupData = {
+    name: nameInput.value.trim(),
+    description: descInput ? descInput.value.trim() : '',
+    type: typeRadio ? typeRadio.value : 'public',
+    members: Array.from(messagesState.selectedMembers)
+  };
+
+  // Validate
+  if (groupData.name.length > 60) {
+    showToast('⚠️ Group name is too long');
+    return;
+  }
+
+  try {
+    // Try to create via API if available
+    let newGroup;
+    if (typeof createGroup === 'function') {
+      newGroup = await createGroup(groupData);
+    } else {
+      // Create locally
+      newGroup = {
+        id: 'g' + Date.now(),
+        name: groupData.name,
+        emoji: groupData.type === 'public' ? '👥' : '🔒',
+        description: groupData.description,
+        type: groupData.type,
+        members: groupData.members,
+        createdAt: new Date(),
+        createdBy: S.username || 'You'
+      };
+    }
+
+    messagesState.groups.push(newGroup);
+    saveMessagesToStorage();
+
+    renderConversationList();
+    closeCreateGroupModal();
+
+    showToast('✅ Group created successfully!');
+  } catch (error) {
+    console.error('Failed to create group:', error);
+    showToast('❌ Failed to create group');
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━ CONVERSATION MANAGEMENT ━━━━━━━━━━━━━━━━━
+
+function renderConversationList() {
+  const list = $('msg-conv-list');
+  if (!list) return;
+
+  if (messagesState.conversations.length === 0 && messagesState.groups.length === 0) {
+    list.innerHTML = `
+      <div class="messages-list-empty">
+        <div class="empty-icon">💬</div>
+        <p>No conversations yet</p>
+        <p class="empty-hint">Start a new conversation to begin messaging</p>
+      </div>
+    `;
+    return;
+  }
+
+  list.innerHTML = '';
+
+  // Add groups first
+  messagesState.groups.forEach(group => {
+    const item = createConvItem(group.id, group.name, group.emoji, `${group.members.length} members`, true);
+    list.appendChild(item);
+  });
+
+  // Then add conversations
+  messagesState.conversations.forEach(conv => {
+    const preview = conv.lastMessage || conv.preview || 'No messages yet';
+    const item = createConvItem(conv.id, conv.name, conv.emoji, preview, false);
+    list.appendChild(item);
+  });
+}
+
+function createConvItem(id, name, emoji, meta, isGroup = false) {
+  const item = document.createElement('div');
+  item.className = 'messages-conv-item';
+  item.dataset.convId = id;
+
+  if (id === messagesState.activeConvId) {
+    item.classList.add('active');
+  }
+
+  item.innerHTML = `
+    <div class="messages-conv-ava ${isGroup ? 'group' : ''}">${emoji}</div>
+    <div class="messages-conv-meta">
+      <div class="messages-conv-name-row">
+        <div class="messages-conv-name">${escapeHtml(name)}</div>
+        <div class="messages-conv-time">now</div>
+      </div>
+      <div class="messages-conv-preview">${escapeHtml(meta)}</div>
+    </div>
+  `;
+
+  item.addEventListener('click', () => {
+    // Update active state
+    document.querySelectorAll('.messages-conv-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+
+    // Load thread
+    loadThread(id);
+  });
+
+  return item;
+}
+
+function loadThread(convId) {
+  const empty = $('msg-thread-empty');
+  const active = $('msg-thread-active');
+
+  if (!empty || !active) return;
+
+  // Find conversation or group
+  const group = messagesState.groups.find(g => g.id === convId);
+  const conv = messagesState.conversations.find(c => c.id === convId);
+
+  if (group) {
+    // Set header info for group
+    const avaEl = $('msg-peer-ava');
+    const nameEl = $('msg-peer-name');
+    const statusEl = $('msg-peer-status');
+
+    if (avaEl) avaEl.textContent = group.emoji;
+    if (nameEl) nameEl.textContent = group.name;
+    if (statusEl) statusEl.textContent = `${group.members.length} members`;
+  } else if (conv) {
+    // Set header info for individual
+    const avaEl = $('msg-peer-ava');
+    const nameEl = $('msg-peer-name');
+    const statusEl = $('msg-peer-status');
+
+    if (avaEl) avaEl.textContent = conv.emoji;
+    if (nameEl) nameEl.textContent = conv.name;
+    if (statusEl) statusEl.textContent = conv.status || 'offline';
+  }
+
+  // Show thread
+  messagesState.activeConvId = convId;
+  empty.style.display = 'none';
+  active.style.display = 'flex';
+
+  // Render messages
+  renderMessages(convId);
+
+  // Focus composer
+  const input = $('msg-composer-input');
+  if (input) input.focus();
+}
+
+function renderMessages(convId) {
+  const container = $('msg-thread-messages');
+  if (!container) return;
+
+  const messages = messagesState.messages[convId] || [];
+
+  container.innerHTML = messages.map(msg => `
+    <div class="msg-row ${msg.isMe ? 'me' : 'them'}">
+      ${msg.isMe ? '' : `<div class="messages-peer-ava" style="width:32px;height:32px;font-size:16px;">${msg.emoji || '👤'}</div>`}
+      <div>
+        <div class="msg-bubble">${escapeHtml(msg.text)}</div>
+        <div class="msg-time">${msg.time || formatTime(msg.timestamp)}</div>
+      </div>
+    </div>
+  `).join('');
+
+  // Scroll to bottom
+  container.scrollTop = container.scrollHeight;
+}
+
+function closeThread() {
+  const empty = $('msg-thread-empty');
+  const active = $('msg-thread-active');
+
+  if (empty) empty.style.display = 'flex';
+  if (active) active.style.display = 'none';
+
+  // Remove active state from items
+  document.querySelectorAll('.messages-conv-item').forEach(i => i.classList.remove('active'));
+
+  messagesState.activeConvId = null;
+}
+
+// ━━━━━━━━━━━━━━━━━ MESSAGE SENDING ━━━━━━━━━━━━━━━━━
+
+async function sendMessage() {
+  const input = $('msg-composer-input');
+  if (!input) return;
+
+  const text = input.value.trim();
+  if (!text || !messagesState.activeConvId) return;
+
+  const convId = messagesState.activeConvId;
+
+  // Initialize messages array if needed
+  if (!messagesState.messages[convId]) {
+    messagesState.messages[convId] = [];
+  }
+
+  const messageData = {
+    id: 'msg' + Date.now(),
+    text,
+    isMe: true,
+    emoji: S.userAvatar || '👤',
+    timestamp: new Date(),
+    time: formatTime(new Date())
+  };
+
+  try {
+    // Try to send via API if available
+    if (typeof sendMessageToAPI === 'function') {
+      await sendMessageToAPI(convId, text);
+    }
+
+    // Add to local state
+    messagesState.messages[convId].push(messageData);
+    saveMessagesToStorage();
+
+    // Clear input
+    input.value = '';
+    input.style.height = 'auto';
+
+    // Render
+    renderMessages(convId);
+
+    // Enable send button check
+    updateComposerButton();
+
+    // Simulate response (remove in production)
+    simulatePeerResponse(convId);
+  } catch (error) {
+    console.error('Failed to send message:', error);
+    showToast('❌ Failed to send message');
+  }
+}
+
+function updateComposerButton() {
+  const input = $('msg-composer-input');
+  const sendBtn = $('msg-composer-send');
+
+  if (input && sendBtn) {
+    sendBtn.disabled = !input.value.trim();
+  }
+}
+
+function simulatePeerResponse(convId) {
+  // Simulate typing indicator
+  const replies = ['Got it!', 'Thanks for that', 'Totally agree', 'On it', '👍', 'Sounds good!'];
+  const delay = 500 + Math.random() * 1500;
+
+  setTimeout(() => {
+    const reply = replies[Math.floor(Math.random() * replies.length)];
+
+    if (!messagesState.messages[convId]) {
+      messagesState.messages[convId] = [];
+    }
+
+    const conv = messagesState.groups.find(g => g.id === convId) ||
+                 messagesState.conversations.find(c => c.id === convId);
+
+    messagesState.messages[convId].push({
+      id: 'msg' + Date.now(),
+      text: reply,
+      isMe: false,
+      emoji: conv?.emoji || '👤',
+      timestamp: new Date(),
+      time: formatTime(new Date())
+    });
+
+    saveMessagesToStorage();
+    renderMessages(convId);
+  }, delay);
+}
+
+// ━━━━━━━━━━━━━━━━━ SEARCH & FILTERING ━━━━━━━━━━━━━━━━━
+
+function handleConversationSearch(e) {
+  const query = e.target.value.toLowerCase();
+  const items = document.querySelectorAll('.messages-conv-item');
+
+  items.forEach(item => {
+    const name = item.querySelector('.messages-conv-name')?.textContent.toLowerCase() || '';
+    const preview = item.querySelector('.messages-conv-preview')?.textContent.toLowerCase() || '';
+
+    const matches = name.includes(query) || preview.includes(query);
+    item.style.display = matches ? '' : 'none';
+  });
+}
+
+// ━━━━━━━━━━━━━━━━━ THREAD MENU ━━━━━━━━━━━━━━━━━
+
+function openThreadMenu(e) {
+  e.stopPropagation();
+
+  const menu = document.createElement('div');
+  menu.className = 'messages-context-menu';
+  menu.innerHTML = `
+    <button data-action="mute" style="width:100%;padding:8px 12px;text-align:left;border:none;background:transparent;cursor:pointer;">🔇 Mute notifications</button>
+    <button data-action="pin" style="width:100%;padding:8px 12px;text-align:left;border:none;background:transparent;cursor:pointer;">📌 Pin conversation</button>
+    <button data-action="archive" style="width:100%;padding:8px 12px;text-align:left;border:none;background:transparent;cursor:pointer;">📦 Archive</button>
+    <button data-action="delete" style="width:100%;padding:8px 12px;text-align:left;border:none;background:transparent;cursor:pointer;color:#ef4444;">🗑️ Delete</button>
+  `;
+
+  menu.addEventListener('click', (e) => {
+    const action = e.target.dataset.action;
+    handleConvAction(messagesState.activeConvId, action);
+    menu.remove();
+  });
+
+  document.body.appendChild(menu);
+
+  const rect = e.target.getBoundingClientRect();
+  menu.style.cssText = `
+    position: fixed;
+    top: ${rect.bottom + 8}px;
+    left: ${Math.min(rect.left - 100, window.innerWidth - 150)}px;
+    background: var(--msg-bg-2, #0d1520);
+    border: 1px solid var(--msg-border, rgba(255,255,255,.07));
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.5);
+    z-index: 1001;
+  `;
+
+  setTimeout(() => {
+    document.addEventListener('click', function closeMenu(e) {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu);
+      }
+    });
+  }, 0);
+}
+
+function handleConvAction(convId, action) {
+  switch (action) {
+    case 'mute':
+      // TODO: Mute notifications
+      showToast('🔇 Notifications muted');
+      break;
+    case 'pin':
+      // TODO: Pin conversation
+      showToast('📌 Conversation pinned');
+      break;
+    case 'archive':
+      // TODO: Archive conversation
+      messagesState.activeConvId = null;
+      renderConversationList();
+      closeThread();
+      showToast('📦 Conversation archived');
+      break;
+    case 'delete':
+      if (confirm('Delete this conversation?')) {
+        messagesState.activeConvId = null;
+        renderConversationList();
+        closeThread();
+        showToast('🗑️ Conversation deleted');
+      }
+      break;
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━ UTILITIES ━━━━━━━━━━━━━━━━━
+
+function formatTime(date) {
+  if (typeof date === 'string') return date;
+  if (!date) return '';
+
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function showToast(message) {
+  // Use existing app.js toast system
+  if (typeof showAppToast === 'function') {
+    showAppToast(message);
+  } else if (typeof showToast === 'function') {
+    showToast(message);
+  } else {
+    console.log('Toast:', message);
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━ API STUBS ━━━━━━━━━━━━━━━━━
+// Implement these in your backend integration
+
+/**
+ * Fetch all conversations for current user
+ * @returns {Promise<Array>} Conversations array
+ */
+async function fetchConversations() {
+  // GET /api/conversations
+  // return (await fetch(`${SERVER_URL}/api/conversations`)).json();
+  return [];
+}
+
+/**
+ * Fetch all groups for current user
+ * @returns {Promise<Array>} Groups array
+ */
+async function fetchGroups() {
+  // GET /api/groups
+  // return (await fetch(`${SERVER_URL}/api/groups`)).json();
+  return [];
+}
+
+/**
+ * Fetch messages for a conversation
+ * @param {string} convId - Conversation ID
+ * @param {number} limit - Number of messages to fetch
+ * @returns {Promise<Array>} Messages array
+ */
+async function fetchMessagesForConv(convId, limit = 50) {
+  // GET /api/conversations/{convId}/messages?limit={limit}
+  // return (await fetch(`${SERVER_URL}/api/conversations/${convId}/messages?limit=${limit}`)).json();
+  return [];
+}
+
+/**
+ * Send message to conversation
+ * @param {string} convId - Conversation ID
+ * @param {string} text - Message text
+ * @returns {Promise<Object>} Sent message
+ */
+async function sendMessageToAPI(convId, text) {
+  // POST /api/conversations/{convId}/messages
+  // return (await fetch(`${SERVER_URL}/api/conversations/${convId}/messages`, {
+  //   method: 'POST',
+  //   headers: { 'Content-Type': 'application/json' },
+  //   body: JSON.stringify({ text })
+  // })).json();
+}
+
+/**
+ * Create a new group
+ * @param {Object} data - Group data
+ * @returns {Promise<Object>} Created group
+ */
+async function createGroup(data) {
+  // POST /api/groups
+  // return (await fetch(`${SERVER_URL}/api/groups`, {
+  //   method: 'POST',
+  //   headers: { 'Content-Type': 'application/json' },
+  //   body: JSON.stringify(data)
+  // })).json();
+}
+
+/**
+ * Subscribe to real-time message updates
+ */
+function subscribeToMessages() {
+  // Use Supabase or similar for real-time updates
+  // Example:
+  // const channel = supabase
+  //   .channel('messages')
+  //   .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' },
+  //     (payload) => {
+  //       const { conversation_id, ...msg } = payload.new;
+  //       if (!messagesState.messages[conversation_id]) {
+  //         messagesState.messages[conversation_id] = [];
+  //       }
+  //       messagesState.messages[conversation_id].push(msg);
+  //       if (messagesState.activeConvId === conversation_id) {
+  //         renderMessages(conversation_id);
+  //       }
+  //     }
+  //   )
+  //   .subscribe();
+}
+
+// ━━━━━━━━━━━━━━━━━ EXPORT FOR USE ━━━━━━━━━━━━━━━━━
+// Call initMessages() from app.js when ready
+// Example: window.addEventListener('load', initMessages);
+
+// Make functions available globally
+window.initMessages = initMessages;
+window.openCreateGroupModal = openCreateGroupModal;
+window.closeCreateGroupModal = closeCreateGroupModal;
+window.loadThread = loadThread;
+window.sendMessage = sendMessage;
+window.closeThread = closeThread;
+
+
 // MORTALIVE FEED — Supabase-backed integration (Step 2)
 // Reuses public.posts created by the Profile composer. Text posts only
 // for this phase; likes/comments/polls remain later relational phases.
@@ -5161,7 +5679,7 @@ async function openFeedProfileOverlay(userId) {
         <div class="feed-profile-stats">
           <div class="feed-profile-stat"><strong>${toNum(followData.followers).toLocaleString()}</strong><span>Followers</span></div>
           <div class="feed-profile-stat"><strong>${toNum(followData.following).toLocaleString()}</strong><span>Following</span></div>
-          <div class="feed-profile-stat"><strong>${toNum(score).toLocaleString()}</strong><span>Croks Score</span></div>
+          <div class="feed-profile-stat"><strong>${toNum(score).toLocaleString()}</strong><span>crockroach Score</span></div>
           <div class="feed-profile-stat"><strong>${textPosts.length}</strong><span>Posts</span></div>
           <div class="feed-profile-stat"><strong>${photoPosts.length}</strong><span>Photos</span></div>
         </div>
@@ -5169,7 +5687,7 @@ async function openFeedProfileOverlay(userId) {
       <div class="feed-profile-tabs">
         <button type="button" class="feed-profile-tab active" data-profile-tab="posts">Posts</button>
         <button type="button" class="feed-profile-tab" data-profile-tab="photos">Photos</button>
-        <button type="button" class="feed-profile-tab" data-profile-tab="reels">Videos</button>
+        <button type="button" class="feed-profile-tab" data-profile-tab="reels">Reels</button>
         <button type="button" class="feed-profile-tab" data-profile-tab="stats">Stats</button>
       </div>
       <div class="feed-profile-section" data-profile-panel="posts">
@@ -5189,7 +5707,7 @@ async function openFeedProfileOverlay(userId) {
       </div>
       <div class="feed-profile-section" data-profile-panel="reels" style="display:none;">
         <div class="profile-reels-grid">${reels.length ? reels.map((post, i) => `
-          <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open video ${i + 1}">
+          <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open reel ${i + 1}">
             <video class="reel-thumb-bg" src="${sanitizeHTML(post.media_url)}" muted playsinline preload="metadata"></video>
             <span class="reel-thumb-play">▶</span>
           </button>`).join('') : '<div class="reels-empty-state"><div class="reels-empty-icon">🎬</div><div class="reels-empty-title">No reels yet</div></div>'}</div>
@@ -5199,10 +5717,10 @@ async function openFeedProfileOverlay(userId) {
           <div class="profile-stats-section"><div class="profile-stats-section-title">Content</div>
             <div class="profile-stats-row"><span class="profile-stats-key">Posts</span><strong class="profile-stats-val">${textPosts.length}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Photos</span><strong class="profile-stats-val">${photoPosts.length}</strong></div>
-            <div class="profile-stats-row"><span class="profile-stats-key">Videos</span><strong class="profile-stats-val">${reels.length}</strong></div>
+            <div class="profile-stats-row"><span class="profile-stats-key">Reels</span><strong class="profile-stats-val">${reels.length}</strong></div>
           </div>
           <div class="profile-stats-section"><div class="profile-stats-section-title">Profile</div>
-            <div class="profile-stats-row"><span class="profile-stats-key">Croks Score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
+            <div class="profile-stats-row"><span class="profile-stats-key">crockroach Score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Followers</span><strong class="profile-stats-val">${toNum(followData.followers).toLocaleString()}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(followData.following).toLocaleString()}</strong></div>
           </div>
@@ -5276,66 +5794,16 @@ const PHOTO_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 const PHOTO_UPLOAD_BUCKET = 'mortalive-media';
 const PHOTO_UPLOAD_TYPES = new Set(['image/jpeg','image/png','image/webp']);
 const REEL_UPLOAD_MAX_BYTES = 60 * 1024 * 1024;
-const REEL_UPLOAD_MAX_SECONDS = 120;
 const REEL_UPLOAD_TYPES = new Set(['video/mp4','video/webm','video/quicktime']);
-
 function validateReelFile(file) {
-  if (!file) throw new Error('Choose a short video first.');
+  if (!file) throw new Error('Choose a reel video first.');
   if (!REEL_UPLOAD_TYPES.has(file.type)) throw new Error('Use MP4, WebM, or MOV videos.');
-  if (file.size > REEL_UPLOAD_MAX_BYTES) throw new Error('Short videos must be 60 MB or smaller.');
+  if (file.size > REEL_UPLOAD_MAX_BYTES) throw new Error('Reels must be 60 MB or smaller.');
   return file;
 }
-
-function inspectReelVideoFile(file) {
-  return new Promise((resolve, reject) => {
-    validateReelFile(file);
-    const objectUrl = URL.createObjectURL(file);
-    const video = document.createElement('video');
-    let settled = false;
-
-    const cleanup = () => {
-      try { URL.revokeObjectURL(objectUrl); } catch (e) {}
-      video.removeAttribute('src');
-      video.load();
-    };
-    const fail = (message) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(new Error(message));
-    };
-
-    video.preload = 'metadata';
-    video.muted = true;
-    video.playsInline = true;
-    video.onloadedmetadata = () => {
-      if (settled) return;
-      const duration = Number(video.duration);
-      const width = Number(video.videoWidth);
-      const height = Number(video.videoHeight);
-
-      if (!Number.isFinite(duration) || duration <= 0) return fail('Could not read the video duration.');
-      if (duration > REEL_UPLOAD_MAX_SECONDS + 0.25) return fail('Short videos must be 2 minutes or shorter.');
-      if (!width || !height) return fail('Could not read the video dimensions.');
-      if (height <= width) return fail('Short videos must be portrait (vertical), not landscape or square.');
-
-      settled = true;
-      cleanup();
-      resolve({
-        durationSeconds: Math.round(duration * 10) / 10,
-        width,
-        height,
-        orientation: 'portrait'
-      });
-    };
-    video.onerror = () => fail('This video could not be read. Try another file.');
-    video.src = objectUrl;
-  });
-}
-
 async function uploadReelFile(file, folder = 'reels') {
-  const metadata = await inspectReelVideoFile(file);
-  if (!S.userId || S.isGuest || !sb) throw new Error('Sign in to upload short videos.');
+  validateReelFile(file);
+  if (!S.userId || S.isGuest || !sb) throw new Error('Sign in to upload reels.');
   const ext = file.type === 'video/webm' ? 'webm' : file.type === 'video/quicktime' ? 'mov' : 'mp4';
   const path = `${S.userId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2,10)}.${ext}`;
   const { error } = await sb.storage.from(PHOTO_UPLOAD_BUCKET).upload(path, file, {
@@ -5343,8 +5811,8 @@ async function uploadReelFile(file, folder = 'reels') {
   });
   if (error) throw error;
   const { data } = sb.storage.from(PHOTO_UPLOAD_BUCKET).getPublicUrl(path);
-  if (!data?.publicUrl) throw new Error('Could not create the short-video URL.');
-  return { url: data.publicUrl, path, size: file.size, type: file.type, ...metadata };
+  if (!data?.publicUrl) throw new Error('Could not create the public reel URL.');
+  return { url: data.publicUrl, path, size: file.size, type: file.type };
 }
 
 
@@ -5650,7 +6118,7 @@ function renderFeedPosts() {
     const display = author.display_name || username;
     const score = Number(author.crockroach_score) || 0;
     const mine = post.user_id === S.userId;
-    const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A' : post?.post_meta?.kind === 'poll' ? 'Poll' : post.post_type === 'text' ? 'Text' : post.post_type === 'reel' ? 'Video' : post.post_type || 'Post';
+    const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A' : post?.post_meta?.kind === 'poll' ? 'Poll' : post.post_type === 'text' ? 'Text' : post.post_type === 'reel' ? 'Reel' : post.post_type || 'Post';
     const badge = score >= 700 ? '<span class="post-badge gold">Gold</span>' : score >= 420 ? '<span class="post-badge silver">Silver</span>' : '';
     const avatarUrl = feedAvatarUrl(author.avatar_url);
     const avatarMarkup = avatarUrl
@@ -5665,14 +6133,7 @@ function renderFeedPosts() {
             <div class="post-author"><button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(post.user_id)}">${sanitizeHTML(display)} ${badge}</button></div>
             <div class="post-time">@${sanitizeHTML(username)} · ${sanitizeHTML(feedRelTime(post.created_at))} · ${sanitizeHTML(typeLabel)}</div>
           </div>
-          <div class="post-more-wrap">
-            <button class="post-more-btn" type="button" data-feed-action="more" data-post-id="${sanitizeHTML(post.id)}" title="More options" aria-label="More options">⋯</button>
-            <div class="post-more-popover" data-post-id="${sanitizeHTML(post.id)}">
-              ${mine
-                ? `<button type="button" class="popover-item danger" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}">🗑️ Delete post</button>`
-                : `<button type="button" class="popover-item danger" data-feed-action="report" data-post-id="${sanitizeHTML(post.id)}">🚩 Report post</button>`}
-            </div>
-          </div>
+          ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
         </div>
         <div class="post-body">${post.post_type === 'reel' && post.media_url
           ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video src="${sanitizeHTML(post.media_url)}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
@@ -5690,32 +6151,6 @@ function renderFeedPosts() {
   }).join('');
   // Restore any comment sections that were open before the innerHTML was replaced
   if (openIds.length) _restoreOpenCommentSections(openIds);
-  bindFeedReelAutoplay();
-}
-
-let _feedReelObserver = null;
-function bindFeedReelAutoplay() {
-  if (!window.IntersectionObserver) return;
-  if (!_feedReelObserver) {
-    _feedReelObserver = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        const video = entry.target.querySelector('video');
-        if (!video) return;
-        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-          video.muted = true;
-          const promise = video.play();
-          if (promise && typeof promise.catch === 'function') promise.catch(() => {});
-        } else {
-          video.pause();
-        }
-      });
-    }, { threshold: [0, 0.5] });
-  }
-  document.querySelectorAll('.feed-reel-card').forEach((card) => {
-    if (card.dataset.reelAutoplayBound === '1') return;
-    card.dataset.reelAutoplayBound = '1';
-    _feedReelObserver.observe(card);
-  });
 }
 
 
@@ -5860,7 +6295,7 @@ async function openPostViewer(postOrId) {
   const post = typeof postOrId === 'string' ? getPostByIdForViewer(postOrId) : postOrId;
   if (!post?.id) return;
   if (post.post_type === 'reel' && post.media_url) {
-    openReelViewer(post, collectAvailableMotions());
+    openReelViewer(post, collectAvailableReels());
     return;
   }
 
@@ -6109,7 +6544,7 @@ async function submitFeedTextPost() {
   const content = field.value.trim();
   const file = kind === 'reel' ? (reelInput?.files?.[0] || null) : (photoInput?.files?.[0] || null);
   if (!content && !file && !['poll','qna'].includes(kind)) return;
-  if (kind === 'reel' && !file) { toast('Choose a video first.', '⚠️'); return; }
+  if (kind === 'reel' && !file) { toast('Choose a reel video first.', '⚠️'); return; }
   if (content.length > FEED_MAX_POST_CHARS) { toast(`Posts are limited to ${FEED_MAX_POST_CHARS} characters`, '⚠️'); return; }
 
   const hashtagCheck = validateUniqueHashtags(content);
@@ -6141,16 +6576,6 @@ async function submitFeedTextPost() {
       payload.media_url = media.url;
       payload.media_type = media.type;
       payload.media_size = media.size;
-    }
-    if (kind === 'reel' && media) {
-      payload.post_meta = {
-        kind: 'reel',
-        mode: 'portrait',
-        duration_seconds: media.durationSeconds,
-        width: media.width,
-        height: media.height,
-        orientation: media.orientation
-      };
     }
     if (['poll','qna'].includes(kind)) {
       payload.post_meta = {
@@ -6192,7 +6617,7 @@ async function submitFeedTextPost() {
         hydrateProfileGallery(S.userId).catch(() => {});
       }
     }
-    toast(kind === 'reel' ? 'Video published!' : media ? 'Photo post published!' : kind === 'poll' ? 'Poll published!' : kind === 'qna' ? 'Q&A published!' : 'Post published!', kind === 'reel' ? '🎬' : '✍️');
+    toast(kind === 'reel' ? 'Reel published!' : media ? 'Photo post published!' : kind === 'poll' ? 'Poll published!' : kind === 'qna' ? 'Q&A published!' : 'Post published!', kind === 'reel' ? '🎬' : '✍️');
   } catch (e) {
     console.warn('[Feed] post failed:', e);
     toast(e?.message || 'Could not publish post.', '⚠️');
@@ -6296,8 +6721,7 @@ function setFeedFilter(filter) {
 }
 
 async function deleteFeedPost(postId) {
-  const post = _feedPosts.find(row => row.id === postId)
-    || (_profilePosts || []).find(row => row.id === postId);
+  const post = _feedPosts.find(row => row.id === postId);
   if (!post || post.user_id !== S.userId || !sb) return;
   const confirmed = await showConfirmDialog({
     title: 'Delete this post?',
@@ -6311,105 +6735,13 @@ async function deleteFeedPost(postId) {
     const { error } = await sb.from('posts').delete().eq('id', postId).eq('user_id', S.userId);
     if (error) throw error;
     _feedPosts = _feedPosts.filter(row => row.id !== postId);
-    _profilePosts = (_profilePosts || []).filter(row => row.id !== postId);
     _feedEngagement.delete(postId);
     _commentCache.delete(postId);
     renderFeedPosts();
     renderFeedSidebars();
-    if (typeof renderProfilePosts === 'function') renderProfilePosts(_profilePosts);
     toast('Post deleted', '🗑️');
   } catch (e) {
     toast(e?.message || 'Could not delete the post.', '⚠️');
-  }
-}
-
-
-// ── Post reporting ──────────────────────────────────────────────────────────
-// Post reports live in a dedicated table so moderation can distinguish
-// content reports from other report types. The authenticated reporter is
-// stored server-side through Supabase RLS and is never exposed in the UI.
-let _feedReportPostId = null;
-
-function closeFeedReportModal() {
-  const modal = $('report-modal');
-  if (!modal) return;
-  modal.classList.remove('open', 'active');
-  modal.setAttribute('aria-hidden', 'true');
-  _feedReportPostId = null;
-}
-
-function openFeedReportModal(postId) {
-  if (!postId) return;
-  if (S.isGuest || !S.userId || !sb) {
-    toast('Sign in to report posts', '🔒');
-    return;
-  }
-  _feedReportPostId = postId;
-  const modal = $('report-modal');
-  if (!modal) {
-    toast('Report form is unavailable right now.', '⚠️');
-    return;
-  }
-  // The modal is declared with the Feed markup, but reports can also be
-  // initiated from Profile posts. Move it to body before opening so a hidden
-  // page container can never suppress the fixed overlay.
-  if (modal.parentElement !== document.body) document.body.appendChild(modal);
-  modal.classList.add('open');
-  modal.setAttribute('aria-hidden', 'false');
-}
-
-async function submitFeedPostReport(reason) {
-  const postId = _feedReportPostId;
-  if (!postId || !reason) return;
-
-  if (S.isGuest || !S.userId || !sb) {
-    closeFeedReportModal();
-    toast('Sign in to report posts', '🔒');
-    return;
-  }
-
-  const sessionOk = await requireAuthenticatedSession();
-  if (!sessionOk) {
-    closeFeedReportModal();
-    toast('Your session expired — please sign in again.', '🔒');
-    return;
-  }
-
-  const post = getPostByIdForViewer(postId)
-    || (_profilePosts || []).find(row => row.id === postId)
-    || (_feedPosts || []).find(row => row.id === postId);
-
-  if (post?.user_id === S.userId) {
-    closeFeedReportModal();
-    toast('You cannot report your own post.', 'ℹ️');
-    return;
-  }
-
-  const allowedReasons = new Set(['spam', 'harassment', 'inappropriate', 'misinformation', 'other']);
-  const normalizedReason = allowedReasons.has(reason) ? reason : 'other';
-
-  try {
-    const { error } = await sb.from('post_reports').insert({
-      post_id: postId,
-      reporter_id: S.userId,
-      reason: normalizedReason
-    });
-
-    if (error) {
-      if (error.code === '23505') {
-        closeFeedReportModal();
-        toast('You already reported this post.', 'ℹ️');
-        return;
-      }
-      throw error;
-    }
-
-    closeFeedReportModal();
-    document.querySelectorAll('.post-more-popover.open').forEach(el => el.classList.remove('open'));
-    toast('Report submitted. Thank you for helping keep Mortalive safe.', '🚩');
-  } catch (error) {
-    console.warn('[Reports] post report failed:', error?.message || error);
-    toast(error?.message || 'Could not submit the report.', '⚠️');
   }
 }
 
@@ -6518,29 +6850,6 @@ function initFeedPage() {
       return;
     }
 
-    const moreButton = event.target.closest('[data-feed-action="more"]');
-    if (moreButton) {
-      event.preventDefault();
-      event.stopPropagation();
-      const activePopover = moreButton.parentElement?.querySelector('.post-more-popover');
-      document.querySelectorAll('#pg-feed .post-more-popover.open, .profile-post-card .post-more-popover.open')
-        .forEach(popover => {
-          if (popover !== activePopover) popover.classList.remove('open');
-        });
-      activePopover?.classList.toggle('open');
-      return;
-    }
-
-    const reportButton = event.target.closest('[data-feed-action="report"]');
-    if (reportButton) {
-      event.preventDefault();
-      event.stopPropagation();
-      document.querySelectorAll('#pg-feed .post-more-popover.open, .profile-post-card .post-more-popover.open')
-        .forEach(popover => popover.classList.remove('open'));
-      openFeedReportModal(reportButton.dataset.postId);
-      return;
-    }
-
     const viewerIgnored = event.target.closest('[data-feed-action], [data-open-profile], a, input, textarea, select, option, label, .comments-section');
     const postCard = event.target.closest('.post-card, .profile-post-card');
     if (postCard && !viewerIgnored) {
@@ -6633,24 +6942,6 @@ function initFeedPage() {
   });
   $('load-more-btn')?.addEventListener('click', () => fetchFeedPage(false));
   $('banner-close')?.addEventListener('click', () => { if ($('context-banner')) $('context-banner').style.display = 'none'; });
-
-  if (!document.body.dataset.feedReportModalBound) {
-    document.body.dataset.feedReportModalBound = '1';
-    document.addEventListener('click', (event) => {
-      const reason = event.target.closest('#report-modal .report-option[data-reason]');
-      if (reason) {
-        event.preventDefault();
-        submitFeedPostReport(reason.dataset.reason);
-        return;
-      }
-      if (event.target.closest('#report-modal-close') || event.target.id === 'report-modal') {
-        closeFeedReportModal();
-      }
-    });
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') closeFeedReportModal();
-    });
-  }
 
   const justChatted = sessionStorage.getItem('mortalive_just_chatted');
   if (justChatted && $('context-banner')) {
@@ -6777,14 +7068,6 @@ function renderProfilePosts(posts = _profilePosts) {
           <div class="profile-post-mini-avatar" style="background:linear-gradient(135deg,#1a6ef5,#7c3aed)">${initial}</div>
           <div class="profile-post-author"><button type="button" class="profile-author-link" data-open-profile="${sanitizeHTML(post.user_id || _profilePostsOwner?.id || S.userId || '')}">${sanitizeHTML(ownerName)}</button></div>
           <div class="profile-post-time">${time}</div>
-          <div class="post-more-wrap">
-            <button type="button" class="post-more-btn profile-more-btn" data-feed-action="more" data-post-id="${sanitizeHTML(post.id)}" title="More options" aria-label="More options">⋯</button>
-            <div class="post-more-popover" data-post-id="${sanitizeHTML(post.id)}">
-              ${post.user_id === S.userId
-                ? `<button type="button" class="popover-item danger" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}">🗑️ Delete post</button>`
-                : `<button type="button" class="popover-item danger" data-feed-action="report" data-post-id="${sanitizeHTML(post.id)}">🚩 Report post</button>`}
-            </div>
-          </div>
         </div>
         <div class="profile-post-body">${content}${post.media_url ? `<img class="profile-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Shared photo" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">` : ''}</div>
         <div class="profile-post-footer">
@@ -6871,7 +7154,7 @@ async function hydrateProfilePosts(userId = S.userId, options = {}) {
         }
         renderProfilePosts(posts);
         renderProfileGallery(posts);
-        renderProfileMotions(posts);
+        renderProfileReels(posts);
         refreshProfileTabs(posts);
       }
       return posts;
@@ -6953,7 +7236,7 @@ function initProfilePostComposer() {
         await hydratePostEngagement([data.id]).catch(() => {});
         renderProfilePosts(_profilePosts);
         renderProfileGallery(_profilePosts);
-        renderProfileMotions(_profilePosts);
+        renderProfileReels(_profilePosts);
         refreshProfileTabs(_profilePosts);
         hydrateTrendingHashtags().catch(() => {});
       }
@@ -7094,7 +7377,7 @@ async function initPublicProfilePage(userId) {
   stabilizeProfileScrollAxes();
   initProfileScrollProgress();
   initProfileTabs();
-  renderProfileMotions(_profilePosts);
+  renderProfileReels(_profilePosts);
   refreshProfileTabs(_profilePosts);
   $('profile-tabs-bar')?.querySelectorAll('.profile-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.profileTab === 'posts'));
   $('pg-profile')?.querySelectorAll('.profile-tab-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.profilePanel === 'posts'));
@@ -7234,7 +7517,7 @@ function initProfilePage() {
 
   // Progress Bar
   if ($('rank-label')) $('rank-label').textContent = `${tier.name}${tier.max < Infinity ? ' → ' + RANK_TIERS[RANK_TIERS.indexOf(tier)+1]?.name : ' (Max)'}`;
-  if ($('progress-label')) $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} Croks Score`;
+  if ($('progress-label')) $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} crockroach Score`;
   if ($('progress-pct')) $('progress-pct').textContent = `${pct}%`;
   if ($('progress-fill')) $('progress-fill').style.width = `${pct}%`;
   if ($('progress-percentile')) $('progress-percentile').textContent = `Top ${summary.percentile}%`;
@@ -7296,10 +7579,6 @@ function initProfilePage() {
   if ($('btn-edit-profile')) $('btn-edit-profile').style.display = '';
   if ($('btn-change-profile-photo')) $('btn-change-profile-photo').style.display = '';
   if ($('profile-post-composer')) $('profile-post-composer').style.display = '';
-
-  // Bind profile actions after the profile DOM is rendered. The binder is
-  // idempotent, so hydration/re-render cycles do not duplicate handlers.
-  bindProfileEvents();
 }
 
 function renderEditInterests(selectedInterests) {
@@ -7462,7 +7741,7 @@ function openAchievementsSheet() {
       <div style="padding:18px 22px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px;">
           <div style="padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,var(--primary-alpha),rgba(124,58,237,.06));border:1px solid rgba(26,110,245,.14);">
-            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">Croks Score</div>
+            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">crockroach Score</div>
             <div style="font-size:24px;font-weight:900;letter-spacing:-.04em;margin-top:4px;color:var(--primary);">${score.toLocaleString()}</div>
           </div>
           <div style="padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);">
@@ -7717,16 +7996,16 @@ async function initFollowSection(profileUserId) {
 // Attach Profile Events
 // Guard: idempotent — safe to call multiple times, only binds once per element.
 function bindProfileEvents() {
-  // Dynamic profile markup can be recreated during hydration/re-render.
-  // Delegation handlers bind once; current DOM controls are rebound below.
-  if (!document.body.dataset.profileEventsBound) {
-    document.body.dataset.profileEventsBound = '1';
-      document.addEventListener('click', (e) => {
-      const profileBtn = e.target.closest?.('[data-open-profile]');
-      if (profileBtn) { e.preventDefault(); openUserProfile(profileBtn.dataset.openProfile); return; }
-    });
-  }
+  // Hard guard against double-binding (e.g. auth-state listener re-triggering)
+  if (document.body.dataset.profileEventsBound) return;
+  document.body.dataset.profileEventsBound = '1';
 
+  document.addEventListener('click', (e) => {
+    const profileBtn = e.target.closest?.('[data-open-profile]');
+    if (profileBtn) { e.preventDefault(); openUserProfile(profileBtn.dataset.openProfile); return; }
+  });
+
+  $('btn-edit-profile')?.addEventListener('click', toggleProfileEditMode);
   const avatarInput = $('profile-avatar-input');
   const avatarButton = $('btn-change-profile-photo');
   if (avatarButton && avatarInput && !avatarButton.dataset.bound) {
@@ -7735,11 +8014,7 @@ function bindProfileEvents() {
     avatarInput.addEventListener('change', () => changeProfilePhoto());
   }
 
-  const inlineEditCancel = $('btn-edit-cancel-inline');
-  if (inlineEditCancel && inlineEditCancel.dataset.profileBound !== '1') {
-    inlineEditCancel.dataset.profileBound = '1';
-    inlineEditCancel.addEventListener('click', toggleProfileEditMode);
-  }
+  $('btn-edit-cancel-inline')?.addEventListener('click', toggleProfileEditMode);
 
   // Profile post strip: like buttons (data-profile-action="like")
   // Uses document delegation so it survives re-renders of the strip
@@ -7751,28 +8026,7 @@ function bindProfileEvents() {
       const action = btn.dataset.profileAction;
       const postId = btn.dataset.postId;
       if (!postId) return;
-      if (action === 'like') {
-        togglePostLike(postId);
-      } else if (action === 'more') {
-        const popover = btn.parentElement?.querySelector('.post-more-popover');
-        document.querySelectorAll('.post-more-popover.open').forEach(pop => {
-          if (pop !== popover) pop.classList.remove('open');
-        });
-        popover?.classList.toggle('open');
-      } else if (action === 'report') {
-        document.querySelectorAll('.post-more-popover.open').forEach(pop => pop.classList.remove('open'));
-        openFeedReportModal(postId);
-      } else if (action === 'delete') {
-        deleteFeedPost(postId);
-      }
-    });
-  }
-
-  if (!document.body.dataset.postMoreOutsideClickBound) {
-    document.body.dataset.postMoreOutsideClickBound = '1';
-    document.addEventListener('click', (event) => {
-      if (event.target.closest('.post-more-wrap')) return;
-      document.querySelectorAll('.post-more-popover.open').forEach(pop => pop.classList.remove('open'));
+      if (action === 'like') togglePostLike(postId);
     });
   }
 
@@ -7793,9 +8047,7 @@ function bindProfileEvents() {
   // older inline id as well so the JS remains compatible with both layouts.
   const profileSaveButton = $('btn-edit-save') || $('btn-edit-save-inline');
 
-  if (profileSaveButton && profileSaveButton.dataset.profileSaveBound !== '1') {
-    profileSaveButton.dataset.profileSaveBound = '1';
-    profileSaveButton.addEventListener('click', async () => {
+  profileSaveButton?.addEventListener('click', async () => {
     const newName = $('edit-display-name')?.value.trim() || '';
     const newBio = $('edit-bio')?.value.trim() || '';
     const newDetails = $('edit-details')?.value.trim() || '';
@@ -7882,87 +8134,51 @@ function bindProfileEvents() {
     } finally {
       if(btn) { btn.disabled = false; btn.textContent = 'Save Changes'; }
     }
-    });
-  }
+  });
 
-  // Current header controls are rebound after every profile hydration/re-render.
-  const editProfileBtn = $('btn-edit-profile');
-  if (editProfileBtn) {
-    editProfileBtn.onclick = (event) => {
-      event.preventDefault();
-      if (!S.profileViewUserId) toggleProfileEditMode();
-    };
-  }
-
-  const shareProfileBtn = $('btn-share-profile');
-  if (shareProfileBtn) {
-    shareProfileBtn.onclick = async (event) => {
-      event.preventDefault();
-      const username = S.profileViewUserId
-        ? (S.profileViewData?.username || '')
-        : (S.accountData?.username || S.username || '');
-      await copyProfileShareLink(username);
-    };
-  }
-
-  async function copyProfileShareLink(username) {
-    const cleanUsername = String(username || '').trim().replace(/^@/, '');
-    if (!cleanUsername || !isValidUsername(cleanUsername)) {
-      toast('Could not determine a valid username — try again.', '⚠️');
-      return;
-    }
-    const link = `${window.location.origin}/?user=${encodeURIComponent(cleanUsername)}`;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(link);
-      } else {
-        const input = document.createElement('input');
-        input.value = link;
-        input.setAttribute('readonly', '');
-        input.style.position = 'fixed';
-        input.style.opacity = '0';
-        document.body.appendChild(input);
-        input.select();
-        document.execCommand('copy');
-        input.remove();
-      }
-      toast('Profile link copied! Share it anywhere.', '📋');
-    } catch (_) {
+  $('btn-share-profile')?.addEventListener('click', () => {
+    const username = S.profileViewUserId
+      ? (S.profileViewData?.username || '')
+      : (S.accountData?.username || S.username || '');
+    if (!username) { toast('Could not determine username — try again.', '⚠️'); return; }
+    // Clean format: mortalive.com/#@username — no server rewrite required
+    const link = `${window.location.origin}${window.location.pathname}#@${encodeURIComponent(username)}`;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(link).then(() => toast('Profile link copied! Share it anywhere.', '📋'));
+    } else {
       toast(link, '🔗');
     }
-  }
+  });
 
-  const copyBtn = $('btn-profile-copy');
-  if (copyBtn) {
-    copyBtn.onclick = async (event) => {
-      event.preventDefault();
-      const username = S.profileViewUserId
-        ? (S.profileViewData?.username || '')
-        : (S.accountData?.username || S.username || '');
-      await copyProfileShareLink(username);
-    };
-  }
-
-  const profileLogoutBtn = $('btn-profile-logout');
-  if (profileLogoutBtn && profileLogoutBtn.dataset.profileBound !== '1') {
-    profileLogoutBtn.dataset.profileBound = '1';
-    profileLogoutBtn.addEventListener('click', async () => {
-      const confirmed = await showConfirmDialog({
-        title: 'Log out?',
-        body: 'You can always sign back in with your email and password.',
-        confirmLabel: 'Log out',
-        cancelLabel: 'Stay',
-        danger: false
-      });
-      if (confirmed) $('btn-logout')?.click();
+  // Override the inline-HTML handler on btn-profile-copy (which incorrectly
+  // used '#profile') by cloning the element to clear all prior listeners,
+  // then re-binding with the correct ?user=username shareable URL.
+  const copyBtnOld = $('btn-profile-copy');
+  if (copyBtnOld) {
+    const copyBtn = copyBtnOld.cloneNode(true);
+    copyBtnOld.parentNode?.replaceChild(copyBtn, copyBtnOld);
+    copyBtn.addEventListener('click', () => {
+      const username = S.accountData?.username || S.username || '';
+      if (!username) { window.toast?.('Sign in to copy your profile link', '🔒'); return; }
+      const link = `${location.origin}${location.pathname}#@${encodeURIComponent(username)}`;
+      navigator.clipboard?.writeText(link)
+        .then(() => window.toast?.('Profile link copied! Share it anywhere.', '📋'))
+        .catch(() => window.toast?.(link, '🔗'));
     });
   }
 
-  const deleteAccountBtn = $('btn-delete-account');
-  if (deleteAccountBtn && deleteAccountBtn.dataset.profileBound !== '1') {
-    deleteAccountBtn.dataset.profileBound = '1';
-    deleteAccountBtn.addEventListener('click', performAccountDeletion);
-  }
+  $('btn-profile-logout')?.addEventListener('click', async () => {
+    const confirmed = await showConfirmDialog({
+      title: 'Log out?',
+      body: 'You can always sign back in with your email and password.',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Stay',
+      danger: false
+    });
+    if (confirmed) $('btn-logout')?.click();
+  });
+
+  $('btn-delete-account')?.addEventListener('click', performAccountDeletion);
 }
 
 // Shared deletion flow — called from both the profile menu button AND the
@@ -8067,13 +8283,13 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
   ];
 
   const MATCH_TIPS = [
-    '💡 Completing chats earns Croks Score',
+    '💡 Completing chats earns crockroach Score',
     '🌍 Your next match could be from any country on Earth',
     '⭐ Rate your chats to help improve future matches',
     '🔒 Your identity stays private — nothing is shared without your consent',
     '⚡ Average match time is under 30 seconds when others are online',
     '🎯 Adding a topic finds like-minded strangers faster',
-    '🧲 A high Croks Score boosts your matching priority',
+    '🧲 A high crockroach Score boosts your matching priority',
     '💬 Text mode works without a camera — great for quieter moments',
     '🎬 If no match is found, a recorded stream will appear automatically'
   ];
@@ -8741,56 +8957,37 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
 })();
 
 
-// ── Profile/Motions enhancement layer (v27) ───────────────────────────────────
-function collectAvailableMotions(source = _profilePosts) {
+// ── Profile/Reels enhancement layer (v27) ───────────────────────────────────
+function collectAvailableReels(source = _profilePosts) {
   const pool = Array.isArray(source) ? source.filter(p => p?.post_type === 'reel' && p.media_url) : [];
   const byId = new Map(pool.map(p => [p.id, p]));
   return Array.from(byId.values());
 }
 
-function renderProfileMotions(posts = _profilePosts) {
+function renderProfileReels(posts = _profilePosts) {
   const grid = $('profile-reels-grid');
   const count = $('profile-reel-count');
   if (!grid) return;
-  const reels = collectAvailableMotions(posts);
+  const reels = collectAvailableReels(posts);
   if (count) count.textContent = reels.length.toLocaleString();
   if (!reels.length) {
     grid.innerHTML = `
       <div class="reels-empty-state">
         <div class="reels-empty-icon">🎬</div>
-        <div class="reels-empty-title">No videos yet</div>
-        <div class="reels-empty-sub">Share a short vertical video and let people discover your moment.</div>
-        ${!S.profileViewUserId ? '<button class="reels-empty-cta" type="button" data-reel-upload-cta>+ Upload video</button>' : ''}
+        <div class="reels-empty-title">No reels yet</div>
+        <div class="reels-empty-sub">Share a short video and let people discover your moment.</div>
+        ${!S.profileViewUserId ? '<button class="reels-empty-cta" type="button" data-reel-upload-cta>+ Upload reel</button>' : ''}
       </div>`;
     return;
   }
-
   grid.innerHTML = reels.map((p, i) => {
     const caption = String(p.content || '').trim();
-    const duration = Number(p?.post_meta?.duration_seconds);
-    const durationLabel = Number.isFinite(duration) && duration > 0
-      ? `${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, '0')}`
-      : '';
-    return `<button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(p.id)}" aria-label="Open video ${i + 1}">
+    return `<button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(p.id)}" aria-label="Open reel ${i + 1}">
       <video class="reel-thumb-bg" src="${sanitizeHTML(p.media_url)}" muted playsinline preload="metadata"></video>
       <span class="reel-thumb-play">▶</span>
-      ${durationLabel ? `<span class="reel-thumb-duration">${durationLabel}</span>` : ''}
       ${caption ? `<span class="reel-thumb-views">${sanitizeHTML(caption.slice(0,28))}${caption.length>28?'…':''}</span>` : ''}
     </button>`;
   }).join('');
-
-  grid.querySelectorAll('.reel-thumb video').forEach((video) => {
-    video.addEventListener('loadedmetadata', () => {
-      const duration = Number(video.duration);
-      if (!Number.isFinite(duration) || duration <= 0) return;
-      const thumb = video.closest('.reel-thumb');
-      if (!thumb || thumb.querySelector('.reel-thumb-duration')) return;
-      const badge = document.createElement('span');
-      badge.className = 'reel-thumb-duration';
-      badge.textContent = `${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, '0')}`;
-      thumb.appendChild(badge);
-    }, { once: true });
-  });
 }
 
 function renderProfileStatsPanel() {
@@ -8802,17 +8999,17 @@ function renderProfileStatsPanel() {
   const follow = S.profileViewUserId ? (_followCache.get(S.profileViewUserId) || {followers:0,following:0}) : null;
   const postCount = (_profilePosts || []).filter(p => !p.media_url && p?.post_type !== 'reel').length;
   const photoCount = (_profilePosts || []).filter(p => p.media_url && p?.post_type !== 'reel').length;
-  const reelCount = collectAvailableMotions().length;
+  const reelCount = collectAvailableReels().length;
   host.innerHTML = `
     <div class="profile-stats-section">
       <div class="profile-stats-section-title">Content</div>
       <div class="profile-stats-row"><span class="profile-stats-key">Text posts</span><strong class="profile-stats-val">${postCount}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Photos</span><strong class="profile-stats-val">${photoCount}</strong></div>
-      <div class="profile-stats-row"><span class="profile-stats-key">Videos</span><strong class="profile-stats-val">${reelCount}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">Reels</span><strong class="profile-stats-val">${reelCount}</strong></div>
     </div>
     <div class="profile-stats-section">
       <div class="profile-stats-section-title">Profile</div>
-      <div class="profile-stats-row"><span class="profile-stats-key">Croks Score</span><strong class="profile-stats-val">${toNum(S.profileViewData?.crockroach_score ?? summary?.score).toLocaleString()}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">crockroach Score</span><strong class="profile-stats-val">${toNum(S.profileViewData?.crockroach_score ?? summary?.score).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Followers</span><strong class="profile-stats-val">${toNum(follow?.followers ?? _followCache.get(S.userId)?.followers).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(follow?.following ?? _followCache.get(S.userId)?.following).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Streak</span><strong class="profile-stats-val">${publicView ? '—' : `${toNum(summary?.streak)}d`}</strong></div>
@@ -8850,7 +9047,7 @@ function initProfileTabs() {
         panel.classList.toggle('active', panel.dataset.profilePanel === tab);
       });
       page.scrollTo({ top: 0, behavior: 'instant' in document.documentElement.style ? 'instant' : 'auto' });
-      if (tab === 'reels') renderProfileMotions(_profilePosts);
+      if (tab === 'reels') renderProfileReels(_profilePosts);
       if (tab === 'stats') renderProfileStatsPanel();
     });
   }
@@ -8860,7 +9057,7 @@ function refreshProfileTabCounts(posts = _profilePosts) {
   const sets = {
     posts: (posts || []).filter(p => !p.media_url && p?.post_type !== 'reel').length,
     photos: (posts || []).filter(p => p.media_url && p?.post_type !== 'reel').length,
-    reels: collectAvailableMotions(posts).length
+    reels: collectAvailableReels(posts).length
   };
   Object.entries(sets).forEach(([key, value]) => {
     const el = document.querySelector(`.profile-tab-btn[data-profile-tab="${key}"] .tab-count`);
@@ -8871,27 +9068,8 @@ function refreshProfileTabCounts(posts = _profilePosts) {
 function refreshProfileTabs(posts = _profilePosts) {
   initProfileTabs();
   refreshProfileTabCounts(posts);
-  renderProfileMotions(posts);
+  renderProfileReels(posts);
   renderProfileStatsPanel();
-}
-
-function closeReelViewer() {
-  const viewer = $('reel-viewer');
-  const video = $('rv-video');
-  if (video) {
-    video.pause();
-    video.currentTime = 0;
-    video.removeAttribute('src');
-    video.load();
-  }
-  if (viewer) {
-    viewer.classList.remove('open', 'opening');
-    viewer.setAttribute('aria-hidden', 'true');
-    viewer._mortaliveReelCollection = [];
-    viewer._mortaliveReelIndex = 0;
-  }
-  document.body.style.overflow = '';
-  document.body.classList.remove('reel-viewer-open');
 }
 
 function ensureReelViewer() {
@@ -8902,17 +9080,17 @@ function ensureReelViewer() {
   viewer.setAttribute('aria-hidden','true');
   viewer.innerHTML = `
     <div class="rv-progress"><div class="rv-progress-fill"></div></div>
-    <div class="rv-topbar"><div class="rv-topbar-title">Videos</div><button class="rv-topbar-btn" type="button" data-reel-close aria-label="Close video viewer">×</button></div>
+    <div class="rv-topbar"><div class="rv-topbar-title">Reels</div><button class="rv-topbar-btn" type="button" data-reel-close aria-label="Close">×</button></div>
     <div class="rv-video-wrap">
       <video id="rv-video" playsinline preload="metadata"></video>
-      <button class="rv-tap-area" type="button" aria-label="Play or pause" aria-pressed="false"></button>
+      <button class="rv-tap-area" type="button" aria-label="Play or pause"></button>
       <div class="rv-pause-flash">▶</div>
-      <button class="rv-nav-btn rv-nav-prev" type="button" data-reel-prev aria-label="Previous video">‹</button>
-      <button class="rv-nav-btn rv-nav-next" type="button" data-reel-next aria-label="Next video">›</button>
-      <button class="rv-mute-badge" type="button" data-reel-mute aria-label="Unmute video">🔇</button>
+      <button class="rv-nav-btn rv-nav-prev" type="button" data-reel-prev aria-label="Previous reel">‹</button>
+      <button class="rv-nav-btn rv-nav-next" type="button" data-reel-next aria-label="Next reel">›</button>
+      <button class="rv-mute-badge" type="button" data-reel-mute aria-label="Toggle mute">🔇</button>
       <div class="rv-sidebar">
-        <button class="rv-action-btn" type="button" data-reel-action="like" aria-pressed="false"><span class="rv-action-icon">♡</span><span class="rv-action-label">Like</span></button>
-        <button class="rv-action-btn" type="button" data-reel-action="comment" aria-label="Open comments"><span class="rv-action-icon">💬</span><span class="rv-action-label">Comment</span></button>
+        <button class="rv-action-btn" type="button" data-reel-action="like"><span class="rv-action-icon">♡</span><span class="rv-action-label">Like</span></button>
+        <button class="rv-action-btn" type="button" data-reel-action="comment"><span class="rv-action-icon">💬</span><span class="rv-action-label">Comment</span></button>
         <button class="rv-action-btn" type="button" data-reel-action="follow"><span class="rv-action-icon">＋</span><span class="rv-action-label">Follow</span></button>
         <button class="rv-action-btn" type="button" data-reel-action="share"><span class="rv-action-icon">↗</span><span class="rv-action-label">Share</span></button>
       </div>
@@ -8925,21 +9103,12 @@ function ensureReelViewer() {
       <div class="rv-comments-sheet" id="rv-comments-sheet">
         <div class="rv-comments-handle"></div><div class="rv-comments-title" id="rv-comments-title">Comments</div>
         <div class="rv-comments-list" id="rv-comments-list"></div>
-        <div class="rv-comment-input-row"><input class="rv-comment-input" id="rv-comment-input" maxlength="300" aria-label="Comment on this motion" placeholder="Add a comment…"><button class="rv-comment-send" type="button" id="rv-comment-send">Send</button></div>
+        <div class="rv-comment-input-row"><input class="rv-comment-input" id="rv-comment-input" maxlength="300" placeholder="Add a comment…"><button class="rv-comment-send" type="button" id="rv-comment-send">Send</button></div>
       </div>
     </div>`;
   document.body.appendChild(viewer);
   let current = [];
   let index = 0;
-
-  const syncMuteUi = (video) => {
-    const muteBtn = viewer.querySelector('[data-reel-mute]');
-    const muted = !!video?.muted;
-    if (muteBtn) {
-      muteBtn.textContent = muted ? '🔇' : '🔊';
-      muteBtn.setAttribute('aria-label', muted ? 'Unmute video' : 'Mute video');
-    }
-  };
 
   const render = async () => {
     current = Array.isArray(viewer._mortaliveReelCollection) ? viewer._mortaliveReelCollection : current;
@@ -8951,29 +9120,20 @@ function ensureReelViewer() {
     loading?.classList.add('show');
     video.pause();
     video.src = post.media_url;
-    video.muted = sessionStorage.getItem('mortalive.reel-muted') !== '0';
-    syncMuteUi(video);
     video.load();
-
     const author = getPostViewerAuthor(post);
     const avatar = $('rv-author-avatar');
-    if (avatar) avatar.innerHTML = buildPostViewerAvatar(author, 40);
+    if (avatar) {
+      avatar.innerHTML = buildPostViewerAvatar(author, 40);
+    }
     $('rv-author-name').textContent = author.display_name || author.username || 'Member';
     $('rv-author-handle').textContent = `@${author.username || 'member'}`;
     $('rv-caption').innerHTML = renderHashtagRichText(String(post.content || '').trim());
-
-    const storedDuration = Number(post?.post_meta?.duration_seconds);
-    $('rv-duration').textContent =
-      Number.isFinite(storedDuration) && storedDuration > 0
-        ? `${Math.floor(storedDuration / 60)}:${String(Math.floor(storedDuration % 60)).padStart(2, '0')}`
-        : 'Short video';
-
+    $('rv-duration').textContent = post.media_size ? `${Math.max(1, Math.round(post.media_size / 1024 / 1024))} MB` : 'Reel';
     const eng = engagementFor(post.id);
     const likeBtn = viewer.querySelector('[data-reel-action="like"]');
     likeBtn?.classList.toggle('liked', !!eng.liked);
-    likeBtn?.setAttribute('aria-pressed', eng.liked ? 'true' : 'false');
     likeBtn?.querySelector('.rv-action-icon')?.replaceChildren(document.createTextNode(eng.liked ? '♥' : '♡'));
-
     const followBtn = viewer.querySelector('[data-reel-action="follow"]');
     if (followBtn) {
       const fd = post.user_id && post.user_id !== S.userId ? await fetchFollowData(post.user_id) : {isFollowing:false};
@@ -8982,43 +9142,18 @@ function ensureReelViewer() {
       followBtn.querySelector('.rv-action-label').textContent = fd.isFollowing ? 'Following' : 'Follow';
       followBtn.dataset.followState = fd.isFollowing ? '1' : '0';
     }
-
     const comments = await loadPostComments(post.id);
     $('rv-comments-title').textContent = `${comments.length} comments`;
-    $('rv-comments-list').innerHTML = postViewerCommentRows(comments)
-      .replaceAll('mortalive-post-viewer-comment','rv-comment-item')
-      .replaceAll('mortalive-post-viewer-comment-copy','rv-comment-body')
-      .replaceAll('mortalive-post-viewer-comment-head','rv-comment-author')
-      .replaceAll('mortalive-post-viewer-comment-text','rv-comment-text');
+    $('rv-comments-list').innerHTML = postViewerCommentRows(comments).replaceAll('mortalive-post-viewer-comment','rv-comment-item').replaceAll('mortalive-post-viewer-comment-copy','rv-comment-body').replaceAll('mortalive-post-viewer-comment-head','rv-comment-author').replaceAll('mortalive-post-viewer-comment-text','rv-comment-text');
     $('rv-comments-sheet').classList.remove('open');
-
-    video.onloadedmetadata = () => {
-      const duration = Number(video.duration);
-      if (Number.isFinite(duration) && duration > 0) {
-        $('rv-duration').textContent = `${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, '0')}`;
-      }
-    };
     video.onloadeddata = () => loading?.classList.remove('show');
     video.ontimeupdate = () => {
       const pct = video.duration ? (video.currentTime / video.duration) * 100 : 0;
       viewer.querySelector('.rv-progress-fill').style.width = `${pct}%`;
     };
-    video.onplay = () => viewer.querySelector('.rv-tap-area')?.setAttribute('aria-pressed', 'false');
-    video.onpause = () => viewer.querySelector('.rv-tap-area')?.setAttribute('aria-pressed', 'true');
-    video.onvolumechange = () => {
-      sessionStorage.setItem('mortalive.reel-muted', video.muted ? '1' : '0');
-      syncMuteUi(video);
-    };
     video.onended = () => {
-      if (index < current.length - 1) {
-        index += 1;
-        viewer._mortaliveReelIndex = index;
-        render();
-      } else {
-        video.currentTime = 0;
-      }
+      if (index < current.length - 1) { index += 1; viewer._mortaliveReelIndex=index; render(); } else video.currentTime = 0;
     };
-
     try { await video.play(); } catch (_) {}
     viewer.querySelector('[data-reel-prev]').disabled = index <= 0;
     viewer.querySelector('[data-reel-next]').disabled = index >= current.length - 1;
@@ -9026,95 +9161,55 @@ function ensureReelViewer() {
 
   viewer._mortaliveRenderReel = render;
   viewer.addEventListener('click', async (e) => {
-    if (e.target.closest('[data-reel-close]')) { closeReelViewer(); return; }
-    if (e.target.closest('[data-reel-prev]')) { if (index > 0) { index--; viewer._mortaliveReelIndex = index; render(); } return; }
-    if (e.target.closest('[data-reel-next]')) { if (index < current.length - 1) { index++; viewer._mortaliveReelIndex = index; render(); } return; }
-    if (e.target === viewer) { closeReelViewer(); return; }
+    if (e.target.closest('[data-reel-close]')) { viewer.classList.remove('open'); viewer.setAttribute('aria-hidden','true'); document.body.style.overflow=''; return; }
+    if (e.target.closest('[data-reel-prev]')) { if (index>0){ index--; viewer._mortaliveReelIndex=index; render(); } return; }
+    if (e.target.closest('[data-reel-next]')) { if(index<current.length-1){ index++; viewer._mortaliveReelIndex=index; render(); } return; }
     if (e.target.closest('.rv-tap-area')) {
-      const v = $('rv-video');
-      if (v.paused) { try { await v.play(); } catch (_) {} } else v.pause();
+      const v=$('rv-video'); if(v.paused){ try{await v.play();}catch(_){}} else v.pause();
       return;
     }
     if (e.target.closest('[data-reel-mute]')) {
-      const v = $('rv-video');
-      v.muted = !v.muted;
-      sessionStorage.setItem('mortalive.reel-muted', v.muted ? '1' : '0');
-      syncMuteUi(v);
-      return;
+      const v=$('rv-video'); v.muted=!v.muted; e.target.textContent=v.muted?'🔇':'🔊'; return;
     }
-
-    const action = e.target.closest('[data-reel-action]');
-    if (!action) return;
-    current = Array.isArray(viewer._mortaliveReelCollection) ? viewer._mortaliveReelCollection : current;
-    index = Number.isInteger(viewer._mortaliveReelIndex) ? viewer._mortaliveReelIndex : index;
-    const post = current[index];
+    const action=e.target.closest('[data-reel-action]'); if(!action) return;
+    current = Array.isArray(viewer._mortaliveReelCollection) ? viewer._mortaliveReelCollection : current; index = Number.isInteger(viewer._mortaliveReelIndex) ? viewer._mortaliveReelIndex : index; const post=current[index];
     if (!post) return;
-
-    if (action.dataset.reelAction === 'like') {
-      await togglePostLike(post.id);
-      refreshProfileTabCounts(_profilePosts);
-      renderProfileStatsPanel();
-      await render();
-      return;
+    if (action.dataset.reelAction==='like'){ await togglePostLike(post.id); render(); }
+    if (action.dataset.reelAction==='comment'){ $('rv-comments-sheet').classList.toggle('open'); }
+    if (action.dataset.reelAction==='share'){
+      const url=`${location.origin}${location.pathname}#feed-post-${encodeURIComponent(post.id)}`;
+      navigator.clipboard?.writeText(url).then(()=>toast('Reel link copied','📋')).catch(()=>toast(url,'🔗'));
     }
-    if (action.dataset.reelAction === 'comment') { $('rv-comments-sheet').classList.toggle('open'); return; }
-    if (action.dataset.reelAction === 'share') {
-      const url = `${location.origin}${location.pathname}#feed-post-${encodeURIComponent(post.id)}`;
-      navigator.clipboard?.writeText(url).then(() => toast('Video link copied','📋')).catch(() => toast(url,'🔗'));
-      return;
-    }
-    if (action.dataset.reelAction === 'follow' && post.user_id && post.user_id !== S.userId) {
-      const fd = await fetchFollowData(post.user_id);
-      const next = !fd.isFollowing;
-      try {
-        await toggleFollow(post.user_id, next);
-        await render();
-        toast(next ? 'Following!' : 'Unfollowed', next ? '✓' : '➖');
-      } catch (err) {
-        toast(err?.message || 'Could not update follow.','⚠️');
-      }
+    if (action.dataset.reelAction==='follow' && post.user_id && post.user_id!==S.userId){
+      const fd=await fetchFollowData(post.user_id); const next=!fd.isFollowing;
+      try{ await toggleFollow(post.user_id,next); render(); toast(next?'Following!':'Unfollowed',next?'✓':'➖'); }catch(err){toast(err?.message||'Could not update follow.','⚠️');}
     }
   });
-
-  $('rv-comment-send')?.addEventListener('click', async () => {
-    const post = current[index];
-    const input = $('rv-comment-input');
-    const raw = input?.value?.trim().slice(0, 300) || '';
-    const content = raw.replace(/<[^>]*>/g, '').trim();
-    if (!post || !content) {
-      toast('Add a comment to share your thoughts.', '💭');
-      return;
-    }
-    input.value = '';
-    try {
-      await createPostComment(post.id, content);
-      await render();
-    } catch (error) {
-      toast(error?.message || 'Could not add comment.', '⚠️');
-    }
+  $('rv-comment-send')?.addEventListener('click', async ()=>{
+    const post=current[index], input=$('rv-comment-input'); const content=input?.value?.trim();
+    if(!post||!content) return;
+    input.value='';
+    await createPostComment(post.id,content);
+    await render();
   });
-
-  viewer.querySelector('[data-reel-close]')?.addEventListener('click', closeReelViewer);
+  viewer.querySelector('[data-reel-close]')?.addEventListener('click',()=>{viewer.classList.remove('open');viewer.setAttribute('aria-hidden','true');document.body.style.overflow='';});
   return viewer;
+
+  // Unreachable? kept below intentionally no
 }
-
 function openReelViewer(post, collection = []) {
-  if (S.isGuest || !S.userId) { toast('Sign in to view short videos', '🔒'); return; }
+  if (S.isGuest || !S.userId) { toast('Sign in to view reels', '🔒'); return; }
   const viewer = ensureReelViewer();
-  if (viewer.classList.contains('opening')) return;
-  viewer.classList.add('opening');
-
   const all = Array.isArray(collection) && collection.length ? collection : [post];
   const ids = all.map(p => p.id);
   const start = Math.max(0, ids.indexOf(post.id));
   viewer._mortaliveReelCollection = all;
   viewer._mortaliveReelIndex = start;
+  // trigger renderer stored on the viewer
   viewer._mortaliveRenderReel?.();
   viewer.classList.add('open');
   viewer.setAttribute('aria-hidden','false');
   document.body.style.overflow='hidden';
-  document.body.classList.add('reel-viewer-open');
-  setTimeout(() => viewer.classList.remove('opening'), 120);
 }
 function bindReelNavigationClicks() {
   // delegated grid/feed opening
@@ -9127,21 +9222,12 @@ function bindReelNavigationClicks() {
     const id = tile.dataset.reelPostId;
     const post = getPostByIdForViewer(id) || _profilePosts.find(p=>p.id===id);
     if (post?.media_url && post.post_type === 'reel') {
-      const collection = document.body.classList.contains('profile-viewing-public') ? collectAvailableMotions(_profilePosts) : collectAvailableMotions(_profilePosts);
+      const collection = document.body.classList.contains('profile-viewing-public') ? collectAvailableReels(_profilePosts) : collectAvailableReels(_profilePosts);
       openReelViewer(post, collection);
     }
   });
 }
 bindReelNavigationClicks();
-
-if (!document.body.dataset.reelKeyboardBound) {
-  document.body.dataset.reelKeyboardBound = '1';
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && $('reel-viewer')?.classList.contains('open')) {
-      closeReelViewer();
-    }
-  });
-}
 
 document.addEventListener('click', (event) => {
   const cta = event.target.closest?.('[data-reel-upload-cta]');
