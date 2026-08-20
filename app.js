@@ -7,7 +7,7 @@
 // Mortalive v29 — main Profile now scrolls as one continuous document flow, matching Feed-profile behavior.
 // Mortalive v32 — Messages integration merged into the v31 motion-hardening baseline; preserve this file as current source.
 // Mortalive v33 — Messages shell fix: close page boundary + remove demo chat UI/data seed.
-const BUILD_TAG = 'mortalive-build-2026-08-20-messages-profile-fix-v33'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-20-messages-presence-v34'; // bump this string on every deploy to confirm cache is fresh
 
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
 const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
@@ -937,27 +937,68 @@ function updateOnlineCount() {
   const formatted = Number(S.onlineCount || 0).toLocaleString();
   ['online-n','online-n-hero','online-count','online-users','app-topbar-online-count'].forEach(id => {
     const el = $(id);
-    if (el) el.textContent = formatted;
+    if (el) {
+      el.textContent = formatted;
+      el.classList.add('live-count-live');
+    }
   });
   const mc = $('match-count');
-  if (mc) mc.textContent = formatted;
+  if (mc) {
+    mc.textContent = formatted;
+    mc.classList.add('live-count-live');
+  }
 }
 
 const PRESENCE_MODEL = {
-  min: 4000,
-  max: 70000,
-  center: 24000,
-  jitter: 0.12
+  min: 0,
+  max: 999999999
 };
 
-function samplePresenceNumber(previous = PRESENCE_MODEL.center) {
-  const r = Math.random();
-  let target;
-  if (r < 0.10) target = PRESENCE_MODEL.min + Math.random() * 6500;
-  else if (r > 0.90) target = PRESENCE_MODEL.max - Math.random() * 9000;
-  else target = PRESENCE_MODEL.min + Math.pow(Math.random(), 0.72) * (PRESENCE_MODEL.max - PRESENCE_MODEL.min);
-  const blended = previous * 0.72 + target * 0.28;
-  return Math.round(Math.max(PRESENCE_MODEL.min, Math.min(PRESENCE_MODEL.max, blended)));
+let _onlineCountAnimationFrame = 0;
+let _onlineCountTarget = null;
+let _onlineCountInitialized = false;
+
+function clampPresenceCount(value) {
+  return Math.round(Math.max(PRESENCE_MODEL.min, Math.min(PRESENCE_MODEL.max, value)));
+}
+
+function animateOnlineCountTo(target, durationMs = 900) {
+  const next = clampPresenceCount(target);
+  const current = clampPresenceCount(Number(S.onlineCount) || 0);
+
+  if (_onlineCountTarget === next && _onlineCountInitialized) return;
+  _onlineCountTarget = next;
+  _onlineCountInitialized = true;
+
+  cancelAnimationFrame(_onlineCountAnimationFrame);
+
+  if (current === next) {
+    S.onlineCount = next;
+    updateOnlineCount();
+    return;
+  }
+
+  const start = performance.now();
+  const delta = next - current;
+
+  // Smooth, odometer-like count movement: fast enough to feel live,
+  // but slow enough that changes are visibly counted rather than jumping.
+  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+  const tick = (now) => {
+    const progress = Math.min(1, (now - start) / Math.max(250, durationMs));
+    S.onlineCount = Math.round(current + delta * easeOutCubic(progress));
+    updateOnlineCount();
+
+    if (progress < 1) {
+      _onlineCountAnimationFrame = requestAnimationFrame(tick);
+    } else {
+      S.onlineCount = next;
+      updateOnlineCount();
+    }
+  };
+
+  _onlineCountAnimationFrame = requestAnimationFrame(tick);
 }
 
 async function fetchPresenceSource() {
@@ -967,7 +1008,7 @@ async function fetchPresenceSource() {
     if (!res.ok) return null;
     const payload = await res.json();
     const value = Number(payload?.count ?? payload?.online ?? payload?.onlineCount);
-    return Number.isFinite(value) ? Math.round(value) : null;
+    return Number.isFinite(value) ? clampPresenceCount(value) : null;
   } catch (_) {
     return null;
   }
@@ -975,10 +1016,16 @@ async function fetchPresenceSource() {
 
 async function refreshOnlinePresence() {
   const sourceValue = await fetchPresenceSource();
-  S.onlineCount = sourceValue != null
-    ? Math.round(Math.max(PRESENCE_MODEL.min, Math.min(PRESENCE_MODEL.max, sourceValue)))
-    : samplePresenceNumber(S.onlineCount || PRESENCE_MODEL.center);
-  updateOnlineCount();
+  if (sourceValue == null) {
+    // Never manufacture a new number. When the real presence endpoint
+    // is temporarily unavailable, keep the last verified count on screen.
+    updateOnlineCount();
+    return;
+  }
+
+  const diff = Math.abs(sourceValue - (Number(S.onlineCount) || 0));
+  const duration = Math.min(1800, Math.max(450, 450 + diff * 8));
+  animateOnlineCountTo(sourceValue, duration);
 }
 
 function isCompactViewport() {
@@ -1101,11 +1148,14 @@ function initConsentGate() {
 function startOnlineCounter() {
   if (S.onlineTimerStarted) return;
   S.onlineTimerStarted = true;
-  S.onlineCount = samplePresenceNumber(PRESENCE_MODEL.center);
+
+  // The visible number is always driven by the backend presence count.
+  // The only animation is the transition between two verified counts.
+  S.onlineCount = 0;
   updateOnlineCount();
   refreshOnlinePresence();
+
   setInterval(() => {
-    // Prefer a real backend presence source; otherwise use a smooth procedural estimate.
     refreshOnlinePresence();
   }, 6500);
 }
@@ -2076,6 +2126,7 @@ function initAuthControls() {
       _commentCache = new Map();
       _feedEngagement = new Map();
       _commentLoading = new Set();
+      if (typeof resetMessagesRuntime === 'function') resetMessagesRuntime();
       return;
     }
 
@@ -2097,6 +2148,7 @@ function initAuthControls() {
         if (switchedUser) {
           S.accountData = null;
           S.userLinks = [];
+          if (typeof resetMessagesRuntime === 'function') resetMessagesRuntime();
         }
 
         S.username =
@@ -4273,35 +4325,68 @@ const _msgsState = { conversations: [], activeId: null, unsubscribe: null };
 const _MSG_CONV_KEY = 'mortalive_conversations_v1';
 const _MSG_MSGS_KEY = 'mortalive_dm_messages_v1';
 
+function msgStorageKey(baseKey) {
+  // Messages are currently a local prototype, but they must still respect the
+  // authenticated account boundary. Never use one global LocalStorage bucket
+  // for multiple signed-in users on the same browser.
+  const userId = String(S.userId || '').trim();
+  return userId ? `${baseKey}:${encodeURIComponent(userId)}` : null;
+}
+
+function resetMessagesRuntime() {
+  if (_msgsState.unsubscribe) {
+    try { _msgsState.unsubscribe(); } catch (_) {}
+  }
+  _msgsState.unsubscribe = null;
+  _msgsState.activeId = null;
+  _msgsState.conversations = [];
+  const shell = document.getElementById('msg-shell');
+  shell?.classList.remove('thread-open');
+  const empty = document.getElementById('msg-thread-empty');
+  const active = document.getElementById('msg-thread-active');
+  if (empty) empty.style.display = '';
+  if (active) active.style.display = 'none';
+}
+
 // ── Pipeline stubs (swap each for a real fetch when the API is ready) ────────
 
 async function msgFetchConversations() {
   // TODO: GET /api/conversations  Authorization: Bearer <S.authToken>
-  try { return JSON.parse(localStorage.getItem(_MSG_CONV_KEY)) || []; } catch { return []; }
+  const key = msgStorageKey(_MSG_CONV_KEY);
+  if (!key) return [];
+  try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; }
 }
 
 async function msgFetchMessages(conversationId) {
   // TODO: GET /api/conversations/:id/messages?limit=50
+  const key = msgStorageKey(_MSG_MSGS_KEY);
+  if (!key) return [];
   try {
-    const all = JSON.parse(localStorage.getItem(_MSG_MSGS_KEY)) || {};
-    return all[conversationId] || [];
+    const all = JSON.parse(localStorage.getItem(key)) || {};
+    return Array.isArray(all[conversationId]) ? all[conversationId] : [];
   } catch { return []; }
 }
 
 async function msgPostMessage(conversationId, text) {
   // TODO: POST /api/conversations/:id/messages  { text }
+  const key = msgStorageKey(_MSG_MSGS_KEY);
+  if (!key || !S.userId) return null;
+
   const thread = await msgFetchMessages(conversationId);
   const msg = { id: 'm' + Date.now(), from: 'me', text, ts: Date.now() };
   thread.push(msg);
   try {
-    const all = JSON.parse(localStorage.getItem(_MSG_MSGS_KEY)) || {};
+    const all = JSON.parse(localStorage.getItem(key)) || {};
     all[conversationId] = thread;
-    localStorage.setItem(_MSG_MSGS_KEY, JSON.stringify(all));
+    localStorage.setItem(key, JSON.stringify(all));
   } catch {}
   const convs = await msgFetchConversations();
   const conv = convs.find(c => c.id === conversationId);
   if (conv) { conv.lastMessage = 'you: ' + text; conv.lastMessageAt = msg.ts; conv.unread = 0; }
-  try { localStorage.setItem(_MSG_CONV_KEY, JSON.stringify(convs)); } catch {}
+  const convKey = msgStorageKey(_MSG_CONV_KEY);
+  if (convKey) {
+    try { localStorage.setItem(convKey, JSON.stringify(convs)); } catch {}
+  }
   return msg;
 }
 
@@ -4319,7 +4404,10 @@ async function msgMarkRead(conversationId) {
   const convs = await msgFetchConversations();
   const conv = convs.find(c => c.id === conversationId);
   if (conv) { conv.unread = 0; }
-  try { localStorage.setItem(_MSG_CONV_KEY, JSON.stringify(convs)); } catch {}
+  const key = msgStorageKey(_MSG_CONV_KEY);
+  if (key) {
+    try { localStorage.setItem(key, JSON.stringify(convs)); } catch {}
+  }
 }
 
 // ── Rendering helpers ─────────────────────────────────────────────────────────
@@ -4441,6 +4529,11 @@ async function msgSendCurrentMessage() {
 // ── initMessagesPage ──────────────────────────────────────────────────────────
 
 function initMessagesPage() {
+  if (S.isGuest || !S.userId) {
+    resetMessagesRuntime();
+    return;
+  }
+
   if (_messagesInitialized) {
     // Re-entry: refresh sidebar in case conversations changed since last visit
     msgFetchConversations().then(convs => {
