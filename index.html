@@ -2,6 +2,7 @@
 <!DOCTYPE html>
 <!-- MORTALIVE SOURCE HANDOFF — v34 main baseline. Preserve all existing source and page boundaries. -->
 <!-- Mortalive v30 — authenticated post reporting added with dedicated post_reports storage. -->
+<!-- Mortalive v36 — profile actions and username-safe share links hardened. -->
 <!-- Mortalive v35 — username hardening, profile actions, video naming, report modal fix. -->
 <!-- Mortalive v32 — Messages integration merged into the v31 motion-hardening baseline; preserve this file as current source. -->
 <html lang="en">
@@ -7504,7 +7505,7 @@ JS Bugs (app.js)
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260820-profile-hardening-v35"></script>
+<script src="app.js?v=20260820-profile-actions-v36"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
