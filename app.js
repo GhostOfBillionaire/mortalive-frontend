@@ -7,10 +7,13 @@
 // Mortalive v29 — main Profile now scrolls as one continuous document flow, matching Feed-profile behavior.
 // Mortalive v32 — Messages integration merged into the v31 motion-hardening baseline; preserve this file as current source.
 // Mortalive v33 — Messages shell fix: close page boundary + remove demo chat UI/data seed.
-const BUILD_TAG = 'mortalive-build-2026-08-20-messages-presence-v34'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-20-profile-hardening-v35'; // bump this string on every deploy to confirm cache is fresh
 
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
 const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
+const USERNAME_MAX_LENGTH = 24;
+const USERNAME_RE = /^[A-Za-z0-9_]{3,24}$/;
+function isValidUsername(value) { return typeof value === 'string' && USERNAME_RE.test(value); }
 
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
@@ -1674,7 +1677,7 @@ function initAuthControls() {
       setUsernameStatus(null, '');
       return;
     }
-    if (!/^[a-zA-Z0-9_]{3,24}$/.test(val)) {
+    if (!isValidUsername(val)) {
       setUsernameStatus('bad', '3–24 characters: letters, numbers, underscore only.');
       return;
     }
@@ -1701,7 +1704,7 @@ function initAuthControls() {
     const terms    = $('signup-terms');
     setError('signup-error', null);
 
-    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
+    if (!isValidUsername(username)) {
       setError('signup-error', 'Username must be 3–24 characters: letters, numbers, underscore only.');
       return;
     }
@@ -4097,7 +4100,7 @@ function getFeedComposerKind() {
 }
 
 function getFeedStructuredKindLabel(kind) {
-  return kind === 'qna' ? 'Q&A' : kind === 'poll' ? 'Poll' : kind === 'photo' ? 'Photo' : kind === 'reel' ? 'Motion' : 'Text';
+  return kind === 'qna' ? 'Q&A' : kind === 'poll' ? 'Poll' : kind === 'photo' ? 'Photo' : kind === 'reel' ? 'Video' : 'Text';
 }
 
 function getFeedComposerOptionValues() {
@@ -4154,7 +4157,7 @@ function syncFeedComposerTypeUI() {
   if (field) field.placeholder = kind === 'qna'
     ? (_feedQnaChoicesEnabled ? 'Ask a question for people to choose from…' : 'Ask a question people can reply to…')
     : kind === 'poll' ? 'Ask a poll question…'
-    : kind === 'reel' ? 'Add a caption to your motion…'
+    : kind === 'reel' ? 'Add a caption to your video…'
     : "What's on your mind after that chat…";
   if (modeLabel) modeLabel.textContent = getFeedStructuredKindLabel(kind);
   if (builder) builder.classList.toggle('open', kind === 'poll' || kind === 'qna');
@@ -5166,7 +5169,7 @@ async function openFeedProfileOverlay(userId) {
       <div class="feed-profile-tabs">
         <button type="button" class="feed-profile-tab active" data-profile-tab="posts">Posts</button>
         <button type="button" class="feed-profile-tab" data-profile-tab="photos">Photos</button>
-        <button type="button" class="feed-profile-tab" data-profile-tab="reels">Motions</button>
+        <button type="button" class="feed-profile-tab" data-profile-tab="reels">Videos</button>
         <button type="button" class="feed-profile-tab" data-profile-tab="stats">Stats</button>
       </div>
       <div class="feed-profile-section" data-profile-panel="posts">
@@ -5186,7 +5189,7 @@ async function openFeedProfileOverlay(userId) {
       </div>
       <div class="feed-profile-section" data-profile-panel="reels" style="display:none;">
         <div class="profile-reels-grid">${reels.length ? reels.map((post, i) => `
-          <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open motion ${i + 1}">
+          <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open video ${i + 1}">
             <video class="reel-thumb-bg" src="${sanitizeHTML(post.media_url)}" muted playsinline preload="metadata"></video>
             <span class="reel-thumb-play">▶</span>
           </button>`).join('') : '<div class="reels-empty-state"><div class="reels-empty-icon">🎬</div><div class="reels-empty-title">No reels yet</div></div>'}</div>
@@ -5196,7 +5199,7 @@ async function openFeedProfileOverlay(userId) {
           <div class="profile-stats-section"><div class="profile-stats-section-title">Content</div>
             <div class="profile-stats-row"><span class="profile-stats-key">Posts</span><strong class="profile-stats-val">${textPosts.length}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Photos</span><strong class="profile-stats-val">${photoPosts.length}</strong></div>
-            <div class="profile-stats-row"><span class="profile-stats-key">Motions</span><strong class="profile-stats-val">${reels.length}</strong></div>
+            <div class="profile-stats-row"><span class="profile-stats-key">Videos</span><strong class="profile-stats-val">${reels.length}</strong></div>
           </div>
           <div class="profile-stats-section"><div class="profile-stats-section-title">Profile</div>
             <div class="profile-stats-row"><span class="profile-stats-key">Croks Score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
@@ -5647,7 +5650,7 @@ function renderFeedPosts() {
     const display = author.display_name || username;
     const score = Number(author.crockroach_score) || 0;
     const mine = post.user_id === S.userId;
-    const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A' : post?.post_meta?.kind === 'poll' ? 'Poll' : post.post_type === 'text' ? 'Text' : post.post_type === 'reel' ? 'Reel' : post.post_type || 'Post';
+    const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A' : post?.post_meta?.kind === 'poll' ? 'Poll' : post.post_type === 'text' ? 'Text' : post.post_type === 'reel' ? 'Video' : post.post_type || 'Post';
     const badge = score >= 700 ? '<span class="post-badge gold">Gold</span>' : score >= 420 ? '<span class="post-badge silver">Silver</span>' : '';
     const avatarUrl = feedAvatarUrl(author.avatar_url);
     const avatarMarkup = avatarUrl
@@ -6106,7 +6109,7 @@ async function submitFeedTextPost() {
   const content = field.value.trim();
   const file = kind === 'reel' ? (reelInput?.files?.[0] || null) : (photoInput?.files?.[0] || null);
   if (!content && !file && !['poll','qna'].includes(kind)) return;
-  if (kind === 'reel' && !file) { toast('Choose a motion video first.', '⚠️'); return; }
+  if (kind === 'reel' && !file) { toast('Choose a video first.', '⚠️'); return; }
   if (content.length > FEED_MAX_POST_CHARS) { toast(`Posts are limited to ${FEED_MAX_POST_CHARS} characters`, '⚠️'); return; }
 
   const hashtagCheck = validateUniqueHashtags(content);
@@ -6189,7 +6192,7 @@ async function submitFeedTextPost() {
         hydrateProfileGallery(S.userId).catch(() => {});
       }
     }
-    toast(kind === 'reel' ? 'Motion published!' : media ? 'Photo post published!' : kind === 'poll' ? 'Poll published!' : kind === 'qna' ? 'Q&A published!' : 'Post published!', kind === 'reel' ? '🎬' : '✍️');
+    toast(kind === 'reel' ? 'Video published!' : media ? 'Photo post published!' : kind === 'poll' ? 'Poll published!' : kind === 'qna' ? 'Q&A published!' : 'Post published!', kind === 'reel' ? '🎬' : '✍️');
   } catch (e) {
     console.warn('[Feed] post failed:', e);
     toast(e?.message || 'Could not publish post.', '⚠️');
@@ -7293,6 +7296,10 @@ function initProfilePage() {
   if ($('btn-edit-profile')) $('btn-edit-profile').style.display = '';
   if ($('btn-change-profile-photo')) $('btn-change-profile-photo').style.display = '';
   if ($('profile-post-composer')) $('profile-post-composer').style.display = '';
+
+  // Bind profile actions after the profile DOM is rendered. The binder is
+  // idempotent, so hydration/re-render cycles do not duplicate handlers.
+  bindProfileEvents();
 }
 
 function renderEditInterests(selectedInterests) {
@@ -7719,7 +7726,6 @@ function bindProfileEvents() {
     if (profileBtn) { e.preventDefault(); openUserProfile(profileBtn.dataset.openProfile); return; }
   });
 
-  $('btn-edit-profile')?.addEventListener('click', toggleProfileEditMode);
   const avatarInput = $('profile-avatar-input');
   const avatarButton = $('btn-change-profile-photo');
   if (avatarButton && avatarInput && !avatarButton.dataset.bound) {
@@ -7871,19 +7877,31 @@ function bindProfileEvents() {
     }
   });
 
-  $('btn-share-profile')?.addEventListener('click', () => {
-    const username = S.profileViewUserId
-      ? (S.profileViewData?.username || '')
-      : (S.accountData?.username || S.username || '');
-    if (!username) { toast('Could not determine username — try again.', '⚠️'); return; }
-    // Clean format: mortalive.com/#@username — no server rewrite required
-    const link = `${window.location.origin}${window.location.pathname}#@${encodeURIComponent(username)}`;
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(link).then(() => toast('Profile link copied! Share it anywhere.', '📋'));
-    } else {
-      toast(link, '🔗');
-    }
-  });
+  if (!document.body.dataset.profileHeaderActionsBound) {
+    document.body.dataset.profileHeaderActionsBound = '1';
+    document.addEventListener('click', (event) => {
+      const editBtn = event.target.closest?.('#btn-edit-profile');
+      if (editBtn) {
+        event.preventDefault();
+        if (!S.profileViewUserId) toggleProfileEditMode();
+        return;
+      }
+      const shareBtn = event.target.closest?.('#btn-share-profile');
+      if (!shareBtn) return;
+      event.preventDefault();
+      const username = S.profileViewUserId
+        ? (S.profileViewData?.username || '')
+        : (S.accountData?.username || S.username || '');
+      if (!username) { toast('Could not determine username — try again.', '⚠️'); return; }
+      const link = `${window.location.origin}${window.location.pathname}#@${encodeURIComponent(username)}`;
+      const copyPromise = navigator.clipboard?.writeText?.(link);
+      if (copyPromise?.then) {
+        copyPromise.then(() => toast('Profile link copied! Share it anywhere.', '📋')).catch(() => toast(link, '🔗'));
+      } else {
+        toast(link, '🔗');
+      }
+    });
+  }
 
   // Override the inline-HTML handler on btn-profile-copy (which incorrectly
   // used '#profile') by cloning the element to clear all prior listeners,
@@ -8709,9 +8727,9 @@ function renderProfileMotions(posts = _profilePosts) {
     grid.innerHTML = `
       <div class="reels-empty-state">
         <div class="reels-empty-icon">🎬</div>
-        <div class="reels-empty-title">No motions yet</div>
+        <div class="reels-empty-title">No videos yet</div>
         <div class="reels-empty-sub">Share a short vertical video and let people discover your moment.</div>
-        ${!S.profileViewUserId ? '<button class="reels-empty-cta" type="button" data-reel-upload-cta>+ Upload motion</button>' : ''}
+        ${!S.profileViewUserId ? '<button class="reels-empty-cta" type="button" data-reel-upload-cta>+ Upload video</button>' : ''}
       </div>`;
     return;
   }
@@ -8722,7 +8740,7 @@ function renderProfileMotions(posts = _profilePosts) {
     const durationLabel = Number.isFinite(duration) && duration > 0
       ? `${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, '0')}`
       : '';
-    return `<button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(p.id)}" aria-label="Open motion ${i + 1}">
+    return `<button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(p.id)}" aria-label="Open video ${i + 1}">
       <video class="reel-thumb-bg" src="${sanitizeHTML(p.media_url)}" muted playsinline preload="metadata"></video>
       <span class="reel-thumb-play">▶</span>
       ${durationLabel ? `<span class="reel-thumb-duration">${durationLabel}</span>` : ''}
@@ -8759,7 +8777,7 @@ function renderProfileStatsPanel() {
       <div class="profile-stats-section-title">Content</div>
       <div class="profile-stats-row"><span class="profile-stats-key">Text posts</span><strong class="profile-stats-val">${postCount}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Photos</span><strong class="profile-stats-val">${photoCount}</strong></div>
-      <div class="profile-stats-row"><span class="profile-stats-key">Motions</span><strong class="profile-stats-val">${reelCount}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">Videos</span><strong class="profile-stats-val">${reelCount}</strong></div>
     </div>
     <div class="profile-stats-section">
       <div class="profile-stats-section-title">Profile</div>
@@ -8853,13 +8871,13 @@ function ensureReelViewer() {
   viewer.setAttribute('aria-hidden','true');
   viewer.innerHTML = `
     <div class="rv-progress"><div class="rv-progress-fill"></div></div>
-    <div class="rv-topbar"><div class="rv-topbar-title">Motions</div><button class="rv-topbar-btn" type="button" data-reel-close aria-label="Close motion viewer">×</button></div>
+    <div class="rv-topbar"><div class="rv-topbar-title">Videos</div><button class="rv-topbar-btn" type="button" data-reel-close aria-label="Close video viewer">×</button></div>
     <div class="rv-video-wrap">
       <video id="rv-video" playsinline preload="metadata"></video>
       <button class="rv-tap-area" type="button" aria-label="Play or pause" aria-pressed="false"></button>
       <div class="rv-pause-flash">▶</div>
-      <button class="rv-nav-btn rv-nav-prev" type="button" data-reel-prev aria-label="Previous motion">‹</button>
-      <button class="rv-nav-btn rv-nav-next" type="button" data-reel-next aria-label="Next motion">›</button>
+      <button class="rv-nav-btn rv-nav-prev" type="button" data-reel-prev aria-label="Previous video">‹</button>
+      <button class="rv-nav-btn rv-nav-next" type="button" data-reel-next aria-label="Next video">›</button>
       <button class="rv-mute-badge" type="button" data-reel-mute aria-label="Unmute video">🔇</button>
       <div class="rv-sidebar">
         <button class="rv-action-btn" type="button" data-reel-action="like" aria-pressed="false"><span class="rv-action-icon">♡</span><span class="rv-action-label">Like</span></button>
@@ -9011,7 +9029,7 @@ function ensureReelViewer() {
     if (action.dataset.reelAction === 'comment') { $('rv-comments-sheet').classList.toggle('open'); return; }
     if (action.dataset.reelAction === 'share') {
       const url = `${location.origin}${location.pathname}#feed-post-${encodeURIComponent(post.id)}`;
-      navigator.clipboard?.writeText(url).then(() => toast('Motion link copied','📋')).catch(() => toast(url,'🔗'));
+      navigator.clipboard?.writeText(url).then(() => toast('Video link copied','📋')).catch(() => toast(url,'🔗'));
       return;
     }
     if (action.dataset.reelAction === 'follow' && post.user_id && post.user_id !== S.userId) {
