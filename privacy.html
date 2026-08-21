@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Privacy Policy • Mortalive</title>
-    <meta name="description" content="Mortalive Privacy Policy - We take your privacy seriously. Learn how we collect, use, and protect your data.">
+    <meta name="description" content="Mortalive Privacy Policy — data collection, safety snapshots, retention, security, deletion, rights, and grievance contact.">
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -190,6 +190,52 @@
             gap: 12px;
         }
 
+
+        /* Founder-protection / legal shield */
+        .legal-shield {
+            margin: 0 0 32px;
+            padding: 22px 24px;
+            border-radius: var(--r-lg);
+            background: linear-gradient(145deg, rgba(26,110,245,.08), rgba(124,58,237,.06));
+            border: 1px solid rgba(26,110,245,.18);
+        }
+        .legal-shield .shield-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(26,110,245,.10);
+            color: var(--primary);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+        .legal-shield h2 {
+            margin: 0 0 8px;
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: -.04em;
+        }
+        .legal-shield p {
+            margin: 0;
+            color: var(--on-surface-2);
+            font-size: 14px;
+            line-height: 1.7;
+        }
+        .legal-note {
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            color: var(--on-surface-3);
+            font-size: 12.5px;
+            line-height: 1.65;
+            margin-top: 14px;
+        }
+
         @media (max-width: 980px) {
             .privacy-section { padding: 32px 24px; }
             .footer-inner { grid-template-columns: 1fr; }
@@ -217,81 +263,114 @@
         </nav>
     </header>
 
+
     <div class="privacy-container">
         <div class="privacy-header">
             <h1>Privacy Policy</h1>
-            <p class="privacy-meta">Last updated: July 14, 2026</p>
+            <p class="privacy-meta">Last updated: August 21, 2026 · Version 1.0 (Beta)</p>
+        </div>
+
+        <div class="legal-shield">
+            <div class="shield-kicker">🛡️ Privacy protection notice</div>
+            <h2>Privacy commitments are specific — not absolute guarantees</h2>
+            <p>Mortalive is a beta-stage service. This policy describes the categories of data the current platform may process and the purposes for which it is used. Security and deletion commitments are made to the extent technically and legally applicable; no internet service can guarantee absolute security or instantaneous deletion in every circumstance.</p>
+            <div class="legal-note">Where a legal, security, fraud-prevention, dispute, or government-preservation obligation applies, data may be retained for as long as lawfully required even after an account-deletion request.</div>
         </div>
 
         <div class="privacy-card">
-
             <div class="privacy-section">
-                <h2>1. Introduction</h2>
-                <p>At Mortalive, your privacy is one of our highest priorities. This Privacy Policy explains how we collect, use, store, and protect your information when you use our platform.</p>
+                <h2>1. Who This Policy Covers</h2>
+                <p>This Privacy Policy applies to Mortalive's website and associated services. By using Mortalive, you acknowledge that the platform is in beta and that data processing may evolve as the product and infrastructure change.</p>
             </div>
 
             <div class="privacy-section">
-                <h2>2. Information We Collect</h2>
-                <h3>Account Information</h3>
-                <p>Name, email address, profile picture, and username (if provided).</p>
+                <h2>2. Information We May Collect</h2>
+                <h3>Guest / Session Data</h3>
+                <p>Temporary session identifiers, guest-state information, and technical information necessary to operate a guest session.</p>
 
-                <h3>Usage Data</h3>
-                <p>How you interact with the platform, such as conversations started, features used, and session duration.</p>
+                <h3>Account Data</h3>
+                <p>Username, email address where provided, authentication-related records, password hashes, account identifiers, profile information, scores, badges, links, and other account metadata.</p>
 
-                <h3>Technical Data</h3>
-                <p>Device type, IP address, browser information, and operating system.</p>
+                <h3>User Content</h3>
+                <p>Profile photos, posts, comments, likes, links, recordings, thumbnails, and other content you choose to upload or create through Mortalive.</p>
 
-                <h3>Media Data</h3>
-                <p>Camera and microphone access only when you explicitly grant permission during a video call. We do not store video or audio recordings.</p>
+                <h3>Usage &amp; Technical Data</h3>
+                <p>Session activity, feature usage, device and browser details, connection information, IP-related technical information, timestamps, logs, and information necessary for security, diagnostics, abuse prevention, and service operation.</p>
+
+                <h3>Camera / Microphone &amp; Safety Snapshots</h3>
+                <p>When you grant browser permission, Mortalive may use camera and microphone streams for real-time communication. Certain safety, matching, diagnostics, or verification workflows may also generate temporary still snapshots from video surfaces.</p>
             </div>
 
             <div class="privacy-section">
-                <h2>3. How We Use Your Information</h2>
+                <h2>3. Why We Use Information</h2>
                 <ul>
-                    <li>To provide and improve our services</li>
-                    <li>To ensure platform safety and prevent abuse</li>
-                    <li>To personalize your experience</li>
-                    <li>To communicate important updates</li>
+                    <li>To provide, maintain, and improve Mortalive and its features</li>
+                    <li>To authenticate accounts and maintain sessions</li>
+                    <li>To enable matching, messaging, profiles, feeds, and recordings where applicable</li>
+                    <li>To protect users, investigate abuse, and enforce platform rules</li>
+                    <li>To diagnose technical issues, prevent fraud, and maintain security</li>
+                    <li>To communicate service, security, account, or legal updates</li>
+                    <li>To comply with applicable law, legal process, and lawful government requests</li>
                 </ul>
             </div>
 
             <div class="privacy-section">
-                <h2>4. Data Sharing</h2>
-                <p>We do not sell your personal data to third parties. We may share information only in these cases:</p>
-                <ul>
-                    <li>With your explicit consent</li>
-                    <li>To comply with legal obligations</li>
-                    <li>To protect the safety of our users and the platform</li>
-                </ul>
+                <h2>4. Data Sharing &amp; Service Providers</h2>
+                <p>Mortalive does not sell personal data. Information may be processed by infrastructure and service providers needed to run the platform, such as hosting, database, authentication, storage, communications, security, or analytics providers, subject to their applicable terms and configurations.</p>
+                <p>Information may also be disclosed where necessary to comply with law, respond to valid legal process, protect users or the public, investigate abuse or security events, or protect Mortalive's rights and infrastructure.</p>
             </div>
 
             <div class="privacy-section">
-                <h2>5. Your Rights</h2>
-                <p>You have the right to:</p>
-                <ul>
-                    <li>Access, correct, or delete your personal data</li>
-                    <li>Withdraw consent at any time</li>
-                    <li>Request data portability</li>
-                    <li>Opt out of certain processing activities</li>
-                </ul>
+                <h2>5. Retention &amp; Deletion</h2>
+                <h3>Account &amp; User Data</h3>
+                <p>We aim to keep personal data only for as long as reasonably necessary to operate the service, provide requested functionality, resolve disputes, prevent abuse, maintain security, and comply with legal obligations.</p>
+
+                <h3>Safety Snapshots</h3>
+                <p>The intended retention period for safety snapshots is <strong>no longer than 90 days</strong>. Actual deletion timing depends on deployed retention controls, backups, storage configuration, security investigations, and any applicable legal preservation requirement.</p>
+
+                <h3>Account Deletion</h3>
+                <p>Mortalive provides an account-deletion flow where available. The current implementation attempts transactional deletion of user-associated records and the authentication account. Some data may remain where necessary for legal compliance, security, fraud prevention, dispute resolution, audit, or other lawful purposes.</p>
             </div>
 
             <div class="privacy-section">
                 <h2>6. Security</h2>
-                <p>We implement industry-standard security measures including encryption, secure servers, and regular audits to protect your data.</p>
+                <p>We implement reasonable technical and organizational safeguards appropriate to a beta-stage service, including encrypted transport where supported by the deployment and password hashing for stored credentials. We also use access controls, authentication checks, rate limits, and other security measures in relevant parts of the platform.</p>
+                <p>No internet transmission, cloud service, browser, device, database, or security control is guaranteed to be completely secure. You understand that using Mortalive involves residual security risk.</p>
+            </div>
+
+            <div class="privacy-section">
+                <h2>7. Your Choices &amp; Rights</h2>
+                <ul>
+                    <li>You may request access to, correction of, or deletion of applicable personal information.</li>
+                    <li>You may withdraw permission for camera or microphone access through your browser or device settings.</li>
+                    <li>You may stop using the platform or delete your account where the feature is available.</li>
+                    <li>Requests may be subject to identity verification, legal exceptions, security requirements, and retention obligations.</li>
+                </ul>
+            </div>
+
+            <div class="privacy-section">
+                <h2>8. Grievance &amp; Contact</h2>
+                <p>For privacy, content, safety, or other platform grievances, contact:</p>
+                <p><strong>Grievance / Support Contact:</strong> <a href="mailto:support@mortalive.com" style="color:var(--primary); font-weight:700;">support@mortalive.com</a></p>
+                <p>Use the subject line <strong>“Grievance”</strong> for a formal complaint so that the request can be routed appropriately. Mortalive will handle grievances within the timeframes applicable to the service and the law governing the relevant complaint.</p>
+            </div>
+
+            <div class="privacy-section">
+                <h2>9. Legal Preservation &amp; Compliance</h2>
+                <p>Nothing in this Privacy Policy prevents Mortalive from preserving or producing information when required or permitted by law, court order, lawful government request, investigation, security incident response, or other valid legal process.</p>
+                <p>Retention periods may therefore differ from ordinary product deletion periods where the law requires preservation or where preservation is reasonably necessary to establish, exercise, or defend legal claims.</p>
+            </div>
+
+            <div class="privacy-section">
+                <h2>10. Policy Changes</h2>
+                <p>We may update this Privacy Policy as the service develops, infrastructure changes, or legal requirements evolve. The effective date shown above will be updated when material changes are published.</p>
             </div>
 
             <div class="last-updated">
-                This Privacy Policy may be updated from time to time. We will notify you of any material changes. Your continued use of Mortalive after such changes constitutes your acceptance of the updated policy.
+                This Privacy Policy is effective from August 21, 2026. It should be read together with the <a href="terms.html" style="color:var(--primary);font-weight:700;">Terms of Service</a>.
             </div>
-
         </div>
-
-        <p style="text-align:center; color:var(--on-surface-3); font-size:14px;">
-            Questions about our privacy practices? Contact us at <a href="mailto:privacy@mortalive.com" style="color:var(--primary); font-weight:700;">privacy@mortalive.com</a>
-        </p>
     </div>
-
     <!-- Footer -->
     <footer class="footer">
         <div class="footer-inner">
