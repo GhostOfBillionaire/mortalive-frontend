@@ -6815,6 +6815,37 @@ JS Bugs (app.js)
   }
 }
 </style>
+<style id="mortalive-profile-regression-fix-v40">
+/* v40 regression fix: Profile must use the document as its only vertical scroll root. */
+#pg-profile {
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  height: auto !important;
+  min-height: 100dvh;
+}
+#pg-profile .profile-wrap {
+  min-height: unset !important;
+}
+.profile-feed-viewport {
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  overscroll-behavior: auto !important;
+}
+/* Do not reintroduce a sticky Profile header. */
+.modern-profile-card.profile-top-sticky {
+  position: static !important;
+  top: auto !important;
+  z-index: auto;
+  background: rgba(255,255,255,.96);
+  backdrop-filter: blur(22px) saturate(145%);
+  -webkit-backdrop-filter: blur(22px) saturate(145%);
+}
+body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky,
+body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scrolled {
+  top: auto !important;
+}
+</style>
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -8776,6 +8807,7 @@ JS Bugs (app.js)
 })();
 </script>
 </body>
+<!-- Random audit marker: silver-pine-92614 -->
 </html>
 <style id="public-profile-visibility">
 body.profile-viewing-public #btn-edit-profile,
