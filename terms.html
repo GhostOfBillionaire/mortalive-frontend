@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Terms &amp; Privacy • Mortalive</title>
-    <meta name="description" content="Mortalive Terms of Service and Privacy Policy">
+    <title>Terms of Service • Mortalive</title>
+    <meta name="description" content="Mortalive Terms of Service — beta-stage terms, liability limits, user responsibilities, safety, moderation, and legal notices.">
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -273,6 +273,52 @@
             gap: 12px;
         }
 
+
+        /* Founder-protection / legal shield */
+        .legal-shield {
+            margin: 0 0 32px;
+            padding: 22px 24px;
+            border-radius: var(--r-lg);
+            background: linear-gradient(145deg, rgba(26,110,245,.08), rgba(124,58,237,.06));
+            border: 1px solid rgba(26,110,245,.18);
+        }
+        .legal-shield .shield-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 6px 10px;
+            border-radius: var(--r-full);
+            background: rgba(26,110,245,.10);
+            color: var(--primary);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+        .legal-shield h2 {
+            margin: 0 0 8px;
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: -.04em;
+        }
+        .legal-shield p {
+            margin: 0;
+            color: var(--on-surface-2);
+            font-size: 14px;
+            line-height: 1.7;
+        }
+        .legal-note {
+            padding: 14px 16px;
+            border-radius: var(--r-sm);
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            color: var(--on-surface-3);
+            font-size: 12.5px;
+            line-height: 1.65;
+            margin-top: 14px;
+        }
+
         @media (max-width: 980px) {
             .terms-section { padding: 32px 24px; }
             .footer-inner { grid-template-columns: 1fr; }
@@ -300,74 +346,107 @@
         </nav>
     </header>
 
+
     <div class="terms-container">
         <div class="terms-header">
-            <h1>Terms of Service &amp; Privacy Policy</h1>
-            <p class="terms-meta">Last updated: July 14, 2026</p>
+            <h1>Terms of Service</h1>
+            <p class="terms-meta">Last Updated: August 21, 2026 · Version 1.0 (Beta)</p>
         </div>
 
-        <!-- Terms Card -->
+        <div class="legal-shield">
+            <div class="shield-kicker">🛡️ Beta protection notice</div>
+            <h2>Mortalive is a test-stage service</h2>
+            <p>Mortalive is currently operated as a beta/testing platform. The service is provided on an <strong>“AS IS”</strong> and <strong>“AS AVAILABLE”</strong> basis. Features, content, availability, security controls, and infrastructure may change, fail, be suspended, or be discontinued without notice.</p>
+            <div class="legal-note">Nothing in these Terms creates a promise that Mortalive will be uninterrupted, error-free, permanently available, completely secure, or suitable for any particular purpose.</div>
+        </div>
+
         <div class="terms-card">
-
-            <!-- Terms of Service -->
             <div class="terms-section">
-                <h2>1. Terms of Service</h2>
-                <p>Welcome to Mortalive. By accessing or using our platform, you agree to be bound by these Terms of Service.</p>
-                
-                <h3>Eligibility</h3>
-                <p>You must be at least 18 years old to use Mortalive. By using the service, you represent that you meet this age requirement.</p>
-                
-                <h3>Account Responsibilities</h3>
+                <h2>1. Acceptance &amp; Eligibility</h2>
+                <p>By accessing, continuing to use, or otherwise interacting with Mortalive after being shown these Terms, you agree to be bound by them. Mortalive is intended for users aged 18 or older.</p>
+                <p>Where the platform presents a consent control, you must actively accept the applicable terms before proceeding. Do not use Mortalive if you do not agree to these Terms or the Privacy Policy.</p>
+            </div>
+
+            <div class="terms-section">
+                <h2>2. Beta / Experimental Service</h2>
+                <p>Mortalive is under development and testing. The platform may contain bugs, incomplete features, temporary outages, data loss, inaccurate counters, experimental matching behavior, or other defects.</p>
+                <p>You understand that use of a beta service carries additional risk. To the maximum extent permitted by applicable law, you accept those risks and acknowledge that Mortalive does not guarantee preservation of any particular content, score, badge, profile state, conversation, recording, or other platform state.</p>
+            </div>
+
+            <div class="terms-section">
+                <h2>3. Accounts &amp; Security</h2>
                 <ul>
-                    <li>You are responsible for maintaining the confidentiality of your account.</li>
-                    <li>You agree to use the platform only for lawful purposes.</li>
-                    <li>Harassment, hate speech, spam, or illegal activities are strictly prohibited.</li>
+                    <li>You are responsible for the credentials and account activity associated with your account.</li>
+                    <li>You must provide information that is accurate to the extent requested by the service.</li>
+                    <li>You must not share, sell, impersonate, or misuse another person's account.</li>
+                    <li>You should promptly report suspected unauthorized access or abuse through the available support channel.</li>
                 </ul>
-
-                <h3>Content Guidelines</h3>
-                <p>Users are responsible for the content they share. Mortalive reserves the right to remove any content that violates our community standards.</p>
             </div>
 
-            <!-- Privacy Policy -->
             <div class="terms-section">
-                <h2>2. Privacy Policy</h2>
-                <p>Your privacy is important to us. This policy explains how we collect, use, and protect your information.</p>
-                
-                <h3>Information We Collect</h3>
-                <ul>
-                    <li>Account information (name, email, profile picture)</li>
-                    <li>Usage data and interaction history</li>
-                    <li>Device and connection information</li>
-                    <li>Camera and microphone data only when you explicitly grant permission during video calls</li>
-                </ul>
-
-                <h3>How We Use Your Information</h3>
-                <p>We use your information to provide, improve, and personalize the Mortalive experience while maintaining your safety and privacy.</p>
-                
-                <h3>Data Sharing</h3>
-                <p>We do not sell your personal data. Information is only shared with your explicit consent or when required by law.</p>
+                <h2>4. User Content &amp; Your Responsibility</h2>
+                <p>You retain your ownership rights in content you submit, upload, publish, or otherwise make available through Mortalive, subject to the rights necessary for Mortalive to operate the service.</p>
+                <p>By submitting content, you grant Mortalive a limited, non-exclusive, worldwide, royalty-free license to host, store, reproduce, process, transmit, display, and technically transform that content only as reasonably necessary to provide, maintain, secure, moderate, and improve the service.</p>
+                <p><strong>You are solely responsible for your content.</strong> You represent that you have the rights needed to upload and share it and that it does not violate applicable law or the rights of others, including copyright, privacy, publicity, defamation, or obscenity laws.</p>
+                <p>Mortalive may remove, restrict, preserve, or disclose content where reasonably necessary for safety, moderation, legal compliance, abuse prevention, or protection of the service or its users.</p>
             </div>
 
-            <!-- Additional Sections -->
             <div class="terms-section">
-                <h2>3. Safety &amp; Moderation</h2>
-                <p>We are committed to creating a safe and respectful environment. All users are encouraged to report suspicious or harmful behavior.</p>
-                
-                <h3>Termination</h3>
-                <p>We reserve the right to suspend or terminate accounts that violate these terms.</p>
+                <h2>5. Safety, Moderation &amp; Third-Party Content</h2>
+                <p>Mortalive provides communication and community features, but users remain responsible for their interactions with other users. Mortalive does not guarantee the identity, statements, conduct, or intentions of any other user.</p>
+                <p>Mortalive may use moderation, reporting, blocking, account suspension, and content-removal tools. These measures are intended to reduce harm but are not a promise that all unlawful, abusive, deceptive, or harmful activity will be detected or prevented.</p>
+                <p>To the extent Mortalive qualifies as an intermediary under applicable law, it will seek to maintain applicable due-diligence and grievance processes. Any intermediary safe-harbor protection is subject to statutory conditions and cannot be guaranteed by contract.</p>
             </div>
 
-            <div class="last-updated">
-                These Terms &amp; Privacy Policy are effective as of July 14, 2026. We may update them from time to time. Continued use of Mortalive after changes constitutes acceptance of the updated terms.
+            <div class="terms-section">
+                <h2>6. Video, Camera &amp; Safety Snapshots</h2>
+                <p>Certain Mortalive safety, permission, matching, or verification flows may access camera or microphone inputs after browser permission is granted. The platform may also capture temporary still snapshots from relevant video surfaces for safety, abuse-prevention, diagnostics, or verification workflows.</p>
+                <p>These snapshots are not intended for marketing or sale to third parties. The intended retention period for safety snapshots is <strong>no longer than 90 days</strong>, subject to actual system configuration, deletion availability, legal preservation obligations, security investigations, or other lawful requirements.</p>
+                <p>Live camera and microphone streams may be transmitted between participants through real-time communication technology. Mortalive does not represent that every live interaction is recorded or permanently stored.</p>
+            </div>
+
+            <div class="terms-section">
+                <h2>7. Suspension &amp; Termination</h2>
+                <p>Mortalive may suspend, restrict, or terminate access at any time where reasonably necessary for safety, abuse prevention, technical reasons, beta testing, legal compliance, or protection of users and the platform.</p>
+                <p>You may stop using Mortalive at any time. Account deletion functionality is provided where available, but some information may need to be retained for legal, security, fraud-prevention, dispute-resolution, or regulatory purposes.</p>
+            </div>
+
+            <div class="terms-section">
+                <h2>8. Disclaimer of Warranties</h2>
+                <p>To the maximum extent permitted by law, Mortalive disclaims all express or implied warranties relating to availability, accuracy, merchantability, fitness for a particular purpose, non-infringement, reliability, security, or uninterrupted operation.</p>
+                <p>Use of the service is at your own risk. Mortalive does not warrant that the service or its infrastructure will be free from bugs, malicious code, unauthorized access, data loss, outages, or other defects.</p>
+            </div>
+
+            <div class="terms-section">
+                <h2>9. Limitation of Liability</h2>
+                <p>To the maximum extent permitted by applicable Indian law, Mortalive and its founders, operators, contributors, contractors, affiliates, and service providers shall not be liable for indirect, incidental, special, consequential, exemplary, or punitive damages, or for loss of profits, revenue, data, use, goodwill, reputation, business opportunity, or other intangible losses arising from or relating to the service.</p>
+                <p>To the maximum extent permitted by law, the total aggregate liability for any claim arising from or relating to Mortalive shall not exceed <strong>₹100 (One Hundred Rupees) or the amount actually paid by you to Mortalive, if any, whichever is lower</strong>.</p>
+                <p>This limitation does not apply to liability that cannot lawfully be excluded or limited under applicable law. Nothing in these Terms is intended to exclude liability for fraud or any other liability that the law does not permit the parties to contract away.</p>
+            </div>
+
+            <div class="terms-section">
+                <h2>10. Indemnity</h2>
+                <p>To the maximum extent permitted by applicable law, you agree to defend, indemnify, and hold harmless Mortalive and its operators from claims, losses, liabilities, damages, costs, and reasonable expenses arising from your content, your misuse of the platform, your violation of these Terms, or your violation of another person's rights or applicable law.</p>
+            </div>
+
+            <div class="terms-section">
+                <h2>11. Governing Law &amp; Legal Process</h2>
+                <p>These Terms are intended to operate subject to applicable law in India. If any provision is found unenforceable, the remaining provisions will continue to the extent permitted by law.</p>
+                <p>Mortalive may preserve, restrict, or disclose information where reasonably necessary to comply with legal process, government requests, court orders, investigations, fraud prevention, security incidents, or protection of users or the public.</p>
+            </div>
+
+            <div class="terms-section">
+                <h2>12. Changes to These Terms</h2>
+                <p>Mortalive may update these Terms as the beta product changes. The latest version will be posted on this page with an updated revision date and version number. Continued use after an update may constitute acceptance of the revised Terms to the extent permitted by law.</p>
             </div>
         </div>
 
-        <p style="text-align:center; color:var(--on-surface-3); font-size:13px;">
-            If you have any questions about these Terms, please contact us at <a href="mailto:support@mortalive.com" style="color:var(--primary);">support@mortalive.com</a>
+        <p style="text-align:center; color:var(--on-surface-3); font-size:13px; line-height:1.7; max-width:760px; margin:0 auto;">
+            For support, safety, privacy, content, or grievance matters, contact <a href="mailto:support@mortalive.com" style="color:var(--primary); font-weight:700;">support@mortalive.com</a>. Please use the subject line “Grievance” for formal complaints.
         </p>
     </div>
-
     <!-- Footer -->
+
     <footer class="footer">
         <div class="footer-inner">
             <div>
@@ -391,7 +470,7 @@
                 <h4>Legal</h4>
                 <div class="footer-links">
                     <a href="terms.html">Terms</a>
-                    <a href="terms.html#privacy">Privacy</a>
+                    <a href="privacy.html">Privacy</a>
                 </div>
             </div>
             
