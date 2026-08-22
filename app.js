@@ -4545,10 +4545,70 @@ function updateCharCounts() {
   }
 }
 
-function handleMemberSearch(e) {
-  const query = e.target.value.trim().toLowerCase();
-  const suggestionsContainer = $('group-members-suggestions');
+let _memberProfileSearchTimer = null;
+let _memberProfileSearchSeq = 0;
 
+function normalizeMemberInvitation(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  try {
+    const u = new URL(raw, window.location.origin);
+    const m = u.pathname.match(/^\/@([A-Za-z0-9_]{3,24})\/?$/);
+    if (m) return { username: m[1].toLowerCase(), url: `${u.origin}/@${encodeURIComponent(m[1])}` };
+  } catch (_) {}
+  const m = raw.match(/^@?([A-Za-z0-9_]{3,24})$/);
+  if (m && raw.startsWith('@')) {
+    const username = m[1].toLowerCase();
+    return { username, url: `${window.location.origin}/@${encodeURIComponent(username)}` };
+  }
+  return null;
+}
+
+async function searchMemberProfiles(query) {
+  if (!sb || !query) return [];
+  const { data, error } = await sb
+    .from('accounts')
+    .select('id,username,display_name,avatar_url')
+    .neq('id', S.userId || '')
+    .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
+    .order('username', { ascending: true })
+    .limit(12);
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+function renderMemberProfileSuggestions(profiles) {
+  const container = $('group-members-suggestions');
+  if (!container) return;
+  if (!profiles.length) {
+    container.innerHTML = '<div class="form-field-hint">No matching profiles found. Paste a @username profile link to invite someone.</div>';
+    return;
+  }
+  container.innerHTML = profiles.map(profile => {
+    const username = String(profile.username || '').trim();
+    const display = String(profile.display_name || username || 'Profile').trim();
+    const key = username || profile.id;
+    if (!key) return '';
+    return `<button type="button" class="form-member-suggestion" data-member-id="${escapeHtml(profile.id || '')}" data-member-username="${escapeHtml(username)}" data-member-name="${escapeHtml(display)}">` +
+      `${profile.avatar_url ? `<img src="${escapeHtml(profile.avatar_url)}" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:6px">` : '👤 '} ` +
+      `${escapeHtml(display)}${username ? ` <span style="opacity:.62">@${escapeHtml(username)}</span>` : ''}</button>`;
+  }).join('');
+
+  container.querySelectorAll('.form-member-suggestion').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      addMemberTag(btn.dataset.memberName || btn.dataset.memberUsername || '', {
+        id: btn.dataset.memberId || null,
+        username: btn.dataset.memberUsername || null,
+        profileUrl: btn.dataset.memberUsername ? `${window.location.origin}/@${encodeURIComponent(btn.dataset.memberUsername)}` : null
+      });
+    });
+  });
+}
+
+async function handleMemberSearch(e) {
+  const query = String(e.target.value || '').trim();
+  const suggestionsContainer = $('group-members-suggestions');
   if (!suggestionsContainer) return;
 
   if (!query) {
@@ -4556,66 +4616,72 @@ function handleMemberSearch(e) {
     return;
   }
 
-  // If you have a real API, call it here
-  // For now, use mock data
-  const allMembers = [
-    { id: 'u1', name: 'Alice Chen', avatar: '👩' },
-    { id: 'u2', name: 'Bob Johnson', avatar: '👨' },
-    { id: 'u3', name: 'Carol White', avatar: '👩' },
-    { id: 'u4', name: 'David Lee', avatar: '👨' },
-    { id: 'u5', name: 'Emma Wilson', avatar: '👩' },
-    { id: 'u6', name: 'Frank Brown', avatar: '👨' },
-    { id: 'u7', name: 'Grace Kim', avatar: '👩' }
-  ];
-
-  const filtered = allMembers.filter(m =>
-    !messagesState.selectedMembers.has(m.name) &&
-    (m.name.toLowerCase().includes(query) || m.id.includes(query))
-  );
-
-  suggestionsContainer.innerHTML = filtered.map(member => `
-    <button type="button" class="form-member-suggestion" data-member-name="${escapeHtml(member.name)}">
-      ${member.avatar} ${escapeHtml(member.name)}
-    </button>
-  `).join('');
-
-  // Add event listeners to suggestion buttons
-  suggestionsContainer.querySelectorAll('.form-member-suggestion').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      const name = btn.dataset.memberName;
-      addMemberTag(name);
+  // Invitation-link mode: only canonical profile links or explicit @usernames.
+  const invitation = normalizeMemberInvitation(query);
+  if (invitation && (query.startsWith('http://') || query.startsWith('https://') || query.startsWith('@'))) {
+    suggestionsContainer.innerHTML = `<button type="button" class="form-member-suggestion" data-invite-username="${escapeHtml(invitation.username)}" data-invite-url="${escapeHtml(invitation.url)}">🔗 Invite @${escapeHtml(invitation.username)}</button>`;
+    const btn = suggestionsContainer.querySelector('.form-member-suggestion');
+    btn?.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      addMemberTag(`@${invitation.username}`, { username: invitation.username, profileUrl: invitation.url, invitation: true });
     });
-  });
+    return;
+  }
+
+  const seq = ++_memberProfileSearchSeq;
+  clearTimeout(_memberProfileSearchTimer);
+  suggestionsContainer.innerHTML = '<div class="form-field-hint">Searching profiles…</div>';
+  _memberProfileSearchTimer = setTimeout(async () => {
+    try {
+      const profiles = await searchMemberProfiles(query);
+      if (seq !== _memberProfileSearchSeq) return;
+      const filtered = profiles.filter(p => {
+        const name = String(p.display_name || p.username || '').trim();
+        const username = String(p.username || '').trim();
+        const tagKey = username || name;
+        return !messagesState.selectedMembers.has(tagKey) && !Array.from(messagesState.selectedMembers.values()).some(v => String(v?.username || '').toLowerCase() === username.toLowerCase());
+      });
+      renderMemberProfileSuggestions(filtered);
+    } catch (err) {
+      console.warn('[Messages] profile search failed:', err?.message || err);
+      if (seq !== _memberProfileSearchSeq) return;
+      suggestionsContainer.innerHTML = '<div class="form-field-hint">Profile search is unavailable. Paste a canonical @username link to invite.</div>';
+    }
+  }, 180);
 }
 
-function addMemberTag(name) {
-  if (messagesState.selectedMembers.has(name)) return;
+function addMemberTag(name, member = {}) {
+  const displayName = String(name || '').trim();
+  const key = member.username ? `@${String(member.username).toLowerCase()}` : displayName.toLowerCase();
+  if (!displayName || messagesState.selectedMembers.has(key)) return;
 
-  messagesState.selectedMembers.add(name);
+  // Never accept arbitrary names/IDs from free text. A member must originate
+  // from a real profile suggestion or an explicit canonical profile invitation.
+  if (!member.username && !member.id) return;
+
+  messagesState.selectedMembers.add(key);
 
   const membersList = $('group-members-list');
   if (!membersList) return;
 
   const tag = document.createElement('div');
   tag.className = 'form-tag';
+  tag.dataset.memberKey = key;
   tag.innerHTML = `
-    <span>${escapeHtml(name)}</span>
-    <span class="form-tag-remove" data-member="${escapeHtml(name)}">×</span>
+    <span>${escapeHtml(displayName)}${member.username ? ` <small style="opacity:.62">@${escapeHtml(member.username)}</small>` : ''}</span>
+    <span class="form-tag-remove" data-member-key="${escapeHtml(key)}">×</span>
   `;
 
   tag.querySelector('.form-tag-remove').addEventListener('click', () => {
-    messagesState.selectedMembers.delete(name);
+    messagesState.selectedMembers.delete(key);
     tag.remove();
   });
 
   membersList.appendChild(tag);
 
-  // Clear input
   const input = $('group-members-input');
   if (input) input.value = '';
 
-  // Clear suggestions
   const suggestions = $('group-members-suggestions');
   if (suggestions) suggestions.innerHTML = '';
 }
@@ -5117,6 +5183,7 @@ window.closeCreateGroupModal = closeCreateGroupModal;
 window.loadThread = loadThread;
 window.sendMessage = sendMessage;
 window.closeThread = closeThread;
+window.normalizeMemberInvitation = normalizeMemberInvitation;
 
 
 // MORTALIVE FEED — Supabase-backed integration (Step 2)
