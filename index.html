@@ -4766,7 +4766,7 @@ COMPLETE CSS FOR REEL SYSTEM, PROFILE TAB AND AUDIT FIXES
    MORTALIVE — Profile Reels System + Audit Fixes  v1
    Paste as a new <style> block in index.html (after existing styles, 
    before <script>
-// v45 profile action bridge: visible Edit/Share use the same app-level actions.
+// v47 security/profile bridge: visible Edit/Share use the same app-level actions.
 (() => {
   const bind = () => {
     const edit = document.getElementById('btn-edit-profile');
@@ -8256,7 +8256,7 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260822-v45-profile-actions-explicit"></script>
+<script src="app.js?v=20260823-v47-api-security-audit"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
