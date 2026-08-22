@@ -3786,6 +3786,12 @@ ready(async () => {
   initRatingControls();
   initFeedPage();
 
+  // Bind profile controls at startup as well as during page navigation.
+  // The visible Edit/Share buttons live in the profile DOM, while the
+  // three-dot menu has its own menu binding; keeping this delegated binder
+  // active from boot ensures the direct buttons work on every profile load.
+  bindProfileEvents();
+
   // Initial routing waits for the real Supabase session result.
   // The landing checkmark only gates the Continue button; it is not auth state.
   const fromInvitationWithLogin = window.location.hash === '#login';
