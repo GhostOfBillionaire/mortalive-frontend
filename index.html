@@ -2539,10 +2539,10 @@ body.mortalive-progress-open .sakura-topbar {
 .modern-profile-card{position:relative;overflow:visible;border-radius:26px}
 
 /* ── Profile topline: menu button row (no cover) ── */
-.profile-topline{display:flex;justify-content:flex-end;padding:14px 14px 0;position:relative;z-index:3}
-.profile-menu-wrap{position:relative}
+.profile-topline{display:flex;justify-content:flex-end;padding:14px 14px 0;position:relative;z-index:100!important}
+.profile-menu-wrap{position:relative;z-index:101!important}
 .profile-round-btn{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.07);font-weight:800;font-size:17px;color:var(--on-surface-2)}
-.profile-menu{position:absolute;top:46px;right:0;width:200px;padding:6px;border-radius:16px;background:rgba(255,255,255,.98);border:1px solid var(--border);box-shadow:0 18px 48px rgba(0,0,0,.16);display:none;z-index:20}
+.profile-menu{position:absolute;top:46px;right:0;width:200px;padding:6px;border-radius:16px;background:rgba(255,255,255,.98);border:1px solid var(--border);box-shadow:0 18px 48px rgba(0,0,0,.16);display:none;z-index:1000!important;pointer-events:auto}
 .profile-menu.open{display:block}
 .profile-menu-item{width:100%;display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:11px;font-size:12.5px;font-weight:700;color:var(--on-surface);text-align:left}
 .profile-menu-item:hover{background:var(--surface-2)}
@@ -2582,6 +2582,9 @@ body.mortalive-progress-open .sakura-topbar {
 .profile-info-chips{display:flex;flex-wrap:wrap;gap:5px;flex:1;min-width:0}
 .profile-info-chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;background:var(--primary-alpha);border:1px solid rgba(26,110,245,.14);font-size:11.5px;font-weight:600;color:var(--primary)}
 .profile-info-link{color:var(--primary);font-weight:600;text-decoration:none;font-size:13px;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:bottom}
+.profile-info-links-value{display:flex;align-items:center;flex-wrap:wrap;gap:7px;flex:1;min-width:0}
+.profile-info-links-value .profile-info-link{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto;width:auto;max-width:240px;margin:0;padding:5px 10px;border-radius:999px;background:var(--primary-alpha);border:1px solid rgba(26,110,245,.14);white-space:nowrap;vertical-align:middle}
+.profile-info-links-value .profile-info-link:hover{background:rgba(26,110,245,.12)}
 .profile-info-link:hover{text-decoration:underline}
 .profile-goal-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 13px;border-radius:999px;background:linear-gradient(120deg,rgba(26,110,245,.08),rgba(124,58,237,.07));border:1px solid rgba(26,110,245,.18);font-size:12px;font-weight:700;color:var(--primary);cursor:pointer;transition:background .15s,box-shadow .15s,transform .15s cubic-bezier(.34,1.56,.64,1)}.profile-goal-pill:hover{background:linear-gradient(120deg,rgba(26,110,245,.16),rgba(124,58,237,.13));box-shadow:0 0 0 3px rgba(26,110,245,.12);transform:translateY(-1px)}.profile-goal-pill:active{transform:scale(.97)}
 
@@ -6846,71 +6849,6 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
   top: auto !important;
 }
 </style>
-<style id="mortalive-profile-bugfix-v41">
-/* Profile bugfix v41: keep the profile controls clickable and keep the
-   Live Identity / Thoughts & polls composer in normal document flow. */
-#pg-profile {
-  overflow-x: hidden !important;
-  overflow-y: visible !important;
-  height: auto !important;
-  min-height: 100dvh;
-}
-#pg-profile .profile-wrap {
-  min-height: unset !important;
-  padding-bottom: 96px !important;
-}
-#pg-profile .modern-profile-card.profile-top-sticky {
-  position: static !important;
-  top: auto !important;
-  z-index: 1 !important;
-}
-#pg-profile .profile-tabs-bar {
-  position: static !important;
-  top: auto !important;
-  z-index: 1 !important;
-  margin-bottom: 12px;
-}
-#pg-profile .profile-content-shell,
-#pg-profile .profile-feed-viewport {
-  overflow: visible !important;
-  max-height: none !important;
-  height: auto !important;
-}
-#pg-profile .profile-thoughts {
-  overflow: visible !important;
-  max-height: none !important;
-}
-#pg-profile .profile-post-composer {
-  position: relative !important;
-  z-index: 2 !important;
-}
-#pg-profile .profile-post-strip {
-  position: relative !important;
-  z-index: 1 !important;
-}
-#pg-profile .profile-actions-modern,
-#pg-profile #btn-edit-profile,
-#pg-profile #btn-share-profile,
-#pg-profile #btn-profile-menu {
-  position: relative;
-  z-index: 40 !important;
-  pointer-events: auto !important;
-}
-#pg-profile .profile-menu {
-  z-index: 60 !important;
-  pointer-events: auto !important;
-}
-@media (max-width: 720px) {
-  #pg-profile .profile-tabs-bar {
-    position: static !important;
-    top: auto !important;
-    z-index: 1 !important;
-  }
-  #pg-profile .profile-post-composer {
-    margin-bottom: 8px;
-  }
-}
-</style>
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -7983,7 +7921,7 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
         </div>
         <div class="profile-info-item" id="profile-info-links-row" style="display:none">
           <span class="profile-info-icon">🔗</span>
-          <div style="display:flex;flex-direction:column;gap:4px;" id="profile-info-links-val"></div>
+          <div class="profile-info-links-value" id="profile-info-links-val"></div>
         </div>
         <div class="profile-info-item" id="profile-info-goal-row">
           <span class="profile-info-icon">🎯</span>
@@ -8287,7 +8225,7 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260822-v41-profile-controls"></script>
+<script src="app.js?v=20260821-v40-security-audit"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -8419,7 +8357,7 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
       if(links.length > 0){
         linksVal.innerHTML = links.map(l => {
           const url = /^https?:\/\//i.test(l.url||'') ? l.url : `https://${l.url}`;
-          return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="profile-info-link">${l.name}</a>`;
+          return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="profile-info-link"><span>${l.name}</span><span style="opacity:.65;font-size:11px;line-height:1;">↗</span></a>`;
         }).join('');
         linksRow.style.display = 'flex';
       } else {
@@ -8901,4 +8839,13 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 #mortalive-post-viewer .mortalive-post-viewer-side .mortalive-post-viewer-text-content{color:var(--on-surface);}
 
 @media(max-width:720px){#pg-feed .compose-type-switch{gap:3px;} #pg-feed .compose-type-switch .compose-type-btn{padding:7px 8px;font-size:11.5px;} #pg-feed .compose-type-separator{font-size:11px;}}
+</style>
+
+<style id="mortalive-profile-dropdown-links-final">
+/* Profile fixes: menu above action row; link titles behave like interest chips. */
+#pg-profile .profile-topline{position:relative!important;z-index:100!important}
+#pg-profile .profile-menu-wrap{position:relative!important;z-index:101!important}
+#pg-profile .profile-menu{z-index:1000!important;pointer-events:auto!important}
+#pg-profile .profile-info-links-value{display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:7px!important;flex:1!important;min-width:0!important}
+#pg-profile .profile-info-links-value .profile-info-link{display:inline-flex!important;align-items:center!important;gap:5px!important;flex:0 0 auto!important;width:auto!important;max-width:240px!important;margin:0!important;white-space:nowrap!important}
 </style>
