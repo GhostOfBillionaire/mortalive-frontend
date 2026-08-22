@@ -767,6 +767,12 @@ function ready(fn) {
   }
 }
 
+ready(() => {
+  installMobileProfileFlowFix();
+  installProfileActionGuards();
+  bindProfileEvents();
+});
+
 
 
 // Phase 1 app boundary: Now extended to include the Coming Soon pages
@@ -807,6 +813,9 @@ function showPage(id, options = {}) {
   if (id !== 'pg-profile') closeProgressSheet();
 
   if (id === 'pg-profile') {
+    installProfileActionGuards();
+    installMobileProfileFlowFix();
+    bindProfileEvents();
     const requestedUserId = options.profileUserId || null;
 
     if (S.isGuest && requestedUserId) {
@@ -1453,7 +1462,7 @@ function initAuthControls() {
     return false;
   }
 
-  async function afterAuthSuccess(token, username, crockroachScore, userId) {
+  function afterAuthSuccess(token, username, crockroachScore, userId) {
     S.authToken = token;
     S.username = username;
     S.userId = userId || null;
@@ -1489,25 +1498,6 @@ function initAuthControls() {
         return;
       }
     } catch (_) {}
-
-    // If a logged-out visitor clicked Follow on a public profile, finish that
-    // follow immediately after signup/login succeeds, then return them to the
-    // public profile they were viewing. This preserves the intended
-    // guest -> signup -> follow flow without requiring a second click.
-    try {
-      const pendingFollowId = sessionStorage.getItem('mortalive_pending_follow_profile');
-      if (pendingFollowId && pendingFollowId !== userId) {
-        sessionStorage.removeItem('mortalive_pending_follow_profile');
-        await toggleFollow(pendingFollowId, true);
-        toast('Following!', '✓');
-        showPage('pg-profile', { profileUserId: pendingFollowId });
-        return;
-      }
-      if (pendingFollowId === userId) sessionStorage.removeItem('mortalive_pending_follow_profile');
-    } catch (error) {
-      console.warn('[Follow] pending follow completion failed:', error);
-      try { sessionStorage.removeItem('mortalive_pending_follow_profile'); } catch (_) {}
-    }
 
     enterLobby();
   }
@@ -3865,44 +3855,16 @@ ready(async () => {
       return;
     }
 
-    // ── Not logged in: open public shared profile links directly ────────
+    // ── Not logged in: handle shared profile link ─────────────────────
     if (sharedUsername) {
-      try {
-        const found = await lookupUserByUsername(sharedUsername);
-        if (!found?.id) {
-          toast(`@${sharedUsername} not found`, '⚠️');
-          if ($('pg-land')) showPage('pg-land');
-          return;
-        }
-        const cleanPath = pathUsername ? '/' : window.location.pathname;
-        window.history.replaceState(null, '', cleanPath);
-        showPage('pg-profile', { profileUserId: found.id });
-      } catch (error) {
-        console.warn('[Mortalive] Public profile route failed:', error);
-        toast('Could not load that profile.', '⚠️');
-        if ($('pg-land')) showPage('pg-land');
-      }
-      return;
-    }
-
-    // ── Not logged in: open public shared post links directly ──────────
-    const postPathMatch = window.location.pathname.match(/^\/post\/([^/]+)$/);
-    const sharedPostId = postPathMatch ? decodeURIComponent(postPathMatch[1]) : '';
-    if (sharedPostId) {
-      try {
-        window.history.replaceState(null, '', '/');
-        const publicPost = await fetchPublicPostById(sharedPostId);
-        if (!publicPost) {
-          toast('Post not found', '⚠️');
-          if ($('pg-land')) showPage('pg-land');
-          return;
-        }
-        await openPostViewer(publicPost);
-      } catch (error) {
-        console.warn('[Mortalive] Public post route failed:', error);
-        toast('Could not load that post.', '⚠️');
-        if ($('pg-land')) showPage('pg-land');
-      }
+      try { sessionStorage.setItem('mortalive_pending_profile_user', sharedUsername); } catch (_) {}
+      const cleanPath = pathUsername ? '/' : window.location.pathname;
+      window.history.replaceState(null, '', cleanPath);
+      showPage('pg-auth');
+      setTimeout(() => {
+        $('tab-login')?.click();
+        toast(`Sign in to view @${sharedUsername}'s profile`, '👤');
+      }, 0);
       return;
     }
 
@@ -5316,8 +5278,6 @@ async function fetchFeedPage(reset = false) {
     let query = sb
       .from('posts')
       .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
-      .neq('post_type', 'reel')
-      .neq('media_type', 'video')
       .order('created_at', { ascending: false })
       .range(_feedOffset, _feedOffset + FEED_PAGE_SIZE - 1);
 
@@ -6219,9 +6179,11 @@ function renderFeedPosts() {
           </div>
           ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
         </div>
-        <div class="post-body">${post.media_url && post.media_type !== 'video'
-          ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><img class="feed-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">`
-          : post?.post_meta?.kind ? renderStructuredFeedPost(post) : `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>`}</div>
+        <div class="post-body">${post.post_type === 'reel' && post.media_url
+          ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video src="${sanitizeHTML(post.media_url)}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
+          : post.media_url
+            ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><img class="feed-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">`
+            : post?.post_meta?.kind ? renderStructuredFeedPost(post) : `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>`}</div>
         <div class="post-actions">
           <button class="action-btn like-btn ${engagement.liked ? 'liked' : ''}" type="button" data-feed-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${engagement.liked ? 'true' : 'false'}"><span class="action-icon">${engagement.liked ? '♥' : '♡'}</span><span class="like-count">${engagement.likes}</span></button>
           <button class="action-btn comment-btn" type="button" data-feed-action="comments" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">💬</span><span>${engagement.comments}</span></button>
@@ -6364,47 +6326,21 @@ function postViewerRender(post, comments = _commentCache.get(post?.id) || []) {
   if (statusEl) statusEl.textContent = comments.length ? `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'}` : '';
 }
 
-async function fetchPublicPostById(postId) {
-  if (!postId || !sb) return null;
-  try {
-    const { data, error } = await sb
-      .from('posts')
-      .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
-      .eq('id', postId)
-      .eq('visibility', 'public')
-      .neq('post_type', 'reel')
-      .maybeSingle();
-    if (error || !data) return null;
-    const author = await fetchPublicProfileData(data.user_id);
-    return {
-      ...data,
-      author: author || { username: 'member', display_name: 'Member' }
-    };
-  } catch (error) {
-    console.warn('[Posts] public post lookup failed:', error?.message || error);
-    return null;
-  }
-}
-
 async function openPostViewer(postOrId) {
-  let post = typeof postOrId === 'string' ? getPostByIdForViewer(postOrId) : postOrId;
-  if (!post?.id) return;
-  if (post.post_type === 'reel' || post.media_type === 'video') {
-    toast('Video posts are no longer supported.', 'ℹ️');
+  if (S.isGuest || !S.userId) {
+    toast('Sign in to view posts', '🔒');
     return;
   }
-  if (!S.isGuest && S.userId) {
-    const sessionOk = await requireAuthenticatedSession();
-    if (!sessionOk) {
-      toast('Your session expired — please sign in again.', '🔒');
-      return;
-    }
-  } else if (S.isGuest && (!post.user_id || post.visibility !== 'public')) {
-    post = await fetchPublicPostById(post.id);
-    if (!post) {
-      toast('Post is not publicly available.', '🔒');
-      return;
-    }
+  const sessionOk = await requireAuthenticatedSession();
+  if (!sessionOk) {
+    toast('Your session expired — please sign in again.', '🔒');
+    return;
+  }
+  const post = typeof postOrId === 'string' ? getPostByIdForViewer(postOrId) : postOrId;
+  if (!post?.id) return;
+  if (post.post_type === 'reel' && post.media_url) {
+    openReelViewer(post, collectAvailableReels());
+    return;
   }
 
   const modal = $('mortalive-post-viewer');
@@ -6489,7 +6425,7 @@ function bindPostViewerInteractions() {
       } else if (type === 'comment-focus') {
         modal.querySelector('.mortalive-post-viewer-input')?.focus();
       } else if (type === 'copy') {
-        const url = `${location.origin}/post/${encodeURIComponent(postId)}`;
+        const url = `${location.origin}${location.pathname}#feed-post-${encodeURIComponent(postId)}`;
         navigator.clipboard?.writeText(url).then(() => toast('Post link copied', '📋')).catch(() => toast(url, '🔗'));
       }
       return;
@@ -6987,7 +6923,7 @@ function initFeedPage() {
         if (input?.value?.trim()) createPostComment(postId, input.value);
       }
       if (type === 'copy') {
-        const url = `${location.origin}/post/${encodeURIComponent(postId)}`;
+        const url = `${location.origin}${location.pathname}#feed-post-${postId}`;
         navigator.clipboard?.writeText(url).then(() => toast('Post link copied', '📋')).catch(() => toast(url, '🔗'));
       }
     }
@@ -7102,17 +7038,15 @@ let _profilePostsOwner = null;
 let _postsHydrationPromise = null;
 
 async function fetchProfilePosts(userId = S.userId) {
-  if (!userId || !sb) return [];
+  if (!userId || S.isGuest || !sb) return [];
+  if (!(await requireAuthenticatedSession())) return [];
   try {
-    let query = sb
+    const { data, error } = await sb
       .from('posts')
       .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
       .eq('user_id', userId)
-      .neq('post_type', 'reel')
       .order('created_at', { ascending: false })
       .limit(POSTS_PAGE_SIZE);
-    if (S.isGuest || userId !== S.userId) query = query.eq('visibility', 'public');
-    if (!S.isGuest && !(await requireAuthenticatedSession())) return [];
 
     if (error) throw error;
     return Array.isArray(data) ? data : [];
@@ -7250,21 +7184,22 @@ async function hydrateProfileGallery(userId = S.userId) {
 }
 
 async function hydrateProfilePosts(userId = S.userId, options = {}) {
-  if (!userId || !sb) return [];
+  if (!userId || S.isGuest || !sb) return [];
   if (_postsHydrationPromise) return _postsHydrationPromise;
 
   _postsHydrationPromise = fetchProfilePosts(userId)
     .then(async (posts) => {
-      if (S.userId === userId || S.profileViewUserId === userId) {
-        _profilePosts = posts.filter(p => p?.post_type !== 'reel');
+      if ((S.userId === userId || S.profileViewUserId === userId) && !S.isGuest) {
+        _profilePosts = posts;
         _profilePostsOwner = S.profileViewData || (S.userId === userId ? { id: S.userId, username: S.username, display_name: S.username } : null);
-        // Hydrate real like/comment counts only for authenticated viewers.
-        if (posts.length && !S.isGuest) {
+        // Hydrate real like/comment counts before rendering so cards show live numbers
+        if (posts.length) {
           await hydratePostEngagement(posts.map(p => p.id));
         }
-        renderProfilePosts(_profilePosts);
-        renderProfileGallery(_profilePosts);
-        refreshProfileTabs(_profilePosts);
+        renderProfilePosts(posts);
+        renderProfileGallery(posts);
+        renderProfileReels(posts);
+        refreshProfileTabs(posts);
       }
       return posts;
     })
@@ -8068,18 +8003,17 @@ async function initFollowSection(profileUserId) {
     return;
   }
 
-  // Guest viewing another profile — show Follow button (signup-gated) and load counts.
+  // Guest viewing another profile — show Follow button (login-gated) and load counts
   if (S.isGuest) {
     followBtn.style.display = '';
     followBtn.textContent = 'Follow';
     followBtn.disabled = false;
     followBtn.onclick = () => {
-      try { sessionStorage.setItem('mortalive_pending_follow_profile', profileUserId); } catch (_) {}
-      toast('Create an account to follow', '🔒');
+      toast('Sign in to follow', '🔒');
       setTimeout(() => {
         showPage('pg-auth');
-        $('tab-signup')?.click();
-      }, 400);
+        $('tab-login')?.click();
+      }, 800);
     };
     // Still load follower counts — they're publicly visible
     fetchFollowData(profileUserId).then(fd => {
@@ -8143,6 +8077,80 @@ function shareCurrentProfile() {
   } else {
     toast(link, '🔗');
   }
+}
+
+// Harden profile action wiring. The profile markup is rendered by index.html and
+// may also be rehydrated after auth/account-data changes, so keep the action
+// path delegated and intercept any legacy menu copy handler before it can emit
+// the obsolete #profile hash URL.
+function installProfileActionGuards() {
+  if (document.body.dataset.profileActionGuardsInstalled) return;
+  document.body.dataset.profileActionGuardsInstalled = '1';
+
+  document.addEventListener('click', (event) => {
+    const target = event.target?.closest?.('#btn-profile-copy');
+    if (!target) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    shareCurrentProfile();
+  }, true);
+}
+
+// Mobile profile layout guard: keep Live identity / composer / polls in the
+// normal document flow and prevent the post strip or tab bar from painting over
+// them on narrow screens. Desktop layout is intentionally untouched.
+function installMobileProfileFlowFix() {
+  if ($('mortalive-mobile-profile-flow-fix')) return;
+  const style = document.createElement('style');
+  style.id = 'mortalive-mobile-profile-flow-fix';
+  style.textContent = `
+    @media (max-width: 720px) {
+      #pg-profile .profile-tabs-bar {
+        position: static !important;
+        top: auto !important;
+        z-index: 1 !important;
+        margin-bottom: 12px !important;
+      }
+      #pg-profile .profile-feed-viewport,
+      #pg-profile .profile-content-shell {
+        overflow: visible !important;
+        max-height: none !important;
+      }
+      #pg-profile #profile-thoughts-section {
+        position: relative !important;
+        z-index: 2 !important;
+        overflow: visible !important;
+        max-height: none !important;
+        min-height: 0 !important;
+        isolation: isolate;
+      }
+      #pg-profile #profile-post-composer {
+        position: relative !important;
+        z-index: 4 !important;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background: var(--surface) !important;
+      }
+      #pg-profile #profile-post-strip {
+        position: relative !important;
+        z-index: 1 !important;
+        margin-top: 0 !important;
+      }
+      #pg-profile .profile-actions-modern {
+        position: relative !important;
+        z-index: 60 !important;
+        pointer-events: auto !important;
+      }
+      #pg-profile .profile-actions-modern button {
+        position: relative !important;
+        z-index: 61 !important;
+        pointer-events: auto !important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 function bindProfileEvents() {
@@ -9083,80 +9091,6 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
 
     console.log('[TalkEnhance v20] Ready ✓');
   }
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // VIDEO / REEL DECOMMISSION LAYER
-  // The historical video/reel code remains preserved above for auditability,
-  // but the product feature is disabled at runtime. Text chat, profiles,
-  // photos, posts, messaging, auth, and other unrelated functionality stay
-  // untouched.
-  // ═══════════════════════════════════════════════════════════════════════
-  (function disableVideoAndReels() {
-    S.mode = 'text';
-    S.camGranted = false;
-    S.localStream = null;
-    S.pc = null;
-    S.syntheticActive = false;
-    S.syntheticVideos = [];
-    S.syntheticCurrentIndex = 0;
-    S.syntheticVideoId = null;
-    S.syntheticSearchTimer = null;
-    try { localStorage.removeItem('mortalive_video_layout'); } catch (_) {}
-
-    const stopMedia = () => {
-      try {
-        if (S.localStream?.getTracks) S.localStream.getTracks().forEach((track) => track.stop());
-      } catch (_) {}
-      S.localStream = null;
-    };
-
-    const removeVideoReelDom = () => {
-      const selectors = [
-        '#perm-video', '#cam-strip', '#lobby-cam-preview', '#video-panel', '#video-feeds',
-        '#vid-local', '#vid-remote', '#btn-start-video', '#btn-toggle-video', '#vc-layout',
-        '#fs-controls', '#quality-bar', '#reel-viewer', '#profile-reels-grid',
-        '#profile-reels-tab', '#feed-reel-input', '[data-reel-upload-cta]',
-        '.profile-reels-section', '.feed-reel-card', '.reel-upload-progress',
-        '.video-panel', '.video-controls', '.video-wrapper', '.perm-video-wrap'
-      ];
-      document.querySelectorAll(selectors.join(',')).forEach((el) => el.remove());
-      document.querySelectorAll('[data-mode="video"]').forEach((el) => el.remove());
-      document.querySelectorAll('.reel-thumb, .reel-thumb-upload, .feed-reel-card').forEach((el) => el.remove());
-      document.body.classList.remove('vid-in-fs', 'vid-fs-portrait', 'vid-fs-landscape');
-    };
-
-    const patchTextMode = () => {
-      S.mode = 'text';
-      try { setActiveMode('text'); } catch (_) {}
-      const modeLabel = $('mode-label');
-      if (modeLabel) modeLabel.textContent = 'Text';
-      document.querySelectorAll('[data-mode="video"]').forEach((el) => el.remove());
-    };
-
-    // These assignments preserve the original functions but make all old
-    // video entry points harmless if a legacy listener still invokes them.
-    try { toggleVideoLayout = () => patchTextMode(); } catch (_) {}
-    try { setActiveMode = () => { S.mode = 'text'; const modeLabel = $('mode-label'); if (modeLabel) modeLabel.textContent = 'Text'; }; } catch (_) {}
-    try { ensureLobbyCameraPreview = () => {}; } catch (_) {}
-    try { requestCameraPermission = async () => { toast('Video chat is no longer available. Use Text chat.', 'ℹ️'); patchTextMode(); return false; }; } catch (_) {}
-    try { startWebRTC = async () => { patchTextMode(); return false; }; } catch (_) {}
-    try { beginSyntheticMatch = () => { patchTextMode(); showSearchScreen(); }; } catch (_) {}
-    try { stopSyntheticVideo = () => { S.syntheticActive = false; S.syntheticVideoId = null; S.syntheticVideoStartTime = null; }; } catch (_) {}
-    try { clearSyntheticSearchTimer = () => { clearTimeout(S.syntheticSearchTimer); S.syntheticSearchTimer = null; }; } catch (_) {}
-    try { startSnapshotCapture = () => {}; stopSnapshotCapture = () => {}; startSearchSnapshots = () => {}; stopSearchSnapshots = () => {}; } catch (_) {}
-    try { openReelViewer = () => { toast('Reels are no longer available.', 'ℹ️'); }; } catch (_) {}
-    try { renderProfileReels = () => {}; } catch (_) {}
-    try { setFeedComposerKind = (kind = 'text') => {
-      const safeKind = kind === 'reel' ? 'text' : kind;
-      _feedComposerKind = ['text','photo','poll','qna'].includes(safeKind) ? safeKind : 'text';
-      try { syncFeedComposerTypeUI(); syncFeedComposer(); } catch (_) {}
-    }; } catch (_) {}
-
-    stopMedia();
-    if (document.readyState !== 'loading') removeVideoReelDom();
-    document.addEventListener('DOMContentLoaded', () => { removeVideoReelDom(); patchTextMode(); stopMedia(); }, { once: true });
-    window.addEventListener('load', () => { removeVideoReelDom(); patchTextMode(); stopMedia(); }, { once: true });
-  })();
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => setTimeout(boot, 130), { once: true });
