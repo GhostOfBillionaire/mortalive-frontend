@@ -6846,6 +6846,71 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
   top: auto !important;
 }
 </style>
+<style id="mortalive-profile-bugfix-v41">
+/* Profile bugfix v41: keep the profile controls clickable and keep the
+   Live Identity / Thoughts & polls composer in normal document flow. */
+#pg-profile {
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  height: auto !important;
+  min-height: 100dvh;
+}
+#pg-profile .profile-wrap {
+  min-height: unset !important;
+  padding-bottom: 96px !important;
+}
+#pg-profile .modern-profile-card.profile-top-sticky {
+  position: static !important;
+  top: auto !important;
+  z-index: 1 !important;
+}
+#pg-profile .profile-tabs-bar {
+  position: static !important;
+  top: auto !important;
+  z-index: 1 !important;
+  margin-bottom: 12px;
+}
+#pg-profile .profile-content-shell,
+#pg-profile .profile-feed-viewport {
+  overflow: visible !important;
+  max-height: none !important;
+  height: auto !important;
+}
+#pg-profile .profile-thoughts {
+  overflow: visible !important;
+  max-height: none !important;
+}
+#pg-profile .profile-post-composer {
+  position: relative !important;
+  z-index: 2 !important;
+}
+#pg-profile .profile-post-strip {
+  position: relative !important;
+  z-index: 1 !important;
+}
+#pg-profile .profile-actions-modern,
+#pg-profile #btn-edit-profile,
+#pg-profile #btn-share-profile,
+#pg-profile #btn-profile-menu {
+  position: relative;
+  z-index: 40 !important;
+  pointer-events: auto !important;
+}
+#pg-profile .profile-menu {
+  z-index: 60 !important;
+  pointer-events: auto !important;
+}
+@media (max-width: 720px) {
+  #pg-profile .profile-tabs-bar {
+    position: static !important;
+    top: auto !important;
+    z-index: 1 !important;
+  }
+  #pg-profile .profile-post-composer {
+    margin-bottom: 8px;
+  }
+}
+</style>
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -7440,42 +7505,6 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
     <div class="chat-body">
 
       <!-- Video panel -->
-      <div class="video-panel" id="video-panel">
-        <div class="video-feeds" id="video-feeds">
-          <div class="no-video" id="no-video-ph">
-            <div class="big">📹</div>
-            <div id="ph-txt" style="font-size:13px;margin-top:4px;">Waiting for video…</div>
-          </div>
-          <div class="video-wrapper remote">
-            <video id="vid-remote" autoplay playsinline></video>
-          </div>
-          <div class="video-wrapper local">
-            <video id="vid-local" autoplay playsinline muted></video>
-          </div>
-          <div class="quality" id="quality-bar">
-            <span class="qdot" id="qual-dot"></span>
-            <span id="qual-text">HD</span>
-          </div>
-        </div>
-
-        <div class="video-controls">
-          <button class="vc-btn" id="vc-mic" title="Mute microphone">🎤 Mic</button>
-          <button class="vc-btn" id="vc-cam" title="Toggle camera">📷 Cam</button>
-          <button class="vc-btn" id="vc-flip" title="Flip camera">🔄 Flip</button>
-          <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶ Full</button>
-        </div>
-
-        <!-- Fullscreen bottom bar (hidden by default, shown via JS) -->
-        <div class="fs-controls" id="fs-controls">
-          <button class="fs-next-btn" id="btn-skip-fs" title="Next" onclick="document.getElementById('btn-skip')?.click()">Next</button>
-          <div class="fs-emoji-btns">
-            <button class="fs-emoji-btn" id="fs-mic" onclick="document.getElementById('vc-mic')?.click()" title="Mic">🎤</button>
-            <button class="fs-emoji-btn" id="fs-cam" onclick="document.getElementById('vc-cam')?.click()" title="Cam">📷</button>
-            <button class="fs-emoji-btn" id="fs-flip" onclick="document.getElementById('vc-flip')?.click()" title="Flip">🔄</button>
-            <button class="fs-emoji-btn" id="fs-exit" onclick="document.exitFullscreen?.() || document.webkitExitFullscreen?.() || document.mozCancelFullScreen?.()" title="Exit">⛶</button>
-          </div>
-        </div>
-      </div><!-- /video-panel -->
 
       <!-- Chat panel -->
       <div class="chat-panel">
@@ -7598,7 +7627,6 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-photo" type="button" data-compose-kind="photo">Photo</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
-  <button class="compose-type-btn" id="btn-type-reel" type="button" data-compose-kind="reel">Reel</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-poll" type="button" data-compose-kind="poll">Poll</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
@@ -7608,9 +7636,6 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
 <input id="feed-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
 <span id="feed-photo-name" class="compose-photo-name" aria-live="polite"></span>
 <div id="feed-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
-<button class="compose-tool" id="btn-feed-reel" type="button" title="Add reel" style="display:none">🎬 Reel</button>
-<input id="feed-reel-input" type="file" accept="video/mp4,video/webm,video/quicktime" hidden>
-<span id="feed-reel-name" class="compose-photo-name" aria-live="polite"></span>
 <span style="flex:1;"></span>
 <span id="compose-hashtag-status" class="compose-hashtag-status" aria-live="polite" style="display:none;"></span><span id="char-count" style="font-size:12px;color:var(--on-surface-3);">500</span>
 <button class="compose-submit" disabled="" id="compose-submit">Post</button>
@@ -7994,7 +8019,6 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
     <nav class="profile-tabs-bar" id="profile-tabs-bar" aria-label="Profile sections">
       <button type="button" class="profile-tab-btn active" data-profile-tab="posts">Posts <span class="tab-count">0</span></button>
       <button type="button" class="profile-tab-btn" data-profile-tab="photos">Photos <span class="tab-count">0</span></button>
-      <button type="button" class="profile-tab-btn" data-profile-tab="reels">Reels <span class="tab-count" id="profile-reel-count">0</span></button>
       <button type="button" class="profile-tab-btn" data-profile-tab="stats">Stats</button>
     </nav>
     <div class="profile-content-shell"><div class="profile-feed-viewport" id="profile-feed-viewport">
@@ -8035,12 +8059,6 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
           <div class="profile-gallery-tile"><div class="profile-gallery-placeholder"><div><strong>Photo</strong><span>1:1 tile</span></div></div></div><div class="profile-gallery-tile"><div class="profile-gallery-placeholder"><div><strong>Photo</strong><span>1:1 tile</span></div></div></div>
           <div class="profile-gallery-tile"><div class="profile-gallery-placeholder"><div><strong>Photo</strong><span>1:1 tile</span></div></div></div><div class="profile-gallery-tile"><div class="profile-gallery-placeholder"><div><strong>Photo</strong><span>1:1 tile</span></div></div></div>
         </div>
-      </section>
-
-
-      <section class="profile-reels-section profile-tab-panel" id="profile-reels-section" data-profile-panel="reels">
-        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Short video</span><span class="profile-section-title">Reels</span><span data-profile-reel-count-label style="font-size:10px;color:var(--on-surface-3);font-weight:700">0</span></div><button type="button" class="reels-empty-cta" data-reel-upload-cta style="margin:0;padding:7px 12px;display:none;">+ Reel</button></div>
-        <div class="profile-reels-grid" id="profile-reels-grid"></div>
       </section>
       <section class="profile-stats-panel profile-tab-panel" id="profile-stats-panel" data-profile-panel="stats"></section>
 
@@ -8269,7 +8287,7 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260821-v40-security-audit"></script>
+<script src="app.js?v=20260822-v41-profile-controls"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
