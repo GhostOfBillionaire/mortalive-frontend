@@ -767,12 +767,6 @@ function ready(fn) {
   }
 }
 
-// Profile controls must be wired independently of which page is active at load.
-// This also makes the delegated handlers survive profile DOM hydration/rerenders.
-ready(() => {
-  bindProfileEvents();
-});
-
 
 
 // Phase 1 app boundary: Now extended to include the Coming Soon pages
@@ -5549,7 +5543,7 @@ function _restoreOpenCommentSections(ids) {
 }
 
 function profileHref(userId, username) {
-  if (username) return `/@${encodeURIComponent(username.replace(/^@/, ''))}`;
+  if (username) return `/${encodeURIComponent(username.replace(/^@/, ''))}`;
   if (userId)   return `/?user=${encodeURIComponent(userId)}`;
   return '/';
 }
@@ -8061,51 +8055,19 @@ async function initFollowSection(profileUserId) {
 // Guard: idempotent — safe to call multiple times, only binds once per element.
 // Single source of truth for generating and copying a canonical profile link.
 // Always produces  https://origin/@username  — never a hash-based URL.
-function profileShareUsername() {
-  const raw = S.profileViewUserId
-    ? (S.profileViewData?.username || S.profileViewData?.handle || '')
+function shareCurrentProfile() {
+  const username = S.profileViewUserId
+    ? (S.profileViewData?.username || '')
     : (S.accountData?.username || S.username || '');
-  return String(raw || '').trim().replace(/^@+/, '');
-}
-
-async function copyTextToClipboard(text) {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch (error) {
-    console.warn('[Profile] navigator.clipboard failed:', error?.message || error);
-  }
-
-  try {
-    const area = document.createElement('textarea');
-    area.value = text;
-    area.setAttribute('readonly', '');
-    area.style.position = 'fixed';
-    area.style.top = '-1000px';
-    area.style.left = '-1000px';
-    area.style.opacity = '0';
-    document.body.appendChild(area);
-    area.focus();
-    area.select();
-    const ok = document.execCommand('copy');
-    area.remove();
-    return ok;
-  } catch (error) {
-    console.warn('[Profile] fallback copy failed:', error?.message || error);
-    return false;
-  }
-}
-
-async function shareCurrentProfile() {
-  const username = profileShareUsername();
-  if (!username) { toast('Profile username is unavailable', '⚠️'); return; }
+  if (!username) { toast('Sign in to copy your profile link', '🔒'); return; }
   const link = `${window.location.origin}/@${encodeURIComponent(username)}`;
-  const copied = await copyTextToClipboard(link);
-  if (copied) toast('Profile link copied!', '📋');
-  else toast(link, '🔗');
-  return link;
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(link)
+      .then(() => toast('Profile link copied! Share it anywhere.', '📋'))
+      .catch(() => toast(link, '🔗'));
+  } else {
+    toast(link, '🔗');
+  }
 }
 
 function bindProfileEvents() {
@@ -8120,23 +8082,10 @@ function bindProfileEvents() {
     const profileBtn = e.target.closest?.('[data-open-profile]');
     if (profileBtn) { e.preventDefault(); openUserProfile(profileBtn.dataset.openProfile); return; }
 
-    const editButton = e.target.closest?.('#btn-edit-profile');
-    if (editButton) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!document.body.classList.contains('profile-viewing-public')) toggleProfileEditMode();
-      return;
-    }
+    if (e.target.closest?.('#btn-edit-profile')) { toggleProfileEditMode(); return; }
 
-    const shareButton = e.target.closest?.('#btn-share-profile, #btn-profile-copy');
-    if (shareButton) {
-      e.preventDefault();
-      e.stopPropagation();
+    if (e.target.closest?.('#btn-share-profile, #btn-profile-copy')) {
       shareCurrentProfile();
-      const profileMenu = $('profile-menu');
-      const menuButton = $('btn-profile-menu');
-      profileMenu?.classList.remove('open');
-      menuButton?.setAttribute('aria-expanded', 'false');
       return;
     }
   });
@@ -9350,3 +9299,124 @@ document.addEventListener('click', (event) => {
     setTimeout(() => $('feed-reel-input')?.click(), 0);
   }, 60);
 });
+
+/* ── FINAL PROFILE INTERACTION PATCH ───────────────────────────────────────
+   Keeps the three-dot menu above the profile action buttons and makes the
+   profile links render horizontally without changing the existing markup.
+   Also reinforces pointer-events on the visible Edit/Share controls because
+   the profile page has several historical overlay/stacking rules. */
+(function installFinalProfileInteractionPatch() {
+  'use strict';
+
+  const STYLE_ID = 'mortalive-final-profile-interaction-patch';
+
+  function installStyle() {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = `
+      /* Profile action hit targets */
+      #pg-profile .profile-identity,
+      #pg-profile .profile-actions-modern {
+        position: relative !important;
+        z-index: 40 !important;
+      }
+      #pg-profile #btn-edit-profile,
+      #pg-profile #btn-share-profile,
+      #pg-profile #btn-follow-user {
+        position: relative !important;
+        z-index: 60 !important;
+        pointer-events: auto !important;
+        touch-action: manipulation;
+        cursor: pointer !important;
+      }
+
+      /* Menu gets its own higher stacking layer and cannot sit behind the
+         identity/action row. */
+      #pg-profile .profile-topline,
+      #pg-profile .profile-menu-wrap {
+        position: relative !important;
+        z-index: 200 !important;
+      }
+      #pg-profile #btn-profile-menu {
+        position: relative !important;
+        z-index: 201 !important;
+        pointer-events: auto !important;
+      }
+      #pg-profile #profile-menu {
+        position: absolute !important;
+        z-index: 9999 !important;
+        pointer-events: auto !important;
+      }
+
+      /* Social/user links: horizontal, wrapping chips instead of a vertical
+         stack. */
+      #pg-profile #profile-info-links-val {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        gap: 7px 10px !important;
+        min-width: 0;
+      }
+      #pg-profile #profile-info-links-val .profile-info-link {
+        display: inline-flex !important;
+        align-items: center !important;
+        max-width: min(280px, 100%) !important;
+        white-space: nowrap !important;
+      }
+
+      @media (max-width: 840px) {
+        #pg-profile .profile-actions-modern {
+          z-index: 60 !important;
+        }
+        #pg-profile .profile-topline,
+        #pg-profile .profile-menu-wrap {
+          z-index: 200 !important;
+        }
+        #pg-profile #profile-menu {
+          top: 46px !important;
+          right: 0 !important;
+        }
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function reinforceProfileActions() {
+    const page = document.getElementById('pg-profile');
+    if (!page) return;
+    ['btn-edit-profile', 'btn-share-profile', 'btn-follow-user', 'btn-profile-menu', 'btn-profile-copy'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.pointerEvents = 'auto';
+      el.style.cursor = 'pointer';
+      el.style.position = 'relative';
+    });
+    const links = document.getElementById('profile-info-links-val');
+    if (links) {
+      links.style.display = 'flex';
+      links.style.flexDirection = 'row';
+      links.style.flexWrap = 'wrap';
+      links.style.alignItems = 'center';
+      links.style.gap = '7px 10px';
+    }
+  }
+
+  function boot() {
+    installStyle();
+    reinforceProfileActions();
+    const observer = new MutationObserver(() => reinforceProfileActions());
+    const profile = document.getElementById('pg-profile');
+    if (profile) observer.observe(profile, { childList: true, subtree: true });
+    window.addEventListener('resize', reinforceProfileActions, { passive: true });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+})();
+
