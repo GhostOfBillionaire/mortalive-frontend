@@ -767,12 +767,6 @@ function ready(fn) {
   }
 }
 
-ready(() => {
-  installMobileProfileFlowFix();
-  installProfileActionGuards();
-  bindProfileEvents();
-});
-
 
 
 // Phase 1 app boundary: Now extended to include the Coming Soon pages
@@ -813,9 +807,6 @@ function showPage(id, options = {}) {
   if (id !== 'pg-profile') closeProgressSheet();
 
   if (id === 'pg-profile') {
-    installProfileActionGuards();
-    installMobileProfileFlowFix();
-    bindProfileEvents();
     const requestedUserId = options.profileUserId || null;
 
     if (S.isGuest && requestedUserId) {
@@ -5552,7 +5543,7 @@ function _restoreOpenCommentSections(ids) {
 }
 
 function profileHref(userId, username) {
-  if (username) return `/@${encodeURIComponent(username.replace(/^@/, ''))}`;
+  if (username) return `/@${encodeURIComponent(String(username).replace(/^@/, ''))}`;
   if (userId)   return `/?user=${encodeURIComponent(userId)}`;
   return '/';
 }
@@ -7909,6 +7900,54 @@ function toggleProfileEditMode() {
   }
 }
 
+function installProfileInteractionFixes() {
+  if (document.getElementById('mortalive-profile-interaction-fix-v2')) return;
+  const style = document.createElement('style');
+  style.id = 'mortalive-profile-interaction-fix-v2';
+  style.textContent = `
+    #btn-edit-profile,
+    #btn-share-profile,
+    #btn-profile-copy {
+      position: relative;
+      z-index: 40;
+      pointer-events: auto !important;
+      touch-action: manipulation;
+    }
+
+    @media (max-width: 720px) {
+      /* The phone profile must flow normally; the sticky tab row was
+         covering the Live identity / composer content. */
+      body.mortalive-app-topbar-visible .profile-tabs-bar {
+        top: auto !important;
+      }
+      #pg-profile .profile-tabs-bar {
+        position: relative !important;
+        top: auto !important;
+        z-index: 10 !important;
+        margin-bottom: 12px;
+      }
+      #pg-profile .profile-feed-viewport {
+        max-height: none !important;
+        overflow: visible !important;
+        overscroll-behavior: auto !important;
+      }
+      #pg-profile .profile-post-composer {
+        position: relative;
+        z-index: 12;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+// Activate profile interaction routing after the DOM exists.
+ready(() => {
+  installProfileInteractionFixes();
+  bindProfileEvents();
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // FOLLOW SYSTEM
 // ═══════════════════════════════════════════════════════════════════
@@ -8065,93 +8104,49 @@ async function initFollowSection(profileUserId) {
 // Single source of truth for generating and copying a canonical profile link.
 // Always produces  https://origin/@username  — never a hash-based URL.
 function shareCurrentProfile() {
-  const username = S.profileViewUserId
-    ? (S.profileViewData?.username || '')
-    : (S.accountData?.username || S.username || '');
-  if (!username) { toast('Sign in to copy your profile link', '🔒'); return; }
+  const rawUsername =
+    S.profileViewData?.username ||
+    S.accountData?.username ||
+    S.username ||
+    localStorage.getItem('mortalive_username') ||
+    '';
+
+  const username = String(rawUsername).trim().replace(/^@+/, '');
+  if (!username) {
+    toast('Your username is not available yet. Please refresh and try again.', '⚠️');
+    return;
+  }
+
   const link = `${window.location.origin}/@${encodeURIComponent(username)}`;
+
+  const finish = () => toast('Profile link copied!', '📋');
+  const fallbackCopy = () => {
+    try {
+      const area = document.createElement('textarea');
+      area.value = link;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.left = '-9999px';
+      area.style.top = '0';
+      document.body.appendChild(area);
+      area.select();
+      area.setSelectionRange(0, area.value.length);
+      const ok = document.execCommand('copy');
+      area.remove();
+      if (ok) finish();
+      else toast(link, '🔗');
+    } catch (_) {
+      toast(link, '🔗');
+    }
+  };
+
   if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(link)
-      .then(() => toast('Profile link copied! Share it anywhere.', '📋'))
-      .catch(() => toast(link, '🔗'));
+    navigator.clipboard.writeText(link).then(finish).catch(fallbackCopy);
   } else {
-    toast(link, '🔗');
+    fallbackCopy();
   }
 }
 
-// Harden profile action wiring. The profile markup is rendered by index.html and
-// may also be rehydrated after auth/account-data changes, so keep the action
-// path delegated and intercept any legacy menu copy handler before it can emit
-// the obsolete #profile hash URL.
-function installProfileActionGuards() {
-  if (document.body.dataset.profileActionGuardsInstalled) return;
-  document.body.dataset.profileActionGuardsInstalled = '1';
-
-  document.addEventListener('click', (event) => {
-    const target = event.target?.closest?.('#btn-profile-copy');
-    if (!target) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-    shareCurrentProfile();
-  }, true);
-}
-
-// Mobile profile layout guard: keep Live identity / composer / polls in the
-// normal document flow and prevent the post strip or tab bar from painting over
-// them on narrow screens. Desktop layout is intentionally untouched.
-function installMobileProfileFlowFix() {
-  if ($('mortalive-mobile-profile-flow-fix')) return;
-  const style = document.createElement('style');
-  style.id = 'mortalive-mobile-profile-flow-fix';
-  style.textContent = `
-    @media (max-width: 720px) {
-      #pg-profile .profile-tabs-bar {
-        position: static !important;
-        top: auto !important;
-        z-index: 1 !important;
-        margin-bottom: 12px !important;
-      }
-      #pg-profile .profile-feed-viewport,
-      #pg-profile .profile-content-shell {
-        overflow: visible !important;
-        max-height: none !important;
-      }
-      #pg-profile #profile-thoughts-section {
-        position: relative !important;
-        z-index: 2 !important;
-        overflow: visible !important;
-        max-height: none !important;
-        min-height: 0 !important;
-        isolation: isolate;
-      }
-      #pg-profile #profile-post-composer {
-        position: relative !important;
-        z-index: 4 !important;
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        background: var(--surface) !important;
-      }
-      #pg-profile #profile-post-strip {
-        position: relative !important;
-        z-index: 1 !important;
-        margin-top: 0 !important;
-      }
-      #pg-profile .profile-actions-modern {
-        position: relative !important;
-        z-index: 60 !important;
-        pointer-events: auto !important;
-      }
-      #pg-profile .profile-actions-modern button {
-        position: relative !important;
-        z-index: 61 !important;
-        pointer-events: auto !important;
-      }
-    }
-  `;
-  document.head.appendChild(style);
-}
 
 function bindProfileEvents() {
   // Hard guard against double-binding (e.g. auth-state listener re-triggering)
@@ -8162,16 +8157,32 @@ function bindProfileEvents() {
   // Direct element.addEventListener on #btn-edit-profile and share buttons
   // broke whenever initProfilePage() replaced those nodes after hydration.
   document.addEventListener('click', (e) => {
-    const profileBtn = e.target.closest?.('[data-open-profile]');
-    if (profileBtn) { e.preventDefault(); openUserProfile(profileBtn.dataset.openProfile); return; }
+    const target = e.target;
+    const profileBtn = target?.closest?.('[data-open-profile]');
+    if (profileBtn) {
+      e.preventDefault();
+      openUserProfile(profileBtn.dataset.openProfile);
+      return;
+    }
 
-    if (e.target.closest?.('#btn-edit-profile')) { toggleProfileEditMode(); return; }
+    const editBtn = target?.closest?.('#btn-edit-profile');
+    if (editBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation?.();
+      toggleProfileEditMode();
+      return;
+    }
 
-    if (e.target.closest?.('#btn-share-profile, #btn-profile-copy')) {
+    const shareBtn = target?.closest?.('#btn-share-profile, #btn-profile-copy');
+    if (shareBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation?.();
       shareCurrentProfile();
       return;
     }
-  });
+  }, true);
 
   // Avatar upload — direct bind is safe here; the input/button are never
   // re-created by initProfilePage, only hidden/shown.
