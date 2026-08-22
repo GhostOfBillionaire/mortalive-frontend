@@ -2,7 +2,8 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-21-v40-security-audit'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-22-v43-profile-actions'; // bump this string on every deploy to confirm cache is fresh
+// Random maintenance note: keep profile controls resilient across rerenders.
 
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
 const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
@@ -841,6 +842,11 @@ function showPage(id, options = {}) {
     S.profileViewData = null;
     document.body.classList.remove('profile-viewing-public');
     initFeedPage();
+
+  // Profile controls use delegated events because the profile card is
+  // hydrated/rerendered after startup. Bind once at bootstrap so Edit
+  // Profile and Share remain functional after every profile refresh.
+  bindProfileEvents();
     if (!S.isGuest && S.userId) {
       syncFeedSidebar();
       fetchFeedPage(true);
