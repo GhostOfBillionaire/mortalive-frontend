@@ -2,8 +2,9 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-22-v45-profile-actions-explicit'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-23-v47-api-security-audit'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
+// Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
 const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
@@ -1308,13 +1309,11 @@ async function loadPublicRuntimeConfig() {
     });
     sb = window.sb;
 
-    if (Array.isArray(config.iceServers) && config.iceServers.length) {
-      ICE_CONFIG = { iceServers: config.iceServers };
-    }
-
+    // Video/reel runtime configuration is retired. Do not hydrate ICE/TURN
+    // settings from the public backend configuration endpoint.
     window.MORTALIVE_PUBLIC_CONFIG = {
       supabaseUrl: config.supabaseUrl,
-      iceServerCount: Array.isArray(config.iceServers) ? config.iceServers.length : 0
+      mediaRetired: true
     };
     return config;
   })();
@@ -2990,20 +2989,8 @@ function monitorQuality() {
 // ═══════════════════════════════════════════════════════════════════
 
 async function fetchSyntheticVideoBatch() {
-  try {
-    const res = await fetch(`${SERVER_URL}/api/synthetic-videos?limit=${SYNTHETIC_SKIP_LIMIT}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (!Array.isArray(data.videos) || data.videos.length === 0) {
-      console.warn('[Synthetic] No videos in database yet.');
-      return [];
-    }
-    console.log(`[Synthetic] Loaded ${data.videos.length} video(s) from server.`);
-    return data.videos;
-  } catch (e) {
-    console.warn('[Synthetic] Could not fetch videos:', e.message);
-    return [];
-  }
+  // Retired: synthetic/reel playback no longer calls a media API.
+  return [];
 }
 
 async function beginSyntheticMatch() {
@@ -3492,12 +3479,9 @@ function captureFrame(videoEl) {
 }
 
 function sendSnapshot(source, dataUrl) {
-  if (!dataUrl) return;
-  fetch(`${SERVER_URL}/api/snapshot`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ roomId: S.roomId, source, image: dataUrl, token: S.authToken, ts: Date.now() })
-  }).catch(() => {});
+  // Retired: snapshot capture used to accompany video/live matching.
+  // Existing snapshots remain available only through the protected admin viewer.
+  return;
 }
 
 function clearSnapshotBurstTimers() {
