@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-22-v43-profile-actions'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-22-v45-profile-actions-explicit'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
@@ -7979,6 +7979,9 @@ function toggleProfileEditMode() {
   }
 }
 
+// Public browser bridge for the visible Profile Edit button.
+window.toggleProfileEditMode = toggleProfileEditMode;
+
 // ═══════════════════════════════════════════════════════════════════
 // FOLLOW SYSTEM
 // ═══════════════════════════════════════════════════════════════════
@@ -8148,6 +8151,9 @@ function shareCurrentProfile() {
     toast(link, '🔗');
   }
 }
+
+// Public bridge: the profile menu lives in index.html and uses the same canonical helper.
+window.shareCurrentProfile = shareCurrentProfile;
 
 function bindProfileEvents() {
   // Hard guard against double-binding (e.g. auth-state listener re-triggering)
@@ -9384,6 +9390,124 @@ document.addEventListener('click', (event) => {
    profile links render horizontally without changing the existing markup.
    Also reinforces pointer-events on the visible Edit/Share controls because
    the profile page has several historical overlay/stacking rules. */
+// The profile buttons stay boringly reliable.
+// ── v45 Explicit profile action bridge ───────────────────────────────────────
+// Keep the visible Edit/Share controls independent from menu bindings,
+// rerenders, and event delegation order.
+(function installExplicitProfileActionBridge(){
+  'use strict';
+  const root = document.documentElement;
+  if (root && !root.dataset.mortaliveV45ProfileActions) {
+    root.dataset.mortaliveV45ProfileActions = '1';
+    root.addEventListener('click', function(event){
+      const edit = event.target?.closest?.('#btn-edit-profile');
+      const share = event.target?.closest?.('#btn-share-profile');
+      if (!edit && !share) return;
+      event.preventDefault();
+      event.stopImmediatePropagation?.();
+      if (edit) {
+        window.toggleProfileEditMode?.();
+      } else {
+        window.shareCurrentProfile?.();
+      }
+    }, true);
+  }
+
+  function ensureDirectHandlers(){
+    const edit = document.getElementById('btn-edit-profile');
+    const share = document.getElementById('btn-share-profile');
+    if (edit && !edit.dataset.mortaliveV45Bound) {
+      edit.dataset.mortaliveV45Bound = '1';
+      edit.addEventListener('click', function(event){
+        event.preventDefault();
+        event.stopImmediatePropagation?.();
+        window.toggleProfileEditMode?.();
+      }, true);
+    }
+    if (share && !share.dataset.mortaliveV45Bound) {
+      share.dataset.mortaliveV45Bound = '1';
+      share.addEventListener('click', function(event){
+        event.preventDefault();
+        event.stopImmediatePropagation?.();
+        window.shareCurrentProfile?.();
+      }, true);
+    }
+  }
+  const boot = () => {
+    ensureDirectHandlers();
+    const page = document.getElementById('pg-profile');
+    if (page && !page.dataset.mortaliveV45Observer) {
+      page.dataset.mortaliveV45Observer = '1';
+      new MutationObserver(ensureDirectHandlers).observe(page, {childList:true, subtree:true});
+    }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once:true});
+  else boot();
+})();
+
+// ── Final profile action binding ─────────────────────────────────────────────
+// Direct target handlers plus a capture fallback keep the visible profile
+// actions functional even when ancestor/profile-menu listeners intercept clicks.
+(function installDirectProfileActionBinding() {
+  'use strict';
+  const BOUND = 'mortaliveDirectProfileActionBound';
+
+  function bind() {
+    const edit = document.getElementById('btn-edit-profile');
+    const share = document.getElementById('btn-share-profile');
+
+    if (edit && !edit.dataset[BOUND]) {
+      edit.dataset[BOUND] = '1';
+      edit.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+        toggleProfileEditMode();
+      };
+    }
+
+    if (share && !share.dataset[BOUND]) {
+      share.dataset[BOUND] = '1';
+      share.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+        shareCurrentProfile();
+      };
+    }
+  }
+
+  function boot() {
+    bind();
+    const root = document.documentElement;
+    if (root && !root.dataset.mortaliveProfileActionCaptureBound) {
+      root.dataset.mortaliveProfileActionCaptureBound = '1';
+      root.addEventListener('click', (event) => {
+        const target = event.target?.closest?.('#btn-edit-profile, #btn-share-profile');
+        if (!target) return;
+        if (!document.getElementById('pg-profile')?.classList.contains('active')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+        if (target.id === 'btn-edit-profile') toggleProfileEditMode();
+        else shareCurrentProfile();
+      }, true);
+    }
+    const page = document.getElementById('pg-profile');
+    if (page && !page.dataset.mortaliveProfileActionObserver) {
+      page.dataset.mortaliveProfileActionObserver = '1';
+      const observer = new MutationObserver(bind);
+      observer.observe(page, { childList: true, subtree: true });
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+})();
+
 (function installFinalProfileInteractionPatch() {
   'use strict';
 
