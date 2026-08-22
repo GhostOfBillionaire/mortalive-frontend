@@ -4765,7 +4765,33 @@ COMPLETE CSS FOR REEL SYSTEM, PROFILE TAB AND AUDIT FIXES
 /* ═══════════════════════════════════════════════════════════════════════
    MORTALIVE — Profile Reels System + Audit Fixes  v1
    Paste as a new <style> block in index.html (after existing styles, 
-   before </body>). These selectors are specific enough to override 
+   before <script>
+// v45 profile action bridge: visible Edit/Share use the same app-level actions.
+(() => {
+  const bind = () => {
+    const edit = document.getElementById('btn-edit-profile');
+    const share = document.getElementById('btn-share-profile');
+    if (edit && !edit.dataset.htmlV45Bound) {
+      edit.dataset.htmlV45Bound='1';
+      edit.addEventListener('click', e => {
+        e.preventDefault();
+        window.toggleProfileEditMode?.();
+      });
+    }
+    if (share && !share.dataset.htmlV45Bound) {
+      share.dataset.htmlV45Bound='1';
+      share.addEventListener('click', e => {
+        e.preventDefault();
+        window.shareCurrentProfile?.();
+      });
+    }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind, {once:true});
+  else bind();
+  new MutationObserver(bind).observe(document.documentElement, {childList:true, subtree:true});
+})();
+</script>
+</body>). These selectors are specific enough to override 
    existing rules without !important wars.
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -8230,7 +8256,7 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260822-v43-profile-layout"></script>
+<script src="app.js?v=20260822-v45-profile-actions-explicit"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
