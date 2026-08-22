@@ -767,6 +767,12 @@ function ready(fn) {
   }
 }
 
+// Profile controls must be wired independently of which page is active at load.
+// This also makes the delegated handlers survive profile DOM hydration/rerenders.
+ready(() => {
+  bindProfileEvents();
+});
+
 
 
 // Phase 1 app boundary: Now extended to include the Coming Soon pages
@@ -5543,7 +5549,7 @@ function _restoreOpenCommentSections(ids) {
 }
 
 function profileHref(userId, username) {
-  if (username) return `/@${encodeURIComponent(String(username).replace(/^@/, ''))}`;
+  if (username) return `/@${encodeURIComponent(username.replace(/^@/, ''))}`;
   if (userId)   return `/?user=${encodeURIComponent(userId)}`;
   return '/';
 }
@@ -7900,54 +7906,6 @@ function toggleProfileEditMode() {
   }
 }
 
-function installProfileInteractionFixes() {
-  if (document.getElementById('mortalive-profile-interaction-fix-v2')) return;
-  const style = document.createElement('style');
-  style.id = 'mortalive-profile-interaction-fix-v2';
-  style.textContent = `
-    #btn-edit-profile,
-    #btn-share-profile,
-    #btn-profile-copy {
-      position: relative;
-      z-index: 40;
-      pointer-events: auto !important;
-      touch-action: manipulation;
-    }
-
-    @media (max-width: 720px) {
-      /* The phone profile must flow normally; the sticky tab row was
-         covering the Live identity / composer content. */
-      body.mortalive-app-topbar-visible .profile-tabs-bar {
-        top: auto !important;
-      }
-      #pg-profile .profile-tabs-bar {
-        position: relative !important;
-        top: auto !important;
-        z-index: 10 !important;
-        margin-bottom: 12px;
-      }
-      #pg-profile .profile-feed-viewport {
-        max-height: none !important;
-        overflow: visible !important;
-        overscroll-behavior: auto !important;
-      }
-      #pg-profile .profile-post-composer {
-        position: relative;
-        z-index: 12;
-        visibility: visible !important;
-        opacity: 1 !important;
-      }
-    }
-  `;
-  document.head.appendChild(style);
-}
-
-// Activate profile interaction routing after the DOM exists.
-ready(() => {
-  installProfileInteractionFixes();
-  bindProfileEvents();
-});
-
 // ═══════════════════════════════════════════════════════════════════
 // FOLLOW SYSTEM
 // ═══════════════════════════════════════════════════════════════════
@@ -8103,50 +8061,52 @@ async function initFollowSection(profileUserId) {
 // Guard: idempotent — safe to call multiple times, only binds once per element.
 // Single source of truth for generating and copying a canonical profile link.
 // Always produces  https://origin/@username  — never a hash-based URL.
-function shareCurrentProfile() {
-  const rawUsername =
-    S.profileViewData?.username ||
-    S.accountData?.username ||
-    S.username ||
-    localStorage.getItem('mortalive_username') ||
-    '';
+function profileShareUsername() {
+  const raw = S.profileViewUserId
+    ? (S.profileViewData?.username || S.profileViewData?.handle || '')
+    : (S.accountData?.username || S.username || '');
+  return String(raw || '').trim().replace(/^@+/, '');
+}
 
-  const username = String(rawUsername).trim().replace(/^@+/, '');
-  if (!username) {
-    toast('Your username is not available yet. Please refresh and try again.', '⚠️');
-    return;
+async function copyTextToClipboard(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (error) {
+    console.warn('[Profile] navigator.clipboard failed:', error?.message || error);
   }
 
-  const link = `${window.location.origin}/@${encodeURIComponent(username)}`;
-
-  const finish = () => toast('Profile link copied!', '📋');
-  const fallbackCopy = () => {
-    try {
-      const area = document.createElement('textarea');
-      area.value = link;
-      area.setAttribute('readonly', '');
-      area.style.position = 'fixed';
-      area.style.left = '-9999px';
-      area.style.top = '0';
-      document.body.appendChild(area);
-      area.select();
-      area.setSelectionRange(0, area.value.length);
-      const ok = document.execCommand('copy');
-      area.remove();
-      if (ok) finish();
-      else toast(link, '🔗');
-    } catch (_) {
-      toast(link, '🔗');
-    }
-  };
-
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(link).then(finish).catch(fallbackCopy);
-  } else {
-    fallbackCopy();
+  try {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.top = '-1000px';
+    area.style.left = '-1000px';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.focus();
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    return ok;
+  } catch (error) {
+    console.warn('[Profile] fallback copy failed:', error?.message || error);
+    return false;
   }
 }
 
+async function shareCurrentProfile() {
+  const username = profileShareUsername();
+  if (!username) { toast('Profile username is unavailable', '⚠️'); return; }
+  const link = `${window.location.origin}/@${encodeURIComponent(username)}`;
+  const copied = await copyTextToClipboard(link);
+  if (copied) toast('Profile link copied!', '📋');
+  else toast(link, '🔗');
+  return link;
+}
 
 function bindProfileEvents() {
   // Hard guard against double-binding (e.g. auth-state listener re-triggering)
@@ -8157,32 +8117,29 @@ function bindProfileEvents() {
   // Direct element.addEventListener on #btn-edit-profile and share buttons
   // broke whenever initProfilePage() replaced those nodes after hydration.
   document.addEventListener('click', (e) => {
-    const target = e.target;
-    const profileBtn = target?.closest?.('[data-open-profile]');
-    if (profileBtn) {
+    const profileBtn = e.target.closest?.('[data-open-profile]');
+    if (profileBtn) { e.preventDefault(); openUserProfile(profileBtn.dataset.openProfile); return; }
+
+    const editButton = e.target.closest?.('#btn-edit-profile');
+    if (editButton) {
       e.preventDefault();
-      openUserProfile(profileBtn.dataset.openProfile);
+      e.stopPropagation();
+      if (!document.body.classList.contains('profile-viewing-public')) toggleProfileEditMode();
       return;
     }
 
-    const editBtn = target?.closest?.('#btn-edit-profile');
-    if (editBtn) {
+    const shareButton = e.target.closest?.('#btn-share-profile, #btn-profile-copy');
+    if (shareButton) {
       e.preventDefault();
       e.stopPropagation();
-      e.stopImmediatePropagation?.();
-      toggleProfileEditMode();
-      return;
-    }
-
-    const shareBtn = target?.closest?.('#btn-share-profile, #btn-profile-copy');
-    if (shareBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation?.();
       shareCurrentProfile();
+      const profileMenu = $('profile-menu');
+      const menuButton = $('btn-profile-menu');
+      profileMenu?.classList.remove('open');
+      menuButton?.setAttribute('aria-expanded', 'false');
       return;
     }
-  }, true);
+  });
 
   // Avatar upload — direct bind is safe here; the input/button are never
   // re-created by initProfilePage, only hidden/shown.
