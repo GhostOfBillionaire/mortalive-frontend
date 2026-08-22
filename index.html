@@ -7810,11 +7810,11 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
         <div class="form-field">
           <label for="group-members">Add members (optional)</label>
           <div class="form-tag-input" id="form-group-members">
-            <input type="text" class="form-tag-input-field" id="group-members-input" placeholder="Search members…">
+            <input type="text" class="form-tag-input-field" id="group-members-input" placeholder="Search profiles or paste @username link…">
             <div class="form-tag-list" id="group-members-list"></div>
           </div>
           <div class="form-members-suggestions" id="group-members-suggestions"></div>
-          <span class="form-field-hint">Type to search and add members</span>
+          <span class="form-field-hint">Only profiles found in Mortalive or canonical @username profile links can be invited.</span>
         </div>
 
         <!-- Form actions -->
@@ -7847,12 +7847,7 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
   </div>
 
   <!-- Bottom navigation -->
-  <nav class="bottom-tabbar" aria-label="Messages navigation">
-    <a href="#" data-top-page="pg-feed" aria-label="Feed">Feed</a>
-    <a href="#" data-top-page="pg-lobby" aria-label="Talk">Talk</a>
-    <a href="#" data-top-page="pg-messages" aria-label="Messages" aria-current="page">Messages</a>
-    <a href="#" data-top-page="pg-profile" aria-label="Profile">Profile</a>
-  </nav>
+
 </section>
 
 <!-- ═══════════════════ PROFILE ═══════════════════════ -->
@@ -8393,6 +8388,7 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
     const overlay = q('acct-center-overlay');
     if(overlay){ overlay.classList.add('open'); document.body.style.overflow='hidden'; }
     q('profile-menu')?.classList.remove('open');
+    q('pg-profile')?.classList.remove('profile-menu-open');
     q('btn-profile-menu')?.setAttribute('aria-expanded','false');
   }
   function closeAcctCenter(){
@@ -8511,6 +8507,7 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
       menuBtn.addEventListener('click',e=>{
         e.stopPropagation();
         const open=menu?.classList.toggle('open');
+        document.getElementById('pg-profile')?.classList.toggle('profile-menu-open', !!open);
         menuBtn.setAttribute('aria-expanded',open?'true':'false');
       });
     }
@@ -8519,6 +8516,7 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
       document.addEventListener('click',e=>{
         if(menu && menu.contains(e.target)) return;
         menu?.classList.remove('open');
+        document.getElementById('pg-profile')?.classList.remove('profile-menu-open');
         menuBtn?.setAttribute('aria-expanded','false');
       });
     }
@@ -8843,6 +8841,13 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 
 <style id="mortalive-profile-dropdown-links-final">
 /* Profile fixes: menu above action row; link titles behave like interest chips. */
+/* Profile menu interaction state: actions stay visually front normally,
+   but move behind the three-dot dropdown while it is open. */
+#pg-profile .profile-actions-modern{position:relative!important;z-index:30!important}
+#pg-profile.profile-menu-open .profile-actions-modern{z-index:1!important;pointer-events:none!important}
+#pg-profile .profile-topline{position:relative!important;z-index:200!important}
+#pg-profile .profile-menu-wrap{position:relative!important;z-index:201!important}
+#pg-profile .profile-menu{z-index:2000!important;pointer-events:auto!important}
 #pg-profile .profile-topline{position:relative!important;z-index:100!important}
 #pg-profile .profile-menu-wrap{position:relative!important;z-index:101!important}
 #pg-profile .profile-menu{z-index:1000!important;pointer-events:auto!important}
