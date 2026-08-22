@@ -1,6 +1,6 @@
 // FRESH BUILD MARKER — 2026-08-21 00:03 IST — v40 Messages enhancement merge; stable baseline preserved
 /* Mortalive — simplified frontend app
-   Omegle-style UI, desktop-safe layout, text chat. */
+   Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
 const BUILD_TAG = 'mortalive-build-2026-08-21-v40-security-audit'; // bump this string on every deploy to confirm cache is fresh
 
@@ -17,16 +17,52 @@ console.log(`[Mortalive] ${BUILD_TAG} loaded`);
 console.log(`[Mortalive] SERVER_URL = ${SERVER_URL}`);
 console.log(`[Mortalive] Socket.io client ${typeof io === 'undefined' ? 'NOT LOADED ✗' : 'loaded ✓'}`);
 
+// Runtime WebRTC configuration is supplied by the authenticated backend config endpoint.
+// Keep only a public STUN fallback here so the frontend has no TURN credentials embedded.
+let ICE_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' }
+  ]
+};
+
 const S = {
-  mode: 'text',
+  mode: 'video',
   interest: '',
   roomId: null,
   stranger: null,
   socket: null,
+  pc: null,
+  localStream: null,
+  isInitiator: false,
+  pendingCandidates: [],
+  camGranted: false,
+  micMuted: false,
+  camOff: false,
   onlineCount: 0,
   onlineTimerStarted: false,
   pendingAction: null,
   replyTimer: null,
+  // synthetic video fallback
+  syntheticActive: false,
+  syntheticSkipCount: 0,
+  syntheticVideos: [],
+  syntheticCurrentIndex: 0,
+  syntheticVideoId: null,
+  syntheticVideoStartTime: null,
+  syntheticSearchTimer: null,
+  searchSnapshotTimer: null,  // fires every 2s while user is on the matching/searching screen
+  // identity
+  authToken: localStorage.getItem('mortalive_token') || null,
+  username: localStorage.getItem('mortalive_username') || null,
+  userId: localStorage.getItem('mortalive_user_id') || null,
+  accountData: null, // Stores DB profile data (bio, display name, etc.)
+  userLinks: [],     // Stores DB profile social links
+  crockroachScore: null,
+  isGuest: !localStorage.getItem('mortalive_token'),
+  guestName: localStorage.getItem('mortalive_guest_name') || '',
+  videoLayout: 'horizontal',
   chatStartedAt: null,
   chatCounted: false,
   progress: null,
@@ -40,6 +76,58 @@ const S = {
 // EXPLICIT GLOBAL BINDING: Allows index.html inline scripts to accurately read the guest state
 window.S = S;
 
+// ── Synthetic video fallback constants ───────────────────
+const SYNTHETIC_SKIP_LIMIT = 10; // videos per "round" before final options shown
+const SEARCH_SNAPSHOT_MAX = 20;   // 15 target shots + 5 buffer before the search turns into synthetic video
+
+function isSyntheticPlayback() {
+  return !!(S.syntheticActive || (S.stranger && S.stranger.isSynthetic));
+}
+
+function clearSyntheticSearchTimer() {
+  clearTimeout(S.syntheticSearchTimer);
+  S.syntheticSearchTimer = null;
+}
+
+function prepareVideoElement(videoEl) {
+  if (!videoEl) return;
+  videoEl.setAttribute('playsinline', '');
+  videoEl.playsInline = true;
+  videoEl.autoplay = true;
+  videoEl.style.width = '100%';
+  videoEl.style.height = '100%';
+  videoEl.style.maxWidth = '100%';
+  videoEl.style.maxHeight = '100%';
+  videoEl.style.minWidth = '0';
+  videoEl.style.minHeight = '0';
+  // Crop videos to fit square container without stretching
+  videoEl.style.objectFit = 'cover';
+  videoEl.style.objectPosition = 'center center';
+  videoEl.style.background = '#000';
+  if (videoEl.parentElement) {
+    videoEl.parentElement.style.overflow = 'hidden';
+    videoEl.parentElement.style.minWidth = '0';
+    videoEl.parentElement.style.minHeight = '0';
+  }
+}
+
+function prepareVideoSurfaces() {
+  ['vid-local', 'vid-remote', 'lobby-cam-preview', 'perm-video'].forEach((id) => prepareVideoElement($(id)));
+}
+
+function syncLocalCameraPreview() {
+  prepareVideoSurfaces();
+  const localVid = $('vid-local');
+  if (!localVid) return;
+  if (S.localStream && S.localStream.active) {
+    localVid.srcObject = S.localStream;
+    localVid.muted = true;
+    localVid.style.display = 'block';
+    const panel = $('video-panel');
+    if (panel && S.mode === 'video') panel.classList.add('visible');
+  }
+}
+
 function showSearchScreen() {
   showPage('pg-match');
   updateOnlineCount();
@@ -47,8 +135,78 @@ function showSearchScreen() {
   setText('match-title', 'Finding your match');
   const subReset = $('match-sub');
   if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
+  // Start continuous 1-per-2s snapshot capture while the user is on the
+  // search screen — covers both real-server queuing and synthetic search
+  // interstials. startSearchSnapshots() is safe to call repeatedly; it
+  // always clears the previous timer before starting a new one.
+  startSearchSnapshots();
 }
-const PROGRESS_KEY = 'mortalive_progress_v3';
+
+function scheduleSyntheticSearchResume(delayMs = 1400) {
+  clearSyntheticSearchTimer();
+  showSearchScreen();
+
+  S.syntheticSearchTimer = setTimeout(() => {
+    S.syntheticSearchTimer = null;
+
+    const onMatchingScreen = $('pg-match')?.classList.contains('active');
+    if (S.matched || !onMatchingScreen) return;
+
+    // If the socket is still connected, keep the queue alive and then
+    // fall back to the next synthetic clip only after the search interstitial.
+    if (S.socket && S.socket.connected) {
+      clearTimeout(matchTimeout);
+      clearTimeout(S.noMatchTimeout);
+      beginSyntheticMatch();
+      return;
+    }
+
+    // If the socket dropped, restart the search cleanly.
+    startMatching();
+  }, Math.max(650, delayMs));
+}
+
+// AI bot responses used when user picks "Chat with AI" after exhausting videos
+const BOT_REPLIES = [
+  "That's interesting — tell me more!",
+  "haha yeah I feel that",
+  "what got you into that?",
+  "honestly same energy",
+  "okay wait, explain that part again",
+  "that's a pretty solid take",
+  "I've been thinking about this lately too",
+  "ngl that surprised me",
+  "go on…",
+  "what would you do differently?",
+  "that tracks actually",
+  "interesting — most people don't think about it that way",
+  "okay I kind of agree",
+  "that's wild lol",
+  "wait really? how long has that been going on?"
+];
+
+const autoReplies = [
+  'haha fr though 😂',
+  'okay that’s actually a good point',
+  'wait what do you do?',
+  'tbh I’ve been thinking about that too',
+  'lmao no way',
+  'that’s lowkey wild',
+  'okay so hear me out…',
+  'depends on what you mean',
+  'I feel like most people don’t realize',
+  'nah I disagree but I respect it',
+  'go on…',
+  'that reminds me of something',
+  'honestly same',
+  'ooh controversial 👀',
+  'solid point ngl',
+  'wait explain that more',
+  'no way lol',
+  'that’s actually kinda scary',
+  'based',
+  'wait are you serious?'
+];const PROGRESS_KEY = 'mortalive_progress_v3';
 const PROFILE_KEY = 'mortalive_profile_v3';
 
 const PROGRESS_BADGES = Object.freeze([
@@ -601,16 +759,6 @@ function $(id) {
   return document.getElementById(id);
 }
 
-function stripRetiredMediaUI() {
-  const selectors = [
-    '#perm-overlay', '#pg-perm', '#cam-strip',
-    '#synthetic-exhaustion-overlay', '#syn-share-overlay'
-  ];
-  selectors.forEach(sel => document.querySelectorAll(sel).forEach(el => el.remove()));
-  document.querySelectorAll('video').forEach(el => { if (/vid-|perm-video|lobby-cam|reel/i.test(el.id || '') || el.closest('#video-panel,#pg-perm')) el.remove(); });
-  document.querySelectorAll('.mode-btn').forEach(btn => { btn.dataset.mode === 'text' ? btn.classList.add('active') : btn.remove(); });
-}
-
 function ready(fn) {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', fn, { once: true });
@@ -849,15 +997,60 @@ function isCompactViewport() {
   return window.matchMedia('(max-width: 720px)').matches;
 }
 
-function setActiveMode() {
-  S.mode = 'text';
-  document.querySelectorAll('.mode-btn').forEach((b) => b.classList.toggle('active', b.dataset.mode === 'text'));
+function getEffectiveVideoLayout() {
+  return S.videoLayout === 'vertical' ? 'vertical' : 'horizontal';
+}
+
+function syncVideoPanelButton(forcedLayout) {
+  const btn = $('vc-layout');
+  if (!btn) return;
+  const layout = forcedLayout || getEffectiveVideoLayout();
+  const isHorizontal = layout === 'horizontal';
+  btn.textContent = isHorizontal ? 'Layout: Side' : 'Layout: Stack';
+  btn.title = isHorizontal ? 'Switch to stacked layout' : 'Switch to side-by-side layout';
+  btn.disabled = isCompactViewport();
+}
+
+function isFullscreenVideoMode() {
+  const panel = $('video-panel');
+  const fs = document.fullscreenElement;
+  return !!(panel && fs && (fs === panel || panel.contains(fs)));
+}
+
+function applyVideoLayout() {
+  // Layout is now entirely CSS-driven:
+  //   Desktop normal     → 2 squares side by side (grid-template-columns: 1fr 1fr)
+  //   Desktop fullscreen → 2 squares side by side filling the screen
+  //   Mobile normal      → 2 squares stacked (grid-template-columns: 1fr)
+  //   Mobile fullscreen  → 2 squares stacked filling the screen
+  // No class toggling needed — just ensure video surfaces are prepared.
+  prepareVideoSurfaces();
+}
+
+function toggleVideoLayout() {
+  if (isCompactViewport()) {
+    S.videoLayout = 'vertical';
+    applyVideoLayout();
+    toast('Phone stays in stacked layout', '📱');
+    return;
+  }
+  S.videoLayout = getEffectiveVideoLayout() === 'horizontal' ? 'vertical' : 'horizontal';
+  localStorage.setItem('mortalive_video_layout', S.videoLayout);
+  applyVideoLayout();
+  toast(S.videoLayout === 'horizontal' ? 'Camera layout set to side-by-side' : 'Camera layout set to stacked', '🎬');
+}
+
+function setActiveMode(mode) {
+  S.mode = mode === 'video' ? 'video' : 'text';
+  document.querySelectorAll('.mode-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.mode === S.mode);
+  });
   const modeLabel = $('mode-label');
-  if (modeLabel) modeLabel.textContent = 'Text';
+  if (modeLabel) modeLabel.textContent = S.mode === 'video' ? 'Video' : 'Text';
 }
 
 function setPrimaryButtonsEnabled(enabled) {
-  ['btn-enter', 'continue-btn', 'btn-start-text', 'btn-start'].forEach((id) => {
+  ['btn-enter', 'continue-btn', 'btn-start-text', 'btn-start-video', 'btn-start'].forEach((id) => {
     const btn = $(id);
     if (!btn) return;
     btn.disabled = !enabled;
@@ -929,9 +1122,17 @@ function startOnlineCounter() {
   }, 6500);
 }
 
+function ensureLobbyCameraPreview() {
+  const preview = $('lobby-cam-preview');
+  if (preview && S.localStream) preview.srcObject = S.localStream;
+  const strip = $('cam-strip');
+  if (strip) strip.style.display = S.localStream ? 'flex' : 'none';
+}
+
 function enterLobby() {
   setActiveMode(S.mode);
   showPage('pg-lobby');
+  ensureLobbyCameraPreview();
   updateDerivedProgress();
   updateProgressText();
   updateIdentityDisplay();
@@ -970,6 +1171,105 @@ function refreshLaunchpadCopy() {
   // app.js should only manage behavior, not overwrite UI text.
 }
 
+function requestCameraPermission() {
+  const btn = $('btn-allow');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Waiting for browser permission…';
+  }
+
+  return navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    .then((stream) => {
+      S.localStream = stream;
+      S.camGranted = true;
+
+      const permVideo = $('perm-video');
+      const permOverlay = $('perm-overlay');
+      const permDot = $('perm-dot');
+      const permStsTxt = $('perm-status-txt');
+      const camLbl = $('cam-status-lbl');
+      const micLbl = $('mic-status-lbl');
+
+      if (permVideo) permVideo.srcObject = stream;
+      if (permOverlay) permOverlay.style.display = 'none';
+      if (permDot) permDot.className = 'dot ok';
+      if (permStsTxt) permStsTxt.textContent = 'Camera & mic active';
+      if (camLbl) {
+        camLbl.textContent = 'granted';
+        camLbl.className = 'badge ok';
+      }
+      if (micLbl) {
+        micLbl.textContent = 'granted';
+        micLbl.className = 'badge ok';
+      }
+
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Permissions granted';
+      }
+
+      const lobbyPreview = $('lobby-cam-preview');
+      if (lobbyPreview) lobbyPreview.srcObject = stream;
+
+      const camStrip = $('cam-strip');
+      if (camStrip) camStrip.style.display = 'flex';
+
+      queueSnapshotBurst('permission', 2, ['perm-video', 'lobby-cam-preview', 'vid-local'], 140, 320);
+
+      showPage('pg-lobby');
+
+      if (S.pendingAction === 'match') {
+        S.pendingAction = null;
+        // Permission just succeeded because the user clicked "Find" while
+        // in video mode without a camera yet — NOW it's safe to commit
+        // S.mode to 'video' and sync the visible toggle button, right
+        // before actually queuing for a match.
+        setActiveMode('video');
+        setTimeout(startMatching, 350);
+      } else if (S.pendingAction === 'lobby-video') {
+        // Permission succeeded because the user just clicked the "Video
+        // Chat" mode tab in the lobby (not "Find") — switch the mode and
+        // stay right here in the lobby. Do NOT auto-start a match.
+        S.pendingAction = null;
+        setActiveMode('video');
+      }
+    })
+    .catch((err) => {
+      console.warn('[Camera]', err.name, err.message);
+
+      const permDot = $('perm-dot');
+      const permStsTxt = $('perm-status-txt');
+      const camLbl = $('cam-status-lbl');
+      const micLbl = $('mic-status-lbl');
+      const permOverlay = $('perm-overlay');
+      const overlayTxt = $('perm-overlay-txt');
+
+      if (permDot) permDot.className = 'dot bad';
+      if (permStsTxt) permStsTxt.textContent = 'Permission denied';
+      if (camLbl) {
+        camLbl.textContent = 'denied';
+        camLbl.className = 'badge warn';
+      }
+      if (micLbl) {
+        micLbl.textContent = 'denied';
+        micLbl.className = 'badge warn';
+      }
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = err.name === 'NotFoundError' ? 'No camera found' : 'Try again';
+      }
+      if (permOverlay) permOverlay.style.display = 'flex';
+      if (overlayTxt) {
+        overlayTxt.textContent =
+          err.name === 'NotFoundError'
+            ? 'No camera was detected on this device.'
+            : 'Permission was denied. Check browser settings and try again.';
+      }
+
+      toast(err.name === 'NotFoundError' ? 'No camera detected' : 'Camera blocked', '⚠️');
+    });
+}
+
 // Supabase client — initialized in index.html as window.sb
 // Supabase + TURN configuration is loaded from /api/public-config at startup.
 // The Supabase anon key is intentionally public, but keeping it out of source
@@ -1002,8 +1302,14 @@ async function loadPublicRuntimeConfig() {
     });
     sb = window.sb;
 
+    if (Array.isArray(config.iceServers) && config.iceServers.length) {
+      ICE_CONFIG = { iceServers: config.iceServers };
+    }
 
-    window.MORTALIVE_PUBLIC_CONFIG = { supabaseUrl: config.supabaseUrl };
+    window.MORTALIVE_PUBLIC_CONFIG = {
+      supabaseUrl: config.supabaseUrl,
+      iceServerCount: Array.isArray(config.iceServers) ? config.iceServers.length : 0
+    };
     return config;
   })();
   return _publicConfigPromise;
@@ -1147,7 +1453,7 @@ function initAuthControls() {
     return false;
   }
 
-  function afterAuthSuccess(token, username, crockroachScore, userId) {
+  async function afterAuthSuccess(token, username, crockroachScore, userId) {
     S.authToken = token;
     S.username = username;
     S.userId = userId || null;
@@ -1169,17 +1475,6 @@ function initAuthControls() {
     syncAuthProgress(crockroachScore);
     toast(`Welcome, ${username}!`, '🧲');
 
-  // Complete a follow that a guest requested before signup.
-  try {
-    const pendingFollowUser = sessionStorage.getItem('mortalive_pending_follow_user');
-    if (pendingFollowUser) {
-      sessionStorage.removeItem('mortalive_pending_follow_user');
-      toggleFollow(pendingFollowUser, true)
-        .then(() => toast('Followed profile ✓', '✓'))
-        .catch((error) => console.warn('[Follow] pending follow failed:', error));
-    }
-  } catch (_) {}
-
     // If the user arrived via a shared profile link (?user=...) but wasn't
     // logged in, we saved the username in sessionStorage — open that profile now.
     try {
@@ -1194,6 +1489,25 @@ function initAuthControls() {
         return;
       }
     } catch (_) {}
+
+    // If a logged-out visitor clicked Follow on a public profile, finish that
+    // follow immediately after signup/login succeeds, then return them to the
+    // public profile they were viewing. This preserves the intended
+    // guest -> signup -> follow flow without requiring a second click.
+    try {
+      const pendingFollowId = sessionStorage.getItem('mortalive_pending_follow_profile');
+      if (pendingFollowId && pendingFollowId !== userId) {
+        sessionStorage.removeItem('mortalive_pending_follow_profile');
+        await toggleFollow(pendingFollowId, true);
+        toast('Following!', '✓');
+        showPage('pg-profile', { profileUserId: pendingFollowId });
+        return;
+      }
+      if (pendingFollowId === userId) sessionStorage.removeItem('mortalive_pending_follow_profile');
+    } catch (error) {
+      console.warn('[Follow] pending follow completion failed:', error);
+      try { sessionStorage.removeItem('mortalive_pending_follow_profile'); } catch (_) {}
+    }
 
     enterLobby();
   }
@@ -2089,6 +2403,23 @@ function initSetupBackButtons() {
   });
 }
 
+function initPermissionControls() {
+  const btnAllow = $('btn-allow');
+  if (btnAllow) btnAllow.addEventListener('click', requestCameraPermission);
+
+  const btnSkipCam = $('btn-skip-cam');
+  if (btnSkipCam) {
+    btnSkipCam.addEventListener('click', () => {
+      S.camGranted = false;
+      S.mode = 'text';
+      S.pendingAction = null;
+      document.querySelectorAll('.mode-btn').forEach((b) => b.classList.remove('active'));
+      const textBtn = document.querySelector('[data-mode="text"]');
+      if (textBtn) textBtn.classList.add('active');
+      showPage('pg-lobby');
+    });
+  }
+}
 
 function initLobbyControls() {
   $('btn-switch-account')?.addEventListener('click', () => { showPage('pg-auth'); $('tab-login')?.click(); $('login-email')?.focus?.(); });
@@ -2117,7 +2448,30 @@ function initLobbyControls() {
     $('login-email')?.focus?.();
   });
 
-  setActiveMode();
+  const modeToggle = $('mode-toggle');
+  if (modeToggle) {
+    modeToggle.addEventListener('click', (e) => {
+      const btn = e.target.closest('.mode-btn');
+      if (!btn) return;
+      const newMode = btn.dataset.mode || 'text';
+
+      if (newMode === 'video' && !S.camGranted) {
+        // FIX: this used to set S.pendingAction = 'match', which is the
+        // code path meant for clicking "Find" — after granting permission
+        // it would immediately call startMatching() and yank the user
+        // straight into a search, even though all they did was tap the
+        // "Video Chat" mode tab. Using 'lobby-video' here means the
+        // permission handler just switches the mode and leaves them in
+        // the lobby, matching what they actually asked for.
+        S.pendingAction = 'lobby-video';
+        showPage('pg-perm');
+        toast('Grant camera access to use video mode', '📹');
+        return;
+      }
+
+      setActiveMode(newMode);
+    });
+  }
 
   const interestInput = $('interest-input');
   if (interestInput) {
@@ -2142,6 +2496,12 @@ function initLobbyControls() {
     btnFind.addEventListener('click', () => {
       const interest = $('interest-input');
       S.interest = (interest && interest.value ? interest.value : '').trim();
+      if (S.mode === 'video' && !S.camGranted) {
+        S.pendingAction = 'match';
+        showPage('pg-perm');
+        toast('Grant camera access to use video mode', '📹');
+        return;
+      }
       startMatching();
     });
   }
@@ -2149,43 +2509,162 @@ function initLobbyControls() {
 
 function initChatControls() {
   $('btn-send')?.addEventListener('click', sendMsg);
+
   const input = $('cin');
-  if (input) input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
-  });
+  if (input) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMsg();
+      }
+    });
+  }
 
   const handleNext = () => {
     clearTimeout(S.replyTimer);
-    finalizeChatProgress('skipped');
-    logSession('end', { reason: 'skip', roomId: S.roomId });
-    disconnectPeer();
-    addSysLine('↩ Skipping — searching next match…');
-    setTimeout(startMatching, 400);
+
+    if (S.syntheticActive) {
+      // ── Synthetic video skip ──────────────────────────────
+      S.syntheticSkipCount++;
+      console.log(`[Synthetic] Skip #${S.syntheticSkipCount}/${SYNTHETIC_SKIP_LIMIT}`);
+      logSession('end', { reason: 'skip_synthetic', roomId: S.roomId, videoId: S.syntheticVideoId });
+      stopSyntheticVideo();
+
+      if (S.syntheticSkipCount >= SYNTHETIC_SKIP_LIMIT) {
+        showSyntheticExhaustionMenu();
+      } else {
+        S.syntheticCurrentIndex++;
+        addSysLine('↩ Searching…');
+        scheduleSyntheticSearchResume(1200);
+      }
+    } else {
+      // ── Real match skip ───────────────────────────────────
+      finalizeChatProgress('skipped');
+      logSession('end', { reason: 'skip', roomId: S.roomId });
+      disconnectPeer();
+      addSysLine('↩ Skipping — searching next match…');
+      setTimeout(startMatching, 800);
+    }
   };
+
   $('btn-skip')?.addEventListener('click', handleNext);
   $('btn-skip-fs')?.addEventListener('click', handleNext);
 
   $('btn-end')?.addEventListener('click', () => {
     clearTimeout(S.replyTimer);
-    finalizeChatProgress('completed');
-    logSession('end', { reason: 'ended', roomId: S.roomId });
-    disconnectPeer();
+    clearSyntheticSearchTimer();
+
+    if (S.syntheticActive) {
+      stopSyntheticVideo();
+      logSession('end', { reason: 'ended_synthetic', roomId: S.roomId, videoId: S.syntheticVideoId });
+    } else {
+      finalizeChatProgress('completed');
+      logSession('end', { reason: 'ended', roomId: S.roomId });
+      disconnectPeer();
+    }
+
     showPage('pg-lobby');
     updateIdentityDisplay();
   });
 
+  $('btn-toggle-video')?.addEventListener('click', () => {
+    const panel = $('video-panel');
+    if (!panel) return;
+    const on = panel.classList.contains('visible');
+
+    if (on) {
+      panel.classList.remove('visible');
+      $('btn-toggle-video')?.classList.remove('active');
+      return;
+    }
+
+    if (!S.camGranted && S.mode === 'video') {
+      S.pendingAction = 'match';
+      showPage('pg-perm');
+      toast('Grant camera access first', '📹');
+      return;
+    }
+
+    panel.classList.add('visible');
+    $('btn-toggle-video')?.classList.add('active');
+  });
+
+  $('vc-mic')?.addEventListener('click', () => {
+    S.micMuted = !S.micMuted;
+    if (S.localStream) S.localStream.getAudioTracks().forEach((t) => (t.enabled = !S.micMuted));
+    const btn = $('vc-mic');
+    if (btn) {
+      btn.textContent = S.micMuted ? '🔇' : '🎤';
+      btn.classList.toggle('off', S.micMuted);
+    }
+    toast(S.micMuted ? 'Mic muted' : 'Mic on', S.micMuted ? '🔇' : '🎤');
+  });
+
+  $('vc-cam')?.addEventListener('click', () => {
+    S.camOff = !S.camOff;
+    if (S.localStream) S.localStream.getVideoTracks().forEach((t) => (t.enabled = !S.camOff));
+    const btn = $('vc-cam');
+    if (btn) {
+      btn.textContent = S.camOff ? '🚫' : '📷';
+      btn.classList.toggle('off', S.camOff);
+    }
+    toast(S.camOff ? 'Camera off' : 'Camera on', S.camOff ? '🚫' : '📷');
+  });
+
+  /* Layout toggle kept for future use
+  $('vc-layout')?.addEventListener('click', toggleVideoLayout);
+  */
+
+  $('vc-flip')?.addEventListener('click', () => {
+    const v = $('vid-local');
+    if (!v) return;
+    const cur = v.style.transform || 'scaleX(-1)';
+    v.style.transform = cur.includes('scaleX(-1)') ? 'scaleX(1)' : 'scaleX(-1)';
+  });
+
+$('vc-fs')?.addEventListener('click', () => {
+  const panel = $('video-panel');
+  if (!panel) return;
+  if (!document.fullscreenElement) {
+    // Snapshot BEFORE requestFullscreen — Android rotates the device after this
+    // call, so by fullscreenchange screen.orientation already says "landscape".
+    S.fsEnteredAsPortrait = getIsPortrait();
+    const req = panel.requestFullscreen?.();
+    if (req) {
+      req.then(() => {
+        // Apply grid immediately using the pre-rotation snapshot
+        applyFsGrid();
+        // Lock orientation so Android can't auto-rotate away from portrait
+        if (S.fsEnteredAsPortrait) {
+          screen.orientation?.lock?.('portrait').catch(() => {});
+        }
+        setTimeout(applyFsGrid, 200); // re-check after transition fully settles
+      }).catch(() => {});
+    }
+  } else {
+    screen.orientation?.unlock?.();
+    S.fsEnteredAsPortrait = null;
+    document.exitFullscreen?.();
+  }
+  setTimeout(() => { applyVideoLayout(); prepareVideoSurfaces(); }, 0);
+});
+
   $('btn-cancel')?.addEventListener('click', () => {
     clearTimeout(matchTimeout);
     clearTimeout(S.noMatchTimeout);
+    stopSearchSnapshots(); // stop the 2s search loop before leaving pg-match
     disconnectPeer();
     showPage('pg-lobby');
   });
+
+
 }
 
 function initGlobalDefaults() {
   bootProgressState();
   setActiveMode(S.mode);
   updateOnlineCount();
+  applyVideoLayout();
   refreshLaunchpadCopy();
   setPrimaryButtonsEnabled(false);
   if (!$('landing-consent') && !$('terms') && !$('terms-checkbox') && !$('c1') && !$('c2') && !$('c3')) {
@@ -2234,8 +2713,11 @@ function initSocket() {
   S.socket.on('matched', async (data) => {
     clearTimeout(matchTimeout);
     clearTimeout(S.noMatchTimeout);
+    clearSyntheticSearchTimer();
+    stopSearchSnapshots(); // stop the 2s search loop — connected chat takes over
     S.matched = true;
     S.roomId = data.roomId;
+    S.isInitiator = !!data.initiator;
     S.stranger = {
       name: (data.peer && data.peer.name) || 'Stranger',
       score: data.peer && typeof data.peer.score === 'number' ? data.peer.score : null,
@@ -2244,8 +2726,38 @@ function initSocket() {
       isGuest: !!(data.peer && data.peer.isGuest)
     };
     beginChat();
+    if (S.mode === 'video') await startWebRTC();
   });
 
+  S.socket.on('signal', async (data) => {
+    if (!S.pc) return;
+    try {
+      if (data.type === 'offer') {
+        await S.pc.setRemoteDescription(new RTCSessionDescription(data));
+        for (const c of S.pendingCandidates) {
+          await S.pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+        }
+        S.pendingCandidates = [];
+        const answer = await S.pc.createAnswer();
+        await S.pc.setLocalDescription(answer);
+        S.socket.emit('signal', { roomId: S.roomId, type: answer.type, sdp: answer.sdp });
+      } else if (data.type === 'answer') {
+        await S.pc.setRemoteDescription(new RTCSessionDescription(data));
+        for (const c of S.pendingCandidates) {
+          await S.pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+        }
+        S.pendingCandidates = [];
+      } else if (data.candidate !== undefined) {
+        if (S.pc.remoteDescription && S.pc.remoteDescription.type) {
+          await S.pc.addIceCandidate(new RTCIceCandidate(data)).catch(() => {});
+        } else {
+          S.pendingCandidates.push(data);
+        }
+      }
+    } catch (e) {
+      console.error('[WebRTC signal]', e);
+    }
+  });
 
   S.socket.on('peer-chat', ({ text }) => appendMsg(text, 'them'));
 
@@ -2253,6 +2765,7 @@ function initSocket() {
     finalizeChatProgress('peer-disconnected');
     addSysLine('👋 Stranger disconnected');
     setCallStatus('failed', 'disconnected');
+    hideRemoteVideo('Stranger disconnected');
   });
 
   S.socket.on('connect_error', (err) => {
@@ -2263,14 +2776,24 @@ function initSocket() {
 let matchTimeout = null;
 
 function startMatching() {
-  showSearchScreen();
-  setActiveMode();
+  clearSyntheticSearchTimer();
+  showSearchScreen(); // also calls startSearchSnapshots() internally
   initSocket();
-  S.matched = false;
+
+  S.matched = false; // reset; set to true inside the 'matched' socket handler
+
   clearTimeout(matchTimeout);
   clearTimeout(S.noMatchTimeout);
   S.connectFailed = false;
 
+  // Don't guess based on a fixed timer how long a handshake "should" take —
+  // that's exactly what was racing the demo fallback against normal,
+  // healthy connections on slower networks (a PC behind a stricter
+  // proxy/firewall can take much longer than a phone on home wifi to
+  // finish the WebSocket → polling fallback dance). Instead, listen for
+  // Socket.io's OWN signal that something is actually wrong, and only
+  // treat it as a real failure after several consecutive failed attempts
+  // (reconnection is enabled, so transient blips resolve on their own).
   let failedAttempts = 0;
   const onConnectError = (err) => {
     failedAttempts++;
@@ -2278,26 +2801,462 @@ function startMatching() {
     if (S.matched || S.connectFailed) return;
     if (failedAttempts >= 4) {
       S.connectFailed = true;
-      setCallStatus('failed', 'server unavailable');
-      toast('Could not reach the matchmaking server. Please try again.', '⚠️');
+      console.warn('[Mortalive] Server unreachable after repeated attempts — falling back to synthetic video.');
+      beginSyntheticMatch();
     }
   };
-  if (S.socket && S._lastConnectErrorHandler) S.socket.off('connect_error', S._lastConnectErrorHandler);
+  // Properly remove any leftover listener from a previous attempt before
+  // attaching a new one — passing a fresh inline function to .off() (the
+  // old code did this) can never match what .on() actually registered, so
+  // stale handlers would silently pile up across repeated search attempts.
+  if (S.socket && S._lastConnectErrorHandler) {
+    S.socket.off('connect_error', S._lastConnectErrorHandler);
+  }
   S.socket?.on('connect_error', onConnectError);
   S._lastConnectErrorHandler = onConnectError;
 
+  // Absolute ceiling as a safety net only — generous enough that it should
+  // never fire on a genuinely working connection, just catches the rare
+  // case where something hangs with no error event at all.
   matchTimeout = setTimeout(() => {
     if (!S.matched && !S.connectFailed && (!S.socket || !S.socket.connected)) {
+      console.warn('[Mortalive] No connection after 20s with no error signal — falling back to synthetic video.');
       S.connectFailed = true;
-      setCallStatus('failed', 'server unavailable');
-      toast('Could not reach the matchmaking server. Please try again.', '⚠️');
+      beginSyntheticMatch();
     }
+  }, 20000);
+
+  // Once we ARE connected to the real server, if nobody else is in the
+  // queue yet, start synthetic video automatically — no button, no dead end.
+  S.noMatchTimeout = setTimeout(() => {
+    if (S.matched || S.connectFailed) return;
+    if (S.socket && S.socket.connected) {
+      console.log('[Mortalive] No peer found after 20s — starting synthetic video fallback.');
+      beginSyntheticMatch();
+    }
+    // If still not connected, connect_error / ceiling timer handles it.
   }, 20000);
 }
 
 function removeFromQueueSafely() {
   if (S.socket && S.socket.connected) {
     try { S.socket.emit('leave', { roomId: S.roomId }); } catch (e) {}
+  }
+}
+
+function hideRemoteVideo(message) {
+  const remote = $('vid-remote');
+  const noVideo = $('no-video-ph');
+  const txt = $('ph-txt');
+  const q = $('quality-bar');
+
+  if (remote) {
+    // Stop any real WebRTC tracks (never stop our own local stream).
+    try {
+      if (remote.srcObject && remote.srcObject !== S.localStream) {
+        remote.srcObject.getTracks().forEach((t) => t.stop());
+      }
+    } catch (e) {}
+    remote.srcObject = null;
+    // Also clear src in case this was a synthetic video file.
+    if (remote.src) {
+      remote.onended = null;
+      remote.pause();
+      remote.src = '';
+      remote.removeAttribute('src');
+    }
+    remote.style.display = 'none';
+  }
+  if (noVideo) noVideo.style.display = 'flex';
+  if (txt) txt.textContent = message || 'Waiting for video…';
+  if (q) q.style.display = 'none';
+}
+
+async function startWebRTC() {
+  try {
+    if (!S.localStream || !S.localStream.active) {
+      S.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      S.camGranted = true;
+    }
+
+    const localVid = $('vid-local');
+    const noVideo = $('no-video-ph');
+    const txt = $('ph-txt');
+    
+    if (localVid) {
+      prepareVideoElement(localVid);
+      localVid.srcObject = S.localStream;
+      localVid.style.display = 'block';
+      localVid.muted = true;
+    }
+    if (noVideo) noVideo.style.display = 'none';
+    if (txt) txt.textContent = "Waiting for stranger's camera…";
+
+    S.pc = new RTCPeerConnection(ICE_CONFIG);
+    S.pendingCandidates = [];
+
+    S.localStream.getTracks().forEach((track) => S.pc.addTrack(track, S.localStream));
+
+    S.pc.ontrack = (event) => {
+      const remoteVid = $('vid-remote');
+      if (remoteVid) {
+        prepareVideoElement(remoteVid);
+        if (event.streams && event.streams[0]) {
+          remoteVid.srcObject = event.streams[0];
+        } else {
+          if (!remoteVid.srcObject) remoteVid.srcObject = new MediaStream();
+          remoteVid.srcObject.addTrack(event.track);
+        }
+        remoteVid.style.display = 'block';
+      }
+
+      if (noVideo) noVideo.style.display = 'none';
+      const panel = $('video-panel');
+      if (panel) panel.classList.add('visible', 'has-remote');
+      const q = $('quality-bar');
+      if (q) q.style.display = 'inline-flex';
+      setCallStatus('connected', 'live');
+      monitorQuality();
+    };
+
+    S.pc.onicecandidate = ({ candidate }) => {
+      if (candidate && S.socket && S.socket.connected) {
+        S.socket.emit('signal', {
+          roomId: S.roomId,
+          candidate: candidate.candidate,
+          sdpMid: candidate.sdpMid,
+          sdpMLineIndex: candidate.sdpMLineIndex
+        });
+      }
+    };
+
+    S.pc.oniceconnectionstatechange = () => {
+      const st = S.pc.iceConnectionState;
+      if (st === 'connected' || st === 'completed') {
+        setCallStatus('connected', 'live');
+      } else if (st === 'failed') {
+        setCallStatus('failed', 'failed');
+        toast('Video connection failed', '⚠️');
+        if (S.isInitiator && S.pc.restartIce) S.pc.restartIce();
+      } else if (st === 'disconnected') {
+        setCallStatus('failed', 'reconnecting…');
+      }
+    };
+
+    if (S.isInitiator) {
+      const offer = await S.pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: true });
+      await S.pc.setLocalDescription(offer);
+      if (S.socket) S.socket.emit('signal', { roomId: S.roomId, type: offer.type, sdp: offer.sdp });
+    }
+  } catch (err) {
+    console.error('[WebRTC]', err);
+    if (err.name === 'NotAllowedError') {
+      toast('Camera blocked — grant permission first', '⚠️');
+      setText('ph-txt', 'Camera permission denied');
+    } else if (err.name === 'NotFoundError') {
+      toast('No camera or microphone detected', '⚠️');
+      setText('ph-txt', 'No camera found');
+    } else {
+      toast(`Video error: ${err.message}`, '⚠️');
+    }
+    const panel = $('video-panel');
+    if (panel) panel.classList.remove('visible');
+  }
+}
+
+function monitorQuality() {
+  if (!S.pc) return;
+  const iv = setInterval(async () => {
+    if (!S.pc || S.pc.connectionState === 'closed') {
+      clearInterval(iv);
+      return;
+    }
+    try {
+      const stats = await S.pc.getStats();
+      let rtt = null;
+      stats.forEach((r) => {
+        if (r.type === 'remote-inbound-rtp' && r.roundTripTime != null) rtt = r.roundTripTime;
+      });
+      const dot = $('qual-dot');
+      const txt = $('qual-text');
+      if (rtt === null) return;
+      if (rtt < 0.1) {
+        if (dot) dot.style.background = 'var(--success)';
+        if (txt) txt.textContent = 'HD';
+      } else if (rtt < 0.3) {
+        if (dot) dot.style.background = '#f0b429';
+        if (txt) txt.textContent = 'OK';
+      } else {
+        if (dot) dot.style.background = 'var(--danger)';
+        if (txt) txt.textContent = 'Poor';
+      }
+    } catch (e) {}
+  }, 4000);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SYNTHETIC VIDEO FALLBACK SYSTEM
+// Replaces the old demo mode entirely.
+// Fetches prerecorded videos from Supabase and plays them as if they
+// were real strangers. User can skip up to SYNTHETIC_SKIP_LIMIT times
+// before seeing the final options menu (AI chat / more videos / share).
+// ═══════════════════════════════════════════════════════════════════
+
+async function fetchSyntheticVideoBatch() {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/synthetic-videos?limit=${SYNTHETIC_SKIP_LIMIT}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!Array.isArray(data.videos) || data.videos.length === 0) {
+      console.warn('[Synthetic] No videos in database yet.');
+      return [];
+    }
+    console.log(`[Synthetic] Loaded ${data.videos.length} video(s) from server.`);
+    return data.videos;
+  } catch (e) {
+    console.warn('[Synthetic] Could not fetch videos:', e.message);
+    return [];
+  }
+}
+
+async function beginSyntheticMatch() {
+  clearSyntheticSearchTimer();
+  stopSearchSnapshots(); // search phase is ending — stop the 2s loop before playback begins
+  // If there are no videos loaded yet (or we've used them all), fetch a fresh batch.
+  if (S.syntheticVideos.length === 0 || S.syntheticCurrentIndex >= S.syntheticVideos.length) {
+    const batch = await fetchSyntheticVideoBatch();
+    if (batch.length === 0) {
+      // No videos in the database at all — skip straight to final options.
+      showSyntheticExhaustionMenu();
+      return;
+    }
+    S.syntheticVideos = batch;
+    S.syntheticCurrentIndex = 0;
+  }
+
+  const video = S.syntheticVideos[S.syntheticCurrentIndex];
+  S.syntheticActive = true;
+  S.syntheticVideoId = video.id;
+  S.syntheticVideoStartTime = Date.now();
+
+  // Present them as a stranger — just like a real matched user.
+  S.stranger = {
+    name:      video.stranger_name  || 'Stream User',
+    score:     video.stranger_score || null,
+    emoji:     video.stranger_emoji || '🎬',
+    isGuest:   video.is_guest !== false,
+    isSynthetic: true
+  };
+  S.roomId = `synthetic-${video.id}-${Date.now()}`;
+
+  // Always show as video mode so the video element is visible.
+  S.mode = 'video';
+  setActiveMode('video');
+
+  // Standard chat setup — clears messages, shows peer name, switches to pg-chat.
+  beginChat();
+  syncLocalCameraPreview();
+
+  // Show the prerecorded video in the remote slot.
+  const remoteVid = $('vid-remote');
+  
+  if (remoteVid) {
+    prepareVideoElement(remoteVid);
+    // Clear any old srcObject (real WebRTC stream) first.
+    remoteVid.srcObject = null;
+    remoteVid.src = video.video_url;
+    remoteVid.loop = false;
+    remoteVid.style.display = 'block';
+    remoteVid.play().catch((e) => {
+      console.warn('[Synthetic] Video play failed:', e.message);
+      setText('ph-txt', 'Video could not load — click Next to try another.');
+    });
+
+    // When the video ends naturally, show a search interstitial first and only
+    // then resume with the next synthetic clip if nobody matched in time.
+    remoteVid.onended = () => {
+      if (!S.syntheticActive) return;
+      S.syntheticCurrentIndex++;
+      if (S.syntheticCurrentIndex < S.syntheticVideos.length) {
+        addSysLine('↩ Video ended — searching…');
+        scheduleSyntheticSearchResume(1200);
+      } else {
+        showSyntheticExhaustionMenu();
+      }
+    };
+  }
+
+  const noVideo = $('no-video-ph');
+  const panel   = $('video-panel');
+  if (noVideo) noVideo.style.display = 'none';
+  if (panel) {
+    panel.classList.add('visible', 'has-remote');
+    applyVideoLayout();
+  }
+
+  const q = $('quality-bar');
+  if (q) q.style.display = 'none'; // no quality stats for pre-recorded
+
+  setCallStatus('connected', 'video');
+  logSession('start', { stranger: S.stranger.name, mode: 'video', roomId: S.roomId, isSynthetic: true });
+}
+
+function stopSyntheticVideo() {
+  S.syntheticActive = false;
+  S.stranger = null;
+  const remoteVid = $('vid-remote');
+  if (remoteVid) {
+    remoteVid.onended = null;
+    remoteVid.pause();
+    remoteVid.src = '';
+    remoteVid.removeAttribute('src');
+    remoteVid.style.display = 'none';
+  }
+  const panel = $('video-panel');
+  if (panel) panel.classList.remove('visible', 'has-remote');
+  S.syntheticVideoId = null;
+  S.syntheticVideoStartTime = null;
+}
+
+function showSyntheticExhaustionMenu() {
+  // Remove any existing instance first.
+  document.getElementById('synthetic-exhaustion-overlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay open';
+  overlay.id = 'synthetic-exhaustion-overlay';
+
+  overlay.innerHTML = `
+    <div class="modal" style="width:min(480px,100%);text-align:center;">
+      <div class="modal-ico">🎬</div>
+      <div class="modal-title">You've seen ${SYNTHETIC_SKIP_LIMIT} videos</div>
+      <div class="modal-sub">
+        Mortalive is still growing. While we build the community,
+        pick what you'd like to do next:
+      </div>
+      <div style="display:grid;gap:10px;margin-top:18px;">
+        <button id="syn-btn-ai"    class="btn btn-primary btn-wide">💬 Chat with AI</button>
+        <button id="syn-btn-more"  class="btn btn-tonal   btn-wide">🎬 Watch 10 more videos</button>
+        <button id="syn-btn-share" class="btn btn-ghost   btn-wide">🔗 Invite friends to Mortalive</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('syn-btn-ai')?.addEventListener('click', () => {
+    overlay.remove();
+    clearSyntheticSearchTimer();
+    startBotChat();
+  });
+
+  document.getElementById('syn-btn-more')?.addEventListener('click', () => {
+    overlay.remove();
+    clearSyntheticSearchTimer();
+    // Reset skip count and force a fresh fetch on next call.
+    S.syntheticSkipCount   = 0;
+    S.syntheticCurrentIndex = 0;
+    S.syntheticVideos       = [];
+    beginSyntheticMatch();
+  });
+
+  document.getElementById('syn-btn-share')?.addEventListener('click', () => {
+    overlay.remove();
+    clearSyntheticSearchTimer();
+    showShareOverlay();
+  });
+}
+
+function showShareOverlay() {
+  document.getElementById('syn-share-overlay')?.remove();
+
+  const shareUrl  = window.location.origin;
+  const shareText = `Try Mortalive — instant random video chat, no account needed: ${shareUrl}`;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay open';
+  overlay.id = 'syn-share-overlay';
+
+  overlay.innerHTML = `
+    <div class="modal" style="width:min(460px,100%);">
+      <div class="modal-ico">🔗</div>
+      <div class="modal-title">Invite friends</div>
+      <div class="modal-sub">Share this link — more people means real matches faster.</div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <input id="syn-share-input" type="text" value="${shareUrl}" readonly
+          style="flex:1;padding:11px 13px;border:1.5px solid var(--border-strong);border-radius:12px;
+                 background:var(--surface);color:var(--on-surface);font-size:13px;outline:none;">
+        <button id="syn-copy-btn" class="btn btn-primary" style="min-width:auto;padding:11px 16px;">Copy</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">
+        <button id="syn-share-twitter"  class="btn btn-ghost" style="font-size:13px;">𝕏 Tweet</button>
+        <button id="syn-share-whatsapp" class="btn btn-ghost" style="font-size:13px;">💬 WhatsApp</button>
+      </div>
+      <button id="syn-share-close" class="btn btn-ghost btn-wide" style="margin-top:14px;">← Back</button>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('syn-copy-btn')?.addEventListener('click', () => {
+    navigator.clipboard?.writeText(shareUrl)
+      .then(() => toast('Link copied!', '📋'))
+      .catch(() => toast('Copy failed — select and copy manually', '⚠️'));
+  });
+
+  document.getElementById('syn-share-twitter')?.addEventListener('click', () => {
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`, '_blank', 'width=550,height=420');
+  });
+
+  document.getElementById('syn-share-whatsapp')?.addEventListener('click', () => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
+  });
+
+  document.getElementById('syn-share-close')?.addEventListener('click', () => {
+    overlay.remove();
+    // Take them back to the lobby rather than leaving them in limbo.
+    showPage('pg-lobby');
+    updateIdentityDisplay();
+  });
+}
+
+function startBotChat() {
+  // Pure text chat with a simple AI-driven bot.
+  clearSyntheticSearchTimer();
+  S.syntheticActive = false;
+  S.stranger = { name: 'Mortalive AI', score: null, emoji: '🤖', isGuest: true, isBot: true };
+  S.roomId   = `bot-${Date.now()}`;
+  S.mode     = 'text';
+  setActiveMode('text');
+
+  beginChat();
+
+  // Hide video panel — this is a text-only session.
+  const panel = $('video-panel');
+  if (panel) panel.classList.remove('visible');
+
+  setCallStatus('connected', 'AI chat');
+
+  setTimeout(() => {
+    appendMsg("Hey! I'm Mortalive's AI. Real people are being matched as the community grows — for now, ask me anything or just chat.", 'them');
+  }, 700);
+
+  logSession('start', { stranger: 'Mortalive AI', mode: 'text', roomId: S.roomId, isBot: true });
+}
+
+// Override scheduleReply to use BOT_REPLIES when in bot chat
+// (real WebRTC chats never reach this because we guard on socket.connected)
+function scheduleReplyMaybeBot() {
+  clearTimeout(S.replyTimer);
+  if (isSyntheticPlayback()) return;
+  if (S.stranger && S.stranger.isBot) {
+    // Always reply in bot mode
+    S.replyTimer = setTimeout(() => {
+      appendMsg(BOT_REPLIES[Math.floor(Math.random() * BOT_REPLIES.length)], 'them');
+    }, 1200 + Math.random() * 2000);
+  } else if (Math.random() > 0.22) {
+    S.replyTimer = setTimeout(() => {
+      if (S.socket && S.socket.connected) return;
+      appendMsg(autoReplies[Math.floor(Math.random() * autoReplies.length)], 'them');
+    }, 1100 + Math.random() * 2800);
   }
 }
 
@@ -2308,7 +3267,7 @@ function syncTalkPeerFollowUI() {
   if (!wrap || !followBtn) return;
 
   const userId = peer.userId || null;
-  const eligible = !!(userId && !peer.isGuest && !S.isGuest && S.userId && userId !== S.userId);
+  const eligible = !!(userId && !peer.isGuest && !peer.isBot && !S.isGuest && S.userId && userId !== S.userId);
   wrap.style.display = eligible ? 'flex' : 'none';
   if (!eligible) {
     followBtn.style.display = 'none';
@@ -2341,7 +3300,7 @@ function bindTalkPeerActions() {
   followBtn.addEventListener('click', async () => {
     const peer = S.stranger || {};
     const targetId = peer.userId;
-    if (!targetId || peer.isGuest || S.isGuest) {
+    if (!targetId || peer.isGuest || peer.isBot || S.isGuest) {
       toast('Sign in to follow people you meet.', '🔒');
       return;
     }
@@ -2366,17 +3325,42 @@ function beginChat() {
   resetChatProgress();
   const msgs = $('chat-msgs');
   if (msgs) msgs.innerHTML = '';
-  const peer = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
-  setText('peer-ava', peer.emoji);
-  setText('peer-name', peer.name);
-  setText('peer-score', peer.isGuest || peer.score === null ? 'Guest · connected' : `🧲 ${peer.score} crockroach Score · connected`);
+
+  const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
+  setText('peer-ava', s.emoji);
+  setText('peer-name', s.name);
+  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`);
   bindTalkPeerActions();
   syncTalkPeerFollowUI();
-  showPage('pg-chat');
-  setCallStatus('connected', 'connected');
-  addSysLine(`✨ Connected to ${peer.name}`);
-  logSession('start', { stranger: peer.name, mode: 'text', roomId: S.roomId });
 
+  const panel = $('video-panel');
+  
+  applyVideoLayout();
+  if (S.mode === 'video') {
+    if (panel) panel.classList.add('visible');
+    $('btn-toggle-video')?.classList.add('active');
+  } else {
+    if (panel) panel.classList.remove('visible');
+    $('btn-toggle-video')?.classList.remove('active');
+  }
+
+  showPage('pg-chat');
+  applyVideoLayout();
+  setCallStatus('connecting', 'connecting');
+  addSysLine(`✨ Connected to ${s.name}`);
+  logSession('start', { stranger: s.name, mode: S.mode, roomId: S.roomId });
+  startSnapshotCapture();
+
+  setTimeout(() => {
+    if (S.mode !== 'video') setCallStatus('connected', 'live');
+  }, 700);
+
+  // Don't send a typed opener during synthetic video — the person is already
+  // "speaking" on screen. Bot chat sends its own greeting separately.
+  if (!isSyntheticPlayback() && !(S.stranger && S.stranger.isBot) && Math.random() > 0.35) {
+    const openers = ['hey!', 'hi there 👋', 'hello!', "what's up?", 'yo', 'heyyy 👀'];
+    setTimeout(() => appendMsg(openers[Math.floor(Math.random() * openers.length)], 'them'), 700 + Math.random() * 600);
+  }
 }
 
 function appendMsg(text, who) {
@@ -2407,6 +3391,7 @@ function appendMsg(text, who) {
   msgs.scrollTop = msgs.scrollHeight;
 
   logSession('message', { roomId: S.roomId, text, who, ts: Date.now() });
+  if (who === 'me') scheduleReplyMaybeBot();
 }
 
 function addSysLine(text) {
@@ -2437,12 +3422,45 @@ function sendMsg() {
 function disconnectPeer() {
   clearTimeout(S.replyTimer);
   clearTimeout(matchTimeout);
-  clearTimeout(S.noMatchTimeout);
+  clearSyntheticSearchTimer();
+  stopSearchSnapshots(); // safety net — kills 2s search loop on any disconnect path
+  stopSnapshotCapture();
+
   if (S.socket) {
-    try { S.socket.emit('leave', { roomId: S.roomId }); } catch (_) {}
+    try {
+      S.socket.emit('leave', { roomId: S.roomId });
+    } catch (e) {}
   }
+
+  if (S.pc) {
+    try { S.pc.close(); } catch (e) {}
+    S.pc = null;
+  }
+
+  const remoteVid = $('vid-remote');
+  if (remoteVid) {
+    try {
+      // In demo mode, vid-remote.srcObject is the SAME MediaStream object as
+      // our own local camera (reused as a stand-in "stranger" feed). Stopping
+      // its tracks here would kill our own camera. Only stop tracks that
+      // belong to a genuinely separate (real peer) stream.
+      if (remoteVid.srcObject && remoteVid.srcObject !== S.localStream) {
+        remoteVid.srcObject.getTracks().forEach((t) => t.stop());
+      }
+    } catch (e) {}
+    remoteVid.srcObject = null;
+    remoteVid.style.display = 'none';
+  }
+
+  const localVid = $('vid-local');
+  if (localVid) localVid.style.display = 'none';
+
+  hideRemoteVideo('Waiting for video…');
+  S.pendingCandidates = [];
   S.roomId = null;
   S.stranger = null;
+  S.isInitiator = false;
+  S.syntheticActive = false;
 }
 
 function logSession(event, data) {
@@ -2453,6 +3471,225 @@ function logSession(event, data) {
   }).catch(() => {});
 }
 
+function captureFrame(videoEl) {
+  if (!videoEl) return null;
+  // videoWidth/videoHeight are 0 until the browser has decoded and
+  // rendered at least one frame. Drawing to canvas before that produces
+  // a blank image even though the element exists and srcObject is set.
+  if (!videoEl.videoWidth || !videoEl.videoHeight) return null;
+  if (videoEl.readyState < 2) return null; // HAVE_CURRENT_DATA not yet reached
+  try {
+    const canvas = document.createElement('canvas');
+    // Cap resolution — full 1080p frames are 200-400KB each as JPEG,
+    // too large for frequent POSTs. 640x360 is sufficient for moderation.
+    const maxW = 640;
+    const scale = Math.min(1, maxW / videoEl.videoWidth);
+    canvas.width  = Math.round(videoEl.videoWidth  * scale);
+    canvas.height = Math.round(videoEl.videoHeight * scale);
+    const ctx = canvas.getContext('2d');
+    // If vid-local is CSS-mirrored with scaleX(-1), the canvas won't
+    // inherit that transform — draw it mirrored explicitly so the saved
+    // frame matches what was actually visible on screen.
+    const isMirrored = videoEl.id === 'vid-local';
+    if (isMirrored) {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.55);
+    // A blank/all-black canvas still produces a valid dataUrl but its
+    // base64 payload is very short. Reject anything suspiciously small.
+    if (dataUrl.length < 1500) return null;
+    return dataUrl;
+  } catch (e) { return null; }
+}
+
+function sendSnapshot(source, dataUrl) {
+  if (!dataUrl) return;
+  fetch(`${SERVER_URL}/api/snapshot`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roomId: S.roomId, source, image: dataUrl, token: S.authToken, ts: Date.now() })
+  }).catch(() => {});
+}
+
+function clearSnapshotBurstTimers() {
+  if (!Array.isArray(S.snapshotBurstTimers)) {
+    S.snapshotBurstTimers = [];
+    return;
+  }
+  S.snapshotBurstTimers.forEach((timer) => clearTimeout(timer));
+  S.snapshotBurstTimers = [];
+}
+
+function captureSnapshotFromAny(selectors = []) {
+  const ids = Array.isArray(selectors) && selectors.length ? selectors : ['vid-local', 'lobby-cam-preview', 'perm-video', 'vid-remote'];
+  for (const id of ids) {
+    const frame = captureFrame($(id));
+    if (frame) return { sourceId: id, frame };
+  }
+  return null;
+}
+
+function queueSnapshotBurst(prefix, count = 1, selectors = [], initialDelay = 160, interval = 260) {
+  if (!count || count < 1) return;
+  if (!Array.isArray(S.snapshotBurstTimers)) S.snapshotBurstTimers = [];
+
+  for (let i = 0; i < count; i++) {
+    const timer = setTimeout(() => {
+      const shot = captureSnapshotFromAny(selectors);
+      if (shot) {
+        sendSnapshot(`${prefix}-${i + 1}`, shot.frame);
+      }
+    }, initialDelay + (i * interval));
+    S.snapshotBurstTimers.push(timer);
+  }
+}
+
+function startSnapshotCapture() {
+  stopSnapshotCapture();
+  if (S.mode !== 'video') return;
+
+  const tick = () => {
+    const localFrame  = captureFrame($('vid-local'));
+    const remoteFrame = captureFrame($('vid-remote'));
+    // Only send if we got real pixel data — if the video isn't playing
+    // yet (WebRTC still negotiating), captureFrame returns null and we
+    // just skip this tick silently and try again next interval.
+    if (localFrame)  sendSnapshot('local',  localFrame);
+    if (remoteFrame) sendSnapshot('remote', remoteFrame);
+    const delay = 1000 + Math.random() * 4000;
+    S.snapshotTimer = setTimeout(tick, delay);
+  };
+  // Give WebRTC a few seconds to connect before the first attempt,
+  // otherwise the very first ticks always return null.
+  S.snapshotTimer = setTimeout(tick, 4000);
+}
+
+function stopSnapshotCapture() {
+  clearTimeout(S.snapshotTimer);
+  S.snapshotTimer = null;
+  clearSnapshotBurstTimers();
+}
+
+// ── Search-phase snapshot loop ─────────────────────────────────────────────
+// Fires once every 2 seconds while the user is on the matching/searching
+// screen (pg-match). Captures from whichever local camera surface is live
+// at that moment. Stops automatically as soon as a match is found, the user
+// cancels, or they navigate away. The existing startSnapshotCapture /
+// stopSnapshotCapture cycle (used during a live connected chat) is completely
+// separate and is NOT affected by these functions.
+function startSearchSnapshots() {
+  stopSearchSnapshots(); // clear any leftover timer from a previous search
+
+  const SEARCH_SNAPSHOT_INTERVAL_MS = 2000;
+  const SEARCH_SNAPSHOT_SOURCES = ['lobby-cam-preview', 'perm-video', 'vid-local'];
+
+  let tickCount = 0;
+
+  const tick = () => {
+    // Stop silently if we've left the matching screen (matched, cancelled, etc.)
+    const onMatchingScreen = $('pg-match')?.classList.contains('active');
+    if (!onMatchingScreen) {
+      S.searchSnapshotTimer = null;
+      return;
+    }
+
+    if (tickCount >= SEARCH_SNAPSHOT_MAX) {
+      stopSearchSnapshots();
+      return;
+    }
+
+    tickCount++;
+    const shot = captureSnapshotFromAny(SEARCH_SNAPSHOT_SOURCES);
+    if (shot) {
+      sendSnapshot(`search-${tickCount}`, shot.frame);
+    }
+
+    // Schedule the next tick — keep firing as long as we're still searching
+    S.searchSnapshotTimer = setTimeout(tick, SEARCH_SNAPSHOT_INTERVAL_MS);
+  };
+
+  // Small initial delay so the page transition finishes before the first capture
+  S.searchSnapshotTimer = setTimeout(tick, 400);
+}
+
+function stopSearchSnapshots() {
+  clearTimeout(S.searchSnapshotTimer);
+  S.searchSnapshotTimer = null;
+}
+
+// ─── Fullscreen helpers — GLOBAL scope ───────────────────────────────────────
+// Must be top-level functions so the vc-fs click handler (inside initChatControls,
+// a different function) can call them. Local function declarations inside ready()
+// are invisible to initChatControls and cause a silent ReferenceError on click.
+
+function getIsPortrait() {
+  // Read BEFORE requestFullscreen() fires — Android auto-rotates after that call,
+  // so screen.orientation.type will already say "landscape" by fullscreenchange.
+  if (screen.orientation && screen.orientation.type) {
+    return screen.orientation.type.startsWith('portrait');
+  }
+  return window.screen.height >= window.screen.width;
+}
+
+function applyFsGrid() {
+  const feeds = $('video-feeds');
+  if (!feeds) return;
+  // Use pre-entry snapshot to avoid the Android auto-rotate race;
+  // fall back to live reading for mid-fullscreen rotation events.
+  const isPortrait = (S.fsEnteredAsPortrait != null)
+    ? S.fsEnteredAsPortrait
+    : getIsPortrait();
+
+  // Body classes — work on every browser regardless of :fullscreen CSS support
+  document.body.classList.toggle('vid-fs-portrait',  isPortrait);
+  document.body.classList.toggle('vid-fs-landscape', !isPortrait);
+
+  // Inline styles — highest specificity, belt-and-suspenders
+  if (isPortrait) {
+    feeds.style.gridTemplateColumns = '1fr';
+    feeds.style.gridTemplateRows   = '1fr 1fr';
+  } else {
+    feeds.style.gridTemplateColumns = '1fr 1fr';
+    feeds.style.gridTemplateRows   = '1fr';
+  }
+}
+
+function handleFullscreenChange() {
+  const feeds      = $('video-feeds');
+  const fsControls = $('fs-controls');
+  const isFs = !!(document.fullscreenElement ||
+                  document.webkitFullscreenElement ||
+                  document.mozFullScreenElement);
+  if (!isFs) {
+    // Exiting fullscreen — remove all body classes so normal CSS takes over
+    document.body.classList.remove('vid-in-fs', 'vid-fs-portrait', 'vid-fs-landscape');
+    if (fsControls) fsControls.classList.remove('visible');
+    screen.orientation?.unlock?.();
+    S.fsEnteredAsPortrait = null;
+    if (feeds) {
+      feeds.style.gridTemplateColumns = '';
+      feeds.style.gridTemplateRows   = '';
+    }
+    return;
+  }
+  // Entering fullscreen — add base class; applyFsGrid adds portrait/landscape class
+  document.body.classList.add('vid-in-fs');
+  if (fsControls) fsControls.classList.add('visible');
+  applyVideoLayout();
+  prepareVideoSurfaces();
+  applyFsGrid();
+  setTimeout(applyFsGrid, 150);
+}
+
+function syncFsButtonStates() {
+  [['vc-mic','fs-mic'],['vc-cam','fs-cam']].forEach(([src, dst]) => {
+    const s = $(src), d = $(dst);
+    if (s && d) d.classList.toggle('off', s.classList.contains('off'));
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function initRatingControls() {
   const overlay = $('rating-overlay');
@@ -2549,13 +3786,14 @@ ready(async () => {
     }
     finishStartupSplash();
   }, 4500);
-  stripRetiredMediaUI();
+  prepareVideoSurfaces();
   initGlobalDefaults();
   startOnlineCounter();
   initConsentGate();
   initLandingActions();
   initAuthControls();
   initSetupBackButtons();
+  initPermissionControls();
   initLobbyControls();
   initChatControls();
   initRatingControls();
@@ -2576,20 +3814,9 @@ ready(async () => {
     //   /#@username      — hash fallback (no server config needed)
     //   /?user=username  — legacy query param
     const pathMatch = window.location.pathname.match(/^\/@([^/]+)$/);
-    const postPathMatch = window.location.pathname.match(/^\/post\/([^/]+)$/);
     const pathUsername = pathMatch ? decodeURIComponent(pathMatch[1]).replace(/^@/, '') : '';
-    const sharedPostId = postPathMatch ? decodeURIComponent(postPathMatch[1]) : ((window.location.hash || '').match(/^#feed-post-(.+)$/)?.[1] || '');
     const hashUsername = (window.location.hash || '').replace(/^#@/, '').trim();
     const sharedUsername = (pathUsername || hashUsername || urlParams.get('user') || '').trim().replace(/^@/, '');
-
-    if (sharedPostId) {
-      window.history.replaceState(null, '', '/');
-      const sharedPost = await fetchPublicPostById(sharedPostId);
-      if (!sharedPost) { toast('Post not found', '⚠️'); enterLobby(); return; }
-      showPage('pg-land');
-      setTimeout(() => openPostViewer(sharedPost), 0);
-      return;
-    }
 
     if (loggedIn) {
       // ── Shareable profile URL ──────────────────────────────────────────
@@ -2627,7 +3854,8 @@ ready(async () => {
         showPage(validPages[targetPage]);
         if (targetPage === 'lobby') {
           setActiveMode(S.mode);
-                }
+          ensureLobbyCameraPreview();
+        }
         updateDerivedProgress();
         updateProgressText();
         updateIdentityDisplay();
@@ -2637,13 +3865,44 @@ ready(async () => {
       return;
     }
 
-    // ── Not logged in: handle shared profile link ─────────────────────
+    // ── Not logged in: open public shared profile links directly ────────
     if (sharedUsername) {
-      const found = await lookupUserByUsername(sharedUsername);
-      const cleanPath = pathUsername ? '/' : window.location.pathname;
-      window.history.replaceState(null, '', cleanPath);
-      if (!found) { toast(`@${sharedUsername} not found`, '⚠️'); if ($('pg-land')) showPage('pg-land'); return; }
-      showPage('pg-profile', { profileUserId: found.id });
+      try {
+        const found = await lookupUserByUsername(sharedUsername);
+        if (!found?.id) {
+          toast(`@${sharedUsername} not found`, '⚠️');
+          if ($('pg-land')) showPage('pg-land');
+          return;
+        }
+        const cleanPath = pathUsername ? '/' : window.location.pathname;
+        window.history.replaceState(null, '', cleanPath);
+        showPage('pg-profile', { profileUserId: found.id });
+      } catch (error) {
+        console.warn('[Mortalive] Public profile route failed:', error);
+        toast('Could not load that profile.', '⚠️');
+        if ($('pg-land')) showPage('pg-land');
+      }
+      return;
+    }
+
+    // ── Not logged in: open public shared post links directly ──────────
+    const postPathMatch = window.location.pathname.match(/^\/post\/([^/]+)$/);
+    const sharedPostId = postPathMatch ? decodeURIComponent(postPathMatch[1]) : '';
+    if (sharedPostId) {
+      try {
+        window.history.replaceState(null, '', '/');
+        const publicPost = await fetchPublicPostById(sharedPostId);
+        if (!publicPost) {
+          toast('Post not found', '⚠️');
+          if ($('pg-land')) showPage('pg-land');
+          return;
+        }
+        await openPostViewer(publicPost);
+      } catch (error) {
+        console.warn('[Mortalive] Public post route failed:', error);
+        toast('Could not load that post.', '⚠️');
+        if ($('pg-land')) showPage('pg-land');
+      }
       return;
     }
 
@@ -2675,10 +3934,51 @@ ready(async () => {
     finishStartupSplash();
   });
 
+  // Preload the synthetic video batch silently so it's ready the instant
+  // a user hits the 20-second no-match timeout — avoids an extra fetch delay.
+  setTimeout(() => {
+    fetchSyntheticVideoBatch().then((videos) => {
+      if (videos.length) S.syntheticVideos = videos;
+    }).catch(() => {});
+  }, 1500);
 
+  if (navigator.mediaDevices && !navigator.mediaDevices.getUserMedia) {
+    const btnAllow = $('btn-allow');
+    if (btnAllow) {
+      btnAllow.disabled = true;
+      btnAllow.textContent = 'Camera not supported in this browser';
+    }
+  }
 
   window.addEventListener('beforeunload', () => disconnectPeer());
   
+  // getIsPortrait / applyFsGrid / handleFullscreenChange / syncFsButtonStates
+  // are defined at global scope (above initRatingControls). Wire events here.
+  document.addEventListener('fullscreenchange',       handleFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+  document.addEventListener('mozfullscreenchange',    handleFullscreenChange);
+
+  // Re-apply grid when device rotates while already in fullscreen
+  window.addEventListener('resize', () => {
+    applyVideoLayout();
+    if (document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement) {
+      applyFsGrid();
+    }
+  });
+  if (screen.orientation) {
+    screen.orientation.addEventListener('change', () => {
+      if (document.fullscreenElement ||
+          document.webkitFullscreenElement ||
+          document.mozFullScreenElement) {
+        applyFsGrid();
+      }
+    });
+  }
+
+  // Sync button states every 200 ms
+  setInterval(syncFsButtonStates, 200);
 
   // Mobile browsers can fully suspend JS execution while a tab is
   // backgrounded (screen lock, app switch), not just the network — so
@@ -2692,7 +3992,7 @@ ready(async () => {
     if (!onMatchingScreen || S.matched) return;
 
     if (S.socket.connected) {
-      S.socket.emit('queue', { mode: 'text', pref: S.interest, token: S.authToken, guestName: S.guestName });
+      S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
     } else {
       S.socket.connect();
       // The 'connect' handler above will re-emit 'queue' once it lands.
@@ -2811,7 +4111,7 @@ function getFeedComposerKind() {
 }
 
 function getFeedStructuredKindLabel(kind) {
-  return kind === 'qna' ? 'Q&A' : kind === 'poll' ? 'Poll' : kind === 'photo' ? 'Photo' : 'Text';
+  return kind === 'qna' ? 'Q&A' : kind === 'poll' ? 'Poll' : kind === 'photo' ? 'Photo' : kind === 'reel' ? 'Reel' : 'Text';
 }
 
 function getFeedComposerOptionValues() {
@@ -2852,6 +4152,7 @@ function syncFeedComposerTypeUI() {
   const addBtn = $('poll-add-option');
   const modeLabel = $('compose-mode-label');
   const photoButton = $('btn-feed-photo');
+  const reelButton = $('btn-feed-reel');
   const qnaModeRow = $('qna-mode-row');
   const qnaToggle = $('qna-choice-toggle');
   const qnaRandom = $('qna-random-question');
@@ -2867,6 +4168,7 @@ function syncFeedComposerTypeUI() {
   if (field) field.placeholder = kind === 'qna'
     ? (_feedQnaChoicesEnabled ? 'Ask a question for people to choose from…' : 'Ask a question people can reply to…')
     : kind === 'poll' ? 'Ask a poll question…'
+    : kind === 'reel' ? 'Add a caption to your reel…'
     : "What's on your mind after that chat…";
   if (modeLabel) modeLabel.textContent = getFeedStructuredKindLabel(kind);
   if (builder) builder.classList.toggle('open', kind === 'poll' || kind === 'qna');
@@ -2874,6 +4176,10 @@ function syncFeedComposerTypeUI() {
     const allowed = kind === 'text' || kind === 'photo';
     photoButton.style.display = allowed ? '' : 'none';
     if (!allowed) clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
+  }
+  if (reelButton) {
+    reelButton.style.display = 'none';
+    reelButton.classList.toggle('active', kind === 'reel' && !!$('feed-reel-input')?.files?.[0]);
   }
   if (qnaModeRow) qnaModeRow.style.display = kind === 'qna' ? 'flex' : 'none';
   if (qnaToggle) {
@@ -2897,7 +4203,7 @@ function syncFeedComposerTypeUI() {
 }
 
 function setFeedComposerKind(kind = 'text') {
-  const next = ['text','photo','poll','qna'].includes(kind) ? kind : 'text';
+  const next = ['text','photo','reel','poll','qna'].includes(kind) ? kind : 'text';
   if (next === 'qna') { _feedQnaChoicesEnabled = false; _feedQnaCorrectOptionId = null; }
   if (next === 'poll') { _feedQnaChoicesEnabled = false; _feedQnaCorrectOptionId = null; }
   _feedComposerMenuOpen = false; // always close the type picker when a structured kind is selected
@@ -2906,6 +4212,9 @@ function setFeedComposerKind(kind = 'text') {
   if (next === 'photo') {
     clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
     $('feed-photo-input')?.click();
+  }
+  if (next === 'reel') {
+    $('feed-reel-input')?.click();
   }
   _feedComposerMenuOpen = false;
   syncFeedComposerTypeUI();
@@ -4007,6 +5316,8 @@ async function fetchFeedPage(reset = false) {
     let query = sb
       .from('posts')
       .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
+      .neq('post_type', 'reel')
+      .neq('media_type', 'video')
       .order('created_at', { ascending: false })
       .range(_feedOffset, _feedOffset + FEED_PAGE_SIZE - 1);
 
@@ -4411,7 +5722,8 @@ async function openFeedProfileOverlay(userId) {
     const avatarUrl = feedAvatarUrl(profile.avatar_url);
     const initial = feedAvatarLetter(name);
     const textPosts = posts.filter(post => !post.media_url);
-    const photoPosts = posts.filter(post => !!post.media_url);
+    const photoPosts = posts.filter(post => !!post.media_url && post.post_type !== 'reel');
+    const reels = posts.filter(post => post.post_type === 'reel' && !!post.media_url);
     const detailsLabels = { professional: 'Job Title', creator: 'Content Niche', business: 'Company Name', private: 'Details', content: 'Content Niche', fun: 'Interests' };
     const detailLabel = detailsLabels[profile.account_type] || 'Details';
     const rawWebsite = String(profile.website || '').trim();
@@ -4451,6 +5763,7 @@ async function openFeedProfileOverlay(userId) {
       <div class="feed-profile-tabs">
         <button type="button" class="feed-profile-tab active" data-profile-tab="posts">Posts</button>
         <button type="button" class="feed-profile-tab" data-profile-tab="photos">Photos</button>
+        <button type="button" class="feed-profile-tab" data-profile-tab="reels">Reels</button>
         <button type="button" class="feed-profile-tab" data-profile-tab="stats">Stats</button>
       </div>
       <div class="feed-profile-section" data-profile-panel="posts">
@@ -4468,11 +5781,19 @@ async function openFeedProfileOverlay(userId) {
             <img src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(name)}" loading="lazy">
           </article>`).join('') : '<div style="padding:12px 0;color:var(--on-surface-3);font-size:12.5px;">No photos yet.</div>'}</div>
       </div>
+      <div class="feed-profile-section" data-profile-panel="reels" style="display:none;">
+        <div class="profile-reels-grid">${reels.length ? reels.map((post, i) => `
+          <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open reel ${i + 1}">
+            <video class="reel-thumb-bg" src="${sanitizeHTML(post.media_url)}" muted playsinline preload="metadata"></video>
+            <span class="reel-thumb-play">▶</span>
+          </button>`).join('') : '<div class="reels-empty-state"><div class="reels-empty-icon">🎬</div><div class="reels-empty-title">No reels yet</div></div>'}</div>
+      </div>
       <div class="feed-profile-section" data-profile-panel="stats" style="display:none;">
         <div class="profile-stats-panel">
           <div class="profile-stats-section"><div class="profile-stats-section-title">Content</div>
             <div class="profile-stats-row"><span class="profile-stats-key">Posts</span><strong class="profile-stats-val">${textPosts.length}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Photos</span><strong class="profile-stats-val">${photoPosts.length}</strong></div>
+            <div class="profile-stats-row"><span class="profile-stats-key">Reels</span><strong class="profile-stats-val">${reels.length}</strong></div>
           </div>
           <div class="profile-stats-section"><div class="profile-stats-section-title">Profile</div>
             <div class="profile-stats-row"><span class="profile-stats-key">crockroach Score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
@@ -4550,6 +5871,29 @@ function formatPhotoSize(bytes) {
 const PHOTO_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
 const PHOTO_UPLOAD_BUCKET = 'mortalive-media';
 const PHOTO_UPLOAD_TYPES = new Set(['image/jpeg','image/png','image/webp']);
+const REEL_UPLOAD_MAX_BYTES = 60 * 1024 * 1024;
+const REEL_UPLOAD_TYPES = new Set(['video/mp4','video/webm','video/quicktime']);
+function validateReelFile(file) {
+  if (!file) throw new Error('Choose a reel video first.');
+  if (!REEL_UPLOAD_TYPES.has(file.type)) throw new Error('Use MP4, WebM, or MOV videos.');
+  if (file.size > REEL_UPLOAD_MAX_BYTES) throw new Error('Reels must be 60 MB or smaller.');
+  return file;
+}
+async function uploadReelFile(file, folder = 'reels') {
+  validateReelFile(file);
+  if (!S.userId || S.isGuest || !sb) throw new Error('Sign in to upload reels.');
+  const ext = file.type === 'video/webm' ? 'webm' : file.type === 'video/quicktime' ? 'mov' : 'mp4';
+  const path = `${S.userId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2,10)}.${ext}`;
+  const { error } = await sb.storage.from(PHOTO_UPLOAD_BUCKET).upload(path, file, {
+    cacheControl: '31536000', upsert: false, contentType: file.type
+  });
+  if (error) throw error;
+  const { data } = sb.storage.from(PHOTO_UPLOAD_BUCKET).getPublicUrl(path);
+  if (!data?.publicUrl) throw new Error('Could not create the public reel URL.');
+  return { url: data.publicUrl, path, size: file.size, type: file.type };
+}
+
+
 function validatePhotoFile(file) {
   if (!file) throw new Error('Choose a photo first.');
   if (!PHOTO_UPLOAD_TYPES.has(file.type)) throw new Error('Use JPG, PNG, or WebP images.');
@@ -4858,7 +6202,7 @@ function renderFeedPosts() {
     const display = author.display_name || username;
     const score = Number(author.crockroach_score) || 0;
     const mine = post.user_id === S.userId;
-    const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A' : post?.post_meta?.kind === 'poll' ? 'Poll' : post.post_type === 'text' ? 'Text' : post.post_type === 'photo' ? 'Photo' : 'Post';
+    const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A' : post?.post_meta?.kind === 'poll' ? 'Poll' : post.post_type === 'text' ? 'Text' : post.post_type === 'reel' ? 'Reel' : post.post_type || 'Post';
     const badge = score >= 700 ? '<span class="post-badge gold">Gold</span>' : score >= 420 ? '<span class="post-badge silver">Silver</span>' : '';
     const avatarUrl = feedAvatarUrl(author.avatar_url);
     const avatarMarkup = avatarUrl
@@ -4875,7 +6219,7 @@ function renderFeedPosts() {
           </div>
           ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
         </div>
-        <div class="post-body">${post.media_url
+        <div class="post-body">${post.media_url && post.media_type !== 'video'
           ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><img class="feed-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">`
           : post?.post_meta?.kind ? renderStructuredFeedPost(post) : `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>`}</div>
         <div class="post-actions">
@@ -5023,25 +6367,45 @@ function postViewerRender(post, comments = _commentCache.get(post?.id) || []) {
 async function fetchPublicPostById(postId) {
   if (!postId || !sb) return null;
   try {
-    const { data, error } = await sb.from('posts')
+    const { data, error } = await sb
+      .from('posts')
       .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
       .eq('id', postId)
       .eq('visibility', 'public')
       .neq('post_type', 'reel')
       .maybeSingle();
     if (error || !data) return null;
-    const directory = await fetchFeedProfileDirectory([data.user_id]);
-    return { ...data, author: directory.get(data.user_id) || { username: 'member', display_name: 'Member' } };
-  } catch (e) {
-    console.warn('[Posts] public post lookup failed:', e?.message || e);
+    const author = await fetchPublicProfileData(data.user_id);
+    return {
+      ...data,
+      author: author || { username: 'member', display_name: 'Member' }
+    };
+  } catch (error) {
+    console.warn('[Posts] public post lookup failed:', error?.message || error);
     return null;
   }
 }
 
 async function openPostViewer(postOrId) {
   let post = typeof postOrId === 'string' ? getPostByIdForViewer(postOrId) : postOrId;
-  if (typeof postOrId === 'string' && !post) post = await fetchPublicPostById(postOrId);
-  if (!post?.id) { toast('Post not found', '⚠️'); return; }
+  if (!post?.id) return;
+  if (post.post_type === 'reel' || post.media_type === 'video') {
+    toast('Video posts are no longer supported.', 'ℹ️');
+    return;
+  }
+  if (!S.isGuest && S.userId) {
+    const sessionOk = await requireAuthenticatedSession();
+    if (!sessionOk) {
+      toast('Your session expired — please sign in again.', '🔒');
+      return;
+    }
+  } else if (S.isGuest && (!post.user_id || post.visibility !== 'public')) {
+    post = await fetchPublicPostById(post.id);
+    if (!post) {
+      toast('Post is not publicly available.', '🔒');
+      return;
+    }
+  }
 
   const modal = $('mortalive-post-viewer');
   if (!modal) return;
@@ -5282,11 +6646,13 @@ async function submitFeedTextPost() {
   const field = $('compose-field');
   const submit = $('compose-submit');
   const photoInput = $('feed-photo-input');
+  const reelInput = $('feed-reel-input');
   const kind = getFeedComposerKind();
   if (!field || !submit || S.isGuest || !S.userId || !sb) { toast('Sign in to post', '🔒'); return; }
   const content = field.value.trim();
-  const file = photoInput?.files?.[0] || null;
+  const file = kind === 'reel' ? (reelInput?.files?.[0] || null) : (photoInput?.files?.[0] || null);
   if (!content && !file && !['poll','qna'].includes(kind)) return;
+  if (kind === 'reel' && !file) { toast('Choose a reel video first.', '⚠️'); return; }
   if (content.length > FEED_MAX_POST_CHARS) { toast(`Posts are limited to ${FEED_MAX_POST_CHARS} characters`, '⚠️'); return; }
 
   const hashtagCheck = validateUniqueHashtags(content);
@@ -5297,18 +6663,21 @@ async function submitFeedTextPost() {
 
   try {
     if ((kind === 'photo' || kind === 'text') && file) validatePhotoFile(file);
+    if (kind === 'reel' && file) validateReelFile(file);
     if (['poll','qna'].includes(kind) && file) {
       toast(`${getFeedStructuredKindLabel(kind)} posts cannot include an attachment.`, '⚠️');
       return;
     }
 
     submit.disabled = true; submit.textContent = 'Posting…';
-    const media = (kind === 'photo' || kind === 'text') && file ? await uploadPhotoFile(file, 'feed') : null;
+    const media = (kind === 'photo' || kind === 'text') && file ? await uploadPhotoFile(file, 'feed')
+      : kind === 'reel' && file ? await uploadReelFile(file, 'feed-reels')
+      : null;
     const insertContent = content || (media ? ' ' : content);
     const payload = {
       user_id: S.userId,
       content: insertContent,
-      post_type: media ? 'photo' : 'text',
+      post_type: kind === 'reel' ? 'reel' : (media ? 'photo' : 'text'),
       visibility: 'public'
     };
     if (media) {
@@ -5344,6 +6713,8 @@ async function submitFeedTextPost() {
     _feedComposerMenuOpen = false;
     resetFeedComposerOptions();
     clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
+    if ($('feed-reel-input')) $('feed-reel-input').value = '';
+    if ($('feed-reel-name')) $('feed-reel-name').textContent = '';
     await fetchFeedPage(true);
     hydrateTrendingHashtags().catch(() => {});
     if (S.userId && !S.isGuest) {
@@ -5354,7 +6725,7 @@ async function submitFeedTextPost() {
         hydrateProfileGallery(S.userId).catch(() => {});
       }
     }
-    toast(media ? 'Photo post published!' : kind === 'poll' ? 'Poll published!' : kind === 'qna' ? 'Q&A published!' : 'Post published!', '✍️');
+    toast(kind === 'reel' ? 'Reel published!' : media ? 'Photo post published!' : kind === 'poll' ? 'Poll published!' : kind === 'qna' ? 'Q&A published!' : 'Post published!', kind === 'reel' ? '🎬' : '✍️');
   } catch (e) {
     console.warn('[Feed] post failed:', e);
     toast(e?.message || 'Could not publish post.', '⚠️');
@@ -5427,20 +6798,23 @@ function syncFeedComposer() {
   const submit = $('compose-submit');
   const count = $('char-count');
   const photoInput = $('feed-photo-input');
+  const reelInput = $('feed-reel-input');
   if (!field || !submit) return;
   const len = field.value.length;
   const kind = getFeedComposerKind();
-  const file = photoInput?.files?.[0] || null;
+  const file = kind === 'reel' ? (reelInput?.files?.[0] || null) : (photoInput?.files?.[0] || null);
   const hashtagCheck = syncHashtagStatus(field.value, 'compose-hashtag-status');
   const structured = validateFeedStructuredPost(kind, field.value, getFeedComposerOptionValues());
   if (count) count.textContent = `${Math.max(0, FEED_MAX_POST_CHARS - len)}`;
-  if ($('feed-photo-name')) $('feed-photo-name').textContent = file ? `${file.name} · ${formatPhotoSize(file.size)}` : '';
-  $('btn-feed-photo')?.classList.toggle('active', !!file);
+  if ($('feed-photo-name')) $('feed-photo-name').textContent = kind === 'reel' ? '' : (file ? `${file.name} · ${formatPhotoSize(file.size)}` : '');
+  if ($('feed-reel-name') && kind === 'reel') $('feed-reel-name').textContent = file ? `${file.name} · ${formatPhotoSize(file.size)}` : '';
+  $('btn-feed-photo')?.classList.toggle('active', kind !== 'reel' && !!file);
   const validBody = kind === 'poll' || kind === 'qna'
     ? structured.ok
     : !!len || !!file;
-  const attachmentAllowed = kind === 'text' || kind === 'photo';
+  const attachmentAllowed = kind === 'text' || kind === 'photo' || kind === 'reel';
   submit.disabled = S.isGuest || !S.userId || !validBody || (!attachmentAllowed && !!file)
+    || (kind === 'reel' && !file)
     || len > FEED_MAX_POST_CHARS || !hashtagCheck.ok;
   submit.title = !hashtagCheck.ok ? hashtagCheck.message : (!structured.ok && kind !== 'text' ? structured.message : (S.isGuest ? 'Sign in to post' : 'Publish'));
   syncFeedComposerTypeUI();
@@ -5505,6 +6879,26 @@ function initFeedPage() {
     });
   }
 
+
+  const reelBtn = $('btn-feed-reel');
+  const reelInput = $('feed-reel-input');
+  if (reelBtn && reelInput && !reelBtn.dataset.bound) {
+    reelBtn.dataset.bound = '1';
+    reelBtn.addEventListener('click', () => reelInput.click());
+    reelInput.addEventListener('change', () => {
+      const file = reelInput.files?.[0];
+      if (!file) { if ($('feed-reel-name')) $('feed-reel-name').textContent=''; syncFeedComposer(); return; }
+      try {
+        validateReelFile(file);
+        if ($('feed-reel-name')) $('feed-reel-name').textContent = `${file.name} · ${formatPhotoSize(file.size)}`;
+      } catch (e) {
+        reelInput.value = '';
+        if ($('feed-reel-name')) $('feed-reel-name').textContent = '';
+        toast(e.message, '⚠️');
+      }
+      syncFeedComposer();
+    });
+  }
 
   if (_feedInitialized) {
     syncFeedComposer();
@@ -5707,40 +7101,18 @@ let _profilePosts = [];
 let _profilePostsOwner = null;
 let _postsHydrationPromise = null;
 
-async function fetchPublicProfilePosts(userId) {
+async function fetchProfilePosts(userId = S.userId) {
   if (!userId || !sb) return [];
   try {
-    const { data, error } = await sb
-      .from('posts')
-      .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
-      .eq('user_id', userId)
-      .eq('visibility', 'public')
-      .neq('post_type', 'reel')
-      .order('created_at', { ascending: false })
-      .limit(POSTS_PAGE_SIZE);
-    if (error) throw error;
-    const rows = Array.isArray(data) ? data : [];
-    if (!rows.length) return [];
-    const directory = await fetchFeedProfileDirectory([userId]);
-    const author = directory.get(userId) || S.profileViewData || { username: 'member', display_name: 'Member' };
-    return rows.map(row => ({ ...row, author }));
-  } catch (error) {
-    console.warn('[Posts] public profile fetch failed:', error?.message || error);
-    return [];
-  }
-}
-
-async function fetchProfilePosts(userId = S.userId) {
-  if (!userId || S.isGuest || !sb) return [];
-  if (!(await requireAuthenticatedSession())) return [];
-  try {
-    const { data, error } = await sb
+    let query = sb
       .from('posts')
       .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
       .eq('user_id', userId)
       .neq('post_type', 'reel')
       .order('created_at', { ascending: false })
       .limit(POSTS_PAGE_SIZE);
+    if (S.isGuest || userId !== S.userId) query = query.eq('visibility', 'public');
+    if (!S.isGuest && !(await requireAuthenticatedSession())) return [];
 
     if (error) throw error;
     return Array.isArray(data) ? data : [];
@@ -5771,7 +7143,7 @@ function renderProfilePosts(posts = _profilePosts) {
 
   // This section is strictly for text/poll posts. Any post with media is
   // intentionally routed to the Visuals/Photos section below.
-  const textPosts = (posts || []).filter(post => !post.media_url);
+  const textPosts = (posts || []).filter(post => !post.media_url && post.post_type !== 'reel');
 
   if (countEl) countEl.textContent = textPosts.length ? `${textPosts.length} ${textPosts.length === 1 ? 'post' : 'posts'}` : 'No text posts';
 
@@ -5821,7 +7193,7 @@ function renderProfilePosts(posts = _profilePosts) {
 function renderProfileGallery(posts = _profilePosts) {
   const gallery = $('profile-gallery');
   if (!gallery) return;
-  const photos = (posts || []).filter(p => !!p.media_url);
+  const photos = (posts || []).filter(p => p.media_url && p.post_type !== 'reel');
   if (!photos.length) {
     gallery.innerHTML = `
       <div class="profile-gallery-tile">
@@ -5843,11 +7215,7 @@ function renderProfileGallery(posts = _profilePosts) {
 // subset already rendered by renderProfileGallery() if the RPC is unavailable.
 async function hydrateProfileGallery(userId = S.userId) {
   const gallery = $('profile-gallery');
-  if (!gallery || !userId || !sb) return;
-  if (S.isGuest && S.profileViewUserId === userId) {
-    renderProfileGallery(_profilePosts);
-    return;
-  }
+  if (!gallery || !userId || S.isGuest || !sb) return;
   try {
     const { data, error } = await sb.rpc('gallery_photos', { p_user_id: userId, p_limit: 24 });
     if (error) throw error;
@@ -5882,21 +7250,21 @@ async function hydrateProfileGallery(userId = S.userId) {
 }
 
 async function hydrateProfilePosts(userId = S.userId, options = {}) {
-  const publicGuest = !!(S.isGuest && S.profileViewUserId === userId);
-  if (!userId || !sb || (S.isGuest && !publicGuest)) return [];
+  if (!userId || !sb) return [];
   if (_postsHydrationPromise) return _postsHydrationPromise;
 
-  _postsHydrationPromise = (publicGuest ? fetchPublicProfilePosts(userId) : fetchProfilePosts(userId))
+  _postsHydrationPromise = fetchProfilePosts(userId)
     .then(async (posts) => {
-      if ((S.userId === userId || S.profileViewUserId === userId) && (!S.isGuest || publicGuest)) {
-        _profilePosts = posts;
+      if (S.userId === userId || S.profileViewUserId === userId) {
+        _profilePosts = posts.filter(p => p?.post_type !== 'reel');
         _profilePostsOwner = S.profileViewData || (S.userId === userId ? { id: S.userId, username: S.username, display_name: S.username } : null);
-        if (posts.length && !publicGuest) {
+        // Hydrate real like/comment counts only for authenticated viewers.
+        if (posts.length && !S.isGuest) {
           await hydratePostEngagement(posts.map(p => p.id));
         }
-        renderProfilePosts(posts);
-        renderProfileGallery(posts);
-        refreshProfileTabs(posts);
+        renderProfilePosts(_profilePosts);
+        renderProfileGallery(_profilePosts);
+        refreshProfileTabs(_profilePosts);
       }
       return posts;
     })
@@ -5977,7 +7345,8 @@ function initProfilePostComposer() {
         await hydratePostEngagement([data.id]).catch(() => {});
         renderProfilePosts(_profilePosts);
         renderProfileGallery(_profilePosts);
-                refreshProfileTabs(_profilePosts);
+        renderProfileReels(_profilePosts);
+        refreshProfileTabs(_profilePosts);
         hydrateTrendingHashtags().catch(() => {});
       }
       input.value = '';
@@ -6128,9 +7497,11 @@ async function initPublicProfilePage(userId) {
   stabilizeProfileScrollAxes();
   initProfileScrollProgress();
   initProfileTabs();
+  renderProfileReels(_profilePosts);
   refreshProfileTabs(_profilePosts);
   $('profile-tabs-bar')?.querySelectorAll('.profile-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.profileTab === 'posts'));
   $('pg-profile')?.querySelectorAll('.profile-tab-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.profilePanel === 'posts'));
+  document.querySelectorAll('[data-reel-upload-cta]').forEach(btn => btn.style.display = S.profileViewUserId ? 'none' : 'inline-flex');
   renderProfileStatsPanel();
 }
 
@@ -6697,18 +8068,18 @@ async function initFollowSection(profileUserId) {
     return;
   }
 
-  // Guest viewing another profile — show Follow button (login-gated) and load counts
+  // Guest viewing another profile — show Follow button (signup-gated) and load counts.
   if (S.isGuest) {
     followBtn.style.display = '';
     followBtn.textContent = 'Follow';
     followBtn.disabled = false;
     followBtn.onclick = () => {
-      try { sessionStorage.setItem('mortalive_pending_follow_user', profileUserId); } catch (_) {}
-      toast('Create an account to follow', '👤');
+      try { sessionStorage.setItem('mortalive_pending_follow_profile', profileUserId); } catch (_) {}
+      toast('Create an account to follow', '🔒');
       setTimeout(() => {
         showPage('pg-auth');
         $('tab-signup')?.click();
-      }, 300);
+      }, 400);
     };
     // Still load follower counts — they're publicly visible
     fetchFollowData(profileUserId).then(fd => {
@@ -7107,6 +8478,7 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
       return {
         totalChats: raw.totalChats  || p.completions || 0,
         totalSec:   raw.totalSec   || 0,
+        videoCalls: raw.videoCalls || 0,
         skips:      raw.skips      || 0,
         sessions:   Array.isArray(raw.sessions) ? raw.sessions : [],
         lastChatAt: raw.lastChatAt || null
@@ -7127,7 +8499,7 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
         raw.sessions   = raw.sessions.slice(0, 60);
         raw.totalChats = (raw.totalChats || 0) + 1;
         raw.totalSec   = (raw.totalSec   || 0) + (Number(durationSec) || 0);
-
+        if (mode === 'video') raw.videoCalls = (raw.videoCalls || 0) + 1;
         raw.lastChatAt = Date.now();
       } else {
         raw.skips = (raw.skips || 0) + 1;
@@ -7209,7 +8581,7 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
   function syncModeCards() {
     const grid = $('talk-mode-grid');
     if (!grid) return;
-    const activeMode = 'text';
+    const activeMode = getS().mode || 'video';
     qsa('.talk-mode-card', grid).forEach(c =>
       c.classList.toggle('active', c.dataset.mode === activeMode)
     );
@@ -7218,8 +8590,10 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
 
   function refreshModeCardCounts() {
     const n = Number(getS().onlineCount || 0);
+    const v = $('talk-mode-video-count');
     const t = $('talk-mode-text-count');
-    if (t) t.textContent = n ? `~${Math.max(1, Math.round(n)).toLocaleString()} available` : 'Available';
+    if (v) v.textContent = n ? `~${Math.max(1, Math.round(n * .55)).toLocaleString()} available` : 'Available';
+    if (t) t.textContent = n ? `~${Math.max(1, Math.round(n * .45)).toLocaleString()} available` : 'Available';
   }
 
   /* ── Lobby stats strip ──────────────────────────────────────────────────── */
@@ -7283,6 +8657,10 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
           <div class="talk-pstats-cell">
             <div class="talk-pstats-val">${escHTML(timeStr)}</div>
             <div class="talk-pstats-lbl">Talk Time</div>
+          </div>
+          <div class="talk-pstats-cell">
+            <div class="talk-pstats-val">${data.videoCalls.toLocaleString()}</div>
+            <div class="talk-pstats-lbl">Video Calls</div>
           </div>
           <div class="talk-pstats-cell">
             <div class="talk-pstats-val">${(p.streak || 0)}<span style="font-size:14px">d 🔥</span></div>
@@ -7353,7 +8731,14 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
       grid.id        = 'talk-mode-grid';
       grid.className = 'talk-mode-grid';
       grid.innerHTML = `
-        <button class="talk-mode-card active" data-mode="text" type="button">
+        <button class="talk-mode-card active" data-mode="video" type="button">
+          <div class="talk-mode-check">✓</div>
+          <span class="talk-mode-card-icon">🎥</span>
+          <div class="talk-mode-card-name">Video Chat</div>
+          <div class="talk-mode-card-desc">Face-to-face with a random stranger</div>
+          <div class="talk-mode-card-meta" id="talk-mode-video-count">Available</div>
+        </button>
+        <button class="talk-mode-card" data-mode="text" type="button">
           <div class="talk-mode-check">✓</div>
           <span class="talk-mode-card-icon">💬</span>
           <div class="talk-mode-card-name">Text Chat</div>
@@ -7575,7 +8960,7 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
       const S = getS();
       if (S.roomId && S.socket?.connected) {
         S.socket.emit('chat', { roomId: S.roomId, text: emoji });
-      } else if (S.stranger?.isBot) {
+      } else if (S.syntheticActive || S.stranger?.isBot) {
         window.appendMsg?.(emoji, 'me');
       }
     });
@@ -7699,6 +9084,80 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
     console.log('[TalkEnhance v20] Ready ✓');
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // VIDEO / REEL DECOMMISSION LAYER
+  // The historical video/reel code remains preserved above for auditability,
+  // but the product feature is disabled at runtime. Text chat, profiles,
+  // photos, posts, messaging, auth, and other unrelated functionality stay
+  // untouched.
+  // ═══════════════════════════════════════════════════════════════════════
+  (function disableVideoAndReels() {
+    S.mode = 'text';
+    S.camGranted = false;
+    S.localStream = null;
+    S.pc = null;
+    S.syntheticActive = false;
+    S.syntheticVideos = [];
+    S.syntheticCurrentIndex = 0;
+    S.syntheticVideoId = null;
+    S.syntheticSearchTimer = null;
+    try { localStorage.removeItem('mortalive_video_layout'); } catch (_) {}
+
+    const stopMedia = () => {
+      try {
+        if (S.localStream?.getTracks) S.localStream.getTracks().forEach((track) => track.stop());
+      } catch (_) {}
+      S.localStream = null;
+    };
+
+    const removeVideoReelDom = () => {
+      const selectors = [
+        '#perm-video', '#cam-strip', '#lobby-cam-preview', '#video-panel', '#video-feeds',
+        '#vid-local', '#vid-remote', '#btn-start-video', '#btn-toggle-video', '#vc-layout',
+        '#fs-controls', '#quality-bar', '#reel-viewer', '#profile-reels-grid',
+        '#profile-reels-tab', '#feed-reel-input', '[data-reel-upload-cta]',
+        '.profile-reels-section', '.feed-reel-card', '.reel-upload-progress',
+        '.video-panel', '.video-controls', '.video-wrapper', '.perm-video-wrap'
+      ];
+      document.querySelectorAll(selectors.join(',')).forEach((el) => el.remove());
+      document.querySelectorAll('[data-mode="video"]').forEach((el) => el.remove());
+      document.querySelectorAll('.reel-thumb, .reel-thumb-upload, .feed-reel-card').forEach((el) => el.remove());
+      document.body.classList.remove('vid-in-fs', 'vid-fs-portrait', 'vid-fs-landscape');
+    };
+
+    const patchTextMode = () => {
+      S.mode = 'text';
+      try { setActiveMode('text'); } catch (_) {}
+      const modeLabel = $('mode-label');
+      if (modeLabel) modeLabel.textContent = 'Text';
+      document.querySelectorAll('[data-mode="video"]').forEach((el) => el.remove());
+    };
+
+    // These assignments preserve the original functions but make all old
+    // video entry points harmless if a legacy listener still invokes them.
+    try { toggleVideoLayout = () => patchTextMode(); } catch (_) {}
+    try { setActiveMode = () => { S.mode = 'text'; const modeLabel = $('mode-label'); if (modeLabel) modeLabel.textContent = 'Text'; }; } catch (_) {}
+    try { ensureLobbyCameraPreview = () => {}; } catch (_) {}
+    try { requestCameraPermission = async () => { toast('Video chat is no longer available. Use Text chat.', 'ℹ️'); patchTextMode(); return false; }; } catch (_) {}
+    try { startWebRTC = async () => { patchTextMode(); return false; }; } catch (_) {}
+    try { beginSyntheticMatch = () => { patchTextMode(); showSearchScreen(); }; } catch (_) {}
+    try { stopSyntheticVideo = () => { S.syntheticActive = false; S.syntheticVideoId = null; S.syntheticVideoStartTime = null; }; } catch (_) {}
+    try { clearSyntheticSearchTimer = () => { clearTimeout(S.syntheticSearchTimer); S.syntheticSearchTimer = null; }; } catch (_) {}
+    try { startSnapshotCapture = () => {}; stopSnapshotCapture = () => {}; startSearchSnapshots = () => {}; stopSearchSnapshots = () => {}; } catch (_) {}
+    try { openReelViewer = () => { toast('Reels are no longer available.', 'ℹ️'); }; } catch (_) {}
+    try { renderProfileReels = () => {}; } catch (_) {}
+    try { setFeedComposerKind = (kind = 'text') => {
+      const safeKind = kind === 'reel' ? 'text' : kind;
+      _feedComposerKind = ['text','photo','poll','qna'].includes(safeKind) ? safeKind : 'text';
+      try { syncFeedComposerTypeUI(); syncFeedComposer(); } catch (_) {}
+    }; } catch (_) {}
+
+    stopMedia();
+    if (document.readyState !== 'loading') removeVideoReelDom();
+    document.addEventListener('DOMContentLoaded', () => { removeVideoReelDom(); patchTextMode(); stopMedia(); }, { once: true });
+    window.addEventListener('load', () => { removeVideoReelDom(); patchTextMode(); stopMedia(); }, { once: true });
+  })();
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => setTimeout(boot, 130), { once: true });
   } else {
@@ -7708,7 +9167,39 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
 })();
 
 
-// ── Profile enhancement layer ───────────────────────────────────────────────
+// ── Profile/Reels enhancement layer (v27) ───────────────────────────────────
+function collectAvailableReels(source = _profilePosts) {
+  const pool = Array.isArray(source) ? source.filter(p => p?.post_type === 'reel' && p.media_url) : [];
+  const byId = new Map(pool.map(p => [p.id, p]));
+  return Array.from(byId.values());
+}
+
+function renderProfileReels(posts = _profilePosts) {
+  const grid = $('profile-reels-grid');
+  const count = $('profile-reel-count');
+  if (!grid) return;
+  const reels = collectAvailableReels(posts);
+  if (count) count.textContent = reels.length.toLocaleString();
+  if (!reels.length) {
+    grid.innerHTML = `
+      <div class="reels-empty-state">
+        <div class="reels-empty-icon">🎬</div>
+        <div class="reels-empty-title">No reels yet</div>
+        <div class="reels-empty-sub">Share a short video and let people discover your moment.</div>
+        ${!S.profileViewUserId ? '<button class="reels-empty-cta" type="button" data-reel-upload-cta>+ Upload reel</button>' : ''}
+      </div>`;
+    return;
+  }
+  grid.innerHTML = reels.map((p, i) => {
+    const caption = String(p.content || '').trim();
+    return `<button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(p.id)}" aria-label="Open reel ${i + 1}">
+      <video class="reel-thumb-bg" src="${sanitizeHTML(p.media_url)}" muted playsinline preload="metadata"></video>
+      <span class="reel-thumb-play">▶</span>
+      ${caption ? `<span class="reel-thumb-views">${sanitizeHTML(caption.slice(0,28))}${caption.length>28?'…':''}</span>` : ''}
+    </button>`;
+  }).join('');
+}
+
 function renderProfileStatsPanel() {
   const host = $('profile-stats-panel');
   if (!host) return;
@@ -7716,13 +9207,15 @@ function renderProfileStatsPanel() {
   const p = publicView ? null : getCurrentProgress();
   const summary = p ? formatProgressLine(p) : null;
   const follow = S.profileViewUserId ? (_followCache.get(S.profileViewUserId) || {followers:0,following:0}) : null;
-  const postCount = (_profilePosts || []).filter(p => !p.media_url).length;
-  const photoCount = (_profilePosts || []).filter(p => !!p.media_url).length;
+  const postCount = (_profilePosts || []).filter(p => !p.media_url && p?.post_type !== 'reel').length;
+  const photoCount = (_profilePosts || []).filter(p => p.media_url && p?.post_type !== 'reel').length;
+  const reelCount = collectAvailableReels().length;
   host.innerHTML = `
     <div class="profile-stats-section">
       <div class="profile-stats-section-title">Content</div>
       <div class="profile-stats-row"><span class="profile-stats-key">Text posts</span><strong class="profile-stats-val">${postCount}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Photos</span><strong class="profile-stats-val">${photoCount}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">Reels</span><strong class="profile-stats-val">${reelCount}</strong></div>
     </div>
     <div class="profile-stats-section">
       <div class="profile-stats-section-title">Profile</div>
@@ -7764,15 +9257,17 @@ function initProfileTabs() {
         panel.classList.toggle('active', panel.dataset.profilePanel === tab);
       });
       page.scrollTo({ top: 0, behavior: 'instant' in document.documentElement.style ? 'instant' : 'auto' });
-if (tab === 'stats') renderProfileStatsPanel();
+      if (tab === 'reels') renderProfileReels(_profilePosts);
+      if (tab === 'stats') renderProfileStatsPanel();
     });
   }
   if (!bar.querySelector('.profile-tab-btn.active')) bar.querySelector('.profile-tab-btn[data-profile-tab="posts"]')?.classList.add('active');
 }
 function refreshProfileTabCounts(posts = _profilePosts) {
   const sets = {
-    posts: (posts || []).filter(p => !p.media_url).length,
-    photos: (posts || []).filter(p => !!p.media_url).length
+    posts: (posts || []).filter(p => !p.media_url && p?.post_type !== 'reel').length,
+    photos: (posts || []).filter(p => p.media_url && p?.post_type !== 'reel').length,
+    reels: collectAvailableReels(posts).length
   };
   Object.entries(sets).forEach(([key, value]) => {
     const el = document.querySelector(`.profile-tab-btn[data-profile-tab="${key}"] .tab-count`);
@@ -7783,6 +9278,173 @@ function refreshProfileTabCounts(posts = _profilePosts) {
 function refreshProfileTabs(posts = _profilePosts) {
   initProfileTabs();
   refreshProfileTabCounts(posts);
+  renderProfileReels(posts);
   renderProfileStatsPanel();
 }
 
+function ensureReelViewer() {
+  let viewer = $('reel-viewer');
+  if (viewer) return viewer;
+  viewer = document.createElement('div');
+  viewer.id = 'reel-viewer';
+  viewer.setAttribute('aria-hidden','true');
+  viewer.innerHTML = `
+    <div class="rv-progress"><div class="rv-progress-fill"></div></div>
+    <div class="rv-topbar"><div class="rv-topbar-title">Reels</div><button class="rv-topbar-btn" type="button" data-reel-close aria-label="Close">×</button></div>
+    <div class="rv-video-wrap">
+      <video id="rv-video" playsinline preload="metadata"></video>
+      <button class="rv-tap-area" type="button" aria-label="Play or pause"></button>
+      <div class="rv-pause-flash">▶</div>
+      <button class="rv-nav-btn rv-nav-prev" type="button" data-reel-prev aria-label="Previous reel">‹</button>
+      <button class="rv-nav-btn rv-nav-next" type="button" data-reel-next aria-label="Next reel">›</button>
+      <button class="rv-mute-badge" type="button" data-reel-mute aria-label="Toggle mute">🔇</button>
+      <div class="rv-sidebar">
+        <button class="rv-action-btn" type="button" data-reel-action="like"><span class="rv-action-icon">♡</span><span class="rv-action-label">Like</span></button>
+        <button class="rv-action-btn" type="button" data-reel-action="comment"><span class="rv-action-icon">💬</span><span class="rv-action-label">Comment</span></button>
+        <button class="rv-action-btn" type="button" data-reel-action="follow"><span class="rv-action-icon">＋</span><span class="rv-action-label">Follow</span></button>
+        <button class="rv-action-btn" type="button" data-reel-action="share"><span class="rv-action-icon">↗</span><span class="rv-action-label">Share</span></button>
+      </div>
+      <div class="rv-bottom">
+        <div class="rv-author-row"><div class="rv-author-avatar" id="rv-author-avatar"></div><div><div class="rv-author-name" id="rv-author-name"></div><div class="rv-author-handle" id="rv-author-handle"></div></div></div>
+        <div class="rv-caption" id="rv-caption"></div>
+        <div class="rv-duration-badge" id="rv-duration"></div>
+      </div>
+      <div class="rv-loading" id="rv-loading"><div class="rv-loading-spinner"></div></div>
+      <div class="rv-comments-sheet" id="rv-comments-sheet">
+        <div class="rv-comments-handle"></div><div class="rv-comments-title" id="rv-comments-title">Comments</div>
+        <div class="rv-comments-list" id="rv-comments-list"></div>
+        <div class="rv-comment-input-row"><input class="rv-comment-input" id="rv-comment-input" maxlength="300" placeholder="Add a comment…"><button class="rv-comment-send" type="button" id="rv-comment-send">Send</button></div>
+      </div>
+    </div>`;
+  document.body.appendChild(viewer);
+  let current = [];
+  let index = 0;
+
+  const render = async () => {
+    current = Array.isArray(viewer._mortaliveReelCollection) ? viewer._mortaliveReelCollection : current;
+    index = Number.isInteger(viewer._mortaliveReelIndex) ? viewer._mortaliveReelIndex : index;
+    const post = current[index];
+    if (!post) return;
+    const video = $('rv-video');
+    const loading = $('rv-loading');
+    loading?.classList.add('show');
+    video.pause();
+    video.src = post.media_url;
+    video.load();
+    const author = getPostViewerAuthor(post);
+    const avatar = $('rv-author-avatar');
+    if (avatar) {
+      avatar.innerHTML = buildPostViewerAvatar(author, 40);
+    }
+    $('rv-author-name').textContent = author.display_name || author.username || 'Member';
+    $('rv-author-handle').textContent = `@${author.username || 'member'}`;
+    $('rv-caption').innerHTML = renderHashtagRichText(String(post.content || '').trim());
+    $('rv-duration').textContent = post.media_size ? `${Math.max(1, Math.round(post.media_size / 1024 / 1024))} MB` : 'Reel';
+    const eng = engagementFor(post.id);
+    const likeBtn = viewer.querySelector('[data-reel-action="like"]');
+    likeBtn?.classList.toggle('liked', !!eng.liked);
+    likeBtn?.querySelector('.rv-action-icon')?.replaceChildren(document.createTextNode(eng.liked ? '♥' : '♡'));
+    const followBtn = viewer.querySelector('[data-reel-action="follow"]');
+    if (followBtn) {
+      const fd = post.user_id && post.user_id !== S.userId ? await fetchFollowData(post.user_id) : {isFollowing:false};
+      followBtn.style.display = post.user_id === S.userId ? 'none' : 'flex';
+      followBtn.querySelector('.rv-action-icon').textContent = fd.isFollowing ? '✓' : '＋';
+      followBtn.querySelector('.rv-action-label').textContent = fd.isFollowing ? 'Following' : 'Follow';
+      followBtn.dataset.followState = fd.isFollowing ? '1' : '0';
+    }
+    const comments = await loadPostComments(post.id);
+    $('rv-comments-title').textContent = `${comments.length} comments`;
+    $('rv-comments-list').innerHTML = postViewerCommentRows(comments).replaceAll('mortalive-post-viewer-comment','rv-comment-item').replaceAll('mortalive-post-viewer-comment-copy','rv-comment-body').replaceAll('mortalive-post-viewer-comment-head','rv-comment-author').replaceAll('mortalive-post-viewer-comment-text','rv-comment-text');
+    $('rv-comments-sheet').classList.remove('open');
+    video.onloadeddata = () => loading?.classList.remove('show');
+    video.ontimeupdate = () => {
+      const pct = video.duration ? (video.currentTime / video.duration) * 100 : 0;
+      viewer.querySelector('.rv-progress-fill').style.width = `${pct}%`;
+    };
+    video.onended = () => {
+      if (index < current.length - 1) { index += 1; viewer._mortaliveReelIndex=index; render(); } else video.currentTime = 0;
+    };
+    try { await video.play(); } catch (_) {}
+    viewer.querySelector('[data-reel-prev]').disabled = index <= 0;
+    viewer.querySelector('[data-reel-next]').disabled = index >= current.length - 1;
+  };
+
+  viewer._mortaliveRenderReel = render;
+  viewer.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-reel-close]')) { viewer.classList.remove('open'); viewer.setAttribute('aria-hidden','true'); document.body.style.overflow=''; return; }
+    if (e.target.closest('[data-reel-prev]')) { if (index>0){ index--; viewer._mortaliveReelIndex=index; render(); } return; }
+    if (e.target.closest('[data-reel-next]')) { if(index<current.length-1){ index++; viewer._mortaliveReelIndex=index; render(); } return; }
+    if (e.target.closest('.rv-tap-area')) {
+      const v=$('rv-video'); if(v.paused){ try{await v.play();}catch(_){}} else v.pause();
+      return;
+    }
+    if (e.target.closest('[data-reel-mute]')) {
+      const v=$('rv-video'); v.muted=!v.muted; e.target.textContent=v.muted?'🔇':'🔊'; return;
+    }
+    const action=e.target.closest('[data-reel-action]'); if(!action) return;
+    current = Array.isArray(viewer._mortaliveReelCollection) ? viewer._mortaliveReelCollection : current; index = Number.isInteger(viewer._mortaliveReelIndex) ? viewer._mortaliveReelIndex : index; const post=current[index];
+    if (!post) return;
+    if (action.dataset.reelAction==='like'){ await togglePostLike(post.id); render(); }
+    if (action.dataset.reelAction==='comment'){ $('rv-comments-sheet').classList.toggle('open'); }
+    if (action.dataset.reelAction==='share'){
+      const url=`${location.origin}${location.pathname}#feed-post-${encodeURIComponent(post.id)}`;
+      navigator.clipboard?.writeText(url).then(()=>toast('Reel link copied','📋')).catch(()=>toast(url,'🔗'));
+    }
+    if (action.dataset.reelAction==='follow' && post.user_id && post.user_id!==S.userId){
+      const fd=await fetchFollowData(post.user_id); const next=!fd.isFollowing;
+      try{ await toggleFollow(post.user_id,next); render(); toast(next?'Following!':'Unfollowed',next?'✓':'➖'); }catch(err){toast(err?.message||'Could not update follow.','⚠️');}
+    }
+  });
+  $('rv-comment-send')?.addEventListener('click', async ()=>{
+    const post=current[index], input=$('rv-comment-input'); const content=input?.value?.trim();
+    if(!post||!content) return;
+    input.value='';
+    await createPostComment(post.id,content);
+    await render();
+  });
+  viewer.querySelector('[data-reel-close]')?.addEventListener('click',()=>{viewer.classList.remove('open');viewer.setAttribute('aria-hidden','true');document.body.style.overflow='';});
+  return viewer;
+
+  // Unreachable? kept below intentionally no
+}
+function openReelViewer(post, collection = []) {
+  if (S.isGuest || !S.userId) { toast('Sign in to view reels', '🔒'); return; }
+  const viewer = ensureReelViewer();
+  const all = Array.isArray(collection) && collection.length ? collection : [post];
+  const ids = all.map(p => p.id);
+  const start = Math.max(0, ids.indexOf(post.id));
+  viewer._mortaliveReelCollection = all;
+  viewer._mortaliveReelIndex = start;
+  // trigger renderer stored on the viewer
+  viewer._mortaliveRenderReel?.();
+  viewer.classList.add('open');
+  viewer.setAttribute('aria-hidden','false');
+  document.body.style.overflow='hidden';
+}
+function bindReelNavigationClicks() {
+  // delegated grid/feed opening
+  if (document.body.dataset.reelOpenBound) return;
+  document.body.dataset.reelOpenBound='1';
+  document.addEventListener('click', event => {
+    const tile = event.target.closest?.('[data-reel-post-id]');
+    if (!tile) return;
+    event.preventDefault();
+    const id = tile.dataset.reelPostId;
+    const post = getPostByIdForViewer(id) || _profilePosts.find(p=>p.id===id);
+    if (post?.media_url && post.post_type === 'reel') {
+      const collection = document.body.classList.contains('profile-viewing-public') ? collectAvailableReels(_profilePosts) : collectAvailableReels(_profilePosts);
+      openReelViewer(post, collection);
+    }
+  });
+}
+bindReelNavigationClicks();
+
+document.addEventListener('click', (event) => {
+  const cta = event.target.closest?.('[data-reel-upload-cta]');
+  if (!cta || S.profileViewUserId) return;
+  showPage('pg-feed');
+  setTimeout(() => {
+    setFeedComposerKind?.('reel');
+    setTimeout(() => $('feed-reel-input')?.click(), 0);
+  }, 60);
+});
