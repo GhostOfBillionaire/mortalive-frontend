@@ -1,8 +1,9 @@
-// FRESH BUILD MARKER — 2026-08-21 00:03 IST — v40 Messages enhancement merge; stable baseline preserved
+// FRESH BUILD MARKER — 2026-08-23 21:12 IST — V101 Messages eligibility merge; V100 security/profile baseline preserved
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-23-v47-api-security-audit'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-23-v101-messages-eligibility';
+// Random maintenance note: keep contact eligibility refresh isolated from the retired media stack. // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -4290,11 +4291,14 @@ function syncHashtagStatus(text, statusId) {
 // ━━━━━━━━━━━━━━━━━ MESSAGES STATE ━━━━━━━━━━━━━━━━━
 const messagesState = {
   activeConvId: null,
+  activeConvType: null,   // 'direct' | 'group'
+  activePeer: null,       // contact object for direct threads
   conversations: [],
   groups: [],
   messages: {},
   threads: {},
   selectedMembers: new Set(),
+  eligibleContacts: [],   // Contacts unlocked by follows or Talk history
   initialized: false
 };
 
@@ -4314,47 +4318,125 @@ function messagesStorageKey(base) {
 }
 
 
+// ── Eligible contacts cache ──────────────────────────────────────────────────
+// A user can only be messaged if they:
+//   (a) follow the current user OR the current user follows them, OR
+//   (b) they had a real (non-guest, non-bot) Talk conversation together.
+let _eligibleContactsCache = null;
+let _eligibleContactsFetchedAt = 0;
+const ELIGIBLE_CONTACTS_TTL = 5 * 60 * 1000; // 5 min
+
+async function fetchEligibleMessageContacts(force = false) {
+  if (S.isGuest || !S.userId || !sb) return [];
+  const now = Date.now();
+  if (!force && _eligibleContactsCache && now - _eligibleContactsFetchedAt < ELIGIBLE_CONTACTS_TTL) {
+    return _eligibleContactsCache;
+  }
+
+  const results = [];
+  const seen = new Set();
+
+  // 1. Follow relationships (both directions)
+  try {
+    const [followersRes, followingRes] = await Promise.all([
+      sb.from('follows').select('follower_id').eq('following_id', S.userId),
+      sb.from('follows').select('following_id').eq('follower_id', S.userId)
+    ]);
+    const followerIds = (followersRes.data || []).map(r => r.follower_id).filter(id => id && id !== S.userId);
+    const followingIds = (followingRes.data || []).map(r => r.following_id).filter(id => id && id !== S.userId);
+    const allFollowIds = [...new Set([...followerIds, ...followingIds])];
+    if (allFollowIds.length) {
+      const { data: profiles } = await sb
+        .from('accounts')
+        .select('id,username,display_name,avatar_url,crockroach_score')
+        .in('id', allFollowIds);
+      (profiles || []).forEach(p => {
+        if (seen.has(p.id)) return;
+        seen.add(p.id);
+        results.push({
+          ...p,
+          source: 'follow',
+          isFollower: followerIds.includes(p.id),
+          isFollowing: followingIds.includes(p.id)
+        });
+      });
+    }
+  } catch (e) {
+    console.warn('[Messages] follow lookup failed:', e?.message || e);
+  }
+
+  // 2. Talk history — only authenticated peers (non-guest, non-bot) who have a stored userId
+  try {
+    const talkRaw = (() => { try { return JSON.parse(localStorage.getItem('mortalive_talk_v3') || '{}'); } catch { return {}; } })();
+    const talkUserIds = [...new Set(
+      (talkRaw.sessions || [])
+        .filter(s => s.userId && s.userId !== S.userId)
+        .map(s => s.userId)
+    )].filter(id => !seen.has(id));
+
+    if (talkUserIds.length) {
+      const { data: talkProfiles } = await sb
+        .from('accounts')
+        .select('id,username,display_name,avatar_url,crockroach_score')
+        .in('id', talkUserIds);
+      (talkProfiles || []).forEach(p => {
+        if (seen.has(p.id)) return;
+        seen.add(p.id);
+        const lastSession = (talkRaw.sessions || [])
+          .filter(s => s.userId === p.id)
+          .sort((a, b) => b.ts - a.ts)[0];
+        results.push({ ...p, source: 'talk', lastTalkedAt: lastSession?.ts || null });
+      });
+    }
+  } catch (e) {
+    console.warn('[Messages] talk history lookup failed:', e?.message || e);
+  }
+
+  _eligibleContactsCache = results;
+  _eligibleContactsFetchedAt = Date.now();
+  return results;
+}
+
+function updateSidebarSubtitle() {
+  const sub = $('msg-sidebar-sub');
+  if (!sub) return;
+  if (S.isGuest) {
+    sub.textContent = 'Sign in to message your connections';
+    return;
+  }
+  const count = messagesState.eligibleContacts.length;
+  if (!count) {
+    sub.textContent = 'Follow or chat on Talk to unlock messaging';
+    return;
+  }
+  sub.textContent = `${count} contact${count === 1 ? '' : 's'} you can message`;
+}
+
 /**
- * Initialize messages functionality
- * Call from app.js when DOM is ready and user is authenticated
+ * Initialize messages functionality.
+ * Called each time the Messages page is opened; only wires listeners once.
  */
 async function initMessages() {
-  if (messagesState.initialized) return;
-  messagesState.initialized = true;
-
-  // Load from localStorage first
-  loadMessagesFromStorage();
-
-  // Then fetch from API if available
-  if (typeof fetchConversations === 'function') {
-    try {
-      messagesState.conversations = await fetchConversations();
-      saveMessagesToStorage();
-    } catch (error) {
-      console.error('Failed to fetch conversations:', error);
-    }
+  if (!messagesState.initialized) {
+    messagesState.initialized = true;
+    loadMessagesFromStorage();
+    setupMessageEventListeners();
+    if (typeof subscribeToMessages === 'function') subscribeToMessages();
   }
 
-  // Fetch groups if available
-  if (typeof fetchGroups === 'function') {
+  // Refresh eligible contacts on every visit (uses 5-min in-memory cache)
+  if (!S.isGuest && S.userId) {
     try {
-      messagesState.groups = await fetchGroups();
-      saveMessagesToStorage();
-    } catch (error) {
-      console.error('Failed to fetch groups:', error);
+      messagesState.eligibleContacts = await fetchEligibleMessageContacts();
+    } catch (e) {
+      console.warn('[Messages] contact fetch failed:', e?.message || e);
     }
+  } else {
+    messagesState.eligibleContacts = [];
   }
 
-  // Setup event listeners
-  setupMessageEventListeners();
-
-  // Render conversation list
   renderConversationList();
-
-  // Subscribe to real-time updates if available
-  if (typeof subscribeToMessages === 'function') {
-    subscribeToMessages();
-  }
+  updateSidebarSubtitle();
 }
 
 /**
@@ -4607,43 +4689,30 @@ async function handleMemberSearch(e) {
   const suggestionsContainer = $('group-members-suggestions');
   if (!suggestionsContainer) return;
 
-  if (!query) {
-    suggestionsContainer.innerHTML = '';
+  if (!query) { suggestionsContainer.innerHTML = ''; return; }
+
+  // Groups can only include eligible contacts (follows or Talk history)
+  const eligible = messagesState.eligibleContacts || [];
+  if (!eligible.length) {
+    suggestionsContainer.innerHTML = '<div class="form-field-hint">No eligible contacts yet. Follow users or complete a Talk chat first.</div>';
     return;
   }
 
-  // Invitation-link mode: only canonical profile links or explicit @usernames.
-  const invitation = normalizeMemberInvitation(query);
-  if (invitation && (query.startsWith('http://') || query.startsWith('https://') || query.startsWith('@'))) {
-    suggestionsContainer.innerHTML = `<button type="button" class="form-member-suggestion" data-invite-username="${escapeHtml(invitation.username)}" data-invite-url="${escapeHtml(invitation.url)}">🔗 Invite @${escapeHtml(invitation.username)}</button>`;
-    const btn = suggestionsContainer.querySelector('.form-member-suggestion');
-    btn?.addEventListener('click', (ev) => {
-      ev.preventDefault();
-      addMemberTag(`@${invitation.username}`, { username: invitation.username, profileUrl: invitation.url, invitation: true });
-    });
+  const q = query.toLowerCase();
+  const alreadyAdded = new Set(messagesState.selectedMembers);
+  const filtered = eligible.filter(c => {
+    const name = (c.display_name || c.username || '').toLowerCase();
+    const username = (c.username || '').toLowerCase();
+    if (alreadyAdded.has(`@${username}`) || alreadyAdded.has(name)) return false;
+    return name.includes(q) || username.includes(q);
+  });
+
+  if (!filtered.length) {
+    suggestionsContainer.innerHTML = '<div class="form-field-hint">No matching contacts. Only people you follow or have chatted with on Talk can be added.</div>';
     return;
   }
 
-  const seq = ++_memberProfileSearchSeq;
-  clearTimeout(_memberProfileSearchTimer);
-  suggestionsContainer.innerHTML = '<div class="form-field-hint">Searching profiles…</div>';
-  _memberProfileSearchTimer = setTimeout(async () => {
-    try {
-      const profiles = await searchMemberProfiles(query);
-      if (seq !== _memberProfileSearchSeq) return;
-      const filtered = profiles.filter(p => {
-        const name = String(p.display_name || p.username || '').trim();
-        const username = String(p.username || '').trim();
-        const tagKey = username || name;
-        return !messagesState.selectedMembers.has(tagKey) && !Array.from(messagesState.selectedMembers.values()).some(v => String(v?.username || '').toLowerCase() === username.toLowerCase());
-      });
-      renderMemberProfileSuggestions(filtered);
-    } catch (err) {
-      console.warn('[Messages] profile search failed:', err?.message || err);
-      if (seq !== _memberProfileSearchSeq) return;
-      suggestionsContainer.innerHTML = '<div class="form-field-hint">Profile search is unavailable. Paste a canonical @username link to invite.</div>';
-    }
-  }, 180);
+  renderMemberProfileSuggestions(filtered);
 }
 
 function addMemberTag(name, member = {}) {
@@ -4651,9 +4720,13 @@ function addMemberTag(name, member = {}) {
   const key = member.username ? `@${String(member.username).toLowerCase()}` : displayName.toLowerCase();
   if (!displayName || messagesState.selectedMembers.has(key)) return;
 
-  // Never accept arbitrary names/IDs from free text. A member must originate
-  // from a real profile suggestion or an explicit canonical profile invitation.
-  if (!member.username && !member.id) return;
+  // Only eligible contacts (follows or Talk history) may be added to groups
+  if (!member.id) return;
+  const isEligible = (messagesState.eligibleContacts || []).some(c => c.id === member.id);
+  if (!isEligible) {
+    toast('Only people you follow or have chatted with on Talk can be added.', '⚠️');
+    return;
+  }
 
   messagesState.selectedMembers.add(key);
 
@@ -4667,17 +4740,14 @@ function addMemberTag(name, member = {}) {
     <span>${escapeHtml(displayName)}${member.username ? ` <small style="opacity:.62">@${escapeHtml(member.username)}</small>` : ''}</span>
     <span class="form-tag-remove" data-member-key="${escapeHtml(key)}">×</span>
   `;
-
   tag.querySelector('.form-tag-remove').addEventListener('click', () => {
     messagesState.selectedMembers.delete(key);
     tag.remove();
   });
-
   membersList.appendChild(tag);
 
   const input = $('group-members-input');
   if (input) input.value = '';
-
   const suggestions = $('group-members-suggestions');
   if (suggestions) suggestions.innerHTML = '';
 }
@@ -4741,116 +4811,237 @@ async function handleCreateGroup(e) {
 
 // ━━━━━━━━━━━━━━━━━ CONVERSATION MANAGEMENT ━━━━━━━━━━━━━━━━━
 
-function renderConversationList() {
+function renderConversationList(searchQuery = '') {
   const list = $('msg-conv-list');
   if (!list) return;
+  const q = String(searchQuery || '').toLowerCase().trim();
+  const contacts = messagesState.eligibleContacts || [];
+  const groups = messagesState.groups || [];
 
-  if (messagesState.conversations.length === 0 && messagesState.groups.length === 0) {
-    list.innerHTML = `
-      <div class="messages-list-empty">
-        <div class="empty-icon">💬</div>
-        <p>No conversations yet</p>
-        <p class="empty-hint">Start a new conversation to begin messaging</p>
-      </div>
-    `;
+  const filteredContacts = q
+    ? contacts.filter(c => {
+        const name = (c.display_name || c.username || '').toLowerCase();
+        return name.includes(q) || (c.username || '').toLowerCase().includes(q);
+      })
+    : contacts;
+
+  const filteredGroups = q
+    ? groups.filter(g => (g.name || '').toLowerCase().includes(q))
+    : groups;
+
+  if (!filteredContacts.length && !filteredGroups.length) {
+    if (S.isGuest) {
+      list.innerHTML = `
+        <div class="messages-list-empty">
+          <div class="empty-icon">🔒</div>
+          <p>Sign in to message</p>
+          <p class="empty-hint">Create an account to message people you meet</p>
+        </div>`;
+    } else if (q) {
+      list.innerHTML = `
+        <div class="messages-list-empty">
+          <div class="empty-icon">🔍</div>
+          <p>No results for "${escapeHtml(searchQuery)}"</p>
+          <p class="empty-hint">Try a different name or username</p>
+        </div>`;
+    } else {
+      list.innerHTML = `
+        <div class="messages-list-empty">
+          <div class="empty-icon">💬</div>
+          <p>No contacts yet</p>
+          <p class="empty-hint">Follow someone or complete a Talk chat to unlock messaging</p>
+        </div>`;
+    }
     return;
   }
 
   list.innerHTML = '';
 
-  // Add groups first
-  messagesState.groups.forEach(group => {
-    const item = createConvItem(group.id, group.name, group.emoji, `${group.members.length} members`, true);
+  // Groups first
+  filteredGroups.forEach(group => {
+    const item = createConvItem(group.id, group.name, group.emoji || '👥', `${(group.members || []).length} members · Group`, true);
     list.appendChild(item);
   });
 
-  // Then add conversations
-  messagesState.conversations.forEach(conv => {
-    const preview = conv.lastMessage || conv.preview || 'No messages yet';
-    const item = createConvItem(conv.id, conv.name, conv.emoji, preview, false);
-    list.appendChild(item);
+  // Then eligible direct contacts
+  filteredContacts.forEach(contact => {
+    list.appendChild(createContactConvItem(contact));
   });
 }
 
-function createConvItem(id, name, emoji, meta, isGroup = false) {
+function createContactConvItem(contact) {
+  const display = contact.display_name || contact.username || 'User';
+  const username = contact.username || 'user';
+  const initial = feedAvatarLetter(display);
+  const avatarUrl = feedAvatarUrl(contact.avatar_url);
+  const hasMessages = !!(messagesState.messages[contact.id]?.length);
+  const lastMsg = hasMessages ? [...(messagesState.messages[contact.id] || [])].pop() : null;
+
+  const sourceLabel = contact.source === 'follow'
+    ? (contact.isFollower && contact.isFollowing ? 'Mutual' : contact.isFollower ? 'Follows you' : 'Following')
+    : 'Met on Talk';
+  const preview = lastMsg
+    ? String(lastMsg.text || '').slice(0, 60)
+    : `${sourceLabel} · Tap to start a conversation`;
+
+  const sourceBadgeCss = contact.source === 'talk'
+    ? 'background:rgba(26,110,245,.10);color:var(--primary);border:1px solid rgba(26,110,245,.16);'
+    : 'background:rgba(22,163,74,.10);color:var(--success);border:1px solid rgba(22,163,74,.18);';
+
   const item = document.createElement('div');
   item.className = 'messages-conv-item';
-  item.dataset.convId = id;
-
-  if (id === messagesState.activeConvId) {
-    item.classList.add('active');
-  }
+  item.dataset.convId = contact.id;
+  item.dataset.convType = 'direct';
+  if (contact.id === messagesState.activeConvId) item.classList.add('active');
 
   item.innerHTML = `
-    <div class="messages-conv-ava ${isGroup ? 'group' : ''}">${emoji}</div>
+    <div class="messages-conv-ava" style="${avatarUrl ? 'padding:0;overflow:hidden;' : ''}">
+      ${avatarUrl
+        ? `<img src="${sanitizeHTML(avatarUrl)}" alt="${sanitizeHTML(display)}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy" onerror="this.parentElement.textContent='${initial}'">`
+        : sanitizeHTML(initial)}
+    </div>
     <div class="messages-conv-meta">
       <div class="messages-conv-name-row">
-        <div class="messages-conv-name">${escapeHtml(name)}</div>
-        <div class="messages-conv-time">now</div>
+        <div class="messages-conv-name">
+          ${sanitizeHTML(display)}
+          <span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;margin-left:5px;vertical-align:middle;${sourceBadgeCss}">${contact.source === 'talk' ? 'Talk' : sourceLabel}</span>
+        </div>
+        <div class="messages-conv-time">@${sanitizeHTML(username)}</div>
       </div>
-      <div class="messages-conv-preview">${escapeHtml(meta)}</div>
-    </div>
-  `;
+      <div class="messages-conv-preview">${escapeHtml(preview)}</div>
+    </div>`;
 
   item.addEventListener('click', () => {
-    // Update active state
     document.querySelectorAll('.messages-conv-item').forEach(i => i.classList.remove('active'));
     item.classList.add('active');
-
-    // Load thread
-    loadThread(id);
+    loadDirectThread(contact);
   });
 
   return item;
 }
 
-function loadThread(convId) {
+// createConvItem is used only for group conversations now
+function createConvItem(id, name, emoji, meta, isGroup = false) {
+  const item = document.createElement('div');
+  item.className = 'messages-conv-item';
+  item.dataset.convId = id;
+  item.dataset.convType = 'group';
+  if (id === messagesState.activeConvId) item.classList.add('active');
+
+  item.innerHTML = `
+    <div class="messages-conv-ava ${isGroup ? 'group' : ''}">${escapeHtml(emoji)}</div>
+    <div class="messages-conv-meta">
+      <div class="messages-conv-name-row">
+        <div class="messages-conv-name">${escapeHtml(name)}</div>
+        <div class="messages-conv-time">Group</div>
+      </div>
+      <div class="messages-conv-preview">${escapeHtml(meta)}</div>
+    </div>`;
+
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.messages-conv-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    loadGroupThread(id);
+  });
+  return item;
+}
+
+function loadDirectThread(contact) {
   const empty = $('msg-thread-empty');
   const active = $('msg-thread-active');
-
   if (!empty || !active) return;
 
-  // Find conversation or group
-  const group = messagesState.groups.find(g => g.id === convId);
-  const conv = messagesState.conversations.find(c => c.id === convId);
+  messagesState.activeConvId = contact.id;
+  messagesState.activeConvType = 'direct';
+  messagesState.activePeer = contact;
 
-  if (group) {
-    // Set header info for group
-    const avaEl = $('msg-peer-ava');
-    const nameEl = $('msg-peer-name');
-    const statusEl = $('msg-peer-status');
+  const display = contact.display_name || contact.username || 'User';
+  const username = contact.username || 'user';
+  const avatarUrl = feedAvatarUrl(contact.avatar_url);
+  const initial = feedAvatarLetter(display);
 
-    if (avaEl) avaEl.textContent = group.emoji;
-    if (nameEl) nameEl.textContent = group.name;
-    if (statusEl) statusEl.textContent = `${group.members.length} members`;
-  } else if (conv) {
-    // Set header info for individual
-    const avaEl = $('msg-peer-ava');
-    const nameEl = $('msg-peer-name');
-    const statusEl = $('msg-peer-status');
+  const avaEl = $('msg-peer-ava');
+  const nameEl = $('msg-peer-name');
+  const statusEl = $('msg-peer-status');
+  const hint = $('msg-composer-hint');
 
-    if (avaEl) avaEl.textContent = conv.emoji;
-    if (nameEl) nameEl.textContent = conv.name;
-    if (statusEl) statusEl.textContent = conv.status || 'offline';
+  if (avaEl) {
+    if (avatarUrl) {
+      avaEl.innerHTML = `<img src="${sanitizeHTML(avatarUrl)}" alt="${sanitizeHTML(display)}" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:50%;" loading="lazy" onerror="this.parentElement.textContent='${initial}'">`;
+    } else {
+      avaEl.textContent = initial;
+    }
   }
+  if (nameEl) nameEl.textContent = display;
+  if (statusEl) {
+    const src = contact.source === 'talk' ? 'Met on Talk' :
+      (contact.isFollower && contact.isFollowing ? 'Mutual follow' :
+        contact.isFollower ? 'Follows you' : 'You follow them');
+    statusEl.textContent = `@${username} · ${src}`;
+  }
+  if (hint) hint.style.display = 'none';
 
-  // Show thread
-  messagesState.activeConvId = convId;
   empty.style.display = 'none';
   active.style.display = 'flex';
 
-  // Render messages
-  renderMessages(convId);
+  renderDirectMessages(contact.id);
+  $('msg-composer-input')?.focus();
+}
 
-  // Focus composer
-  const input = $('msg-composer-input');
-  if (input) input.focus();
+function loadGroupThread(groupId) {
+  const empty = $('msg-thread-empty');
+  const active = $('msg-thread-active');
+  if (!empty || !active) return;
+
+  const group = messagesState.groups.find(g => g.id === groupId);
+  messagesState.activeConvId = groupId;
+  messagesState.activeConvType = 'group';
+  messagesState.activePeer = null;
+
+  const avaEl = $('msg-peer-ava');
+  const nameEl = $('msg-peer-name');
+  const statusEl = $('msg-peer-status');
+  const hint = $('msg-composer-hint');
+
+  if (avaEl) avaEl.textContent = group?.emoji || '👥';
+  if (nameEl) nameEl.textContent = group?.name || 'Group';
+  if (statusEl) statusEl.textContent = `${(group?.members || []).length} members`;
+  if (hint) hint.style.display = 'none';
+
+  empty.style.display = 'none';
+  active.style.display = 'flex';
+
+  renderMessages(groupId);
+  $('msg-composer-input')?.focus();
+}
+
+function renderDirectMessages(userId) {
+  const container = $('msg-thread-messages');
+  if (!container) return;
+  const messages = messagesState.messages[userId] || [];
+
+  if (!messages.length) {
+    const peer = messagesState.activePeer;
+    const display = peer ? (peer.display_name || peer.username || 'them') : 'this person';
+    container.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px 20px;text-align:center;flex:1;color:var(--msg-text-3,rgba(255,255,255,.38));">
+        <span style="font-size:38px;opacity:.55;">💬</span>
+        <div style="font-size:14px;font-weight:600;color:rgba(255,255,255,.7);">Start a conversation</div>
+        <div style="font-size:12px;max-width:28ch;line-height:1.6;">Say hi to ${escapeHtml(display)} — you're connected through ${peer?.source === 'talk' ? 'a Talk chat' : 'follows'}.</div>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = messages.map(msg => `
+    <div class="msg-row ${msg.isMe ? 'me' : 'them'}">
+      <div class="msg-bubble">${escapeHtml(msg.text)}</div>
+    </div>`).join('');
+  container.scrollTop = container.scrollHeight;
 }
 
 function renderMessages(convId) {
   const container = $('msg-thread-messages');
   if (!container) return;
-
   const messages = messagesState.messages[convId] || [];
 
   container.innerHTML = messages.map(msg => `
@@ -4860,24 +5051,23 @@ function renderMessages(convId) {
         <div class="msg-bubble">${escapeHtml(msg.text)}</div>
         <div class="msg-time">${msg.time || formatTime(msg.timestamp)}</div>
       </div>
-    </div>
-  `).join('');
-
-  // Scroll to bottom
+    </div>`).join('');
   container.scrollTop = container.scrollHeight;
 }
 
 function closeThread() {
   const empty = $('msg-thread-empty');
   const active = $('msg-thread-active');
-
   if (empty) empty.style.display = 'flex';
   if (active) active.style.display = 'none';
 
-  // Remove active state from items
   document.querySelectorAll('.messages-conv-item').forEach(i => i.classList.remove('active'));
 
   messagesState.activeConvId = null;
+  messagesState.activeConvType = null;
+  messagesState.activePeer = null;
+  const hint = $('msg-composer-hint');
+  if (hint) hint.style.display = '';
 }
 
 // ━━━━━━━━━━━━━━━━━ MESSAGE SENDING ━━━━━━━━━━━━━━━━━
@@ -4890,46 +5080,36 @@ async function sendMessage() {
   if (!text || !messagesState.activeConvId) return;
 
   const convId = messagesState.activeConvId;
+  const isDirect = messagesState.activeConvType === 'direct';
 
-  // Initialize messages array if needed
-  if (!messagesState.messages[convId]) {
-    messagesState.messages[convId] = [];
-  }
+  if (!messagesState.messages[convId]) messagesState.messages[convId] = [];
 
   const messageData = {
     id: 'msg' + Date.now(),
     text,
     isMe: true,
-    emoji: S.userAvatar || '👤',
+    emoji: feedAvatarLetter(S.accountData?.display_name || S.username || 'You'),
     timestamp: new Date(),
     time: formatTime(new Date())
   };
 
-  try {
-    // Try to send via API if available
-    if (typeof sendMessageToAPI === 'function') {
-      await sendMessageToAPI(convId, text);
-    }
+  // Optimistic local update
+  messagesState.messages[convId].push(messageData);
+  saveMessagesToStorage();
+  input.value = '';
+  input.style.height = 'auto';
+  updateComposerButton();
 
-    // Add to local state
-    messagesState.messages[convId].push(messageData);
-    saveMessagesToStorage();
-
-    // Clear input
-    input.value = '';
-    input.style.height = 'auto';
-
-    // Render
+  if (isDirect) {
+    renderDirectMessages(convId);
+    // Refresh contact preview in sidebar
+    const contactItem = document.querySelector(`.messages-conv-item[data-conv-id="${CSS.escape(convId)}"]`);
+    const previewEl = contactItem?.querySelector('.messages-conv-preview');
+    if (previewEl) previewEl.textContent = text.slice(0, 60);
+    // TODO: persist to Supabase when the messages table is wired up
+  } else {
     renderMessages(convId);
-
-    // Enable send button check
-    updateComposerButton();
-
-    // Simulate response (remove in production)
     simulatePeerResponse(convId);
-  } catch (error) {
-    console.error('Failed to send message:', error);
-    showToast('❌ Failed to send message');
   }
 }
 
@@ -4974,16 +5154,9 @@ function simulatePeerResponse(convId) {
 // ━━━━━━━━━━━━━━━━━ SEARCH & FILTERING ━━━━━━━━━━━━━━━━━
 
 function handleConversationSearch(e) {
-  const query = e.target.value.toLowerCase();
-  const items = document.querySelectorAll('.messages-conv-item');
-
-  items.forEach(item => {
-    const name = item.querySelector('.messages-conv-name')?.textContent.toLowerCase() || '';
-    const preview = item.querySelector('.messages-conv-preview')?.textContent.toLowerCase() || '';
-
-    const matches = name.includes(query) || preview.includes(query);
-    item.style.display = matches ? '' : 'none';
-  });
+  const query = String(e.target.value || '').trim();
+  renderConversationList(query);
+  updateSidebarSubtitle();
 }
 
 // ━━━━━━━━━━━━━━━━━ THREAD MENU ━━━━━━━━━━━━━━━━━
@@ -5137,17 +5310,21 @@ async function sendMessageToAPI(convId, text) {
  * @returns {Promise<Object>} Created group
  */
 async function createGroup(data) {
-  // POST /api/groups
-  // return (await fetch(`${SERVER_URL}/api/groups`, {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify(data)
-  // })).json();
+  // Local fallback keeps the existing UI functional until a groups API exists.
+  if (!data || !String(data.name || '').trim()) {
+    throw new Error('Group name is required');
+  }
+  return {
+    id: 'g' + Date.now() + Math.random().toString(36).slice(2, 7),
+    name: String(data.name).trim().slice(0, 60),
+    emoji: data.type === 'public' ? '👥' : '🔒',
+    description: String(data.description || '').trim().slice(0, 200),
+    type: data.type === 'private' ? 'private' : 'public',
+    members: Array.isArray(data.members) ? data.members.slice(0, 50) : [],
+    createdAt: new Date().toISOString(),
+    createdBy: S.username || 'You'
+  };
 }
-
-/**
- * Subscribe to real-time message updates
- */
 function subscribeToMessages() {
   // Use Supabase or similar for real-time updates
   // Example:
@@ -5176,10 +5353,15 @@ function subscribeToMessages() {
 window.initMessages = initMessages;
 window.openCreateGroupModal = openCreateGroupModal;
 window.closeCreateGroupModal = closeCreateGroupModal;
-window.loadThread = loadThread;
+window.loadThread = (id) => { // legacy shim
+  const contact = (messagesState.eligibleContacts || []).find(c => c.id === id);
+  if (contact) loadDirectThread(contact);
+  else loadGroupThread(id);
+};
 window.sendMessage = sendMessage;
 window.closeThread = closeThread;
 window.normalizeMemberInvitation = normalizeMemberInvitation;
+window.fetchEligibleMessageContacts = fetchEligibleMessageContacts;
 
 
 // MORTALIVE FEED — Supabase-backed integration (Step 2)
@@ -8478,7 +8660,7 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
         lastChatAt: raw.lastChatAt || null
       };
     },
-    record({ peer, emoji, mode, durationSec, rating, skipped }) {
+    record({ peer, emoji, mode, durationSec, rating, skipped, userId }) {
       const raw = this.load();
       if (!raw.sessions) raw.sessions = [];
       if (!skipped) {
@@ -8488,6 +8670,7 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
           mode:        mode || 'text',
           durationSec: Number(durationSec) || 0,
           rating:      Number.isFinite(rating) ? rating : null,
+          userId:      userId || null,  // stored for messaging eligibility; null for guests/bots
           ts:          Date.now()
         });
         raw.sessions   = raw.sessions.slice(0, 60);
@@ -8988,14 +9171,24 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
       if (elapsed > 8) {
         const S  = getS();
         const st = S.stranger || {};
+        // Only store userId for real authenticated peers — not guests, bots, or synthetic
+        const peerId = (!st.isGuest && !st.isBot && !st.isSynthetic && st.userId && st.userId !== S.userId)
+          ? st.userId : null;
         TalkStore.record({
           peer:        st.name  || 'Stranger',
           emoji:       st.emoji || '👤',
           mode:        S.mode   || 'text',
           durationSec: elapsed,
           rating:      null,
-          skipped:     id === 'pg-match' /* navigated back = skip */
+          skipped:     id === 'pg-match', /* navigated back = skip */
+          userId:      peerId
         });
+        // Invalidate the eligible-contacts cache so the new peer appears
+        // immediately if the user visits Messages after this chat.
+        if (peerId) {
+          _eligibleContactsCache = null;
+          _eligibleContactsFetchedAt = 0;
+        }
       }
     }
     _prevPage = id;
@@ -9034,7 +9227,6 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
       }, 200);
     }
   }
-
   /* MutationObserver on .page elements — fires whenever .active changes */
   function watchPages() {
     const obs = new MutationObserver(mutations => {
