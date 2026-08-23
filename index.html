@@ -6878,6 +6878,112 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
   top: auto !important;
 }
 </style>
+
+<style id="mortalive-messages-layout-v102">
+/* =============================================================
+   MORTALIVE V102 — Messages full-viewport layout fix
+   Keeps the V101 Messages functionality; fixes only geometry/flow.
+   ============================================================= */
+
+/* The authenticated topbar uses a document spacer (88px desktop,
+   134px phone). The Messages page must fill the remaining viewport. */
+body.mortalive-app-topbar-visible #pg-messages.active {
+  height: calc(100dvh - 88px);
+  min-height: calc(100dvh - 88px);
+  max-height: calc(100dvh - 88px);
+  padding-top: 0;
+  padding-bottom: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  flex: 0 0 calc(100dvh - 88px);
+}
+
+#pg-messages.active .messages-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  display: flex;
+}
+
+#pg-messages .messages-sidebar {
+  height: 100%;
+  min-height: 0;
+}
+
+#pg-messages .messages-main {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#pg-messages .messages-thread-empty,
+#pg-messages .messages-thread-active {
+  min-height: 0;
+  height: 100%;
+  flex: 1 1 auto;
+}
+
+#pg-messages .messages-thread-messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+#pg-messages .messages-composer-wrap {
+  flex: 0 0 auto;
+  margin-top: auto;
+  position: relative;
+  z-index: 2;
+}
+
+/* Keep the sidebar independently scrollable while the shell stays fixed. */
+#pg-messages .messages-conv-list {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1 1 auto;
+}
+
+@media (max-width: 720px) {
+  body.mortalive-app-topbar-visible #pg-messages.active {
+    height: calc(100dvh - 134px);
+    min-height: calc(100dvh - 134px);
+    max-height: calc(100dvh - 134px);
+    flex-basis: calc(100dvh - 134px);
+  }
+
+  #pg-messages.active .messages-shell {
+    height: 100%;
+  }
+
+  #pg-messages .messages-sidebar {
+    display: none;
+  }
+
+  #pg-messages .messages-main {
+    width: 100%;
+  }
+
+  #pg-messages .messages-thread-header {
+    flex: 0 0 auto;
+  }
+
+  #pg-messages .messages-thread-messages {
+    padding: 12px;
+  }
+
+  #pg-messages .messages-composer-wrap {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+}
+</style>
+
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -8248,7 +8354,7 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260823-v101-messages-eligibility"></script>
+<script src="app.js?v=20260823-v102-messages-layout"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
