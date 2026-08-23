@@ -7737,9 +7737,9 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
 
       <!-- Empty state -->
       <div class="messages-thread-empty" id="msg-thread-empty">
-        <div class="empty-illustration">💭</div>
-        <h2>Select a conversation</h2>
-        <p>Choose someone from your list or create a new group to start messaging</p>
+        <div class="empty-illustration">💬</div>
+        <h2>Your messages</h2>
+        <p>Select someone from your contacts, or start a group chat. You can message people you follow or have chatted with on Talk.</p>
         <button class="messages-cta-btn" id="btn-empty-new-group">Create a group</button>
       </div>
 
@@ -7839,11 +7839,11 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
         <div class="form-field">
           <label for="group-members">Add members (optional)</label>
           <div class="form-tag-input" id="form-group-members">
-            <input type="text" class="form-tag-input-field" id="group-members-input" placeholder="Search members…">
+            <input type="text" class="form-tag-input-field" id="group-members-input" placeholder="Search your contacts…">
             <div class="form-tag-list" id="group-members-list"></div>
           </div>
           <div class="form-members-suggestions" id="group-members-suggestions"></div>
-          <span class="form-field-hint">Type to search and add members</span>
+          <span class="form-field-hint">Search among people you follow or have chatted with on Talk</span>
         </div>
 
         <!-- Form actions -->
@@ -7874,14 +7874,6 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
       </div>
     </div>
   </div>
-
-  <!-- Bottom navigation -->
-  <nav class="bottom-tabbar" aria-label="Messages navigation">
-    <a href="#" data-top-page="pg-feed" aria-label="Feed">Feed</a>
-    <a href="#" data-top-page="pg-lobby" aria-label="Talk">Talk</a>
-    <a href="#" data-top-page="pg-messages" aria-label="Messages" aria-current="page">Messages</a>
-    <a href="#" data-top-page="pg-profile" aria-label="Profile">Profile</a>
-  </nav>
 </section>
 
 <!-- ═══════════════════ PROFILE ═══════════════════════ -->
@@ -8256,7 +8248,7 @@ body.mortalive-app-topbar-visible .modern-profile-card.profile-top-sticky.is-scr
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260823-v47-api-security-audit"></script>
+<script src="app.js?v=20260823-v101-messages-eligibility"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
