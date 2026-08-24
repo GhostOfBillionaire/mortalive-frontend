@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-24-v108-poll-direct-persist'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-24-v109-poll-click-capture-fixed'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -6378,6 +6378,14 @@ async function hydratePollResults(postIds = []) {
 async function submitPollVote(postId, optionId) {
   if (S.isGuest || !S.userId || !sb) { toast('Sign in to vote', '🔒'); return; }
   if (!postId || !optionId) return;
+
+  const targetPost = Array.isArray(_feedPosts) ? _feedPosts.find(row => row?.id === postId) : null;
+  const expiresAt = targetPost?.post_meta?.expires_at ? Date.parse(targetPost.post_meta.expires_at) : NaN;
+  if (Number.isFinite(expiresAt) && Date.now() >= expiresAt) {
+    toast('This poll has ended.', '⏱️');
+    return;
+  }
+
   if (_feedPollVoteCache.has(postId)) {
     toast('You already voted on this poll.', 'ℹ️');
     return;
@@ -6542,7 +6550,7 @@ function renderStructuredFeedPost(post) {
         const count = Number(counts.get(optionId) || 0);
         const pct = totalVotes ? Math.round((count / totalVotes) * 100) : 0;
         const selected = myVote === optionId;
-        const disabled = (myVote || post.user_id === S.userId || expired) ? ' disabled' : '';;
+        const disabled = (myVote || expired) ? ' aria-disabled="true"' : '';
         return `<button type="button" class="feed-structured-option${selected ? ' qna-selected' : ''}" data-structured-kind="poll" data-structured-option="${sanitizeHTML(optionId)}" data-post-id="${sanitizeHTML(post.id)}"${disabled}>`+
           `<span>${sanitizeHTML(option?.label || '')}</span><span class="feed-structured-option-result">${totalVotes ? `${pct}%` : '›'}</span></button>`;
       }).join('')}</div>
@@ -6559,7 +6567,7 @@ function renderStructuredFeedPost(post) {
     ${mode === 'open' ? `<div class="feed-structured-open-note">Reply in the comments to share your answer.</div>` : `<div class="feed-structured-options">${options.map((option) => {
       const optionId = String(option?.id || '');
       const stateClass = hasResult ? (optionId === correctId ? ' qna-correct' : ' qna-incorrect') : (responseId === optionId ? ' qna-selected' : '');
-      const disabled = responseId || post.user_id === S.userId ? ' disabled' : '';
+      const disabled = responseId ? ' aria-disabled="true"' : '';
       const resultMark = hasResult ? (optionId === correctId ? '✓' : '✕') : '';
       return `<button type="button" class="feed-structured-option${stateClass}" data-structured-kind="qna" data-structured-option="${sanitizeHTML(optionId)}" data-post-id="${sanitizeHTML(post.id)}"${disabled}><span>${sanitizeHTML(option?.label || '')}</span><span class="feed-structured-option-result">${resultMark || '›'}</span></button>`;
     }).join('')}</div>`}
@@ -7281,6 +7289,28 @@ function initFeedPage() {
   _feedInitialized = true;
   bindPostViewerInteractions();
   bindPostViewerKeys();
+
+  // V109: capture poll/Q&A clicks before the generic post-card viewer handler.
+  // Native `disabled` buttons were previously preventing the event from firing at all;
+  // eligibility is now enforced inside submitPollVote()/submitQnaResponse().
+  const feedPostsRoot = $('feed-posts');
+  if (feedPostsRoot && !feedPostsRoot.dataset.pollCaptureBound) {
+    feedPostsRoot.dataset.pollCaptureBound = '1';
+    feedPostsRoot.addEventListener('click', (event) => {
+      const option = event.target.closest('.feed-structured-option[data-post-id][data-structured-option]');
+      if (!option) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const kind = option.dataset.structuredKind;
+      const postId = option.dataset.postId;
+      const optionId = option.dataset.structuredOption;
+      if (kind === 'poll') {
+        submitPollVote(postId, optionId);
+      } else {
+        submitQnaResponse(postId, optionId);
+      }
+    }, true);
+  }
 
   document.addEventListener('click', (event) => {
     const feedRoot = event.target.closest('#pg-feed');
