@@ -6278,8 +6278,9 @@ async function hydrateQnaResponses(postIds = []) {
       }
     });
     const ownIds = ids.filter(id => {
-      const post = Array.isArray(_feedPosts) ? _feedPosts.find(row => row.id === id) : null;
-      return post?.user_id === S.userId;
+      const feedPost = Array.isArray(_feedPosts) ? _feedPosts.find(row => row.id === id) : null;
+      const profilePost = Array.isArray(_profilePosts) ? _profilePosts.find(row => row.id === id) : null;
+      return (feedPost?.user_id || profilePost?.user_id) === S.userId;
     });
     if (ownIds.length) {
       const { data: ownKeys } = await sb.from('post_qna_keys').select('post_id,correct_option_id').in('post_id', ownIds);
@@ -7548,6 +7549,80 @@ function formatPostTime(iso) {
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+
+// V110 — Profile poll integration, based on the engineer-provided V109 fix.
+// The current renderer uses .feed-structured-option (not .poll-option), so
+// profile handling deliberately supports both names without relying on the
+// native disabled attribute.
+(function initProfilePollInteraction() {
+  const attach = () => {
+    const profilePage = document.getElementById('pg-profile');
+    if (!profilePage || profilePage.dataset.profilePollHandler === '1') return;
+    profilePage.dataset.profilePollHandler = '1';
+
+    const handleProfilePollClick = async (event) => {
+      const option = event.target.closest?.(
+        '.feed-structured-option[data-post-id][data-structured-option], .poll-option[data-post-id][data-option-id]'
+      );
+      if (!option || !profilePage.contains(option)) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      const postId = option.dataset.postId || option.closest('[data-post-id]')?.dataset.postId;
+      const optionId = option.dataset.structuredOption || option.dataset.optionId;
+      if (!postId || !optionId) {
+        console.warn('[Profile Poll] missing postId or optionId', { postId, optionId });
+        return;
+      }
+
+      const ariaDisabled = option.getAttribute('aria-disabled') === 'true';
+      if (ariaDisabled) {
+        const post = Array.isArray(_profilePosts) ? _profilePosts.find(p => p?.id === postId) : null;
+        const expiresAt = post?.post_meta?.expires_at ? Date.parse(post.post_meta.expires_at) : NaN;
+        if (Number.isFinite(expiresAt) && Date.now() >= expiresAt) {
+          toast('This poll has ended.', '⏱️');
+        } else if (String(option.className || '').includes('qna')) {
+          toast('You already answered this Q&A.', 'ℹ️');
+        } else {
+          toast('You already voted on this poll.', 'ℹ️');
+        }
+        return;
+      }
+
+      try {
+        if (option.dataset.structuredKind === 'qna') {
+          await submitQnaResponse(postId, optionId);
+        } else {
+          await submitPollVote(postId, optionId);
+        }
+
+        // submitPollVote/renderFeedPosts updates the global caches; refresh
+        // the profile strip so the selected option and percentages are visible.
+        if ($('pg-profile')?.classList.contains('active') && _profilePostsOwner?.id) {
+          await hydrateProfilePosts(_profilePostsOwner.id);
+        }
+      } catch (error) {
+        console.warn('[Profile Poll] vote handling warning:', error);
+      }
+    };
+
+    profilePage.addEventListener('click', handleProfilePollClick, true);
+    console.log('[Profile Poll] capture handler attached to #pg-profile');
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attach, { once: true });
+  } else {
+    attach();
+  }
+
+  // The profile DOM is normally stable, but re-attach safely if a future
+  // render replaces the entire #pg-profile node.
+  const observer = new MutationObserver(attach);
+  observer.observe(document.body, { childList: true, subtree: true });
+})();
+
 function renderProfilePosts(posts = _profilePosts) {
   const strip = $('profile-post-strip');
   const countEl = $('profile-post-count');
@@ -7584,6 +7659,10 @@ function renderProfilePosts(posts = _profilePosts) {
     const eng = engagementFor(post.id);
     const likedClass = eng.liked ? 'liked' : '';
     const likeIcon = eng.liked ? '♥' : '♡';
+    const structured = post?.post_meta?.kind ? renderStructuredFeedPost(post) : '';
+    const bodyContent = structured
+      ? structured
+      : `${content}${post.media_url ? `<img class="profile-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Shared photo" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">` : ''}`;
     return `
       <article class="profile-post-card" data-post-id="${sanitizeHTML(post.id)}" data-post-owner="${sanitizeHTML(post.user_id || _profilePostsOwner?.id || S.userId || '')}" data-post-type="${sanitizeHTML(post.post_type || 'text')}">
         <div class="profile-post-header">
@@ -7591,7 +7670,7 @@ function renderProfilePosts(posts = _profilePosts) {
           <div class="profile-post-author"><button type="button" class="profile-author-link" data-open-profile="${sanitizeHTML(post.user_id || _profilePostsOwner?.id || S.userId || '')}">${sanitizeHTML(ownerName)}</button></div>
           <div class="profile-post-time">${time}</div>
         </div>
-        <div class="profile-post-body">${content}${post.media_url ? `<img class="profile-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Shared photo" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">` : ''}</div>
+        <div class="profile-post-body">${bodyContent}</div>
         <div class="profile-post-footer">
           <button type="button" data-profile-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${eng.liked}" style="background:none;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:0;color:${eng.liked ? 'var(--danger)' : 'var(--on-surface-3)'};font-size:10.5px;font-weight:700;transition:color .14s;" class="profile-like-btn ${likedClass}">${likeIcon} ${eng.likes}</button>
           <span>💬 ${eng.comments}</span>
@@ -7672,7 +7751,18 @@ async function hydrateProfilePosts(userId = S.userId, options = {}) {
         _profilePostsOwner = S.profileViewData || (S.userId === userId ? { id: S.userId, username: S.username, display_name: S.username } : null);
         // Hydrate real like/comment counts before rendering so cards show live numbers
         if (posts.length) {
-          await hydratePostEngagement(posts.map(p => p.id));
+          const postIds = posts.map(p => p.id).filter(Boolean);
+          await hydratePostEngagement(postIds);
+
+          // Keep profile polls/Q&A on the same durable result caches as Feed.
+          const structuredPosts = posts.filter(post => post?.post_meta?.kind === 'poll' || post?.post_meta?.kind === 'qna');
+          if (structuredPosts.length) {
+            const structuredIds = structuredPosts.map(post => post.id).filter(Boolean);
+            const pollIds = structuredPosts.filter(post => post.post_meta?.kind === 'poll').map(post => post.id).filter(Boolean);
+            const qnaIds = structuredPosts.filter(post => post.post_meta?.kind === 'qna').map(post => post.id).filter(Boolean);
+            if (pollIds.length) await hydratePollResults(pollIds);
+            if (qnaIds.length) await hydrateQnaResponses(qnaIds);
+          }
         }
         renderProfilePosts(posts);
         renderProfileGallery(posts);
