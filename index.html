@@ -2650,7 +2650,7 @@ body.mortalive-progress-open .sakura-topbar {
   .profile-name-modern{font-size:20px}
   .profile-mini-stat-value{font-size:16px}
 }
-.profile-feed-viewport{min-height:0;max-height:min(72vh,800px);overflow-x:hidden;overflow-y:auto;scrollbar-width:thin;overscroll-behavior-y:contain;border-radius:24px}.profile-section-card{border-radius:22px;overflow:clip}.profile-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px 12px}.profile-section-title-wrap{display:flex;align-items:center;gap:9px}.profile-section-kicker{color:var(--on-surface-3);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}.profile-section-title{font-size:15px;font-weight:900}.profile-open-grid-btn{padding:8px 11px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);font-size:10.5px;font-weight:800;color:var(--on-surface-2)}
+.profile-feed-viewport{min-height:0;max-height:min(72vh,800px);overflow-x:hidden;overflow-y:auto;scrollbar-width:thin;overscroll-behavior-y:contain;border-radius:24px}.profile-section-card{border-radius:22px;overflow:clip}.profile-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px 12px}.profile-section-title-wrap{display:flex;align-items:center;gap:9px}.profile-section-kicker{color:var(--on-surface-3);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}.profile-section-title{font-size:15px;font-weight:900}
 body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#edit-modal{position:fixed!important;inset:0!important;z-index:5000!important;pointer-events:none}#edit-modal.active{display:flex!important;pointer-events:auto!important}#edit-modal .modal{position:relative;z-index:5001;pointer-events:auto}
 .profile-post-composer{padding:0 18px 16px}.profile-post-composer-box{padding:12px;border-radius:16px;background:var(--surface-2);border:1px solid var(--border)}.profile-post-composer textarea{width:100%;min-height:76px;resize:vertical;border:1px solid var(--border-strong);border-radius:14px;background:#fff;color:var(--on-surface);padding:11px 12px;font:inherit;font-size:13px;line-height:1.5;outline:none}.profile-post-composer textarea:focus{border-color:var(--primary);box-shadow:0 0 0 4px var(--primary-alpha)}.profile-post-composer-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}.profile-post-char-count{font-size:10.5px;color:var(--on-surface-3)}.profile-post-submit{border:0;border-radius:999px;padding:9px 15px;background:linear-gradient(145deg,var(--primary),var(--secondary));color:#fff;font-size:11px;font-weight:800;cursor:pointer}.profile-post-submit:disabled{opacity:.45;cursor:not-allowed}.profile-post-error{display:none;margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(220,38,38,.07);border:1px solid rgba(220,38,38,.16);color:var(--danger);font-size:11px}.profile-post-empty-card{justify-content:flex-start}.profile-post-empty-card .profile-post-body{max-width:44ch}
 .profile-post-strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(300px,64%);gap:12px;overflow-x:auto;overflow-y:hidden;padding:0 18px 16px;scroll-snap-type:x mandatory;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:none;-webkit-overflow-scrolling:touch}.profile-post-strip.expanded{grid-auto-columns:minmax(420px,74%)}.profile-post-card{scroll-snap-align:start;aspect-ratio:16/9;min-height:220px;border-radius:20px;display:flex;flex-direction:column;border:1px solid var(--border);background:#fff;padding:14px;box-shadow:0 4px 16px rgba(13,17,23,.035)}.profile-post-header{display:flex;align-items:center;gap:9px;margin-bottom:10px}.profile-post-mini-avatar{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:900}.profile-post-author{font-size:11.5px;font-weight:800}.profile-post-time{margin-left:auto;color:var(--on-surface-3);font-size:10px}.profile-post-body{font-size:14px;line-height:1.55}.profile-post-footer{margin-top:13px;padding-top:11px;border-top:1px solid var(--border);display:flex;gap:13px;color:var(--on-surface-3);font-size:10.5px;font-weight:700}.profile-poll-box{margin-top:11px;padding:11px;border-radius:15px;background:var(--surface-2)}.profile-poll-option{position:relative;overflow:hidden;margin-top:7px;min-height:32px;padding:7px 9px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-radius:10px;border:1px solid var(--border);background:#fff;font-size:10.5px;font-weight:700}.profile-poll-option-fill{position:absolute;inset:0 auto 0 0;background:rgba(26,110,245,.08)}.profile-poll-option span{position:relative;z-index:1}.profile-poll-percent{color:var(--on-surface-3)}
@@ -6984,6 +6984,42 @@ body.mortalive-app-topbar-visible #pg-messages.active {
 }
 </style>
 
+
+<style id="mortalive-v103-profile-composer-fix">
+/* V103 — Profile mobile flow + composer tools */
+.profile-content-shell{position:relative;min-height:0;z-index:1}
+.profile-feed-viewport{max-height:none!important;height:auto!important;overflow:visible!important;position:relative;z-index:1}
+.profile-thoughts{position:relative;overflow:visible!important;z-index:2}
+.profile-post-composer{position:relative;z-index:20;background:rgba(255,255,255,.98);isolation:isolate}
+.profile-post-composer-box{position:relative;z-index:21}
+.profile-post-strip{position:relative;z-index:2;max-width:100%;}
+.profile-post-strip.expanded{grid-auto-columns:minmax(300px,64%);}
+.profile-compose-type-switch{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.profile-compose-type-btn{padding:7px 11px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--on-surface-2);font-size:11px;font-weight:800;cursor:pointer;transition:all .15s ease}
+.profile-compose-type-btn.active{background:var(--primary-alpha);border-color:rgba(26,110,245,.28);color:var(--primary)}
+.profile-poll-builder{margin:8px 0;padding:10px;border-radius:14px;background:#fff;border:1px solid var(--border)}
+.profile-poll-builder-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:11px;font-weight:800;color:var(--on-surface-2)}
+.profile-poll-add-option{padding:6px 9px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--primary);font-size:10px;font-weight:800}
+.profile-poll-options-list{display:grid;gap:7px}
+.profile-poll-option-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:7px}
+.profile-poll-option-input{width:100%;padding:8px 10px;border:1px solid var(--border-strong);border-radius:10px;font:inherit;font-size:11px;outline:none;background:#fff}
+.profile-poll-option-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-alpha)}
+.profile-qna-correct-wrap{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;color:var(--on-surface-3);white-space:nowrap}
+.profile-poll-remove-btn{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--surface-2);color:var(--on-surface-2);font-size:15px;line-height:1}
+.profile-poll-remove-btn:disabled{opacity:.35}
+@media(max-width:720px){
+  #pg-profile .profile-content-shell{overflow:visible}
+  #pg-profile .profile-feed-viewport{overflow:visible!important;max-height:none!important}
+  #pg-profile .profile-post-composer{margin-bottom:4px}
+  #pg-profile .profile-post-strip{z-index:1}
+  #pg-profile .profile-post-card{position:relative;z-index:1}
+  .profile-compose-type-switch{gap:5px}
+  .profile-compose-type-btn{flex:0 1 auto}
+  .profile-post-composer-actions{flex-wrap:wrap;justify-content:flex-start}
+  .profile-post-char-count{margin-right:auto}
+  .profile-post-photo-btn,.profile-post-submit{min-height:38px}
+}
+</style>
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -8090,16 +8126,26 @@ body.mortalive-app-topbar-visible #pg-messages.active {
     </nav>
     <div class="profile-content-shell"><div class="profile-feed-viewport" id="profile-feed-viewport">
       <section class="profile-section-card profile-thoughts profile-tab-panel active" id="profile-thoughts-section" data-profile-panel="posts">
-        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Live identity</span><span class="profile-section-title">Thoughts & polls</span><span id="profile-post-count" style="font-size:10px;color:var(--on-surface-3);font-weight:700">Loading…</span></div><button class="profile-open-grid-btn" id="profile-open-grid" type="button" aria-expanded="false">Open grid ↗</button></div>
+        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Live identity</span><span class="profile-section-title">Thoughts & polls</span><span id="profile-post-count" style="font-size:10px;color:var(--on-surface-3);font-weight:700">Loading…</span></div></div>
         <div class="profile-post-composer" id="profile-post-composer">
           <div class="profile-post-composer-box">
             <textarea id="profile-post-input" maxlength="500" placeholder="Share a thought, update, question, or conversation starter…"></textarea>
+            <div class="profile-compose-type-switch" role="group" aria-label="Profile post type">
+              <button type="button" class="profile-compose-type-btn active" data-profile-compose-kind="text" aria-pressed="true">Text</button>
+              <button type="button" class="profile-compose-type-btn" data-profile-compose-kind="photo" aria-pressed="false">Photo</button>
+              <button type="button" class="profile-compose-type-btn" data-profile-compose-kind="poll" aria-pressed="false">Polls</button>
+              <button type="button" class="profile-compose-type-btn" data-profile-compose-kind="qna" aria-pressed="false">Q&A</button>
+            </div>
+            <div class="profile-poll-builder" id="profile-poll-builder" hidden>
+              <div class="profile-poll-builder-head"><span id="profile-compose-mode-label">Text</span><button type="button" id="profile-poll-add-option" class="profile-poll-add-option">+ Add option</button></div>
+              <div id="profile-poll-options-list" class="profile-poll-options-list"></div>
+            </div>
             <div class="profile-post-composer-actions">
               <span id="profile-hashtag-status" class="compose-hashtag-status" aria-live="polite" style="display:none;"></span><span class="profile-post-char-count" id="profile-post-char-count">0 / 500</span>
-              <button class="profile-post-photo-btn photo-compose-btn" id="btn-profile-photo-upload" type="button">📷 Photo</button>
+              <button class="profile-post-photo-btn photo-compose-btn" id="btn-profile-photo-upload" type="button">📷 Add photo</button>
               <input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
               <span class="profile-photo-name" id="profile-photo-name" aria-live="polite"></span>
-<div id="profile-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
+              <div id="profile-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
               <button class="profile-post-submit" id="btn-profile-post-submit" type="button" disabled>Post</button>
             </div>
             <div class="profile-post-error" id="profile-post-error"></div>
@@ -8354,7 +8400,7 @@ body.mortalive-app-topbar-visible #pg-messages.active {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260823-v102-messages-layout"></script>
+<script src="app.js?v=20260823-v103-profile-composer-layout"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -8634,7 +8680,7 @@ body.mortalive-app-topbar-visible #pg-messages.active {
   }
 
   function init(){
-    const menuBtn=q('btn-profile-menu'),menu=q('profile-menu'),vp=q('profile-feed-viewport'),grid=q('profile-open-grid'),strip=q('profile-post-strip'),copy=q('btn-profile-copy'),prog=q('btn-profile-progress');
+    const menuBtn=q('btn-profile-menu'),menu=q('profile-menu'),vp=q('profile-feed-viewport'),strip=q('profile-post-strip'),copy=q('btn-profile-copy'),prog=q('btn-profile-progress');
     if(menuBtn&&!menuBtn.dataset.bound){
       menuBtn.dataset.bound='1';
       menuBtn.addEventListener('click',e=>{
@@ -8657,14 +8703,6 @@ body.mortalive-app-topbar-visible #pg-messages.active {
       // handler collapsed profile sections while scrolling, changing scrollHeight
       // and causing scrollTop feedback/oscillation. Horizontal post scrolling is
       // handled by #profile-post-strip itself via CSS touch-axis locking.
-    }
-    if(grid&&strip&&!grid.dataset.bound){
-      grid.dataset.bound='1';
-      grid.addEventListener('click',()=>{
-        const ex=strip.classList.toggle('expanded');
-        grid.textContent=ex?'Compact ↘':'Open grid ↗';
-        grid.setAttribute('aria-expanded',ex?'true':'false');
-      });
     }
     if(copy&&!copy.dataset.bound){
       copy.dataset.bound='1';
@@ -8908,7 +8946,6 @@ body.profile-viewing-public #btn-edit-profile,
 body.profile-viewing-public #btn-share-profile,
 body.profile-viewing-public #btn-change-profile-photo,
 body.profile-viewing-public #profile-post-composer,
-body.profile-viewing-public #profile-open-grid,
 body.profile-viewing-public #btn-profile-copy,
 body.profile-viewing-public #btn-profile-progress{display:none!important}
 body.profile-viewing-public #profile-stat-edit-action,
