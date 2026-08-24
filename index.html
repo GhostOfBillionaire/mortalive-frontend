@@ -7021,12 +7021,52 @@ body.mortalive-app-topbar-visible #pg-messages.active {
 }
 </style>
 
-<style id="mortalive-v104-profile-hide-composer-phone">
+<style id="mortalive-v105-profile-phone-gap-fixed">
 /* V104 — Hide the profile post composer on phones only.
    Desktop/tablet layout remains unchanged. */
 @media (max-width: 720px) {
   #pg-profile #profile-post-composer {
     display: none !important;
+  }
+}
+</style>
+
+<style id="mortalive-v105-profile-phone-gap-fix">
+/* V105 — Phone profile flow fix.
+   The profile header/tab stack was keeping desktop sticky offsets on phones.
+   Once the phone composer is hidden, those sticky offsets leave a large
+   dead area between the profile card and Thoughts & polls. Keep desktop
+   unchanged and let the phone profile flow naturally. */
+@media (max-width: 720px) {
+  #pg-profile .modern-profile-card.profile-top-sticky {
+    position: static !important;
+    top: auto !important;
+    z-index: auto !important;
+    transform: none !important;
+  }
+
+  #pg-profile .profile-scroll-progress {
+    display: none !important;
+    height: 0 !important;
+    margin: 0 !important;
+  }
+
+  #pg-profile .profile-tabs-bar {
+    position: static !important;
+    top: auto !important;
+    margin-top: 0 !important;
+    margin-bottom: 8px !important;
+    z-index: auto !important;
+  }
+
+  #pg-profile .profile-content-shell {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+  }
+
+  #pg-profile .profile-feed-viewport {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
   }
 }
 </style>
