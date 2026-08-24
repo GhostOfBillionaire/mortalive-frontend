@@ -8450,7 +8450,7 @@ body.mortalive-app-topbar-visible #pg-messages.active {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260824-v104-profile-hide-phone-composer"></script>
+<script src="app.js?v=20260824-v106-feed-votes-views"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -9028,6 +9028,10 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 }
 </style>
 
+<style id="mortalive-v106-feed-views">
+.post-view-count{display:inline-flex;align-items:center;gap:5px;min-height:32px;padding:6px 9px;border-radius:999px;color:var(--on-surface-3);font-size:12px;font-weight:700;white-space:nowrap;cursor:default;}
+.post-view-count .action-icon{font-size:14px;line-height:1;}
+</style>
 <style id="mortalive-v11-composer-overrides">
 #pg-feed .compose-writing-wrap{position:relative;}
 #pg-feed .compose-writing-wrap .compose-field{padding-left:15px;}
