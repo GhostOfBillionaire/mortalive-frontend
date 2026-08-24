@@ -1,9 +1,8 @@
-// FRESH BUILD MARKER — 2026-08-23 21:12 IST — V101 Messages eligibility merge; V100 security/profile baseline preserved
+// FRESH BUILD MARKER — 2026-08-21 00:03 IST — v40 Messages enhancement merge; stable baseline preserved
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-23-v101-messages-eligibility';
-// Random maintenance note: keep contact eligibility refresh isolated from the retired media stack. // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-24-v103-profile-composer-layout'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -5310,21 +5309,17 @@ async function sendMessageToAPI(convId, text) {
  * @returns {Promise<Object>} Created group
  */
 async function createGroup(data) {
-  // Local fallback keeps the existing UI functional until a groups API exists.
-  if (!data || !String(data.name || '').trim()) {
-    throw new Error('Group name is required');
-  }
-  return {
-    id: 'g' + Date.now() + Math.random().toString(36).slice(2, 7),
-    name: String(data.name).trim().slice(0, 60),
-    emoji: data.type === 'public' ? '👥' : '🔒',
-    description: String(data.description || '').trim().slice(0, 200),
-    type: data.type === 'private' ? 'private' : 'public',
-    members: Array.isArray(data.members) ? data.members.slice(0, 50) : [],
-    createdAt: new Date().toISOString(),
-    createdBy: S.username || 'You'
-  };
+  // POST /api/groups
+  // return (await fetch(`${SERVER_URL}/api/groups`, {
+  //   method: 'POST',
+  //   headers: { 'Content-Type': 'application/json' },
+  //   body: JSON.stringify(data)
+  // })).json();
 }
+
+/**
+ * Subscribe to real-time message updates
+ */
 function subscribeToMessages() {
   // Use Supabase or similar for real-time updates
   // Example:
@@ -7349,7 +7344,7 @@ function renderProfilePosts(posts = _profilePosts) {
           <div class="profile-post-author"><button type="button" class="profile-author-link" data-open-profile="${sanitizeHTML(post.user_id || _profilePostsOwner?.id || S.userId || '')}">${sanitizeHTML(ownerName)}</button></div>
           <div class="profile-post-time">${time}</div>
         </div>
-        <div class="profile-post-body">${content}${post.media_url ? `<img class="profile-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Shared photo" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">` : ''}</div>
+        <div class="profile-post-body">${post?.post_meta?.kind ? renderStructuredFeedPost(post) : `${content}${post.media_url ? `<img class="profile-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Shared photo" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">` : ''}`}</div>
         <div class="profile-post-footer">
           <button type="button" data-profile-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${eng.liked}" style="background:none;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:0;color:${eng.liked ? 'var(--danger)' : 'var(--on-surface-3)'};font-size:10.5px;font-weight:700;transition:color .14s;" class="profile-like-btn ${likedClass}">${likeIcon} ${eng.likes}</button>
           <span>💬 ${eng.comments}</span>
@@ -7459,24 +7454,148 @@ function initProfilePostComposer() {
   const photoButton = $('btn-profile-photo-upload');
   const photoName = $('profile-photo-name');
   const error = $('profile-post-error');
+  const modeButtons = composer?.querySelectorAll('[data-profile-compose-kind]') || [];
+  const optionBuilder = $('profile-poll-builder');
+  const optionList = $('profile-poll-options-list');
+  const addOptionBtn = $('profile-poll-add-option');
   if (!composer || !input || !button) return;
-  // Reset the guard if the input element changed (e.g. after a DOM re-render)
+
   if (composer.dataset.bound === '1' && composer.dataset.boundInputId === input.id + (input.dataset.uid || '')) return;
   composer.dataset.bound = '1';
   composer.dataset.boundInputId = input.id + (input.dataset.uid || '');
 
+  if (!composer.dataset.profileComposeKind) composer.dataset.profileComposeKind = 'text';
+
+  const getKind = () => ['text', 'photo', 'poll', 'qna'].includes(composer.dataset.profileComposeKind)
+    ? composer.dataset.profileComposeKind
+    : 'text';
+
+  const getOptions = () => Array.from(optionList?.querySelectorAll('.profile-poll-option-input') || [])
+    .map((el) => String(el.value || '').trim());
+
+  const ensureOptions = (minimum = 2) => {
+    if (!optionList) return;
+    while (optionList.querySelectorAll('.profile-poll-option-row').length < minimum) {
+      const index = optionList.querySelectorAll('.profile-poll-option-row').length + 1;
+      const row = document.createElement('div');
+      row.className = 'profile-poll-option-row';
+      row.innerHTML = `
+        <label class="profile-qna-correct-wrap" title="Mark as correct answer">
+          <input type="radio" class="profile-qna-correct-radio" name="profile-qna-correct-option" value="option-${index}" aria-label="Mark option ${index} as correct">
+          <span>Correct</span>
+        </label>
+        <input class="profile-poll-option-input" maxlength="80" placeholder="Option ${index}">
+        <button type="button" class="profile-poll-remove-btn" aria-label="Remove option" title="Remove option">×</button>`;
+      optionList.appendChild(row);
+    }
+    syncOptionRows();
+  };
+
+  const syncOptionRows = () => {
+    if (!optionList) return;
+    const rows = Array.from(optionList.querySelectorAll('.profile-poll-option-row'));
+    rows.forEach((row, index) => {
+      const inputEl = row.querySelector('.profile-poll-option-input');
+      const radio = row.querySelector('.profile-qna-correct-radio');
+      if (inputEl) inputEl.placeholder = `Option ${index + 1}`;
+      if (radio) radio.value = `option-${index + 1}`;
+      const remove = row.querySelector('.profile-poll-remove-btn');
+      if (remove) remove.disabled = rows.length <= 2;
+    });
+  };
+
+  const resetOptions = () => {
+    if (!optionList) return;
+    optionList.innerHTML = '';
+    ensureOptions(2);
+    syncOptionRows();
+  };
+
+  const setKind = (kind) => {
+    const next = ['text', 'photo', 'poll', 'qna'].includes(kind) ? kind : 'text';
+    composer.dataset.profileComposeKind = next;
+    modeButtons.forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.profileComposeKind === next);
+      btn.setAttribute('aria-pressed', btn.dataset.profileComposeKind === next ? 'true' : 'false');
+    });
+    if (optionBuilder) optionBuilder.hidden = !(next === 'poll' || next === 'qna');
+    if (next === 'poll' || next === 'qna') ensureOptions(2);
+    if (next === 'text') {
+      if (photoInput?.files?.length) photoInput.value = '';
+      clearComposePhotoPreview('profile-photo-input','btn-profile-photo-upload','profile-photo-preview','profile-photo-name');
+      if (photoName) photoName.textContent = '';
+      input.placeholder = 'Share a thought, update, question, or conversation starter…';
+    } else if (next === 'photo') {
+      input.placeholder = 'Add a caption to your photo…';
+      photoInput?.click();
+    } else if (next === 'poll') {
+      input.placeholder = 'Ask a poll question…';
+    } else if (next === 'qna') {
+      input.placeholder = 'Ask a question for people to answer…';
+      input.focus();
+    }
+    sync();
+  };
+
   const sync = () => {
+    const kind = getKind();
     const text = input.value.trim();
     const hasPhoto = !!photoInput?.files?.[0];
     const hashtagCheck = syncHashtagStatus(text, 'profile-hashtag-status');
-    button.disabled = (!text && !hasPhoto) || text.length > 500 || S.isGuest || !S.userId || !hashtagCheck.ok;
+    const values = getOptions();
+    const validStructured = (kind === 'poll' || kind === 'qna')
+      ? !!text && values.filter(Boolean).length >= 2 && new Set(values.filter(Boolean).map(v => v.toLowerCase())).size === values.filter(Boolean).length
+      : true;
+    const needsPhoto = kind === 'photo';
+    const validBody = kind === 'text' ? !!text : kind === 'photo' ? hasPhoto : validStructured;
+    button.disabled = S.isGuest || !S.userId || !validBody || text.length > 500 || !hashtagCheck.ok || (needsPhoto && !hasPhoto);
     if (photoName) photoName.textContent = hasPhoto ? `${photoInput.files[0].name} · ${formatPhotoSize(photoInput.files[0].size)}` : '';
     const count = $('profile-post-char-count');
     if (count) {
       count.textContent = `${input.value.length} / 500`;
       count.style.color = input.value.length > 500 ? 'var(--danger)' : 'var(--on-surface-3)';
     }
+    const modeLabel = $('profile-compose-mode-label');
+    if (modeLabel) modeLabel.textContent = kind === 'qna' ? 'Q&A' : kind === 'poll' ? 'Poll' : kind === 'photo' ? 'Photo' : 'Text';
   };
+
+  modeButtons.forEach((btn) => {
+    if (btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => setKind(btn.dataset.profileComposeKind));
+  });
+
+  optionList?.addEventListener('input', sync);
+  optionList?.addEventListener('change', sync);
+  optionList?.addEventListener('click', (event) => {
+    const remove = event.target.closest('.profile-poll-remove-btn');
+    if (!remove) return;
+    const rows = optionList.querySelectorAll('.profile-poll-option-row');
+    if (rows.length <= 2) return;
+    remove.closest('.profile-poll-option-row')?.remove();
+    syncOptionRows();
+    sync();
+  });
+  addOptionBtn?.addEventListener('click', () => {
+    const count = optionList?.querySelectorAll('.profile-poll-option-row').length || 0;
+    if (count >= 6) {
+      toast('Polls and Q&A posts can have at most 6 options.', '⚠️');
+      return;
+    }
+    const row = document.createElement('div');
+    row.className = 'profile-poll-option-row';
+    row.innerHTML = `
+      <label class="profile-qna-correct-wrap" title="Mark as correct answer">
+        <input type="radio" class="profile-qna-correct-radio" name="profile-qna-correct-option" value="option-${count + 1}" aria-label="Mark option ${count + 1} as correct">
+        <span>Correct</span>
+      </label>
+      <input class="profile-poll-option-input" maxlength="80" placeholder="Option ${count + 1}">
+      <button type="button" class="profile-poll-remove-btn" aria-label="Remove option" title="Remove option">×</button>`;
+    optionList?.appendChild(row);
+    syncOptionRows();
+    sync();
+    row.querySelector('.profile-poll-option-input')?.focus();
+  });
 
   input.addEventListener('input', sync);
   input.addEventListener('keydown', (event) => {
@@ -7487,50 +7606,95 @@ function initProfilePostComposer() {
   });
 
   button.addEventListener('click', async () => {
+    const kind = getKind();
     const content = input.value.trim();
     const file = photoInput?.files?.[0] || null;
-    if ((!content && !file) || content.length > 500 || S.isGuest || !S.userId) return;
+    const optionValues = getOptions().map((label, index) => ({ label, sourceIndex: index })).filter(row => row.label);
+    if (S.isGuest || !S.userId || !sb) return;
+    if (content.length > 500) return;
     const hashtagCheck = validateUniqueHashtags(content);
     if (!hashtagCheck.ok) { toast(hashtagCheck.message, '⚠️'); sync(); return; }
+    if (kind === 'text' && !content) return;
+    if (kind === 'photo' && !file) { toast('Choose a photo first.', '⚠️'); return; }
+    if ((kind === 'poll' || kind === 'qna') && !content) { toast(`${kind === 'qna' ? 'Q&A' : 'Poll'} needs a question.`, '⚠️'); return; }
+    if ((kind === 'poll' || kind === 'qna')) {
+      if (optionValues.length < 2) { toast('Add at least 2 choices.', '⚠️'); return; }
+      if (optionValues.length > 6) { toast('Use a maximum of 6 choices.', '⚠️'); return; }
+      const seen = new Set();
+      for (const option of optionValues) {
+        const key = option.label.toLowerCase();
+        if (seen.has(key)) { toast('Each choice must be unique.', '⚠️'); return; }
+        seen.add(key);
+      }
+    }
+
+    let correctOptionId = null;
+    if (kind === 'qna') {
+      const rows = Array.from(optionList?.querySelectorAll('.profile-poll-option-row') || []);
+      const checked = rows.findIndex(row => row.querySelector('.profile-qna-correct-radio:checked'));
+      const matched = checked >= 0 ? optionValues.find(option => option.sourceIndex === checked) : null;
+      if (!matched) { toast('Select the correct answer for this Q&A.', '⚠️'); return; }
+      correctOptionId = `option-${matched.sourceIndex + 1}`;
+    }
 
     button.disabled = true;
     button.textContent = 'Posting…';
     if (error) error.style.display = 'none';
 
     try {
-      if (file) validatePhotoFile(file);
-      const media = file ? await uploadPhotoFile(file, 'profile') : null;
-      // posts_content_check requires >= 1 char; photo posts may have no caption, so send ' '.
-      const insertContent = content || (media ? ' ' : content);
-      const payload = { user_id: S.userId, content: insertContent, post_type: media ? 'photo' : 'text', visibility: 'public' };
-      if (media) { payload.media_url = media.url; payload.media_type = media.type; payload.media_size = media.size; }
+      if (file && (kind === 'photo')) validatePhotoFile(file);
+      const media = kind === 'photo' && file ? await uploadPhotoFile(file, 'profile') : null;
+      const normalizedOptions = optionValues.map(option => ({ id: `option-${option.sourceIndex + 1}`, label: option.label }));
+      const payload = {
+        user_id: S.userId,
+        content: content || (media ? ' ' : content),
+        post_type: media ? 'photo' : 'text',
+        visibility: 'public'
+      };
+      if (media) {
+        payload.media_url = media.url;
+        payload.media_type = media.type;
+        payload.media_size = media.size;
+      }
+      if (kind === 'poll' || kind === 'qna') {
+        payload.post_meta = {
+          kind,
+          mode: 'mcq',
+          options: normalizedOptions
+        };
+      }
+
       const { data, error: postError } = await sb.from('posts').insert(payload)
         .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta').single();
+      if (postError) throw postError;
 
-      if (postError) {
-        throw postError;
+      if (kind === 'qna' && correctOptionId) {
+        const { error: answerKeyError } = await sb.from('post_qna_keys').insert({
+          post_id: data.id,
+          owner_id: S.userId,
+          correct_option_id: correctOptionId
+        });
+        if (answerKeyError) {
+          await sb.from('posts').delete().eq('id', data.id).eq('user_id', S.userId);
+          throw answerKeyError;
+        }
       }
-      if (data) {
-        _profilePosts = [data, ..._profilePosts].slice(0, POSTS_PAGE_SIZE);
-        // Hydrate engagement for the new post so like/comment counts are live
-        await hydratePostEngagement([data.id]).catch(() => {});
-        renderProfilePosts(_profilePosts);
-        renderProfileGallery(_profilePosts);
-        renderProfileReels(_profilePosts);
-        refreshProfileTabs(_profilePosts);
-        hydrateTrendingHashtags().catch(() => {});
-      }
+
+      _profilePosts = [data, ..._profilePosts].slice(0, POSTS_PAGE_SIZE);
+      await hydratePostEngagement([data.id]).catch(() => {});
+      if (data.post_meta?.kind === 'poll') await hydratePollResults([data]);
+      if (data.post_meta?.kind === 'qna' && data.post_meta?.mode === 'mcq') await hydrateQnaResponses([data]);
+      renderProfilePosts(_profilePosts);
+      renderProfileGallery(_profilePosts);
+      renderProfileReels(_profilePosts);
+      refreshProfileTabs(_profilePosts);
       input.value = '';
+      if (photoInput) photoInput.value = '';
       clearComposePhotoPreview('profile-photo-input','btn-profile-photo-upload','profile-photo-preview','profile-photo-name');
-      sync();
-      // Refresh feed too if it is the active page
-      if ($('pg-feed')?.classList.contains('active')) {
-        _feedPosts = [];
-        _feedOffset = 0;
-        _feedHasMore = true;
-        fetchFeedPage(true).catch(() => {});
-      }
-      toast(file ? 'Photo post published!' : 'Post published!', '✍️');
+      resetOptions();
+      setKind('text');
+      toast(kind === 'photo' ? 'Photo post published!' : kind === 'poll' ? 'Poll published!' : kind === 'qna' ? 'Q&A published!' : 'Post published!', kind === 'poll' ? '📊' : kind === 'qna' ? '❓' : kind === 'photo' ? '📷' : '✍️');
+      hydrateTrendingHashtags().catch(() => {});
     } catch (e) {
       console.warn('[Posts] create failed:', e);
       if (error) {
@@ -7545,7 +7709,10 @@ function initProfilePostComposer() {
 
   if (photoButton && photoInput && !photoButton.dataset.bound) {
     photoButton.dataset.bound = '1';
-    photoButton.addEventListener('click', () => photoInput.click());
+    photoButton.addEventListener('click', () => {
+      if (getKind() !== 'photo') setKind('photo');
+      else photoInput.click();
+    });
     photoInput.addEventListener('change', () => {
       try {
         renderComposePhotoPreview({ inputId:'profile-photo-input', buttonId:'btn-profile-photo-upload', previewId:'profile-photo-preview', nameId:'profile-photo-name' });
@@ -7557,6 +7724,8 @@ function initProfilePostComposer() {
       }
     });
   }
+  resetOptions();
+  setKind(getKind());
   sync();
 }
 
@@ -9227,6 +9396,7 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
       }, 200);
     }
   }
+
   /* MutationObserver on .page elements — fires whenever .active changes */
   function watchPages() {
     const obs = new MutationObserver(mutations => {
@@ -9351,15 +9521,6 @@ function initProfileTabs() {
   if (!bar.dataset.bound) {
     bar.dataset.bound = '1';
     window.addEventListener('resize', syncStickyHeight, { passive: true });
-    $('profile-open-grid')?.addEventListener('click', () => {
-      const strip = $('profile-post-strip');
-      const btn = $('profile-open-grid');
-      if (!strip || !btn) return;
-      const expanded = strip.classList.toggle('expanded');
-      btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-      btn.textContent = expanded ? 'Collapse grid ↙' : 'Open grid ↗';
-      if (expanded) strip.scrollLeft = 0;
-    });
     bar.addEventListener('click', (event) => {
       const btn = event.target.closest('.profile-tab-btn');
       if (!btn) return;
