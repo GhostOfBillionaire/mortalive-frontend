@@ -7077,7 +7077,7 @@ body.mortalive-app-topbar-visible #pg-messages.active {
 #pg-feed .feed-structured-duration{margin-left:auto;font-size:10px;font-weight:700;color:var(--on-surface-3);white-space:nowrap;}
 </style>
 
-<style id="mortalive-v110-profile-structured-polls">
+<style id="mortalive-v111-profile-structured-polls">
 /* V110: use the Feed poll visual system inside profile cards too. */
 #pg-profile .feed-structured-post{
   margin-top:10px;
@@ -7165,6 +7165,87 @@ body.mortalive-app-topbar-visible #pg-messages.active {
 }
 </style>
 
+<style id="public-profile-visibility">
+body.profile-viewing-public #btn-edit-profile,
+body.profile-viewing-public #btn-share-profile,
+body.profile-viewing-public #btn-change-profile-photo,
+body.profile-viewing-public #profile-post-composer,
+body.profile-viewing-public #btn-profile-copy,
+body.profile-viewing-public #btn-profile-progress{display:none!important}
+body.profile-viewing-public #profile-stat-edit-action,
+body.profile-viewing-public #profile-stat-share-action{display:none!important}
+/* Follow button is always visible on public profiles */
+body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
+</style>
+<style id="mortalive-follow-btn-css">
+/* Following state: pill turns outlined instead of filled */
+#btn-follow-user.profile-action-following{
+  background:#fff;
+  border:1.5px solid var(--border-strong);
+  color:var(--on-surface);
+  box-shadow:none;
+}
+#btn-follow-user.profile-action-following:hover{
+  background:rgba(220,38,38,.06);
+  border-color:var(--danger);
+  color:var(--danger);
+}
+/* Compact mini-stats on mobile (6 cols) */
+@media(max-width:560px){
+  .profile-mini-stats[style*="repeat(6"]{
+    grid-template-columns:repeat(3,1fr)!important;
+  }
+  .profile-mini-stat:nth-child(3){border-right:0}
+  .profile-mini-stat:nth-child(4){border-top:1px solid var(--border)}
+  .profile-mini-stat:nth-child(5){border-top:1px solid var(--border)}
+  .profile-mini-stat:nth-child(6){border-top:1px solid var(--border);border-right:0}
+}
+</style>
+<style id="mortalive-v106-feed-views">
+.post-view-count{display:inline-flex;align-items:center;gap:5px;min-height:32px;padding:6px 9px;border-radius:999px;color:var(--on-surface-3);font-size:12px;font-weight:700;white-space:nowrap;cursor:default;}
+.post-view-count .action-icon{font-size:14px;line-height:1;}
+</style>
+<style id="mortalive-v11-composer-overrides">
+#pg-feed .compose-writing-wrap{position:relative;}
+#pg-feed .compose-writing-wrap .compose-field{padding-left:15px;}
+#pg-feed .compose-type-switch{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+#pg-feed .compose-type-switch .compose-type-btn{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 10px;border-radius:999px;background:transparent;color:var(--on-surface-3);border:1px solid transparent;font-size:12px;font-weight:700;line-height:1;transition:background .14s ease,color .14s ease,border-color .14s ease;}
+#pg-feed .compose-type-switch .compose-type-btn:hover{background:var(--surface-2);color:var(--on-surface);}
+#pg-feed .compose-type-switch .compose-type-btn.active{background:var(--primary-alpha);color:var(--primary);border-color:rgba(26,110,245,.16);}
+#pg-feed .compose-type-separator{color:var(--border-strong);font-size:12px;user-select:none;}
+#mortalive-post-viewer{background:rgba(245,247,250,.94);backdrop-filter:blur(12px) saturate(105%);-webkit-backdrop-filter:blur(12px) saturate(105%);}
+#mortalive-post-viewer .mortalive-post-viewer-dialog{background:#fff;border-color:rgba(0,0,0,.10);box-shadow:0 26px 80px rgba(15,23,42,.18);}
+#mortalive-post-viewer .mortalive-post-viewer-media-host{background:#f3f4f6;}
+#mortalive-post-viewer .mortalive-post-viewer-media-frame{background:#f3f4f6;}
+#mortalive-post-viewer .mortalive-post-viewer-media{background:#f3f4f6;}
+#mortalive-post-viewer .mortalive-post-viewer-nav{display:none!important;}
+#mortalive-post-viewer .mortalive-post-viewer-close{color:#fff;background:#111827;border-color:#111827;box-shadow:0 6px 18px rgba(15,23,42,.18);}
+#mortalive-post-viewer .mortalive-post-viewer-side{background:#fff;color:var(--on-surface);}
+#mortalive-post-viewer .mortalive-post-viewer-name{color:var(--on-surface);}
+#mortalive-post-viewer .mortalive-post-viewer-handle{color:var(--on-surface-3);}
+#mortalive-post-viewer .mortalive-post-viewer-divider{background:var(--border);}
+#mortalive-post-viewer .mortalive-post-viewer-caption{color:var(--on-surface);}
+#mortalive-post-viewer .mortalive-post-viewer-caption-author{color:var(--on-surface);}
+#mortalive-post-viewer .mortalive-post-viewer-caption-text{color:var(--on-surface-2);}
+#mortalive-post-viewer .mortalive-post-viewer-countline{color:var(--on-surface-3);}
+#mortalive-post-viewer .mortalive-post-viewer-comment-head strong{color:var(--on-surface);}
+#mortalive-post-viewer .mortalive-post-viewer-comment-head span{color:var(--on-surface-3);}
+#mortalive-post-viewer .mortalive-post-viewer-comment-text{color:var(--on-surface-2);}
+#mortalive-post-viewer .mortalive-post-viewer-empty-comments{color:var(--on-surface-3);}
+#mortalive-post-viewer .mortalive-post-viewer-bottom{border-top-color:var(--border);}
+#mortalive-post-viewer .mortalive-post-viewer-action{color:var(--on-surface-2);}
+#mortalive-post-viewer .mortalive-post-viewer-action:hover{background:var(--surface-2);}
+#mortalive-post-viewer .mortalive-post-viewer-likes{color:var(--on-surface);}
+#mortalive-post-viewer .mortalive-post-viewer-comment-box{border-color:var(--border-strong);background:var(--surface-2);}
+#mortalive-post-viewer .mortalive-post-viewer-input{color:var(--on-surface);}
+#mortalive-post-viewer .mortalive-post-viewer-input::placeholder{color:var(--on-surface-3);}
+#mortalive-post-viewer .mortalive-post-viewer-status{color:var(--on-surface-3);}
+#mortalive-post-viewer .mortalive-post-viewer-submit{color:var(--primary);}
+#mortalive-post-viewer .mortalive-post-viewer-side .mortalive-post-viewer-text-content{color:var(--on-surface);}
+
+@media(max-width:720px){#pg-feed .compose-type-switch{gap:3px;} #pg-feed .compose-type-switch .compose-type-btn{padding:7px 8px;font-size:11.5px;} #pg-feed .compose-type-separator{font-size:11px;}}
+</style>
+<!-- Mortalive V111 safe cleanup: orphaned styles moved into head; no behavior removed. -->
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -8545,7 +8626,7 @@ body.mortalive-app-topbar-visible #pg-messages.active {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260824-v110-profile-polls-engineer-merge"></script>
+<script src="app.js?v=20260824-v111-profile-polls-engineer-merge"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -9086,84 +9167,12 @@ body.mortalive-app-topbar-visible #pg-messages.active {
 </body>
 <!-- Random audit marker: silver-pine-92614 -->
 </html>
-<style id="public-profile-visibility">
-body.profile-viewing-public #btn-edit-profile,
-body.profile-viewing-public #btn-share-profile,
-body.profile-viewing-public #btn-change-profile-photo,
-body.profile-viewing-public #profile-post-composer,
-body.profile-viewing-public #btn-profile-copy,
-body.profile-viewing-public #btn-profile-progress{display:none!important}
-body.profile-viewing-public #profile-stat-edit-action,
-body.profile-viewing-public #profile-stat-share-action{display:none!important}
-/* Follow button is always visible on public profiles */
-body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
-</style>
-<style id="mortalive-follow-btn-css">
-/* Following state: pill turns outlined instead of filled */
-#btn-follow-user.profile-action-following{
-  background:#fff;
-  border:1.5px solid var(--border-strong);
-  color:var(--on-surface);
-  box-shadow:none;
-}
-#btn-follow-user.profile-action-following:hover{
-  background:rgba(220,38,38,.06);
-  border-color:var(--danger);
-  color:var(--danger);
-}
-/* Compact mini-stats on mobile (6 cols) */
-@media(max-width:560px){
-  .profile-mini-stats[style*="repeat(6"]{
-    grid-template-columns:repeat(3,1fr)!important;
-  }
-  .profile-mini-stat:nth-child(3){border-right:0}
-  .profile-mini-stat:nth-child(4){border-top:1px solid var(--border)}
-  .profile-mini-stat:nth-child(5){border-top:1px solid var(--border)}
-  .profile-mini-stat:nth-child(6){border-top:1px solid var(--border);border-right:0}
-}
-</style>
 
-<style id="mortalive-v106-feed-views">
-.post-view-count{display:inline-flex;align-items:center;gap:5px;min-height:32px;padding:6px 9px;border-radius:999px;color:var(--on-surface-3);font-size:12px;font-weight:700;white-space:nowrap;cursor:default;}
-.post-view-count .action-icon{font-size:14px;line-height:1;}
-</style>
-<style id="mortalive-v11-composer-overrides">
-#pg-feed .compose-writing-wrap{position:relative;}
-#pg-feed .compose-writing-wrap .compose-field{padding-left:15px;}
-#pg-feed .compose-type-switch{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-#pg-feed .compose-type-switch .compose-type-btn{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 10px;border-radius:999px;background:transparent;color:var(--on-surface-3);border:1px solid transparent;font-size:12px;font-weight:700;line-height:1;transition:background .14s ease,color .14s ease,border-color .14s ease;}
-#pg-feed .compose-type-switch .compose-type-btn:hover{background:var(--surface-2);color:var(--on-surface);}
-#pg-feed .compose-type-switch .compose-type-btn.active{background:var(--primary-alpha);color:var(--primary);border-color:rgba(26,110,245,.16);}
-#pg-feed .compose-type-separator{color:var(--border-strong);font-size:12px;user-select:none;}
-#mortalive-post-viewer{background:rgba(245,247,250,.94);backdrop-filter:blur(12px) saturate(105%);-webkit-backdrop-filter:blur(12px) saturate(105%);}
-#mortalive-post-viewer .mortalive-post-viewer-dialog{background:#fff;border-color:rgba(0,0,0,.10);box-shadow:0 26px 80px rgba(15,23,42,.18);}
-#mortalive-post-viewer .mortalive-post-viewer-media-host{background:#f3f4f6;}
-#mortalive-post-viewer .mortalive-post-viewer-media-frame{background:#f3f4f6;}
-#mortalive-post-viewer .mortalive-post-viewer-media{background:#f3f4f6;}
-#mortalive-post-viewer .mortalive-post-viewer-nav{display:none!important;}
-#mortalive-post-viewer .mortalive-post-viewer-close{color:#fff;background:#111827;border-color:#111827;box-shadow:0 6px 18px rgba(15,23,42,.18);}
-#mortalive-post-viewer .mortalive-post-viewer-side{background:#fff;color:var(--on-surface);}
-#mortalive-post-viewer .mortalive-post-viewer-name{color:var(--on-surface);}
-#mortalive-post-viewer .mortalive-post-viewer-handle{color:var(--on-surface-3);}
-#mortalive-post-viewer .mortalive-post-viewer-divider{background:var(--border);}
-#mortalive-post-viewer .mortalive-post-viewer-caption{color:var(--on-surface);}
-#mortalive-post-viewer .mortalive-post-viewer-caption-author{color:var(--on-surface);}
-#mortalive-post-viewer .mortalive-post-viewer-caption-text{color:var(--on-surface-2);}
-#mortalive-post-viewer .mortalive-post-viewer-countline{color:var(--on-surface-3);}
-#mortalive-post-viewer .mortalive-post-viewer-comment-head strong{color:var(--on-surface);}
-#mortalive-post-viewer .mortalive-post-viewer-comment-head span{color:var(--on-surface-3);}
-#mortalive-post-viewer .mortalive-post-viewer-comment-text{color:var(--on-surface-2);}
-#mortalive-post-viewer .mortalive-post-viewer-empty-comments{color:var(--on-surface-3);}
-#mortalive-post-viewer .mortalive-post-viewer-bottom{border-top-color:var(--border);}
-#mortalive-post-viewer .mortalive-post-viewer-action{color:var(--on-surface-2);}
-#mortalive-post-viewer .mortalive-post-viewer-action:hover{background:var(--surface-2);}
-#mortalive-post-viewer .mortalive-post-viewer-likes{color:var(--on-surface);}
-#mortalive-post-viewer .mortalive-post-viewer-comment-box{border-color:var(--border-strong);background:var(--surface-2);}
-#mortalive-post-viewer .mortalive-post-viewer-input{color:var(--on-surface);}
-#mortalive-post-viewer .mortalive-post-viewer-input::placeholder{color:var(--on-surface-3);}
-#mortalive-post-viewer .mortalive-post-viewer-status{color:var(--on-surface-3);}
-#mortalive-post-viewer .mortalive-post-viewer-submit{color:var(--primary);}
-#mortalive-post-viewer .mortalive-post-viewer-side .mortalive-post-viewer-text-content{color:var(--on-surface);}
 
-@media(max-width:720px){#pg-feed .compose-type-switch{gap:3px;} #pg-feed .compose-type-switch .compose-type-btn{padding:7px 8px;font-size:11.5px;} #pg-feed .compose-type-separator{font-size:11px;}}
-</style>
+
+
+
+
+
+
+
