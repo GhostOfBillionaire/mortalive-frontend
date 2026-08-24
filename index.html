@@ -7076,6 +7076,95 @@ body.mortalive-app-topbar-visible #pg-messages.active {
 #pg-feed .poll-duration-btn[aria-pressed="true"]{background:var(--primary-alpha);border-color:rgba(26,110,245,.30);color:var(--primary);}
 #pg-feed .feed-structured-duration{margin-left:auto;font-size:10px;font-weight:700;color:var(--on-surface-3);white-space:nowrap;}
 </style>
+
+<style id="mortalive-v110-profile-structured-polls">
+/* V110: use the Feed poll visual system inside profile cards too. */
+#pg-profile .feed-structured-post{
+  margin-top:10px;
+  padding:12px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:var(--surface-2);
+}
+#pg-profile .feed-structured-title{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:11px;
+  font-weight:800;
+  color:var(--on-surface-2);
+}
+#pg-profile .feed-structured-duration{
+  margin-left:auto;
+  color:var(--on-surface-3);
+  font-weight:700;
+  font-size:10px;
+}
+#pg-profile .feed-structured-question{
+  margin-top:8px;
+  font-size:13px;
+  line-height:1.55;
+  color:var(--on-surface);
+}
+#pg-profile .feed-structured-options{
+  display:grid;
+  gap:8px;
+  margin-top:10px;
+}
+#pg-profile .feed-structured-option{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  width:100%;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:#fff;
+  color:var(--on-surface);
+  font-size:12.5px;
+  font-weight:700;
+  text-align:left;
+  cursor:pointer;
+}
+#pg-profile .feed-structured-option:hover{
+  border-color:var(--primary);
+  background:var(--primary-alpha);
+  color:var(--primary);
+}
+#pg-profile .feed-structured-option[aria-disabled="true"]{
+  cursor:default;
+  opacity:.9;
+}
+#pg-profile .feed-structured-option.qna-selected{
+  background:var(--primary-alpha);
+  border-color:rgba(26,110,245,.32);
+  color:var(--primary);
+}
+#pg-profile .feed-structured-option.qna-correct{
+  background:rgba(22,163,74,.10);
+  border-color:rgba(22,163,74,.36);
+  color:#166534;
+}
+#pg-profile .feed-structured-option.qna-incorrect{
+  background:rgba(220,38,38,.08);
+  border-color:rgba(220,38,38,.30);
+  color:#991b1b;
+}
+#pg-profile .feed-structured-option-result{
+  min-width:18px;
+  text-align:center;
+  font-size:13px;
+  font-weight:900;
+  color:var(--on-surface-3);
+}
+#pg-profile .feed-structured-open-note{
+  margin-top:9px;
+  font-size:10.5px;
+  color:var(--on-surface-3);
+}
+</style>
+
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -8456,7 +8545,7 @@ body.mortalive-app-topbar-visible #pg-messages.active {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260824-v109-poll-click-capture-fixed"></script>
+<script src="app.js?v=20260824-v110-profile-polls-engineer-merge"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
