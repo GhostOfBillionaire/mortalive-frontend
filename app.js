@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-24-v109-poll-click-capture-fixed'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-24-v111-safe-cleanup'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -46,6 +46,7 @@ const S = {
   onlineTimerStarted: false,
   pendingAction: null,
   replyTimer: null,
+  noMatchTimeout: null,
   // synthetic video fallback
   syntheticActive: false,
   syntheticSkipCount: 0,
@@ -187,28 +188,7 @@ const BOT_REPLIES = [
   "wait really? how long has that been going on?"
 ];
 
-const autoReplies = [
-  'haha fr though 😂',
-  'okay that’s actually a good point',
-  'wait what do you do?',
-  'tbh I’ve been thinking about that too',
-  'lmao no way',
-  'that’s lowkey wild',
-  'okay so hear me out…',
-  'depends on what you mean',
-  'I feel like most people don’t realize',
-  'nah I disagree but I respect it',
-  'go on…',
-  'that reminds me of something',
-  'honestly same',
-  'ooh controversial 👀',
-  'solid point ngl',
-  'wait explain that more',
-  'no way lol',
-  'that’s actually kinda scary',
-  'based',
-  'wait are you serious?'
-];const PROGRESS_KEY = 'mortalive_progress_v3';
+const PROGRESS_KEY = 'mortalive_progress_v3';
 const PROFILE_KEY = 'mortalive_profile_v3';
 
 const PROGRESS_BADGES = Object.freeze([
@@ -3229,7 +3209,7 @@ function scheduleReplyMaybeBot() {
   } else if (Math.random() > 0.22) {
     S.replyTimer = setTimeout(() => {
       if (S.socket && S.socket.connected) return;
-      appendMsg(autoReplies[Math.floor(Math.random() * autoReplies.length)], 'them');
+      appendMsg(BOT_REPLIES[Math.floor(Math.random() * BOT_REPLIES.length)], 'them');
     }, 1100 + Math.random() * 2800);
   }
 }
@@ -9900,60 +9880,6 @@ document.addEventListener('click', (event) => {
    Also reinforces pointer-events on the visible Edit/Share controls because
    the profile page has several historical overlay/stacking rules. */
 // The profile buttons stay boringly reliable.
-// ── v45 Explicit profile action bridge ───────────────────────────────────────
-// Keep the visible Edit/Share controls independent from menu bindings,
-// rerenders, and event delegation order.
-(function installExplicitProfileActionBridge(){
-  'use strict';
-  const root = document.documentElement;
-  if (root && !root.dataset.mortaliveV45ProfileActions) {
-    root.dataset.mortaliveV45ProfileActions = '1';
-    root.addEventListener('click', function(event){
-      const edit = event.target?.closest?.('#btn-edit-profile');
-      const share = event.target?.closest?.('#btn-share-profile');
-      if (!edit && !share) return;
-      event.preventDefault();
-      event.stopImmediatePropagation?.();
-      if (edit) {
-        window.toggleProfileEditMode?.();
-      } else {
-        window.shareCurrentProfile?.();
-      }
-    }, true);
-  }
-
-  function ensureDirectHandlers(){
-    const edit = document.getElementById('btn-edit-profile');
-    const share = document.getElementById('btn-share-profile');
-    if (edit && !edit.dataset.mortaliveV45Bound) {
-      edit.dataset.mortaliveV45Bound = '1';
-      edit.addEventListener('click', function(event){
-        event.preventDefault();
-        event.stopImmediatePropagation?.();
-        window.toggleProfileEditMode?.();
-      }, true);
-    }
-    if (share && !share.dataset.mortaliveV45Bound) {
-      share.dataset.mortaliveV45Bound = '1';
-      share.addEventListener('click', function(event){
-        event.preventDefault();
-        event.stopImmediatePropagation?.();
-        window.shareCurrentProfile?.();
-      }, true);
-    }
-  }
-  const boot = () => {
-    ensureDirectHandlers();
-    const page = document.getElementById('pg-profile');
-    if (page && !page.dataset.mortaliveV45Observer) {
-      page.dataset.mortaliveV45Observer = '1';
-      new MutationObserver(ensureDirectHandlers).observe(page, {childList:true, subtree:true});
-    }
-  };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once:true});
-  else boot();
-})();
-
 // ── Final profile action binding ─────────────────────────────────────────────
 // Direct target handlers plus a capture fallback keep the visible profile
 // actions functional even when ancestor/profile-menu listeners intercept clicks.
