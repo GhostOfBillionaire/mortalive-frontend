@@ -7020,6 +7020,16 @@ body.mortalive-app-topbar-visible #pg-messages.active {
   .profile-post-photo-btn,.profile-post-submit{min-height:38px}
 }
 </style>
+
+<style id="mortalive-v104-profile-hide-composer-phone">
+/* V104 — Hide the profile post composer on phones only.
+   Desktop/tablet layout remains unchanged. */
+@media (max-width: 720px) {
+  #pg-profile #profile-post-composer {
+    display: none !important;
+  }
+}
+</style>
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -8400,7 +8410,7 @@ body.mortalive-app-topbar-visible #pg-messages.active {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260823-v103-profile-composer-layout"></script>
+<script src="app.js?v=20260824-v104-profile-hide-phone-composer"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
