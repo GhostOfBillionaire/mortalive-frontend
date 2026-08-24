@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-24-v107-full-preserved-poll-duration-vote-fix'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-24-v108-poll-direct-persist'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -6383,75 +6383,99 @@ async function submitPollVote(postId, optionId) {
     return;
   }
 
-  const commitResult = (data) => {
-    const result = Array.isArray(data) ? data[0] : data;
-    _feedPollVoteCache.set(postId, result?.option_id || optionId);
-    const counts = new Map();
-    (result?.counts || []).forEach((row) => counts.set(row.option_id, Number(row.vote_count) || 0));
-    if (counts.size) _feedPollCountsCache.set(postId, counts);
-    renderFeedPosts();
-    toast('Vote recorded', '✅');
-  };
-
-  try {
-    const { data, error } = await sb.rpc('submit_poll_vote_v2', {
-      p_post_id: postId,
-      p_option_id: optionId
-    });
-    if (!error) {
-      commitResult(data);
-      return;
-    }
-    console.warn('[Poll] submit_poll_vote_v2 failed; trying legacy RPC:', error.message);
-  } catch (e) {
-    console.warn('[Poll] submit_poll_vote_v2 unavailable; trying legacy RPC:', e?.message || e);
-  }
-
-  try {
-    const { data, error } = await sb.rpc('submit_poll_vote', {
-      p_post_id: postId,
-      p_option_id: optionId
-    });
-    if (!error) {
-      commitResult(data);
-      return;
-    }
-    console.warn('[Poll] submit_poll_vote failed; using direct insert fallback:', error.message);
-  } catch (e) {
-    console.warn('[Poll] submit_poll_vote unavailable; using direct insert fallback:', e?.message || e);
-  }
+  // V108: persist the vote directly first. This is the authoritative path and
+  // does not depend on a particular RPC return shape. A security-definer RPC
+  // remains available as the compatibility path for deployments with stricter
+  // table RLS or an older database migration.
+  let persisted = false;
+  let rpcResult = null;
+  let lastError = null;
 
   try {
     const { error: insertError } = await sb.from('post_poll_votes').insert({
       post_id: postId,
       user_id: S.userId,
-      option_id: optionId
+      option_id: String(optionId)
     });
-
-    if (insertError) {
+    if (!insertError) {
+      persisted = true;
+    } else {
       const message = String(insertError.message || '').toLowerCase();
       if (message.includes('duplicate') || message.includes('already') || message.includes('unique')) {
-        _feedPollVoteCache.set(postId, optionId);
+        _feedPollVoteCache.set(postId, String(optionId));
         await hydratePollResults([postId]);
         renderFeedPosts();
         toast('You already voted on this poll.', 'ℹ️');
         return;
       }
-      throw insertError;
+      lastError = insertError;
+      console.warn('[Poll] direct vote insert unavailable; trying RPC:', insertError.message);
     }
-
-    _feedPollVoteCache.set(postId, optionId);
-    const counts = new Map(_feedPollCountsCache.get(postId) || []);
-    counts.set(optionId, (Number(counts.get(optionId)) || 0) + 1);
-    _feedPollCountsCache.set(postId, counts);
-    renderFeedPosts();
-    toast('Vote recorded', '✅');
   } catch (e) {
-    console.error('[Poll] vote persistence failed:', e);
-    toast(e?.message || 'Could not submit your poll vote.', '⚠️');
+    lastError = e;
+    console.warn('[Poll] direct vote insert unavailable; trying RPC:', e?.message || e);
   }
-}
 
+  if (!persisted) {
+    try {
+      const { data, error } = await sb.rpc('submit_poll_vote_v2', {
+        p_post_id: postId,
+        p_option_id: String(optionId)
+      });
+      if (!error) {
+        rpcResult = Array.isArray(data) ? data[0] : data;
+        persisted = true;
+      } else {
+        lastError = error;
+        console.warn('[Poll] submit_poll_vote_v2 failed; trying legacy RPC:', error.message);
+      }
+    } catch (e) {
+      lastError = e;
+      console.warn('[Poll] submit_poll_vote_v2 unavailable; trying legacy RPC:', e?.message || e);
+    }
+  }
+
+  if (!persisted) {
+    try {
+      const { data, error } = await sb.rpc('submit_poll_vote', {
+        p_post_id: postId,
+        p_option_id: String(optionId)
+      });
+      if (!error) {
+        rpcResult = Array.isArray(data) ? data[0] : data;
+        persisted = true;
+      } else {
+        lastError = error;
+        console.warn('[Poll] submit_poll_vote failed:', error.message);
+      }
+    } catch (e) {
+      lastError = e;
+      console.warn('[Poll] submit_poll_vote unavailable:', e?.message || e);
+    }
+  }
+
+  if (!persisted) {
+    const message = lastError?.message || 'Could not submit your poll vote.';
+    toast(message, '⚠️');
+    return;
+  }
+
+  _feedPollVoteCache.set(postId, String(rpcResult?.option_id || optionId));
+
+  if (Array.isArray(rpcResult?.counts)) {
+    const counts = new Map();
+    rpcResult.counts.forEach((row) => counts.set(String(row.option_id), Number(row.vote_count) || 0));
+    _feedPollCountsCache.set(postId, counts);
+  } else {
+    // Re-read the durable data. The results RPC is security-definer and can
+    // aggregate all votes even when the table itself only exposes the user's
+    // own row through RLS.
+    await hydratePollResults([postId]);
+  }
+
+  renderFeedPosts();
+  toast('Vote recorded', '✅');
+}
 async function submitQnaResponse(postId, optionId) {
   if (S.isGuest || !S.userId || !sb) { toast('Sign in to answer', '🔒'); return; }
   if (!postId || !optionId) return;
