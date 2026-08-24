@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-24-v106-feed-votes-views'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-24-v107-full-preserved-poll-duration-vote-fix'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -4053,6 +4053,8 @@ let _feedQnaResponseCache = new Map();
 let _feedQnaCorrectCache = new Map();
 let _feedPollVoteCache = new Map();
 let _feedPollCountsCache = new Map();
+// V107: explicit poll duration state; default remains one day.
+let _feedPollDurationHours = 24;
 let _feedComposerMenuOpen = false;
 
 function getFeedComposerKind() {
@@ -4148,7 +4150,15 @@ function syncFeedComposerTypeUI() {
     addBtn.disabled = count >= FEED_COMPOSER_MAX_OPTIONS;
     addBtn.textContent = count >= FEED_COMPOSER_MAX_OPTIONS ? 'Maximum 6 options' : '+ Add option';
   }
-  if (durationRow) durationRow.style.display = kind === 'poll' ? 'flex' : 'none';
+  if (durationRow) {
+    durationRow.style.display = kind === 'poll' ? 'flex' : 'none';
+    durationRow.querySelectorAll('.poll-duration-btn[data-hours]').forEach((btn) => {
+      const hours = Number(btn.dataset.hours);
+      const selected = hours === _feedPollDurationHours;
+      btn.classList.toggle('active', selected);
+      btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    });
+  }
 }
 
 function setFeedComposerKind(kind = 'text') {
@@ -6292,91 +6302,153 @@ async function hydratePollResults(postIds = []) {
   if (S.isGuest || !S.userId || !sb) return;
   const ids = Array.from(new Set((postIds || []).filter(Boolean)));
   if (!ids.length) return;
-  try {
-    const { data, error } = await sb.rpc('get_poll_results', { p_post_ids: ids });
-    if (error) throw error;
-    ids.forEach(id => { _feedPollVoteCache.delete(id); _feedPollCountsCache.delete(id); });
+
+  const applyRows = (rows) => {
+    ids.forEach((id) => {
+      _feedPollVoteCache.delete(id);
+      _feedPollCountsCache.delete(id);
+    });
     const grouped = new Map();
-    (data || []).forEach(row => {
+    (rows || []).forEach((row) => {
       const postId = row?.post_id;
       if (!postId) return;
       if (!grouped.has(postId)) grouped.set(postId, new Map());
-      grouped.get(postId).set(row.option_id, Number(row.vote_count) || 0);
+      const counts = grouped.get(postId);
+      if (row.option_id) counts.set(row.option_id, Number(row.vote_count) || 0);
       if (row.user_option_id) _feedPollVoteCache.set(postId, row.user_option_id);
     });
     grouped.forEach((counts, postId) => _feedPollCountsCache.set(postId, counts));
-    ids.forEach(id => { if (!_feedPollCountsCache.has(id)) _feedPollCountsCache.set(id, new Map()); });
-  } catch (e) {
-    // Direct-table compatibility path for deployments where the aggregate RPC
-    // has not been installed yet. Counts remain anonymous; only the caller's
-    // own row is read through RLS.
-    try {
-      const { data, error } = await sb
-        .from('post_poll_votes')
-        .select('post_id,option_id,user_id')
-        .in('post_id', ids);
-      if (error) throw error;
-      ids.forEach(id => { _feedPollVoteCache.delete(id); _feedPollCountsCache.delete(id); });
-      const grouped = new Map();
-      (data || []).forEach(row => {
-        if (!grouped.has(row.post_id)) grouped.set(row.post_id, new Map());
-        const counts = grouped.get(row.post_id);
-        counts.set(row.option_id, (counts.get(row.option_id) || 0) + 1);
-        if (row.user_id === S.userId) _feedPollVoteCache.set(row.post_id, row.option_id);
-      });
-      grouped.forEach((counts, postId) => _feedPollCountsCache.set(postId, counts));
-      ids.forEach(id => { if (!_feedPollCountsCache.has(id)) _feedPollCountsCache.set(id, new Map()); });
-    } catch (fallbackError) {
-      console.warn('[Poll] results hydration warning:', fallbackError?.message || e?.message || e);
-      ids.forEach(id => {
-        if (!_feedPollCountsCache.has(id)) _feedPollCountsCache.set(id, new Map());
-      });
+    ids.forEach((id) => {
+      if (!_feedPollCountsCache.has(id)) _feedPollCountsCache.set(id, new Map());
+    });
+  };
+
+  try {
+    const { data, error } = await sb.rpc('get_poll_results_v2', { p_post_ids: ids });
+    if (!error) {
+      applyRows(data || []);
+      return;
     }
+    console.warn('[Poll] get_poll_results_v2 failed; trying legacy RPC:', error.message);
+  } catch (e) {
+    console.warn('[Poll] get_poll_results_v2 unavailable; trying legacy RPC:', e?.message || e);
+  }
+
+  try {
+    const { data, error } = await sb.rpc('get_poll_results', { p_post_ids: ids });
+    if (!error) {
+      applyRows(data || []);
+      return;
+    }
+    console.warn('[Poll] get_poll_results failed; using direct table fallback:', error.message);
+  } catch (e) {
+    console.warn('[Poll] get_poll_results unavailable; using direct table fallback:', e?.message || e);
+  }
+
+  try {
+    const { data, error } = await sb
+      .from('post_poll_votes')
+      .select('post_id,option_id,user_id')
+      .in('post_id', ids);
+    if (error) throw error;
+
+    const grouped = new Map();
+    ids.forEach((id) => {
+      _feedPollVoteCache.delete(id);
+      _feedPollCountsCache.delete(id);
+    });
+    (data || []).forEach((row) => {
+      if (!grouped.has(row.post_id)) grouped.set(row.post_id, new Map());
+      const counts = grouped.get(row.post_id);
+      counts.set(row.option_id, (counts.get(row.option_id) || 0) + 1);
+      if (row.user_id === S.userId) _feedPollVoteCache.set(row.post_id, row.option_id);
+    });
+    grouped.forEach((counts, postId) => _feedPollCountsCache.set(postId, counts));
+    ids.forEach((id) => {
+      if (!_feedPollCountsCache.has(id)) _feedPollCountsCache.set(id, new Map());
+    });
+  } catch (fallbackError) {
+    console.warn('[Poll] results hydration warning:', fallbackError?.message || fallbackError);
+    ids.forEach((id) => {
+      if (!_feedPollCountsCache.has(id)) _feedPollCountsCache.set(id, new Map());
+    });
   }
 }
 
 async function submitPollVote(postId, optionId) {
   if (S.isGuest || !S.userId || !sb) { toast('Sign in to vote', '🔒'); return; }
   if (!postId || !optionId) return;
-  if (_feedPollVoteCache.has(postId)) { toast('You already voted on this poll.', 'ℹ️'); return; }
+  if (_feedPollVoteCache.has(postId)) {
+    toast('You already voted on this poll.', 'ℹ️');
+    return;
+  }
+
+  const commitResult = (data) => {
+    const result = Array.isArray(data) ? data[0] : data;
+    _feedPollVoteCache.set(postId, result?.option_id || optionId);
+    const counts = new Map();
+    (result?.counts || []).forEach((row) => counts.set(row.option_id, Number(row.vote_count) || 0));
+    if (counts.size) _feedPollCountsCache.set(postId, counts);
+    renderFeedPosts();
+    toast('Vote recorded', '✅');
+  };
+
+  try {
+    const { data, error } = await sb.rpc('submit_poll_vote_v2', {
+      p_post_id: postId,
+      p_option_id: optionId
+    });
+    if (!error) {
+      commitResult(data);
+      return;
+    }
+    console.warn('[Poll] submit_poll_vote_v2 failed; trying legacy RPC:', error.message);
+  } catch (e) {
+    console.warn('[Poll] submit_poll_vote_v2 unavailable; trying legacy RPC:', e?.message || e);
+  }
+
   try {
     const { data, error } = await sb.rpc('submit_poll_vote', {
       p_post_id: postId,
       p_option_id: optionId
     });
-    if (error) throw error;
-    const result = Array.isArray(data) ? data[0] : data;
-    _feedPollVoteCache.set(postId, result?.option_id || optionId);
-    const counts = new Map();
-    (result?.counts || []).forEach(row => counts.set(row.option_id, Number(row.vote_count) || 0));
-    if (counts.size) _feedPollCountsCache.set(postId, counts);
-    renderFeedPosts();
-    toast('Vote recorded', '✅');
+    if (!error) {
+      commitResult(data);
+      return;
+    }
+    console.warn('[Poll] submit_poll_vote failed; using direct insert fallback:', error.message);
   } catch (e) {
-    // V106 compatibility path: directly insert into the poll-vote table when
-    // the RPC is absent or temporarily unavailable.
-    try {
-      const { error: insertError } = await sb.from('post_poll_votes').insert({
-        post_id: postId,
-        user_id: S.userId,
-        option_id: optionId
-      });
-      if (insertError) throw insertError;
-      _feedPollVoteCache.set(postId, optionId);
-      await hydratePollResults([postId]);
-      renderFeedPosts();
-      toast('Vote recorded', '✅');
-    } catch (fallbackError) {
-      const message = fallbackError?.message || e?.message || 'Could not submit your poll vote.';
-      if (String(message).toLowerCase().includes('duplicate') || String(message).toLowerCase().includes('already')) {
+    console.warn('[Poll] submit_poll_vote unavailable; using direct insert fallback:', e?.message || e);
+  }
+
+  try {
+    const { error: insertError } = await sb.from('post_poll_votes').insert({
+      post_id: postId,
+      user_id: S.userId,
+      option_id: optionId
+    });
+
+    if (insertError) {
+      const message = String(insertError.message || '').toLowerCase();
+      if (message.includes('duplicate') || message.includes('already') || message.includes('unique')) {
         _feedPollVoteCache.set(postId, optionId);
         await hydratePollResults([postId]);
         renderFeedPosts();
         toast('You already voted on this poll.', 'ℹ️');
         return;
       }
-      toast(message, '⚠️');
+      throw insertError;
     }
+
+    _feedPollVoteCache.set(postId, optionId);
+    const counts = new Map(_feedPollCountsCache.get(postId) || []);
+    counts.set(optionId, (Number(counts.get(optionId)) || 0) + 1);
+    _feedPollCountsCache.set(postId, counts);
+    renderFeedPosts();
+    toast('Vote recorded', '✅');
+  } catch (e) {
+    console.error('[Poll] vote persistence failed:', e);
+    toast(e?.message || 'Could not submit your poll vote.', '⚠️');
   }
 }
 
@@ -6433,19 +6505,24 @@ function renderStructuredFeedPost(post) {
     const counts = _feedPollCountsCache.get(post.id) || new Map();
     const totalVotes = Array.from(counts.values()).reduce((sum, value) => sum + (Number(value) || 0), 0);
     const myVote = _feedPollVoteCache.get(post.id) || null;
+    const expiresAt = meta?.expires_at ? Date.parse(meta.expires_at) : NaN;
+    const expired = Number.isFinite(expiresAt) && Date.now() >= expiresAt;
+    const expirationLabel = Number.isFinite(expiresAt)
+      ? (expired ? 'Poll ended' : `Ends ${new Date(expiresAt).toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })}`)
+      : '';
     return `<div class="feed-structured-post" data-structured-kind="poll" data-structured-mode="mcq">
-      <div class="feed-structured-title"><span>${icon}</span><span>${label}</span></div>
+      <div class="feed-structured-title"><span>${icon}</span><span>${label}</span>${expirationLabel ? `<span class="feed-structured-duration">${sanitizeHTML(expirationLabel)}</span>` : ''}</div>
       <div class="feed-structured-question">${renderHashtagRichText(post.content || '')}</div>
       <div class="feed-structured-options">${options.map((option) => {
         const optionId = String(option?.id || '');
         const count = Number(counts.get(optionId) || 0);
         const pct = totalVotes ? Math.round((count / totalVotes) * 100) : 0;
         const selected = myVote === optionId;
-        const disabled = myVote || post.user_id === S.userId ? ' disabled' : '';
+        const disabled = (myVote || post.user_id === S.userId || expired) ? ' disabled' : '';;
         return `<button type="button" class="feed-structured-option${selected ? ' qna-selected' : ''}" data-structured-kind="poll" data-structured-option="${sanitizeHTML(optionId)}" data-post-id="${sanitizeHTML(post.id)}"${disabled}>`+
           `<span>${sanitizeHTML(option?.label || '')}</span><span class="feed-structured-option-result">${totalVotes ? `${pct}%` : '›'}</span></button>`;
       }).join('')}</div>
-      <div class="feed-structured-open-note">${totalVotes} vote${totalVotes === 1 ? '' : 's'}${myVote ? ' · You voted' : ''}</div>
+      <div class="feed-structured-open-note">${totalVotes} vote${totalVotes === 1 ? '' : 's'}${myVote ? ' · You voted' : ''}${expired ? ' · Voting closed' : ''}</div>
     </div>`;
   }
 
@@ -6955,6 +7032,13 @@ async function submitFeedTextPost() {
         mode: kind === 'qna' ? (_feedQnaChoicesEnabled ? 'mcq' : 'open') : 'mcq',
         options: structured.options
       };
+      if (kind === 'poll') {
+        const durationHours = [24, 48, 168].includes(Number(_feedPollDurationHours))
+          ? Number(_feedPollDurationHours)
+          : 24;
+        payload.post_meta.duration_hours = durationHours;
+        payload.post_meta.expires_at = new Date(Date.now() + durationHours * 60 * 60 * 1000).toISOString();
+      }
     }
 
     const { data: createdPost, error } = await sb.from('posts').insert(payload).select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta').single();
@@ -6974,6 +7058,7 @@ async function submitFeedTextPost() {
     _feedComposerKind = 'text';
     _feedQnaChoicesEnabled = false;
     _feedQnaCorrectOptionId = null;
+    _feedPollDurationHours = 24;
     _feedComposerMenuOpen = false;
     resetFeedComposerOptions();
     clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
@@ -7268,6 +7353,17 @@ function initFeedPage() {
   $('poll-add-option')?.addEventListener('click', (event) => {
     event.preventDefault();
     addFeedComposerOption();
+  });
+
+  // V107: poll duration selector.
+  $('poll-duration-row')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('.poll-duration-btn[data-hours]');
+    if (!btn) return;
+    const hours = Number(btn.dataset.hours);
+    if (![24, 48, 168].includes(hours)) return;
+    _feedPollDurationHours = hours;
+    syncFeedComposerTypeUI();
+    syncFeedComposer();
   });
   $('qna-choice-toggle')?.addEventListener('click', (event) => {
     event.preventDefault();
