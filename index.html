@@ -1,3 +1,4 @@
+<!-- V107 FULL PRESERVED: poll vote/duration patch merged on top of V106 feed/views baseline -->
 <!DOCTYPE html>
 <!-- Mortalive v19 — runtime configuration centralized in backend; Section 1 optimization pass applied. -->
 <html lang="en">
@@ -7070,6 +7071,11 @@ body.mortalive-app-topbar-visible #pg-messages.active {
   }
 }
 </style>
+<style id="mortalive-v107-poll-duration-preserved">
+/* V107: visual state for the interactive poll duration selector. */
+#pg-feed .poll-duration-btn[aria-pressed="true"]{background:var(--primary-alpha);border-color:rgba(26,110,245,.30);color:var(--primary);}
+#pg-feed .feed-structured-duration{margin-left:auto;font-size:10px;font-weight:700;color:var(--on-surface-3);white-space:nowrap;}
+</style>
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -7775,9 +7781,9 @@ body.mortalive-app-topbar-visible #pg-messages.active {
 <div class="sidebar-divider" style="margin:4px 0;"></div>
 <div style="font-size:11.5px;font-weight:700;color:var(--on-surface-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">Poll duration</div>
 <div class="poll-duration-row" id="poll-duration-row">
-<button class="poll-duration-btn active" data-hours="24">1 day</button>
-<button class="poll-duration-btn" data-hours="48">2 days</button>
-<button class="poll-duration-btn" data-hours="168">1 week</button>
+<button type="button" class="poll-duration-btn active" data-hours="24" aria-pressed="true">1 day</button>
+<button type="button" class="poll-duration-btn" data-hours="48" aria-pressed="false">2 days</button>
+<button type="button" class="poll-duration-btn" data-hours="168" aria-pressed="false">1 week</button>
 </div>
 </div>
 <div class="compose-toolbar">
@@ -8450,7 +8456,7 @@ body.mortalive-app-topbar-visible #pg-messages.active {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260824-v106-feed-votes-views"></script>
+<script src="app.js?v=20260824-v107-full-preserved-poll-duration-vote-fix"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
