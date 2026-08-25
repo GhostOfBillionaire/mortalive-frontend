@@ -7077,7 +7077,7 @@ body.mortalive-app-topbar-visible #pg-messages.active {
 #pg-feed .feed-structured-duration{margin-left:auto;font-size:10px;font-weight:700;color:var(--on-surface-3);white-space:nowrap;}
 </style>
 
-<style id="mortalive-v111-profile-structured-polls">
+<style id="mortalive-v112-profile-stream-composer-profile-structured-polls">
 /* V110: use the Feed poll visual system inside profile cards too. */
 #pg-profile .feed-structured-post{
   margin-top:10px;
@@ -7246,6 +7246,48 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 @media(max-width:720px){#pg-feed .compose-type-switch{gap:3px;} #pg-feed .compose-type-switch .compose-type-btn{padding:7px 8px;font-size:11.5px;} #pg-feed .compose-type-separator{font-size:11px;}}
 </style>
 <!-- Mortalive V111 safe cleanup: orphaned styles moved into head; no behavior removed. -->
+
+<style id="mortalive-v112-profile-composer-layout">
+/* V112: profile Posts is one vertical mixed stream; Photos stays grid-only. */
+#pg-profile .profile-post-strip{
+  display:grid;
+  grid-auto-flow:row;
+  grid-template-columns:minmax(0,1fr);
+  grid-auto-rows:auto;
+  gap:14px;
+  overflow:visible;
+  padding:0 18px 18px;
+  scroll-snap-type:none;
+  touch-action:auto;
+}
+#pg-profile .profile-post-strip.expanded{grid-template-columns:minmax(0,1fr);}
+#pg-profile .profile-post-card{
+  width:100%;
+  min-height:0;
+  aspect-ratio:auto;
+  scroll-snap-align:none;
+}
+#pg-profile .profile-post-body{min-width:0;}
+#pg-profile .profile-post-media{width:100%;max-height:560px;object-fit:cover;border-radius:14px;display:block;}
+#pg-profile .profile-post-photo-wrap{overflow:hidden;border-radius:14px;}
+#pg-profile .profile-gallery{display:grid;}
+#pg-profile .profile-compose-type-switch{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;}
+#pg-profile .profile-compose-type-btn{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 11px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--on-surface-2);font-size:11px;font-weight:800;cursor:pointer;}
+#pg-profile .profile-compose-type-btn.active{background:var(--primary-alpha);border-color:rgba(26,110,245,.28);color:var(--primary);}
+#pg-profile .profile-poll-builder{margin:8px 0;padding:10px;border-radius:14px;background:#fff;border:1px solid var(--border);}
+#pg-profile .profile-poll-duration-row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;}
+#pg-profile .profile-poll-duration-btn{padding:7px 10px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--on-surface-2);font-size:10.5px;font-weight:800;cursor:pointer;}
+#pg-profile .profile-poll-duration-btn.active{background:var(--primary-alpha);border-color:rgba(26,110,245,.24);color:var(--primary);}
+#pg-profile .profile-poll-option-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:7px;}
+#pg-profile .profile-poll-option-input{width:100%;padding:8px 10px;border:1px solid var(--border-strong);border-radius:10px;font:inherit;font-size:11px;outline:none;background:#fff;}
+#pg-profile .profile-qna-correct-wrap{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;color:var(--on-surface-3);white-space:nowrap;}
+#pg-profile .profile-poll-remove-btn{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--surface-2);color:var(--on-surface-3);cursor:pointer;}
+#pg-profile .profile-stats-panel .profile-talk-stats-host-section{margin-top:0;}
+@media(max-width:720px){
+  #pg-profile .profile-post-strip{grid-template-columns:minmax(0,1fr);padding-inline:12px;}
+}
+</style>
+
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -8364,6 +8406,11 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
             </div>
             <div class="profile-poll-builder" id="profile-poll-builder" hidden>
               <div class="profile-poll-builder-head"><span id="profile-compose-mode-label">Text</span><button type="button" id="profile-poll-add-option" class="profile-poll-add-option">+ Add option</button></div>
+              <div class="profile-poll-duration-row" role="group" aria-label="Poll duration">
+                <button type="button" class="profile-poll-duration-btn active" data-profile-poll-duration="24" aria-pressed="true">1 day</button>
+                <button type="button" class="profile-poll-duration-btn" data-profile-poll-duration="48" aria-pressed="false">2 days</button>
+                <button type="button" class="profile-poll-duration-btn" data-profile-poll-duration="168" aria-pressed="false">1 week</button>
+              </div>
               <div id="profile-poll-options-list" class="profile-poll-options-list"></div>
             </div>
             <div class="profile-post-composer-actions">
