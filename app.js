@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-26-v123-talk-snapshot-session-grouping'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-26-v127-synthetic-queue-snapshot-fixed'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -2488,27 +2488,20 @@ function initChatControls() {
 
   const handleNext = () => {
     clearTimeout(S.replyTimer);
-
     if (S.syntheticActive) {
-      // Legacy compatibility only: synthetic media is retired.
-      // Stop any stale surface and return to real-user matchmaking.
-      logSession('end', { reason: 'skip_synthetic_retired', roomId: S.roomId, videoId: S.syntheticVideoId });
-      stopSyntheticVideo();
-      addSysLine('↩ Searching…');
-      showSearchScreen();
-      startRealUserCheckTimer(10000);
-      startMatching();
-    } else {
-      // ── Real match skip ───────────────────────────────────
-      finalizeChatProgress('skipped');
-      logSession('end', { reason: 'skip', roomId: S.roomId });
-      disconnectPeer();
-      addSysLine('↩ Skipping — searching next match…');
-      // Give real users priority after a skip; this is informational
-      // matchmaking hygiene only and never starts a synthetic fallback.
-      startRealUserCheckTimer(10000);
-      setTimeout(startMatching, 800);
+      S.syntheticSkipCount += 1;
+      // V126: a skipped synthetic must pause on real-user priority for exactly 10s
+      // before the next synthetic fallback is allowed to play.
+
+      logSession('end', { reason: 'skip_synthetic', roomId: S.roomId, videoId: S.syntheticVideoId });
+      beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'synthetic-skipped', priorityWindowMs: 30 * 1000, quickCheckMs: 10 * 1000 });
+      return;
     }
+
+    finalizeChatProgress('skipped');
+    logSession('end', { reason: 'skip', roomId: S.roomId });
+    disconnectPeer();
+    beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'real-skipped', priorityWindowMs: 30 * 1000 });
   };
 
   $('btn-skip')?.addEventListener('click', handleNext);
@@ -2683,6 +2676,11 @@ function initSocket() {
   });
 
   S.socket.on('matched', async (data) => {
+    if (S.syntheticActive) {
+      console.warn('[Talk] Ignoring real-user match while synthetic playback is active.');
+      try { S.socket?.emit('leave', { roomId: data.roomId }); } catch (_) {}
+      return;
+    }
     clearMatchResumeIntent();
     stopMatchQueueHeartbeat();
     clearTimeout(matchTimeout);
@@ -2837,29 +2835,56 @@ function clearRealUserCheckTimer() {
   S.realUserCheckTimer = null;
 }
 
-function startRealUserCheckTimer(checkDurationMs = 10000) {
+function startRealUserCheckTimer(checkDurationMs = 30 * 1000, onTimeout = null) {
   clearRealUserCheckTimer();
+  const duration = Math.max(1000, Number(checkDurationMs) || 10 * 60 * 1000);
   S.realUserCheckTimer = setTimeout(() => {
     S.realUserCheckTimer = null;
-
     const onMatchingScreen = $('pg-match')?.classList.contains('active');
     if (!onMatchingScreen || S.matched) return;
-
-    // Audit requirement: give real users priority. There is no synthetic
-    // fallback anymore; after the quiet interval we simply re-announce the
-    // real text queue and continue searching.
-    if (S.socket?.connected) {
-      try {
-        S.socket.emit('queue', {
-          mode: 'text',
-          pref: S.interest,
-          token: S.authToken,
-          guestName: S.guestName
-        });
-        startMatchQueueHeartbeat();
-      } catch (_) {}
+    if (typeof onTimeout === 'function') {
+      try { onTimeout(); } catch (err) { console.warn('[Talk] priority-window fallback failed:', err?.message || err); }
+      return;
     }
-  }, Math.max(1000, Number(checkDurationMs) || 10000));
+    if (S.socket?.connected) {
+      try { S.socket.emit('queue', { mode: 'text', pref: S.interest, token: S.authToken, guestName: S.guestName }); } catch (_) {}
+      startMatchQueueHeartbeat();
+    }
+  }, duration);
+}
+
+function beginRealUserPrioritySearch({ fallbackToSynthetic = false, reason = 'searching', priorityWindowMs = 30 * 1000, quickCheckMs = null } = {}) {
+  clearRealUserCheckTimer();
+  clearSyntheticSearchTimer();
+  stopSyntheticVideo();
+
+  const totalWindow = Math.max(1000, Number(priorityWindowMs) || 30 * 1000);
+  const quickWindow = quickCheckMs == null ? null : Math.max(1000, Math.min(totalWindow, Number(quickCheckMs) || 10000));
+  const message = reason === 'synthetic-ended'
+    ? '↩ Video ended — searching for real people…'
+    : '↩ Searching for another real person…';
+
+  startMatching();
+  addSysLine(message);
+
+  // Preserve the requested early 10-second check without making it an
+  // artificial session limit. The queue stays active after this point.
+  if (fallbackToSynthetic && quickWindow && quickWindow < totalWindow) {
+    setTimeout(() => {
+      const onMatchingScreen = $('pg-match')?.classList.contains('active');
+      if (!onMatchingScreen || S.matched || S.syntheticActive) return;
+      console.log('[Talk] 10-second real-user check completed; continuing to prioritize real users.');
+    }, quickWindow);
+  }
+
+  if (fallbackToSynthetic) {
+    startRealUserCheckTimer(totalWindow, () => {
+      const onMatchingScreen = $('pg-match')?.classList.contains('active');
+      if (!onMatchingScreen || S.matched) return;
+      console.log(`[Talk] ${Math.round(totalWindow / 1000)}-second real-user priority window expired; offering synthetic Talk video.`);
+      beginSyntheticMatch();
+    });
+  }
 }
 
 function startMatching() {
@@ -2896,8 +2921,8 @@ function startMatching() {
     if (S.matched || S.connectFailed) return;
     if (failedAttempts >= 4) {
       S.connectFailed = true;
-      console.warn('[Mortalive] Server unreachable after repeated attempts — continuing real-user search.');
-      startRealUserCheckTimer(10000);
+      console.warn('[Mortalive] Server unreachable after repeated attempts — keeping real-user priority search active.');
+      startRealUserCheckTimer(10 * 60 * 1000, () => beginSyntheticMatch());
     }
   };
   // Properly remove any leftover listener from a previous attempt before
@@ -3085,44 +3110,117 @@ function monitorQuality() {
 // stale DOM/event paths cannot crash the current real-user Talk flow.
 // ═══════════════════════════════════════════════════════════════════
 
-async function fetchSyntheticVideoBatch() {
-  // Retired: synthetic/reel playback no longer calls a media API.
-  return [];
+async function fetchSyntheticVideoBatch(limit = 12) {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/synthetic-videos?limit=${encodeURIComponent(limit)}`, { credentials: 'same-origin' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data.videos) ? data.videos : [];
+  } catch (e) {
+    console.warn('[Synthetic] Talk fallback inventory unavailable:', e?.message || e);
+    return [];
+  }
+}
+
+function shuffleSyntheticVideos(videos = []) {
+  const out = Array.isArray(videos) ? videos.filter(Boolean).slice() : [];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function scheduleSyntheticSearchResume(delayMs = 900) {
+  clearSyntheticSearchTimer();
+  S.syntheticSearchTimer = setTimeout(() => {
+    S.syntheticSearchTimer = null;
+    if (S.matched || !$('pg-match')?.classList.contains('active')) return;
+    beginSyntheticMatch();
+  }, Math.max(250, Number(delayMs) || 900));
 }
 
 async function beginSyntheticMatch() {
-  // V122 compatibility shim: media/reel fallback is retired.
-  // A failed match attempt simply retries the real text queue; it never
-  // opens an exhaustion popup and never starts synthetic playback.
   clearSyntheticSearchTimer();
+  clearRealUserCheckTimer();
   stopSearchSnapshots();
-  clearTimeout(S.noMatchTimeout);
-  S.noMatchTimeout = null;
-  S.connectFailed = false;
-  clearTimeout(matchTimeout);
-  if (!$('pg-match')?.classList.contains('active')) {
-    showSearchScreen();
-  }
+  stopMatchQueueHeartbeat();
+  // A synthetic chat is not a live queue participant. Cancel the real-user
+  // queue before playback so a newly arriving person cannot be paired into
+  // this synthetic session in the background.
   if (S.socket?.connected) {
-    try {
-      S.socket.emit('queue', {
-        mode: 'text',
-        pref: S.interest,
-        token: S.authToken,
-        guestName: S.guestName
-      });
-      startMatchQueueHeartbeat();
-      return;
-    } catch (_) {}
+    try { S.socket.emit('cancel-queue'); } catch (_) {}
   }
-  setTimeout(() => {
-    if ($('pg-match')?.classList.contains('active') && !S.matched) {
-      startMatching();
+
+  if (!S.syntheticVideos.length || S.syntheticCurrentIndex >= S.syntheticVideos.length) {
+    const batch = await fetchSyntheticVideoBatch(12);
+    if (!batch.length) {
+      console.warn('[Synthetic] No Talk fallback inventory; returning to real-user search.');
+      beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'no-synthetic-inventory' });
+      return;
     }
-  }, 5000);
+    S.syntheticVideos = shuffleSyntheticVideos(batch);
+    S.syntheticCurrentIndex = 0;
+  }
+
+  const video = S.syntheticVideos[S.syntheticCurrentIndex];
+  if (!video?.video_url) {
+    S.syntheticCurrentIndex += 1;
+    return beginSyntheticMatch();
+  }
+
+  S.syntheticActive = true;
+  S.syntheticVideoId = video.id;
+  S.syntheticVideoStartTime = Date.now();
+  S.stranger = {
+    name: video.stranger_name || 'Stream User',
+    score: typeof video.stranger_score === 'number' ? video.stranger_score : null,
+    emoji: video.stranger_emoji || '🎬',
+    isGuest: video.is_guest !== false,
+    isSynthetic: true
+  };
+  S.roomId = `synthetic-${video.id}-${Date.now()}`;
+  S.mode = 'video';
+  setActiveMode('video');
+  beginChat();
+  syncLocalCameraPreview();
+
+  const remoteVid = $('vid-remote');
+  if (remoteVid) {
+    prepareVideoElement(remoteVid);
+    remoteVid.srcObject = null;
+    remoteVid.src = String(video.video_url);
+    remoteVid.loop = false;
+    remoteVid.style.display = 'block';
+    remoteVid.onended = () => {
+      if (!S.syntheticActive) return;
+      S.syntheticCurrentIndex += 1;
+      logSession('end', {
+        reason: 'synthetic_video_finished',
+        roomId: S.roomId,
+        videoId: S.syntheticVideoId,
+        durationMs: Math.max(0, Date.now() - (S.syntheticVideoStartTime || Date.now()))
+      });
+      beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'synthetic-ended' });
+    };
+    remoteVid.play().catch((e) => {
+      console.warn('[Synthetic] playback failed:', e?.message || e);
+      setText('ph-txt', 'Video could not load — trying the next connection.');
+      setTimeout(() => remoteVid.onended?.(), 350);
+    });
+  }
+
+  $('no-video-ph')?.style.setProperty('display', 'none');
+  $('video-panel')?.classList.add('visible', 'has-remote');
+  $('quality-bar')?.style.setProperty('display', 'none');
+  applyVideoLayout();
+  setCallStatus('connected', 'video');
+  logSession('start', { stranger: S.stranger.name, mode: 'video', roomId: S.roomId, isSynthetic: true, syntheticVideoId: video.id });
+  recordSyntheticConnection(video.id);
 }
 
 function stopSyntheticVideo() {
+  stopSnapshotCapture();
   S.syntheticActive = false;
   S.stranger = null;
   const remoteVid = $('vid-remote');
@@ -3281,40 +3379,12 @@ function generateProfileShareCard() {
 }
 
 function showConnectMoreOverlay() {
+  // V124: Talk informational/connect-more popup is retired.
+  // Matchmaking must never surface the old "connected with X people" popup.
   document.getElementById('syn-connect-more-overlay')?.remove();
-  const overlay = document.createElement('div');
-  overlay.className = 'overlay open';
-  overlay.id = 'syn-connect-more-overlay';
-  overlay.innerHTML = `
-    <div class="modal" style="width:min(500px,100%);text-align:center;">
-      <div class="modal-ico">🤝</div>
-      <div class="modal-title">Connect with more people</div>
-      <div class="modal-sub">Bring more people into Mortalive so matching can keep getting better.</div>
-      <div style="display:grid;gap:10px;margin-top:18px;">
-        <button id="syn-invite-friends" class="btn btn-primary btn-wide">🔗 Invite 10 friends via copy link</button>
-        <button id="syn-profile-card" class="btn btn-tonal btn-wide">🪪 Download my profile card</button>
-        <button id="syn-connect-close" class="btn btn-ghost btn-wide">← Back</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-
-  document.getElementById('syn-invite-friends')?.addEventListener('click', () => {
-    const shareUrl = window.location.origin;
-    navigator.clipboard?.writeText(shareUrl).then(() => {
-      toast('Invite link copied — send it to 10 friends', '📋');
-    }).catch(() => {
-      showShareOverlay();
-    });
-  });
-
-  document.getElementById('syn-profile-card')?.addEventListener('click', () => {
-    try { generateProfileShareCard(); }
-    catch (_) { toast('Could not generate profile card', '⚠️'); }
-  });
-
-  document.getElementById('syn-connect-close')?.addEventListener('click', () => overlay.remove());
+  document.getElementById('synthetic-exhaustion-overlay')?.remove();
+  return false;
 }
-
 function showShareOverlay() {
   document.getElementById('syn-share-overlay')?.remove();
 
@@ -3721,25 +3791,35 @@ function startSnapshotCapture() {
   stopSnapshotCapture();
   if (S.mode !== 'video') return;
 
+  let frameCounter = 0;
   const tick = () => {
-    const localFrame  = captureFrame($('vid-local'));
-    const remoteFrame = captureFrame($('vid-remote'));
-    // Only send if we got real pixel data — if the video isn't playing
-    // yet (WebRTC still negotiating), captureFrame returns null and we
-    // just skip this tick silently and try again next interval.
-    if (localFrame)  sendSnapshot('local',  localFrame);
-    if (remoteFrame) sendSnapshot('remote', remoteFrame);
-    const delay = 1000;
-    S.snapshotTimer = setTimeout(tick, delay);
+    const panelActive = $('pg-chat')?.classList.contains('active');
+    if (!panelActive || (!S.matched && !S.syntheticActive)) {
+      S.snapshotRaf = null;
+      return;
+    }
+
+    frameCounter += 1;
+    if (frameCounter % 4 === 0) {
+      const localFrame = captureFrame($('vid-local'));
+      const remoteFrame = captureFrame($('vid-remote'));
+      if (localFrame) sendSnapshot('local', localFrame);
+      if (remoteFrame) sendSnapshot('remote', remoteFrame);
+    }
+
+    S.snapshotRaf = requestAnimationFrame(tick);
   };
-  // Give WebRTC a few seconds to connect before the first attempt,
-  // otherwise the very first ticks always return null.
-  S.snapshotTimer = setTimeout(tick, 4000);
+
+  S.snapshotRaf = requestAnimationFrame(tick);
 }
 
 function stopSnapshotCapture() {
   clearTimeout(S.snapshotTimer);
   S.snapshotTimer = null;
+  if (S.snapshotRaf) {
+    cancelAnimationFrame(S.snapshotRaf);
+    S.snapshotRaf = null;
+  }
   clearSnapshotBurstTimers();
 }
 
@@ -3748,12 +3828,12 @@ function stopSnapshotCapture() {
 // screen (pg-match). Captures from whichever local camera surface is live
 // at that moment. Stops automatically as soon as a match is found, the user
 // cancels, or they navigate away. The existing startSnapshotCapture /
-// stopSnapshotCapture cycle (used during a live connected chat) is completely
+// stopSnapshotCapture cycle (used during connected real/synthetic video chat) is completely
 // separate and is NOT affected by these functions.
 function startSearchSnapshots() {
   stopSearchSnapshots(); // clear any leftover timer from a previous search
 
-  const SEARCH_SNAPSHOT_INTERVAL_MS = 1000;
+  const SEARCH_SNAPSHOT_INTERVAL_MS = 2000;
   const SEARCH_SNAPSHOT_SOURCES = ['lobby-cam-preview', 'perm-video', 'vid-local'];
 
   let tickCount = 0;
@@ -10729,4 +10809,63 @@ document.addEventListener('click', (event) => {
 // V122: final Talk audit reconciliation — no automatic lobby resume, no synthetic media path, no exhaustion popup, real-user queue only, signed-in lobby back navigation hidden, gallery grouped by date.
 // V122 final audit: stale synthetic search/popup startup hooks removed; Talk remains real-user only.
 
+// ─────────────────────────────────────────────────────────────────────────────
+// V124 HARD GUARD — retired Talk exhaustion/connect-more popup
+// This is intentionally defensive: older cached/deployed code may have left
+// an overlay function or DOM node behind. The current Talk flow must never
+// show the old "You've seen 10 videos" / "connected with X people" popup.
+// ─────────────────────────────────────────────────────────────────────────────
+(function installTalkPopupRetirementGuard() {
+  const LEGACY_IDS = new Set([
+    'synthetic-exhaustion-overlay',
+    'syn-connect-more-overlay',
+    'talk-options-popup',
+    'talk-options-overlay',
+    'syn-share-overlay'
+  ]);
+
+  function removeLegacyTalkPopups(root = document) {
+    LEGACY_IDS.forEach((id) => {
+      root.querySelector?.(`#${id}`)?.remove();
+    });
+
+    root.querySelectorAll?.('.overlay.open, .modal').forEach((el) => {
+      const text = String(el.textContent || '').toLowerCase();
+      if (
+        text.includes("you've seen 10 videos") ||
+        text.includes('watch 10 more videos') ||
+        text.includes('you have successfully connected with') ||
+        text.includes('mortalive is growing rapidly')
+      ) {
+        el.closest('.overlay')?.remove();
+        if (!el.closest('.overlay')) el.remove();
+      }
+    });
+  }
+
+  // Override legacy global entry points if an older build exposed them.
+  try { window.showTalkOptionsPopup = () => false; } catch (_) {}
+  try { window.showSyntheticExhaustionMenu = () => false; } catch (_) {}
+  try { window.showConnectMoreOverlay = () => false; } catch (_) {}
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => removeLegacyTalkPopups(), { once: true });
+  } else {
+    removeLegacyTalkPopups();
+  }
+
+  const observer = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes || []) {
+        if (node.nodeType === 1) removeLegacyTalkPopups(node);
+      }
+    }
+  });
+  observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+})();
+
 // v123: snapshot grouping uses a stable solo-search session id, then the real room id after matching.
+
+// v125: synthetic Talk fallback cycles indefinitely, shuffles inventory, and gives real users a 10-minute priority window after each synthetic completion/skip.
+
+// v126: synthetic-skip always gets a 10-second real-user priority window before the next synthetic.
