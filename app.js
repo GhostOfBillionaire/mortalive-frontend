@@ -2992,6 +2992,7 @@ async function beginSyntheticMatch() {
   S.syntheticActive = true;
   S.syntheticVideoId = video.id;
   S.syntheticVideoStartTime = Date.now();
+  recordSyntheticConnection(video.id);
 
   // Present them as a stranger — just like a real matched user.
   S.stranger = {
@@ -3072,26 +3073,143 @@ function stopSyntheticVideo() {
   S.syntheticVideoStartTime = null;
 }
 
+function getTalkConnectionCount() {
+  const progress = getCurrentProgress();
+  let syntheticConnections = 0;
+  try {
+    const raw = localStorage.getItem('mortalive_synthetic_connections_v1');
+    const ids = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(ids)) syntheticConnections = ids.length;
+  } catch (_) {}
+  return Math.max(0, toNum(progress.completions) + syntheticConnections);
+}
+
+function recordSyntheticConnection(videoId) {
+  if (!videoId) return;
+  try {
+    const raw = localStorage.getItem('mortalive_synthetic_connections_v1');
+    const ids = raw ? JSON.parse(raw) : [];
+    const list = Array.isArray(ids) ? ids.filter(Boolean) : [];
+    if (!list.includes(String(videoId))) {
+      list.push(String(videoId));
+      localStorage.setItem('mortalive_synthetic_connections_v1', JSON.stringify(list.slice(-500)));
+    }
+  } catch (_) {}
+}
+
+function generateProfileShareCard() {
+  const username = S.profileViewUserId
+    ? (S.profileViewData?.username || '')
+    : (S.accountData?.username || S.username || '');
+  const displayName = S.profileViewUserId
+    ? (S.profileViewData?.display_name || S.profileViewData?.full_name || username)
+    : (S.accountData?.display_name || S.accountData?.full_name || username);
+  const score = getProgressScore(getCurrentProgress());
+  const profileUrl = username ? `${window.location.origin}/@${encodeURIComponent(username)}` : window.location.origin;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 1200;
+  canvas.height = 630;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas is unavailable');
+
+  const bg = ctx.createLinearGradient(0, 0, 1200, 630);
+  bg.addColorStop(0, '#091225');
+  bg.addColorStop(1, '#182c52');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, 1200, 630);
+
+  ctx.fillStyle = 'rgba(84, 161, 255, .12)';
+  ctx.beginPath(); ctx.arc(1000, 90, 250, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(139, 92, 246, .12)';
+  ctx.beginPath(); ctx.arc(170, 570, 240, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 34px Inter, Arial, sans-serif';
+  ctx.fillText('Mortalive', 70, 80);
+
+  ctx.fillStyle = '#dbeafe';
+  ctx.font = '700 58px Inter, Arial, sans-serif';
+  ctx.fillText(displayName || 'Mortalive User', 70, 190);
+
+  ctx.fillStyle = '#8fb7ff';
+  ctx.font = '500 30px Inter, Arial, sans-serif';
+  ctx.fillText(`@${username || 'user'}`, 70, 238);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 74px Inter, Arial, sans-serif';
+  ctx.fillText(String(score), 70, 360);
+  ctx.fillStyle = '#b9c7dc';
+  ctx.font = '600 26px Inter, Arial, sans-serif';
+  ctx.fillText('crockroach Score', 75, 405);
+
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '500 25px Inter, Arial, sans-serif';
+  ctx.fillText('Connect with me on Mortalive', 70, 500);
+  ctx.fillStyle = '#7dd3fc';
+  ctx.font = '600 22px Inter, Arial, sans-serif';
+  ctx.fillText(profileUrl, 70, 545);
+
+  const link = document.createElement('a');
+  link.download = `mortalive-profile-${username || 'card'}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+  toast('Profile card downloaded', '🪪');
+}
+
+function showConnectMoreOverlay() {
+  document.getElementById('syn-connect-more-overlay')?.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay open';
+  overlay.id = 'syn-connect-more-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="width:min(500px,100%);text-align:center;">
+      <div class="modal-ico">🤝</div>
+      <div class="modal-title">Connect with more people</div>
+      <div class="modal-sub">Bring more people into Mortalive so matching can keep getting better.</div>
+      <div style="display:grid;gap:10px;margin-top:18px;">
+        <button id="syn-invite-friends" class="btn btn-primary btn-wide">🔗 Invite 10 friends via copy link</button>
+        <button id="syn-profile-card" class="btn btn-tonal btn-wide">🪪 Download my profile card</button>
+        <button id="syn-connect-close" class="btn btn-ghost btn-wide">← Back</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  document.getElementById('syn-invite-friends')?.addEventListener('click', () => {
+    const shareUrl = window.location.origin;
+    navigator.clipboard?.writeText(shareUrl).then(() => {
+      toast('Invite link copied — send it to 10 friends', '📋');
+    }).catch(() => {
+      showShareOverlay();
+    });
+  });
+
+  document.getElementById('syn-profile-card')?.addEventListener('click', () => {
+    try { generateProfileShareCard(); }
+    catch (_) { toast('Could not generate profile card', '⚠️'); }
+  });
+
+  document.getElementById('syn-connect-close')?.addEventListener('click', () => overlay.remove());
+}
+
 function showSyntheticExhaustionMenu() {
-  // Remove any existing instance first.
   document.getElementById('synthetic-exhaustion-overlay')?.remove();
 
+  const connectionCount = getTalkConnectionCount();
   const overlay = document.createElement('div');
   overlay.className = 'overlay open';
   overlay.id = 'synthetic-exhaustion-overlay';
 
   overlay.innerHTML = `
-    <div class="modal" style="width:min(480px,100%);text-align:center;">
-      <div class="modal-ico">🎬</div>
-      <div class="modal-title">You've seen ${SYNTHETIC_SKIP_LIMIT} videos</div>
+    <div class="modal" style="width:min(500px,100%);text-align:center;">
+      <div class="modal-ico">🤝</div>
+      <div class="modal-title">You have successfully connected with ${connectionCount} ${connectionCount === 1 ? 'person' : 'people'}</div>
       <div class="modal-sub">
-        Mortalive is still growing. While we build the community,
-        pick what you'd like to do next:
+        Mortalive is growing rapidly. To get better matching, pick what you'd like to do next:
       </div>
       <div style="display:grid;gap:10px;margin-top:18px;">
-        <button id="syn-btn-ai"    class="btn btn-primary btn-wide">💬 Chat with AI</button>
-        <button id="syn-btn-more"  class="btn btn-tonal   btn-wide">🎬 Watch 10 more videos</button>
-        <button id="syn-btn-share" class="btn btn-ghost   btn-wide">🔗 Invite friends to Mortalive</button>
+        <button id="syn-btn-ai" class="btn btn-primary btn-wide">🤖 Chat with our exclusive AI</button>
+        <button id="syn-btn-more" class="btn btn-tonal btn-wide">✨ Connect with more people</button>
       </div>
     </div>`;
 
@@ -3100,23 +3218,15 @@ function showSyntheticExhaustionMenu() {
   document.getElementById('syn-btn-ai')?.addEventListener('click', () => {
     overlay.remove();
     clearSyntheticSearchTimer();
-    startBotChat();
+    // The AI lives in the Messages experience; route there now.
+    showPage('pg-messages');
+    toast('AI chat is being added to Messages', '🤖');
   });
 
   document.getElementById('syn-btn-more')?.addEventListener('click', () => {
     overlay.remove();
     clearSyntheticSearchTimer();
-    // Reset skip count and force a fresh fetch on next call.
-    S.syntheticSkipCount   = 0;
-    S.syntheticCurrentIndex = 0;
-    S.syntheticVideos       = [];
-    beginSyntheticMatch();
-  });
-
-  document.getElementById('syn-btn-share')?.addEventListener('click', () => {
-    overlay.remove();
-    clearSyntheticSearchTimer();
-    showShareOverlay();
+    showConnectMoreOverlay();
   });
 }
 
