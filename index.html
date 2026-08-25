@@ -7245,9 +7245,9 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 
 @media(max-width:720px){#pg-feed .compose-type-switch{gap:3px;} #pg-feed .compose-type-switch .compose-type-btn{padding:7px 8px;font-size:11.5px;} #pg-feed .compose-type-separator{font-size:11px;}}
 </style>
-<!-- Mortalive V111 safe cleanup: orphaned styles moved into head; no behavior removed. -->
+<!-- Mortalive V113 profile sections: orphaned styles moved into head; no behavior removed. -->
 
-<style id="mortalive-v112-profile-composer-layout">
+<style id="mortalive-v113-profile-sections-layout">
 /* V112: profile Posts is one vertical mixed stream; Photos stays grid-only. */
 #pg-profile .profile-post-strip{
   display:grid;
@@ -7285,6 +7285,40 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 #pg-profile .profile-stats-panel .profile-talk-stats-host-section{margin-top:0;}
 @media(max-width:720px){
   #pg-profile .profile-post-strip{grid-template-columns:minmax(0,1fr);padding-inline:12px;}
+}
+</style>
+
+
+<style id="mortalive-v113-profile-sections-fix">
+/* V113 — Profile sections are strictly separated. */
+#pg-profile #profile-post-strip{
+  display:flex !important;
+  flex-direction:column !important;
+  flex-wrap:nowrap !important;
+  width:100% !important;
+  overflow-x:visible !important;
+  overflow-y:visible !important;
+  scroll-snap-type:none !important;
+  touch-action:auto !important;
+  gap:14px !important;
+  padding:0 18px 18px !important;
+}
+#pg-profile #profile-post-strip .profile-post-card{
+  width:100% !important;
+  max-width:none !important;
+  min-width:0 !important;
+  flex:0 0 auto !important;
+}
+#pg-profile #profile-thoughts-section .talk-pstats-card,
+#pg-profile #profile-thoughts-section #profile-talk-stats,
+#pg-profile #profile-gallery-section .talk-pstats-card,
+#pg-profile #profile-gallery-section #profile-talk-stats{
+  display:none !important;
+}
+#pg-profile #profile-stats-panel .talk-pstats-card{display:block !important;}
+#pg-profile #btn-profile-photo-upload.photo-compose-btn{display:none;}
+@media(max-width:720px){
+  #pg-profile #profile-post-strip{padding-inline:12px !important;}
 }
 </style>
 
@@ -8415,7 +8449,7 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
             </div>
             <div class="profile-post-composer-actions">
               <span id="profile-hashtag-status" class="compose-hashtag-status" aria-live="polite" style="display:none;"></span><span class="profile-post-char-count" id="profile-post-char-count">0 / 500</span>
-              <button class="profile-post-photo-btn photo-compose-btn" id="btn-profile-photo-upload" type="button">📷 Add photo</button>
+              <button class="profile-post-photo-btn photo-compose-btn" id="btn-profile-photo-upload" type="button" style="display:none">📷 Add photo</button>
               <input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
               <span class="profile-photo-name" id="profile-photo-name" aria-live="polite"></span>
               <div id="profile-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
