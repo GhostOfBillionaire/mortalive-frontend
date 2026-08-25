@@ -7607,10 +7607,25 @@ function formatPostTime(iso) {
   observer.observe(document.body, { childList: true, subtree: true });
 })();
 
+
+// V113 PROFILE SECTION SEPARATION / VERTICAL STREAM GUARD
+// Posts = mixed vertical stream; Photos = photos only; Talk Activity = Stats only.
+
 function renderProfilePosts(posts = _profilePosts) {
   const strip = $('profile-post-strip');
   const countEl = $('profile-post-count');
   if (!strip) return;
+
+  // V113: Posts is a single vertical chronological stream. Override any
+  // legacy horizontal-strip behavior that may have been bound earlier.
+  strip.classList.remove('expanded');
+  strip.style.display = 'flex';
+  strip.style.flexDirection = 'column';
+  strip.style.flexWrap = 'nowrap';
+  strip.style.overflowX = 'visible';
+  strip.style.overflowY = 'visible';
+  strip.style.scrollSnapType = 'none';
+  strip.style.touchAction = 'auto';
 
   // V112: Posts is the combined chronological stream for all non-reel posts:
   // text, photo, poll, and Q&A. The Photos tab remains media-only.
@@ -7692,6 +7707,32 @@ function renderProfilePosts(posts = _profilePosts) {
 
   refreshProfileTabCounts(posts);
 }
+function enforceProfileSectionSeparation() {
+  const postsPanel = $('profile-thoughts-section');
+  const photosPanel = $('profile-gallery-section');
+  const statsPanel = $('profile-stats-panel');
+
+  // Talk Activity belongs exclusively to Stats. Remove any stale/legacy
+  // injection that may have landed inside Posts or Photos.
+  [postsPanel, photosPanel].forEach(panel => {
+    panel?.querySelectorAll('.talk-pstats-card, #profile-talk-stats').forEach(el => el.remove());
+  });
+
+  // Keep the canonical Talk host inside Stats. If an older render moved it,
+  // move it back instead of leaving duplicate cards behind.
+  if (statsPanel) {
+    let talkHost = statsPanel.querySelector('#profile-talk-stats');
+    if (!talkHost) {
+      talkHost = document.createElement('div');
+      talkHost.id = 'profile-talk-stats';
+      const section = document.createElement('div');
+      section.className = 'profile-stats-section profile-talk-stats-host-section';
+      section.appendChild(talkHost);
+      statsPanel.appendChild(section);
+    }
+  }
+}
+
 function renderProfileGallery(posts = _profilePosts) {
   const gallery = $('profile-gallery');
   if (!gallery) return;
@@ -9930,9 +9971,11 @@ function renderProfileStatsPanel() {
       <div id="profile-talk-stats"></div>
     </div>`;
   if (typeof window.renderProfileTalkStats === 'function') window.renderProfileTalkStats();
+  enforceProfileSectionSeparation();
 }
 
 function initProfileTabs() {
+  enforceProfileSectionSeparation();
   const bar = $('profile-tabs-bar');
   const page = $('pg-profile');
   if (!bar || !page) return;
@@ -9981,6 +10024,7 @@ function refreshProfileTabCounts(posts = _profilePosts) {
 }
 
 function refreshProfileTabs(posts = _profilePosts) {
+  enforceProfileSectionSeparation();
   initProfileTabs();
   refreshProfileTabCounts(posts);
   renderProfileReels(posts);
