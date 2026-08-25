@@ -16,7 +16,7 @@ const SERVER_URL =
     : 'https://mortalive-server.onrender.com');
 
 console.log(`[Mortalive] ${BUILD_TAG} loaded`);
-// V122: Talk audit reconciled — real-user search only, no synthetic media fallback, no session cap.
+// V128: Talk state machine — real-user first → 30-second priority → synthetic fallback → indefinite cycle.
 
 console.log(`[Mortalive] SERVER_URL = ${SERVER_URL}`);
 console.log(`[Mortalive] Socket.io client ${typeof io === 'undefined' ? 'NOT LOADED ✗' : 'loaded ✓'}`);
@@ -2843,7 +2843,9 @@ function clearRealUserCheckTimer() {
 
 function startRealUserCheckTimer(checkDurationMs = 30 * 1000, onTimeout = null) {
   clearRealUserCheckTimer();
-  const duration = Math.max(1000, Number(checkDurationMs) || 10 * 60 * 1000);
+  // P0 FIX: Unified to 30 seconds to match the global policy everywhere else.
+  // The old 10-minute fallback contradicted the 30-second priority window.
+  const duration = Math.max(1000, Number(checkDurationMs) || 30 * 1000);
   S.realUserCheckTimer = setTimeout(() => {
     S.realUserCheckTimer = null;
     const onMatchingScreen = $('pg-match')?.classList.contains('active');
@@ -3118,9 +3120,11 @@ function monitorQuality() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// RETIRED MEDIA COMPATIBILITY
-// Synthetic video / reel playback is retired. These shims exist only so
-// stale DOM/event paths cannot crash the current real-user Talk flow.
+// SYNTHETIC VIDEO FALLBACK — ACTIVE
+// When no real user is found within the 30-second priority window,
+// Talk falls back to synthetic video clips. This is NOT a session cap.
+// User can cycle: real → synthetic → real → synthetic indefinitely.
+// Synthetic never auto-connects two users; real always has priority.
 // ═══════════════════════════════════════════════════════════════════
 
 async function fetchSyntheticVideoBatch(limit = 12) {
@@ -10823,11 +10827,10 @@ document.addEventListener('click', (event) => {
   }
 })();
 
-// V128: Talk state machine — real-user first → 30 s priority window → synthetic fallback → indefinite cycle.
+// V128: Talk state machine — real-user first → 30-second priority window → synthetic fallback → indefinite cycle.
 // No automatic lobby resume. No exhaustion popup. No session cap.
 // Synthetic is a fallback experience, not a session limit. Real users always have priority.
 // Search snapshots every 2 s (searchSessionId grouping). Connected snapshots every 4 frames (roomId grouping).
-// V122 final audit: stale synthetic search/popup startup hooks removed; Talk remains real-user only.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // V124 HARD GUARD — retired Talk exhaustion/connect-more popup
@@ -10886,6 +10889,6 @@ document.addEventListener('click', (event) => {
 
 // v123: snapshot grouping uses a stable solo-search session id, then the real room id after matching.
 
-// v125: synthetic Talk fallback cycles indefinitely, shuffles inventory, and gives real users a 10-minute priority window after each synthetic completion/skip.
+// v128: synthetic Talk fallback cycles indefinitely, shuffles inventory, and gives real users a 30-second priority window after each synthetic completion/skip.
 
 // v126: synthetic-skip always gets a 10-second real-user priority window before the next synthetic.
