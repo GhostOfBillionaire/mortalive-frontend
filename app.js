@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-25-v114-profile-composer-tabs-stats'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-25-v116-talk-final-options'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -16,6 +16,8 @@ const SERVER_URL =
     : 'https://mortalive-server.onrender.com');
 
 console.log(`[Mortalive] ${BUILD_TAG} loaded`);
+// V116: Talk exhaustion flow is the canonical connection-count/options flow.
+
 console.log(`[Mortalive] SERVER_URL = ${SERVER_URL}`);
 console.log(`[Mortalive] Socket.io client ${typeof io === 'undefined' ? 'NOT LOADED ✗' : 'loaded ✓'}`);
 
