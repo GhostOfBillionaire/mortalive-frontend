@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-25-v121-talk-manual-entry-snapshot-compat'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-26-v123-talk-snapshot-session-grouping'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -16,7 +16,7 @@ const SERVER_URL =
     : 'https://mortalive-server.onrender.com');
 
 console.log(`[Mortalive] ${BUILD_TAG} loaded`);
-// V121: Talk exhaustion popups are retired; connection count remains informational.
+// V122: Talk audit reconciled — real-user search only, no synthetic media fallback, no session cap.
 
 console.log(`[Mortalive] SERVER_URL = ${SERVER_URL}`);
 console.log(`[Mortalive] Socket.io client ${typeof io === 'undefined' ? 'NOT LOADED ✗' : 'loaded ✓'}`);
@@ -35,6 +35,10 @@ const S = {
   mode: 'video',
   interest: '',
   roomId: null,
+  // Stable identifier for one continuous solo searching phase.
+  // It lets the admin snapshot viewer group search frames together even
+  // before a real room exists. Once matched, snapshots switch to S.roomId.
+  searchSessionId: null,
   stranger: null,
   socket: null,
   pc: null,
@@ -49,6 +53,7 @@ const S = {
   pendingAction: null,
   replyTimer: null,
   noMatchTimeout: null,
+  realUserCheckTimer: null,
   matchQueueHeartbeat: null,
   // synthetic video fallback
   syntheticActive: false,
@@ -142,35 +147,10 @@ function showSearchScreen() {
   setText('match-title', 'Finding your match');
   const subReset = $('match-sub');
   if (subReset) subReset.innerHTML = 'Scanning <strong id="match-count">' + S.onlineCount.toLocaleString() + '</strong> people online right now.';
-  // Start continuous 1-per-2s snapshot capture while the user is on the
-  // search screen — covers both real-server queuing and synthetic search
-  // interstials. startSearchSnapshots() is safe to call repeatedly; it
-  // always clears the previous timer before starting a new one.
+  // Start continuous snapshot capture while the user is on the real
+  // matchmaking/search screen. startSearchSnapshots() safely restarts
+  // the current search capture timer.
   startSearchSnapshots();
-}
-
-function scheduleSyntheticSearchResume(delayMs = 1400) {
-  clearSyntheticSearchTimer();
-  showSearchScreen();
-
-  S.syntheticSearchTimer = setTimeout(() => {
-    S.syntheticSearchTimer = null;
-
-    const onMatchingScreen = $('pg-match')?.classList.contains('active');
-    if (S.matched || !onMatchingScreen) return;
-
-    // If the socket is still connected, keep the queue alive and then
-    // fall back to the next synthetic clip only after the search interstitial.
-    if (S.socket && S.socket.connected) {
-      clearTimeout(matchTimeout);
-      clearTimeout(S.noMatchTimeout);
-      beginSyntheticMatch();
-      return;
-    }
-
-    // If the socket dropped, restart the search cleanly.
-    startMatching();
-  }, Math.max(650, delayMs));
 }
 
 // AI bot responses used when user picks "Chat with AI" after exhausting videos
@@ -791,6 +771,14 @@ function showPage(id, options = {}) {
   window.scrollTo(0, 0);
   window.dispatchEvent(new CustomEvent('mortalive-auth-state'));
   if (id !== 'pg-profile') closeProgressSheet();
+
+  if (id === 'pg-lobby') {
+    const backBtn = $('pg-lobby')?.querySelector('.setup-back');
+    if (backBtn) {
+      backBtn.style.display = (!S.isGuest && !!S.authToken) ? 'none' : '';
+    }
+    if (typeof refreshLobbyStats === 'function') refreshLobbyStats();
+  }
 
   if (id === 'pg-profile') {
     const requestedUserId = options.profileUserId || null;
@@ -2502,25 +2490,23 @@ function initChatControls() {
     clearTimeout(S.replyTimer);
 
     if (S.syntheticActive) {
-      // ── Synthetic video skip ──────────────────────────────
-      S.syntheticSkipCount++;
-      console.log(`[Synthetic] Skip #${S.syntheticSkipCount}/${SYNTHETIC_SKIP_LIMIT}`);
-      logSession('end', { reason: 'skip_synthetic', roomId: S.roomId, videoId: S.syntheticVideoId });
+      // Legacy compatibility only: synthetic media is retired.
+      // Stop any stale surface and return to real-user matchmaking.
+      logSession('end', { reason: 'skip_synthetic_retired', roomId: S.roomId, videoId: S.syntheticVideoId });
       stopSyntheticVideo();
-
-      if (S.syntheticSkipCount >= SYNTHETIC_SKIP_LIMIT) {
-        showSyntheticExhaustionMenu();
-      } else {
-        S.syntheticCurrentIndex++;
-        addSysLine('↩ Searching…');
-        scheduleSyntheticSearchResume(1200);
-      }
+      addSysLine('↩ Searching…');
+      showSearchScreen();
+      startRealUserCheckTimer(10000);
+      startMatching();
     } else {
       // ── Real match skip ───────────────────────────────────
       finalizeChatProgress('skipped');
       logSession('end', { reason: 'skip', roomId: S.roomId });
       disconnectPeer();
       addSysLine('↩ Skipping — searching next match…');
+      // Give real users priority after a skip; this is informational
+      // matchmaking hygiene only and never starts a synthetic fallback.
+      startRealUserCheckTimer(10000);
       setTimeout(startMatching, 800);
     }
   };
@@ -2532,6 +2518,7 @@ function initChatControls() {
     clearMatchResumeIntent();
     stopMatchQueueHeartbeat();
     clearTimeout(S.replyTimer);
+    clearRealUserCheckTimer();
     clearSyntheticSearchTimer();
 
     if (S.syntheticActive) {
@@ -2634,6 +2621,7 @@ $('vc-fs')?.addEventListener('click', () => {
     stopMatchQueueHeartbeat();
     clearTimeout(matchTimeout);
     clearTimeout(S.noMatchTimeout);
+    clearRealUserCheckTimer();
     clearTimeout(talkOptionsPopupTimer);
     talkOptionsPopupTimer = null;
     stopSearchSnapshots(); // stop the 2s search loop before leaving pg-match
@@ -2699,12 +2687,15 @@ function initSocket() {
     stopMatchQueueHeartbeat();
     clearTimeout(matchTimeout);
     clearTimeout(S.noMatchTimeout);
+    clearRealUserCheckTimer();
     clearTimeout(talkOptionsPopupTimer);
     talkOptionsPopupTimer = null;
     clearSyntheticSearchTimer;
     stopSearchSnapshots(); // stop the 2s search loop — connected chat takes over
     S.matched = true;
     S.roomId = data.roomId;
+    // From this point forward snapshots belong to the dual-user room.
+    S.searchSessionId = null;
     S.isInitiator = !!data.initiator;
     S.stranger = {
       name: (data.peer && data.peer.name) || 'Stranger',
@@ -2840,8 +2831,45 @@ function resumePendingMatchIntent() {
   return false;
 }
 
+
+function clearRealUserCheckTimer() {
+  clearTimeout(S.realUserCheckTimer);
+  S.realUserCheckTimer = null;
+}
+
+function startRealUserCheckTimer(checkDurationMs = 10000) {
+  clearRealUserCheckTimer();
+  S.realUserCheckTimer = setTimeout(() => {
+    S.realUserCheckTimer = null;
+
+    const onMatchingScreen = $('pg-match')?.classList.contains('active');
+    if (!onMatchingScreen || S.matched) return;
+
+    // Audit requirement: give real users priority. There is no synthetic
+    // fallback anymore; after the quiet interval we simply re-announce the
+    // real text queue and continue searching.
+    if (S.socket?.connected) {
+      try {
+        S.socket.emit('queue', {
+          mode: 'text',
+          pref: S.interest,
+          token: S.authToken,
+          guestName: S.guestName
+        });
+        startMatchQueueHeartbeat();
+      } catch (_) {}
+    }
+  }, Math.max(1000, Number(checkDurationMs) || 10000));
+}
+
 function startMatching() {
   // Explicit user action is the only way to enter matchmaking.
+  // Start a fresh solo-search session for snapshot grouping. Re-announcing
+  // an already-active search keeps the same group instead of splitting it.
+  const alreadySearching = $('pg-match')?.classList.contains('active') && !S.matched && S.searchSessionId;
+  if (!alreadySearching) {
+    S.searchSessionId = `search-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
   setMatchResumeIntent();
   clearSyntheticSearchTimer();
   showSearchScreen(); // also calls startSearchSnapshots() internally
@@ -2868,8 +2896,8 @@ function startMatching() {
     if (S.matched || S.connectFailed) return;
     if (failedAttempts >= 4) {
       S.connectFailed = true;
-      console.warn('[Mortalive] Server unreachable after repeated attempts — falling back to synthetic video.');
-      beginSyntheticMatch();
+      console.warn('[Mortalive] Server unreachable after repeated attempts — continuing real-user search.');
+      startRealUserCheckTimer(10000);
     }
   };
   // Properly remove any leftover listener from a previous attempt before
@@ -3052,11 +3080,9 @@ function monitorQuality() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SYNTHETIC VIDEO FALLBACK SYSTEM
-// Replaces the old demo mode entirely.
-// Fetches prerecorded videos from Supabase and plays them as if they
-// were real strangers. User can skip up to SYNTHETIC_SKIP_LIMIT times
-// before seeing the final options menu (AI chat / more videos / share).
+// RETIRED MEDIA COMPATIBILITY
+// Synthetic video / reel playback is retired. These shims exist only so
+// stale DOM/event paths cannot crash the current real-user Talk flow.
 // ═══════════════════════════════════════════════════════════════════
 
 async function fetchSyntheticVideoBatch() {
@@ -3065,7 +3091,7 @@ async function fetchSyntheticVideoBatch() {
 }
 
 async function beginSyntheticMatch() {
-  // V121 compatibility shim: media/reel fallback is retired.
+  // V122 compatibility shim: media/reel fallback is retired.
   // A failed match attempt simply retries the real text queue; it never
   // opens an exhaustion popup and never starts synthetic playback.
   clearSyntheticSearchTimer();
@@ -3287,52 +3313,6 @@ function showConnectMoreOverlay() {
   });
 
   document.getElementById('syn-connect-close')?.addEventListener('click', () => overlay.remove());
-}
-
-function showTalkOptionsPopup() {
-  document.getElementById('synthetic-exhaustion-overlay')?.remove();
-
-  const connectionCount = getTalkConnectionCount();
-  const isLoggedIn = !S.isGuest && !!S.userId;
-  const headline = isLoggedIn
-    ? `You have successfully connected with ${connectionCount} ${connectionCount === 1 ? 'person' : 'people'}`
-    : `You have connected with ${connectionCount} ${connectionCount === 1 ? 'person' : 'people'}`;
-
-  const overlay = document.createElement('div');
-  overlay.className = 'overlay open';
-  overlay.id = 'synthetic-exhaustion-overlay';
-  overlay.innerHTML = `
-    <div class="modal talk-options-modal" style="width:min(500px,100%);text-align:center;position:relative;">
-      <button id="syn-talk-close" type="button" aria-label="Close" title="Close"
-        style="position:absolute;top:10px;right:10px;width:36px;height:36px;border-radius:50%;border:1px solid var(--border-strong);background:var(--surface);color:var(--on-surface);font-size:22px;line-height:1;cursor:pointer;">×</button>
-      <div class="modal-ico">🤝</div>
-      <div class="modal-title">${headline}</div>
-      <div class="modal-sub">
-        Mortalive is growing rapidly. To get better matching, pick what you'd like to do next:
-      </div>
-      <div style="display:grid;gap:10px;margin-top:18px;">
-        <button id="syn-btn-ai" class="btn btn-primary btn-wide">🤖 Chat with our exclusive AI</button>
-        <button id="syn-btn-more" class="btn btn-tonal btn-wide">✨ Connect with more people</button>
-      </div>
-    </div>`;
-
-  document.body.appendChild(overlay);
-
-  document.getElementById('syn-talk-close')?.addEventListener('click', () => {
-    overlay.remove();
-  });
-
-  document.getElementById('syn-btn-ai')?.addEventListener('click', () => {
-    overlay.remove();
-    clearSyntheticSearchTimer();
-    showPage('pg-messages');
-    toast('AI chat is being added to Messages', '🤖');
-  });
-
-  document.getElementById('syn-btn-more')?.addEventListener('click', () => {
-    overlay.remove();
-    showConnectMoreOverlay();
-  });
 }
 
 function showShareOverlay() {
@@ -3633,6 +3613,7 @@ function disconnectPeer() {
   hideRemoteVideo('Waiting for video…');
   S.pendingCandidates = [];
   S.roomId = null;
+  S.searchSessionId = null;
   S.stranger = null;
   S.isInitiator = false;
   S.syntheticActive = false;
@@ -3682,10 +3663,16 @@ function captureFrame(videoEl) {
 function sendSnapshot(source, dataUrl) {
   if (!dataUrl || !SERVER_URL) return;
 
+  const snapshotRoomId =
+    S.roomId ||
+    S.searchSessionId ||
+    `browser-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
   const payload = JSON.stringify({
-    roomId: S.roomId || `browser-${Date.now()}`,
+    roomId: snapshotRoomId,
     source: source || 'unknown',
-    image: dataUrl
+    image: dataUrl,
+    actor: S.username || S.guestName || 'guest'
   });
 
   fetch(`${SERVER_URL.replace(/\/$/, '')}/api/snapshot`, {
@@ -4091,14 +4078,6 @@ ready(async () => {
     // Keep the cover up only until Supabase has decided the initial destination.
     finishStartupSplash();
   });
-
-  // Preload the synthetic video batch silently so it's ready the instant
-  // a user hits the 20-second no-match timeout — avoids an extra fetch delay.
-  setTimeout(() => {
-    fetchSyntheticVideoBatch().then((videos) => {
-      if (videos.length) S.syntheticVideos = videos;
-    }).catch(() => {});
-  }, 1500);
 
   if (navigator.mediaDevices && !navigator.mediaDevices.getUserMedia) {
     const btnAllow = $('btn-allow');
@@ -8004,10 +7983,52 @@ function enforceProfileSectionSeparation() {
   }
 }
 
+function groupPhotosByDate(photos = []) {
+  const grouped = new Map();
+
+  photos.forEach((photo) => {
+    const timestamp = photo?.created_at || photo?.ts || photo?.uploaded_at || photo?.updated_at;
+    if (!timestamp) return;
+
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return;
+
+    const dateKey = [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0')
+    ].join('-');
+
+    if (!grouped.has(dateKey)) {
+      grouped.set(dateKey, {
+        date: dateKey,
+        dateLabel: date.toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        }),
+        sortValue: date.getTime(),
+        photos: []
+      });
+    }
+    grouped.get(dateKey).photos.push(photo);
+  });
+
+  return Array.from(grouped.values()).sort((a, b) => b.sortValue - a.sortValue);
+}
+
 function renderProfileGallery(posts = _profilePosts) {
   const gallery = $('profile-gallery');
   if (!gallery) return;
-  const photos = (posts || []).filter(p => p.media_url && p.post_type !== 'reel');
+
+  const photos = (posts || [])
+    .filter((p) => p?.media_url && p.post_type !== 'reel')
+    .sort((a, b) => {
+      const ta = new Date(a?.created_at || a?.ts || a?.uploaded_at || 0).getTime();
+      const tb = new Date(b?.created_at || b?.ts || b?.uploaded_at || 0).getTime();
+      return tb - ta;
+    });
+
   if (!photos.length) {
     gallery.innerHTML = `
       <div class="profile-gallery-tile">
@@ -8017,12 +8038,37 @@ function renderProfileGallery(posts = _profilePosts) {
       </div>`;
     return;
   }
+
   enforceSingleProfileTabPanel('photos');
-  gallery.innerHTML = photos.map((p, i) => {
-    const caption = sanitizeHTML(String(p.content || '').trim());
-    const ownerName = sanitizeHTML(p.author?.username || _profilePostsOwner?.username || S.username || 'user');
-    return `<button type="button" class="profile-gallery-tile" data-post-id="${sanitizeHTML(p.id || '')}" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" aria-label="Open photo ${i + 1}"><img src="${sanitizeHTML(p.media_url)}" alt="${ownerName} photo post" loading="lazy" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" style="width:100%;height:100%;object-fit:cover;display:block"></button>`;
-  }).join('');
+
+  const groupedByDate = groupPhotosByDate(photos);
+  let html = '';
+
+  groupedByDate.forEach((group) => {
+    html += `<div class="gallery-date-section" data-date="${sanitizeHTML(group.date)}">`;
+    html += `<div class="gallery-date-header">${sanitizeHTML(group.dateLabel)}</div>`;
+    html += `<div class="gallery-date-grid">`;
+
+    html += group.photos.map((p, i) => {
+      const caption = sanitizeHTML(String(p.content || '').trim());
+      const ownerName = sanitizeHTML(
+        p.author?.username ||
+        _profilePostsOwner?.username ||
+        S.username ||
+        'user'
+      );
+      const postId = sanitizeHTML(p.id || '');
+      const photoUrl = sanitizeHTML(p.media_url || '');
+
+      return `<button type="button" class="profile-gallery-tile" data-post-id="${postId}" data-photo-url="${photoUrl}" data-photo-caption="${caption}" data-photo-author="${ownerName}" aria-label="Open photo ${i + 1}">
+        <img src="${photoUrl}" alt="${ownerName} photo post" loading="lazy" data-photo-url="${photoUrl}" data-photo-caption="${caption}" data-photo-author="${ownerName}" style="width:100%;height:100%;object-fit:cover;display:block">
+      </button>`;
+    }).join('');
+
+    html += `</div></div>`;
+  });
+
+  gallery.innerHTML = html;
 }
 
 // Dedicated gallery fetch using the gallery_photos RPC (returns up to 24 media posts,
@@ -8052,12 +8098,7 @@ async function hydrateProfileGallery(userId = S.userId) {
       }
     }
 
-    gallery.innerHTML = photos.map((p, i) => {
-      const caption = sanitizeHTML(String(p.content || '').trim());
-      const ownerName = sanitizeHTML(p.author?.username || _profilePostsOwner?.username || S.username || 'user');
-      return `<button type="button" class="profile-gallery-tile" data-post-id="${sanitizeHTML(p.id || '')}" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" aria-label="Open photo ${i + 1}">` +
-        `<img src="${sanitizeHTML(p.media_url)}" alt="${ownerName} photo post" loading="lazy" data-photo-url="${sanitizeHTML(p.media_url)}" data-photo-caption="${caption}" data-photo-author="${ownerName}" style="width:100%;height:100%;object-fit:cover;display:block"></button>`;
-    }).join('');
+    renderProfileGallery(photos);
   } catch (e) {
     // gallery_photos RPC not yet deployed — post-strip fallback is already showing
     console.warn('[Gallery] gallery_photos RPC unavailable, using post-strip fallback:', e?.message || e);
@@ -10685,3 +10726,7 @@ document.addEventListener('click', (event) => {
   }
 })();
 
+// V122: final Talk audit reconciliation — no automatic lobby resume, no synthetic media path, no exhaustion popup, real-user queue only, signed-in lobby back navigation hidden, gallery grouped by date.
+// V122 final audit: stale synthetic search/popup startup hooks removed; Talk remains real-user only.
+
+// v123: snapshot grouping uses a stable solo-search session id, then the real room id after matching.
