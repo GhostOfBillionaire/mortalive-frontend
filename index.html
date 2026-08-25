@@ -7322,6 +7322,31 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 }
 </style>
 
+
+<!-- V114: profile composer/tabs hardening -->
+<style id="mortalive-v114-profile-composer-tabs-stats">
+/* Only one profile content panel may be visible at a time. */
+#pg-profile .profile-tab-panel{display:none !important;}
+#pg-profile .profile-tab-panel.active{display:block !important;}
+
+/* Composer mode buttons must remain directly interactive. */
+#pg-profile .profile-compose-type-switch,
+#pg-profile .profile-compose-type-btn{position:relative;z-index:120 !important;pointer-events:auto !important;touch-action:manipulation;}
+#pg-profile .profile-compose-type-btn{cursor:pointer !important;}
+#pg-profile .profile-compose-type-btn.active{background:var(--primary-alpha);color:var(--primary);border-color:rgba(26,110,245,.16);}
+
+/* Never allow a Stats/Talk card to leak into Posts or Photos. */
+#pg-profile #profile-thoughts-section .profile-stats-panel,
+#pg-profile #profile-gallery-section .profile-stats-panel,
+#pg-profile #profile-thoughts-section .talk-pstats-card,
+#pg-profile #profile-gallery-section .talk-pstats-card,
+#pg-profile #profile-thoughts-section #profile-talk-stats,
+#pg-profile #profile-gallery-section #profile-talk-stats{display:none !important;}
+
+/* Stats is the only allowed destination for the Talk Activity host. */
+#pg-profile #profile-stats-panel .profile-talk-stats-host-section{display:block !important;}
+</style>
+
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -8707,7 +8732,7 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260824-v111-profile-polls-engineer-merge"></script>
+<script src="app.js?v=20260825-v114-profile-composer-tabs-stats"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
