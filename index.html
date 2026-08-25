@@ -3,7 +3,7 @@
 <!-- Mortalive v19 — runtime configuration centralized in backend; Section 1 optimization pass applied. -->
 <html lang="en">
 <head>
-<!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v22 -->
+<!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v124 -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
@@ -7347,6 +7347,32 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 #pg-profile #profile-stats-panel .profile-talk-stats-host-section{display:block !important;}
 </style>
 
+<style id="mortalive-v122-gallery-grouping">
+/* V122 profile gallery: date-grouped photo sections while preserving 4-column tile flow. */
+#pg-profile #profile-gallery{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:3px;
+  padding:0 3px 3px;
+}
+#pg-profile .gallery-date-section{display:contents;}
+#pg-profile .gallery-date-header{
+  grid-column:1 / -1;
+  padding:12px 3px 8px;
+  margin-top:4px;
+  border-top:1px solid var(--border);
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:var(--on-surface-3);
+}
+#pg-profile .gallery-date-grid{display:contents;}
+@media(max-width:720px){
+  #pg-profile #profile-gallery{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+</style>
+<meta name="mortalive-build" content="v126-synthetic-skip-10s-real-check">
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -8732,7 +8758,7 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260825-v121-talk-manual-entry-snapshot-compat"></script>
+<script src="app.js?v=20260826-v126-synthetic-skip-10s-real-check"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -9273,12 +9299,4 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 </body>
 <!-- Random audit marker: silver-pine-92614 -->
 </html>
-
-
-
-
-
-
-
-
-
+<!-- V122: Talk audit final reconciled; profile gallery grouped by date. -->
