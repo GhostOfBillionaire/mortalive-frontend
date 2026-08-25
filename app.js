@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-24-v111-safe-cleanup'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-25-v114-profile-composer-tabs-stats'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -7608,6 +7608,47 @@ function formatPostTime(iso) {
 })();
 
 
+// V114 PROFILE COMPOSER / TAB INTERACTION HARDENING
+// Mode buttons remain toggleable even if another profile listener or a
+// rerender prevents the local composer binding from receiving the click.
+(function installProfileComposerInteractionBridge(){
+  const bind = () => {
+    const page = document.getElementById('pg-profile');
+    if (!page || page.dataset.v114ComposerBridge === '1') return;
+    page.dataset.v114ComposerBridge = '1';
+    page.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-profile-compose-kind]');
+      if (!btn || !page.contains(btn)) return;
+      const kind = btn.dataset.profileComposeKind;
+      const setter = window.__mortaliveSetProfileComposerKind;
+      if (typeof setter !== 'function') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setter(kind);
+    }, true);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind, {once:true});
+  else bind();
+  new MutationObserver(bind).observe(document.body, {childList:true, subtree:true});
+})();
+
+// V114: enforce exactly one visible profile content panel at a time.
+function enforceSingleProfileTabPanel(preferred = 'posts') {
+  const page = document.getElementById('pg-profile');
+  if (!page) return;
+  const panels = Array.from(page.querySelectorAll('.profile-tab-panel[data-profile-panel]'));
+  if (!panels.length) return;
+  let active = panels.find(panel => panel.classList.contains('active'))?.dataset.profilePanel || preferred;
+  if (!panels.some(panel => panel.dataset.profilePanel === active)) active = preferred;
+  panels.forEach(panel => panel.classList.toggle('active', panel.dataset.profilePanel === active));
+  page.querySelectorAll('#profile-tabs-bar .profile-tab-btn').forEach(btn => {
+    const selected = btn.dataset.profileTab === active;
+    btn.classList.toggle('active', selected);
+    btn.setAttribute('aria-selected', selected ? 'true' : 'false');
+  });
+  page.dataset.profileActivePanel = active;
+}
+
 // V113 PROFILE SECTION SEPARATION / VERTICAL STREAM GUARD
 // Posts = mixed vertical stream; Photos = photos only; Talk Activity = Stats only.
 
@@ -7706,6 +7747,7 @@ function renderProfilePosts(posts = _profilePosts) {
   }).join('');
 
   refreshProfileTabCounts(posts);
+  enforceSingleProfileTabPanel('posts');
 }
 function enforceProfileSectionSeparation() {
   const postsPanel = $('profile-thoughts-section');
@@ -7746,6 +7788,7 @@ function renderProfileGallery(posts = _profilePosts) {
       </div>`;
     return;
   }
+  enforceSingleProfileTabPanel('photos');
   gallery.innerHTML = photos.map((p, i) => {
     const caption = sanitizeHTML(String(p.content || '').trim());
     const ownerName = sanitizeHTML(p.author?.username || _profilePostsOwner?.username || S.username || 'user');
@@ -7911,6 +7954,9 @@ function initProfilePostComposer() {
     }
     syncProfileComposer();
   };
+
+  // Expose the canonical profile composer switcher so capture-phase and rerender-safe bridges can invoke the same logic.
+  window.__mortaliveSetProfileComposerKind = setKind;
 
   const getOptionValues = () => Array.from(optionsList?.querySelectorAll('.profile-poll-option-input') || [])
     .map(inputEl => String(inputEl.value || '').trim());
@@ -9972,6 +10018,7 @@ function renderProfileStatsPanel() {
     </div>`;
   if (typeof window.renderProfileTalkStats === 'function') window.renderProfileTalkStats();
   enforceProfileSectionSeparation();
+  enforceSingleProfileTabPanel($('profile-stats-panel')?.classList.contains('active') ? 'stats' : 'posts');
 }
 
 function initProfileTabs() {
@@ -9984,6 +10031,7 @@ function initProfileTabs() {
     if (sticky) page.style.setProperty('--profile-sticky-height', `${Math.ceil(sticky.getBoundingClientRect().height)}px`);
   };
   syncStickyHeight();
+  enforceSingleProfileTabPanel(bar.querySelector('.profile-tab-btn.active')?.dataset.profileTab || 'posts');
   if (!bar.dataset.bound) {
     bar.dataset.bound = '1';
     window.addEventListener('resize', syncStickyHeight, { passive: true });
@@ -10004,6 +10052,7 @@ function initProfileTabs() {
       page.querySelectorAll('.profile-tab-panel').forEach(panel => {
         panel.classList.toggle('active', panel.dataset.profilePanel === tab);
       });
+      page.dataset.profileActivePanel = tab;
       page.scrollTo({ top: 0, behavior: 'instant' in document.documentElement.style ? 'instant' : 'auto' });
       if (tab === 'reels') renderProfileReels(_profilePosts);
       if (tab === 'stats') renderProfileStatsPanel();
