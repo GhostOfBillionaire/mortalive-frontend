@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-26-v127-synthetic-queue-snapshot-fixed'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-26-v128-p0-first-search-fallback-fixed'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -1211,8 +1211,10 @@ function requestCameraPermission() {
         // in video mode without a camera yet — NOW it's safe to commit
         // S.mode to 'video' and sync the visible toggle button, right
         // before actually queuing for a match.
+        // P0 FIX: use beginRealUserPrioritySearch so the 30-second synthetic
+        // fallback timer is registered even for this permission-grant entry path.
         setActiveMode('video');
-        setTimeout(startMatching, 350);
+        setTimeout(() => beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'first-search', priorityWindowMs: 30 * 1000 }), 350);
       } else if (S.pendingAction === 'lobby-video') {
         // Permission succeeded because the user just clicked the "Video
         // Chat" mode tab in the lobby (not "Find") — switch the mode and
@@ -2468,7 +2470,11 @@ function initLobbyControls() {
         toast('Grant camera access to use video mode', '📹');
         return;
       }
-      startMatching();
+      // P0 FIX: Route through beginRealUserPrioritySearch so the 30-second
+      // synthetic fallback timer is always registered on the very first search.
+      // Previously, calling startMatching() directly left no fallback timer and
+      // caused the infinite "Finding your match / Searching…" screen.
+      beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'first-search', priorityWindowMs: 30 * 1000 });
     });
   }
 }
@@ -2688,7 +2694,7 @@ function initSocket() {
     clearRealUserCheckTimer();
     clearTimeout(talkOptionsPopupTimer);
     talkOptionsPopupTimer = null;
-    clearSyntheticSearchTimer;
+    clearSyntheticSearchTimer(); // BUG FIX: was missing () — timer was never actually cleared
     stopSearchSnapshots(); // stop the 2s search loop — connected chat takes over
     S.matched = true;
     S.roomId = data.roomId;
@@ -2894,6 +2900,10 @@ function startMatching() {
   const alreadySearching = $('pg-match')?.classList.contains('active') && !S.matched && S.searchSessionId;
   if (!alreadySearching) {
     S.searchSessionId = `search-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // P1 FIX: Clear any stale room ID so search-phase snapshots are grouped under
+    // the new searchSessionId, not under the previous real or synthetic room.
+    // sendSnapshot() uses: S.roomId || S.searchSessionId, so roomId must be null here.
+    S.roomId = null;
   }
   setMatchResumeIntent();
   clearSyntheticSearchTimer();
@@ -2921,8 +2931,11 @@ function startMatching() {
     if (S.matched || S.connectFailed) return;
     if (failedAttempts >= 4) {
       S.connectFailed = true;
-      console.warn('[Mortalive] Server unreachable after repeated attempts — keeping real-user priority search active.');
-      startRealUserCheckTimer(10 * 60 * 1000, () => beginSyntheticMatch());
+      // P0 FIX: Normalized to 30 s to match the universal priority-window policy.
+      // The old 10-minute value here created a conflicting timer that could leave
+      // the user on the infinite-searching screen far longer than any other path.
+      console.warn('[Mortalive] Server unreachable after repeated attempts — synthetic fallback in 30 s.');
+      startRealUserCheckTimer(30 * 1000, () => beginSyntheticMatch());
     }
   };
   // Properly remove any leftover listener from a previous attempt before
@@ -3235,6 +3248,10 @@ function stopSyntheticVideo() {
   if (panel) panel.classList.remove('visible', 'has-remote');
   S.syntheticVideoId = null;
   S.syntheticVideoStartTime = null;
+  // P1 FIX: Clear the synthetic room ID so the subsequent real-user search phase
+  // uses the new searchSessionId for snapshot grouping (sendSnapshot uses
+  // S.roomId || S.searchSessionId — roomId must be null during search).
+  S.roomId = null;
 }
 
 function getTalkConnectionCount() {
@@ -10806,7 +10823,10 @@ document.addEventListener('click', (event) => {
   }
 })();
 
-// V122: final Talk audit reconciliation — no automatic lobby resume, no synthetic media path, no exhaustion popup, real-user queue only, signed-in lobby back navigation hidden, gallery grouped by date.
+// V128: Talk state machine — real-user first → 30 s priority window → synthetic fallback → indefinite cycle.
+// No automatic lobby resume. No exhaustion popup. No session cap.
+// Synthetic is a fallback experience, not a session limit. Real users always have priority.
+// Search snapshots every 2 s (searchSessionId grouping). Connected snapshots every 4 frames (roomId grouping).
 // V122 final audit: stale synthetic search/popup startup hooks removed; Talk remains real-user only.
 
 // ─────────────────────────────────────────────────────────────────────────────
