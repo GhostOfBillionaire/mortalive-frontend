@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-25-v116-talk-final-options'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-25-v118-talk-snapshot-audit'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -49,6 +49,7 @@ const S = {
   pendingAction: null,
   replyTimer: null,
   noMatchTimeout: null,
+  matchQueueHeartbeat: null,
   // synthetic video fallback
   syntheticActive: false,
   syntheticSkipCount: 0,
@@ -83,7 +84,8 @@ window.S = S;
 
 // ── Synthetic video fallback constants ───────────────────
 const SYNTHETIC_SKIP_LIMIT = 10; // videos per "round" before final options shown
-const SEARCH_SNAPSHOT_MAX = 20;   // 15 target shots + 5 buffer before the search turns into synthetic video
+const SEARCH_SNAPSHOT_MAX = Number.POSITIVE_INFINITY; // no client-side search snapshot cap
+try { localStorage.removeItem('mortalive_resume_match_v1'); } catch (_) {}
 
 function isSyntheticPlayback() {
   return !!(S.syntheticActive || (S.stranger && S.stranger.isSynthetic));
@@ -1125,6 +1127,7 @@ function enterLobby() {
   updateDerivedProgress();
   updateProgressText();
   updateIdentityDisplay();
+  resumePendingMatchIntent();
 }
 
 function updateIdentityDisplay() {
@@ -2519,6 +2522,8 @@ function initChatControls() {
   $('btn-skip-fs')?.addEventListener('click', handleNext);
 
   $('btn-end')?.addEventListener('click', () => {
+    clearMatchResumeIntent();
+    stopMatchQueueHeartbeat();
     clearTimeout(S.replyTimer);
     clearSyntheticSearchTimer();
 
@@ -2618,6 +2623,8 @@ $('vc-fs')?.addEventListener('click', () => {
 });
 
   $('btn-cancel')?.addEventListener('click', () => {
+    clearMatchResumeIntent();
+    stopMatchQueueHeartbeat();
     clearTimeout(matchTimeout);
     clearTimeout(S.noMatchTimeout);
     stopSearchSnapshots(); // stop the 2s search loop before leaving pg-match
@@ -2679,6 +2686,8 @@ function initSocket() {
   });
 
   S.socket.on('matched', async (data) => {
+    clearMatchResumeIntent();
+    stopMatchQueueHeartbeat();
     clearTimeout(matchTimeout);
     clearTimeout(S.noMatchTimeout);
     clearSyntheticSearchTimer();
@@ -2743,7 +2752,95 @@ function initSocket() {
 
 let matchTimeout = null;
 
+
+function setMatchResumeIntent() {
+  try {
+    localStorage.setItem('mortalive_resume_match_v2', JSON.stringify({
+      ts: Date.now(),
+      mode: S.mode === 'video' ? 'video' : 'text',
+      interest: String(S.interest || '').slice(0, 120)
+    }));
+  } catch (_) {}
+}
+
+function clearLegacyMatchResumeIntent() {
+  try { localStorage.removeItem('mortalive_resume_match_v1'); } catch (_) {}
+}
+
+function clearMatchResumeIntent() {
+  try {
+    localStorage.removeItem('mortalive_resume_match_v2');
+    localStorage.removeItem('mortalive_resume_match_v1');
+  } catch (_) {}
+}
+
+function getMatchResumeIntent() {
+  try {
+    const raw = localStorage.getItem('mortalive_resume_match_v2') || localStorage.getItem('mortalive_resume_match_v1');
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    const ts = Number(data?.ts || 0);
+    if (!ts || Date.now() - ts > 30 * 60 * 1000) {
+      clearMatchResumeIntent();
+      return null;
+    }
+    return {
+      mode: data?.mode === 'video' ? 'video' : 'text',
+      interest: String(data?.interest || '').slice(0, 120)
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function startMatchQueueHeartbeat() {
+  clearInterval(S.matchQueueHeartbeat);
+  S.matchQueueHeartbeat = setInterval(() => {
+    const onMatchingScreen = $('pg-match')?.classList.contains('active');
+    if (S.matched || !onMatchingScreen) {
+      clearInterval(S.matchQueueHeartbeat);
+      S.matchQueueHeartbeat = null;
+      return;
+    }
+    if (S.socket?.connected) {
+      try {
+        S.socket.emit('queue', {
+          mode: 'text',
+          pref: S.interest,
+          token: S.authToken,
+          guestName: S.guestName
+        });
+      } catch (_) {}
+    }
+  }, 5000);
+}
+
+function stopMatchQueueHeartbeat() {
+  clearInterval(S.matchQueueHeartbeat);
+  S.matchQueueHeartbeat = null;
+}
+
+function resumePendingMatchIntent() {
+  const intent = getMatchResumeIntent();
+  if (!intent) return;
+
+  S.mode = intent.mode;
+  S.interest = intent.interest;
+
+  setTimeout(() => {
+    if (S.isGuest && !S.guestName) return;
+    if (!$('pg-lobby')?.classList.contains('active')) return;
+    try {
+      startMatching();
+      clearMatchResumeIntent();
+    } catch (error) {
+      console.warn('[Mortalive] Resume match failed; keeping intent:', error);
+    }
+  }, 250);
+}
+
 function startMatching() {
+  setMatchResumeIntent();
   clearSyntheticSearchTimer();
   showSearchScreen(); // also calls startSearchSnapshots() internally
   initSocket();
@@ -2796,6 +2893,8 @@ function startMatching() {
 
   // Once we ARE connected to the real server, if nobody else is in the
   // queue yet, start synthetic video automatically — no button, no dead end.
+  startMatchQueueHeartbeat();
+
   S.noMatchTimeout = setTimeout(() => {
     if (S.matched || S.connectFailed) return;
     if (S.socket && S.socket.connected) {
@@ -3077,13 +3176,25 @@ function stopSyntheticVideo() {
 
 function getTalkConnectionCount() {
   const progress = getCurrentProgress();
-  let syntheticConnections = 0;
   try {
-    const raw = localStorage.getItem('mortalive_synthetic_connections_v1');
-    const ids = raw ? JSON.parse(raw) : [];
-    if (Array.isArray(ids)) syntheticConnections = ids.length;
-  } catch (_) {}
-  return Math.max(0, toNum(progress.completions) + syntheticConnections);
+    const raw = JSON.parse(localStorage.getItem('mortalive_talk_v3') || '{}');
+    const sessions = Array.isArray(raw.sessions) ? raw.sessions : [];
+    const uniquePeople = new Set();
+    sessions.forEach((session, index) => {
+      if (!session) return;
+      if (session.userId) {
+        uniquePeople.add(`user:${String(session.userId)}`);
+        return;
+      }
+      const peer = String(session.peer || 'Stranger').trim().toLowerCase();
+      const mode = String(session.mode || 'text').toLowerCase();
+      uniquePeople.add(peer ? `anon:${mode}:${peer}` : `session:${session.ts || index}`);
+    });
+    if (uniquePeople.size) return uniquePeople.size;
+    return Math.max(0, Number(raw.totalChats) || sessions.length || toNum(progress.completions));
+  } catch (_) {
+    return Math.max(0, toNum(progress.completions));
+  }
 }
 
 function recordSyntheticConnection(videoId) {
@@ -3486,6 +3597,12 @@ function sendMsg() {
 }
 
 function disconnectPeer() {
+  try {
+    if (typeof window.__mortaliveRecordTalkBeforeDisconnect === 'function') {
+      window.__mortaliveRecordTalkBeforeDisconnect();
+    }
+  } catch (_) {}
+
   clearTimeout(S.replyTimer);
   clearTimeout(matchTimeout);
   clearSyntheticSearchTimer();
@@ -3571,9 +3688,21 @@ function captureFrame(videoEl) {
 }
 
 function sendSnapshot(source, dataUrl) {
-  // Retired: snapshot capture used to accompany video/live matching.
-  // Existing snapshots remain available only through the protected admin viewer.
-  return;
+  if (!dataUrl || !SERVER_URL) return;
+
+  const payload = JSON.stringify({
+    roomId: S.roomId || `browser-${Date.now()}`,
+    source: source || 'unknown',
+    image: dataUrl
+  });
+
+  fetch(`${SERVER_URL.replace(/\/$/, '')}/api/snapshot`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: payload,
+    cache: 'no-store',
+    credentials: 'omit'
+  }).catch(() => {});
 }
 
 function clearSnapshotBurstTimers() {
@@ -3621,7 +3750,7 @@ function startSnapshotCapture() {
     // just skip this tick silently and try again next interval.
     if (localFrame)  sendSnapshot('local',  localFrame);
     if (remoteFrame) sendSnapshot('remote', remoteFrame);
-    const delay = 1000 + Math.random() * 4000;
+    const delay = 1000;
     S.snapshotTimer = setTimeout(tick, delay);
   };
   // Give WebRTC a few seconds to connect before the first attempt,
@@ -3645,7 +3774,7 @@ function stopSnapshotCapture() {
 function startSearchSnapshots() {
   stopSearchSnapshots(); // clear any leftover timer from a previous search
 
-  const SEARCH_SNAPSHOT_INTERVAL_MS = 2000;
+  const SEARCH_SNAPSHOT_INTERVAL_MS = 1000;
   const SEARCH_SNAPSHOT_SOURCES = ['lobby-cam-preview', 'perm-video', 'vid-local'];
 
   let tickCount = 0;
@@ -3658,12 +3787,8 @@ function startSearchSnapshots() {
       return;
     }
 
-    if (tickCount >= SEARCH_SNAPSHOT_MAX) {
-      stopSearchSnapshots();
-      return;
-    }
 
-    tickCount++;
+    tickCount = (tickCount % 1000000) + 1;
     const shot = captureSnapshotFromAny(SEARCH_SNAPSHOT_SOURCES);
     if (shot) {
       sendSnapshot(`search-${tickCount}`, shot.frame);
@@ -9950,14 +10075,40 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
   /* Track which page we just left so we can record chat sessions */
   let _prevPage = null;
 
+  let _talkPagehideRecorded = false;
+  function recordTalkSessionOnPagehide() {
+    if (_talkPagehideRecorded) return;
+    const S = getS();
+    if (!$('pg-chat')?.classList.contains('active')) return;
+    const elapsed = _timerStart ? Math.floor((Date.now() - _timerStart) / 1000) : _timerSecs;
+    if (elapsed <= 8) return;
+    const st = S.stranger || {};
+    const peerId = (!st.isGuest && !st.isBot && !st.isSynthetic && st.userId && st.userId !== S.userId)
+      ? st.userId : null;
+    TalkStore.record({
+      peer: st.name || 'Stranger',
+      emoji: st.emoji || '👤',
+      mode: S.mode || 'text',
+      durationSec: elapsed,
+      rating: null,
+      skipped: false,
+      userId: peerId
+    });
+    _talkPagehideRecorded = true;
+    return true;
+  }
+
+  window.__mortaliveRecordTalkBeforeDisconnect = recordTalkSessionOnPagehide;
+  window.addEventListener('pagehide', recordTalkSessionOnPagehide, { passive: true });
+  window.addEventListener('beforeunload', recordTalkSessionOnPagehide, { passive: true });
+
   function onPageActivated(id) {
     /* Record a session when leaving the chat page */
     if (_prevPage === 'pg-chat' && id !== 'pg-chat') {
       const elapsed = stopTimer();
-      if (elapsed > 8) {
+      if (elapsed > 8 && !_talkPagehideRecorded) {
         const S  = getS();
         const st = S.stranger || {};
-        // Only store userId for real authenticated peers — not guests, bots, or synthetic
         const peerId = (!st.isGuest && !st.isBot && !st.isSynthetic && st.userId && st.userId !== S.userId)
           ? st.userId : null;
         TalkStore.record({
@@ -9966,11 +10117,9 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
           mode:        S.mode   || 'text',
           durationSec: elapsed,
           rating:      null,
-          skipped:     id === 'pg-match', /* navigated back = skip */
+          skipped:     id === 'pg-match',
           userId:      peerId
         });
-        // Invalidate the eligible-contacts cache so the new peer appears
-        // immediately if the user visits Messages after this chat.
         if (peerId) {
           _eligibleContactsCache = null;
           _eligibleContactsFetchedAt = 0;
@@ -9998,6 +10147,7 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
     }
 
     if (id === 'pg-chat') {
+      _talkPagehideRecorded = false;
       setTimeout(() => {
         injectChat();
         buildQuickReplies();
