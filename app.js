@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-25-v120-talk-popup-profile-card'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-25-v121-talk-manual-entry-snapshot-compat'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -16,7 +16,7 @@ const SERVER_URL =
     : 'https://mortalive-server.onrender.com');
 
 console.log(`[Mortalive] ${BUILD_TAG} loaded`);
-// V116: Talk exhaustion flow is the canonical connection-count/options flow.
+// V121: Talk exhaustion popups are retired; connection count remains informational.
 
 console.log(`[Mortalive] SERVER_URL = ${SERVER_URL}`);
 console.log(`[Mortalive] Socket.io client ${typeof io === 'undefined' ? 'NOT LOADED ✗' : 'loaded ✓'}`);
@@ -82,8 +82,8 @@ const S = {
 // EXPLICIT GLOBAL BINDING: Allows index.html inline scripts to accurately read the guest state
 window.S = S;
 
-// ── Synthetic video fallback constants ───────────────────
-const SYNTHETIC_SKIP_LIMIT = 10; // videos per "round" before final options shown
+// ── Retired-media compatibility constants ───────────────────
+const SYNTHETIC_SKIP_LIMIT = Number.POSITIVE_INFINITY; // retired media path; no Talk session cap
 const SEARCH_SNAPSHOT_MAX = Number.POSITIVE_INFINITY; // no client-side search snapshot cap
 try { localStorage.removeItem('mortalive_resume_match_v1'); } catch (_) {}
 
@@ -1121,13 +1121,20 @@ function ensureLobbyCameraPreview() {
 }
 
 function enterLobby() {
+  // Returning to the site/lobby must never auto-start Talk.
+  // A stored login session is only an authentication state, not consent
+  // to begin matchmaking again.
+  try { clearMatchResumeIntent(); } catch (_) {}
+  stopMatchQueueHeartbeat?.();
+  stopSearchSnapshots?.();
+  clearTimeout(talkOptionsPopupTimer);
+  document.getElementById('synthetic-exhaustion-overlay')?.remove();
   setActiveMode(S.mode);
   showPage('pg-lobby');
   ensureLobbyCameraPreview();
   updateDerivedProgress();
   updateProgressText();
   updateIdentityDisplay();
-  resumePendingMatchIntent();
 }
 
 function updateIdentityDisplay() {
@@ -2826,25 +2833,15 @@ function stopMatchQueueHeartbeat() {
 }
 
 function resumePendingMatchIntent() {
-  const intent = getMatchResumeIntent();
-  if (!intent) return;
-
-  S.mode = intent.mode;
-  S.interest = intent.interest;
-
-  setTimeout(() => {
-    if (S.isGuest && !S.guestName) return;
-    if (!$('pg-lobby')?.classList.contains('active')) return;
-    try {
-      startMatching();
-      clearMatchResumeIntent();
-    } catch (error) {
-      console.warn('[Mortalive] Resume match failed; keeping intent:', error);
-    }
-  }, 250);
+  // V121: intentionally disabled.
+  // A persisted Supabase session means "stay logged in", not "start Talk".
+  // The user must explicitly press Find a match from the Talk lobby.
+  clearMatchResumeIntent();
+  return false;
 }
 
 function startMatching() {
+  // Explicit user action is the only way to enter matchmaking.
   setMatchResumeIntent();
   clearSyntheticSearchTimer();
   showSearchScreen(); // also calls startSearchSnapshots() internally
@@ -2885,14 +2882,10 @@ function startMatching() {
   S.socket?.on('connect_error', onConnectError);
   S._lastConnectErrorHandler = onConnectError;
 
-  // No overall Talk/session cap. Keep searching indefinitely while the
-  // socket is healthy. After 20s, surface optional next-step choices only;
-  // closing the popup does NOT end or cap matchmaking.
+  // No overall Talk/session cap and no automatic exhaustion popup.
+  // Keep the user in the real matchmaking queue indefinitely until they
+  // explicitly cancel, leave, or match with someone.
   clearTimeout(talkOptionsPopupTimer);
-  talkOptionsPopupTimer = setTimeout(() => {
-    if (S.matched) return;
-    showTalkOptionsPopup();
-  }, 20000);
 
   // Keep the user in the real matchmaking queue indefinitely. The popup is
   // informational/optional and never replaces the queue.
@@ -3072,11 +3065,35 @@ async function fetchSyntheticVideoBatch() {
 }
 
 async function beginSyntheticMatch() {
-  // Retired media path: never impose a session cap and never start playback.
-  // Keep this function as a compatibility shim for older callers.
+  // V121 compatibility shim: media/reel fallback is retired.
+  // A failed match attempt simply retries the real text queue; it never
+  // opens an exhaustion popup and never starts synthetic playback.
   clearSyntheticSearchTimer();
   stopSearchSnapshots();
-  showTalkOptionsPopup();
+  clearTimeout(S.noMatchTimeout);
+  S.noMatchTimeout = null;
+  S.connectFailed = false;
+  clearTimeout(matchTimeout);
+  if (!$('pg-match')?.classList.contains('active')) {
+    showSearchScreen();
+  }
+  if (S.socket?.connected) {
+    try {
+      S.socket.emit('queue', {
+        mode: 'text',
+        pref: S.interest,
+        token: S.authToken,
+        guestName: S.guestName
+      });
+      startMatchQueueHeartbeat();
+      return;
+    } catch (_) {}
+  }
+  setTimeout(() => {
+    if ($('pg-match')?.classList.contains('active') && !S.matched) {
+      startMatching();
+    }
+  }, 5000);
 }
 
 function stopSyntheticVideo() {
