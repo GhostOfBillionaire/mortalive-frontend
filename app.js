@@ -2,7 +2,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-25-v118-talk-snapshot-audit'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-25-v120-talk-popup-profile-card'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -2627,6 +2627,8 @@ $('vc-fs')?.addEventListener('click', () => {
     stopMatchQueueHeartbeat();
     clearTimeout(matchTimeout);
     clearTimeout(S.noMatchTimeout);
+    clearTimeout(talkOptionsPopupTimer);
+    talkOptionsPopupTimer = null;
     stopSearchSnapshots(); // stop the 2s search loop before leaving pg-match
     disconnectPeer();
     showPage('pg-lobby');
@@ -2690,7 +2692,9 @@ function initSocket() {
     stopMatchQueueHeartbeat();
     clearTimeout(matchTimeout);
     clearTimeout(S.noMatchTimeout);
-    clearSyntheticSearchTimer();
+    clearTimeout(talkOptionsPopupTimer);
+    talkOptionsPopupTimer = null;
+    clearSyntheticSearchTimer;
     stopSearchSnapshots(); // stop the 2s search loop — connected chat takes over
     S.matched = true;
     S.roomId = data.roomId;
@@ -2751,6 +2755,7 @@ function initSocket() {
 }
 
 let matchTimeout = null;
+let talkOptionsPopupTimer = null;
 
 
 function setMatchResumeIntent() {
@@ -2880,29 +2885,21 @@ function startMatching() {
   S.socket?.on('connect_error', onConnectError);
   S._lastConnectErrorHandler = onConnectError;
 
-  // Absolute ceiling as a safety net only — generous enough that it should
-  // never fire on a genuinely working connection, just catches the rare
-  // case where something hangs with no error event at all.
-  matchTimeout = setTimeout(() => {
-    if (!S.matched && !S.connectFailed && (!S.socket || !S.socket.connected)) {
-      console.warn('[Mortalive] No connection after 20s with no error signal — falling back to synthetic video.');
-      S.connectFailed = true;
-      beginSyntheticMatch();
-    }
+  // No overall Talk/session cap. Keep searching indefinitely while the
+  // socket is healthy. After 20s, surface optional next-step choices only;
+  // closing the popup does NOT end or cap matchmaking.
+  clearTimeout(talkOptionsPopupTimer);
+  talkOptionsPopupTimer = setTimeout(() => {
+    if (S.matched) return;
+    showTalkOptionsPopup();
   }, 20000);
 
-  // Once we ARE connected to the real server, if nobody else is in the
-  // queue yet, start synthetic video automatically — no button, no dead end.
+  // Keep the user in the real matchmaking queue indefinitely. The popup is
+  // informational/optional and never replaces the queue.
   startMatchQueueHeartbeat();
 
-  S.noMatchTimeout = setTimeout(() => {
-    if (S.matched || S.connectFailed) return;
-    if (S.socket && S.socket.connected) {
-      console.log('[Mortalive] No peer found after 20s — starting synthetic video fallback.');
-      beginSyntheticMatch();
-    }
-    // If still not connected, connect_error / ceiling timer handles it.
-  }, 20000);
+  clearTimeout(S.noMatchTimeout);
+  S.noMatchTimeout = null;
 }
 
 function removeFromQueueSafely() {
@@ -3075,86 +3072,11 @@ async function fetchSyntheticVideoBatch() {
 }
 
 async function beginSyntheticMatch() {
+  // Retired media path: never impose a session cap and never start playback.
+  // Keep this function as a compatibility shim for older callers.
   clearSyntheticSearchTimer();
-  stopSearchSnapshots(); // search phase is ending — stop the 2s loop before playback begins
-  // If there are no videos loaded yet (or we've used them all), fetch a fresh batch.
-  if (S.syntheticVideos.length === 0 || S.syntheticCurrentIndex >= S.syntheticVideos.length) {
-    const batch = await fetchSyntheticVideoBatch();
-    if (batch.length === 0) {
-      // No videos in the database at all — skip straight to final options.
-      showSyntheticExhaustionMenu();
-      return;
-    }
-    S.syntheticVideos = batch;
-    S.syntheticCurrentIndex = 0;
-  }
-
-  const video = S.syntheticVideos[S.syntheticCurrentIndex];
-  S.syntheticActive = true;
-  S.syntheticVideoId = video.id;
-  S.syntheticVideoStartTime = Date.now();
-  recordSyntheticConnection(video.id);
-
-  // Present them as a stranger — just like a real matched user.
-  S.stranger = {
-    name:      video.stranger_name  || 'Stream User',
-    score:     video.stranger_score || null,
-    emoji:     video.stranger_emoji || '🎬',
-    isGuest:   video.is_guest !== false,
-    isSynthetic: true
-  };
-  S.roomId = `synthetic-${video.id}-${Date.now()}`;
-
-  // Always show as video mode so the video element is visible.
-  S.mode = 'video';
-  setActiveMode('video');
-
-  // Standard chat setup — clears messages, shows peer name, switches to pg-chat.
-  beginChat();
-  syncLocalCameraPreview();
-
-  // Show the prerecorded video in the remote slot.
-  const remoteVid = $('vid-remote');
-  
-  if (remoteVid) {
-    prepareVideoElement(remoteVid);
-    // Clear any old srcObject (real WebRTC stream) first.
-    remoteVid.srcObject = null;
-    remoteVid.src = video.video_url;
-    remoteVid.loop = false;
-    remoteVid.style.display = 'block';
-    remoteVid.play().catch((e) => {
-      console.warn('[Synthetic] Video play failed:', e.message);
-      setText('ph-txt', 'Video could not load — click Next to try another.');
-    });
-
-    // When the video ends naturally, show a search interstitial first and only
-    // then resume with the next synthetic clip if nobody matched in time.
-    remoteVid.onended = () => {
-      if (!S.syntheticActive) return;
-      S.syntheticCurrentIndex++;
-      if (S.syntheticCurrentIndex < S.syntheticVideos.length) {
-        addSysLine('↩ Video ended — searching…');
-        scheduleSyntheticSearchResume(1200);
-      } else {
-        showSyntheticExhaustionMenu();
-      }
-    };
-  }
-
-  const noVideo = $('no-video-ph');
-  const panel   = $('video-panel');
-  if (noVideo) noVideo.style.display = 'none';
-  if (panel) {
-    panel.classList.add('visible', 'has-remote');
-    applyVideoLayout();
-  }
-
-  const q = $('quality-bar');
-  if (q) q.style.display = 'none'; // no quality stats for pre-recorded
-
-  setCallStatus('connected', 'video');
-  logSession('start', { stranger: S.stranger.name, mode: 'video', roomId: S.roomId, isSynthetic: true });
+  stopSearchSnapshots();
+  showTalkOptionsPopup();
 }
 
 function stopSyntheticVideo() {
@@ -3220,54 +3142,99 @@ function generateProfileShareCard() {
   const score = getProgressScore(getCurrentProgress());
   const profileUrl = username ? `${window.location.origin}/@${encodeURIComponent(username)}` : window.location.origin;
 
+  // Portrait social-card format: 900 × 1350 (2:3).
   const canvas = document.createElement('canvas');
-  canvas.width = 1200;
-  canvas.height = 630;
+  canvas.width = 900;
+  canvas.height = 1350;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas is unavailable');
 
-  const bg = ctx.createLinearGradient(0, 0, 1200, 630);
-  bg.addColorStop(0, '#091225');
-  bg.addColorStop(1, '#182c52');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, 1200, 630);
+  // Light base with soft blue edge treatment.
+  ctx.fillStyle = '#f7fbff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = 'rgba(84, 161, 255, .12)';
-  ctx.beginPath(); ctx.arc(1000, 90, 250, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = 'rgba(139, 92, 246, .12)';
-  ctx.beginPath(); ctx.arc(170, 570, 240, 0, Math.PI * 2); ctx.fill();
+  // Blue strips running in from different edges/corners.
+  const strips = [
+    { x: -140, y: 80, w: 560, h: 72, r: -0.42 },
+    { x: 600, y: -40, w: 520, h: 70, r: 0.52 },
+    { x: 520, y: 520, w: 500, h: 64, r: -0.38 },
+    { x: -170, y: 1050, w: 620, h: 74, r: 0.38 },
+    { x: 520, y: 1210, w: 520, h: 58, r: -0.48 }
+  ];
+  strips.forEach(({ x, y, w, h, r }, i) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(r);
+    ctx.fillStyle = i % 2 ? '#93c5fd' : '#2563eb';
+    ctx.globalAlpha = i % 2 ? 0.55 : 0.9;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  });
+  ctx.globalAlpha = 1;
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '800 34px Inter, Arial, sans-serif';
-  ctx.fillText('Mortalive', 70, 80);
+  // Soft central card.
+  const cardX = 55, cardY = 150, cardW = 790, cardH = 1000;
+  ctx.fillStyle = 'rgba(255,255,255,0.94)';
+  ctx.shadowColor = 'rgba(37,99,235,0.12)';
+  ctx.shadowBlur = 32;
+  ctx.shadowOffsetY = 12;
+  ctx.beginPath();
+  ctx.roundRect(cardX, cardY, cardW, cardH, 42);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
 
-  ctx.fillStyle = '#dbeafe';
-  ctx.font = '700 58px Inter, Arial, sans-serif';
-  ctx.fillText(displayName || 'Mortalive User', 70, 190);
+  ctx.fillStyle = '#1d4ed8';
+  ctx.font = '800 38px Inter, Arial, sans-serif';
+  ctx.fillText('Mortalive', 100, 235);
 
-  ctx.fillStyle = '#8fb7ff';
-  ctx.font = '500 30px Inter, Arial, sans-serif';
-  ctx.fillText(`@${username || 'user'}`, 70, 238);
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '800 64px Inter, Arial, sans-serif';
+  const safeName = String(displayName || 'Mortalive User').slice(0, 24);
+  ctx.fillText(safeName, 100, 370);
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '800 74px Inter, Arial, sans-serif';
-  ctx.fillText(String(score), 70, 360);
-  ctx.fillStyle = '#b9c7dc';
-  ctx.font = '600 26px Inter, Arial, sans-serif';
-  ctx.fillText('crockroach Score', 75, 405);
+  ctx.fillStyle = '#2563eb';
+  ctx.font = '600 30px Inter, Arial, sans-serif';
+  ctx.fillText(`@${username || 'user'}`, 100, 420);
 
-  ctx.fillStyle = '#cbd5e1';
-  ctx.font = '500 25px Inter, Arial, sans-serif';
-  ctx.fillText('Connect with me on Mortalive', 70, 500);
-  ctx.fillStyle = '#7dd3fc';
-  ctx.font = '600 22px Inter, Arial, sans-serif';
-  ctx.fillText(profileUrl, 70, 545);
+  // Score block.
+  ctx.fillStyle = '#eff6ff';
+  ctx.beginPath();
+  ctx.roundRect(100, 500, 700, 205, 28);
+  ctx.fill();
+
+  ctx.fillStyle = '#1d4ed8';
+  ctx.font = '800 92px Inter, Arial, sans-serif';
+  ctx.fillText(String(score), 135, 610);
+  ctx.fillStyle = '#334155';
+  ctx.font = '700 27px Inter, Arial, sans-serif';
+  ctx.fillText('crockroach Score', 140, 665);
+
+  ctx.fillStyle = '#475569';
+  ctx.font = '600 28px Inter, Arial, sans-serif';
+  ctx.fillText('Connect with me on Mortalive', 100, 825);
+
+  ctx.fillStyle = '#2563eb';
+  ctx.font = '700 24px Inter, Arial, sans-serif';
+  const displayUrl = profileUrl.length > 52 ? profileUrl.slice(0, 49) + '…' : profileUrl;
+  ctx.fillText(displayUrl, 100, 875);
+
+  ctx.fillStyle = '#64748b';
+  ctx.font = '500 23px Inter, Arial, sans-serif';
+  ctx.fillText('Meet people. Build your network.', 100, 1015);
+
+  // Decorative blue edge strips at the bottom of the card.
+  ctx.fillStyle = '#2563eb';
+  ctx.fillRect(100, 1080, 230, 8);
+  ctx.fillStyle = '#93c5fd';
+  ctx.fillRect(345, 1080, 120, 8);
+  ctx.fillStyle = '#60a5fa';
+  ctx.fillRect(480, 1080, 220, 8);
 
   const link = document.createElement('a');
   link.download = `mortalive-profile-${username || 'card'}.png`;
   link.href = canvas.toDataURL('image/png');
   link.click();
-  toast('Profile card downloaded', '🪪');
+  toast('Portrait profile card downloaded', '🪪');
 }
 
 function showConnectMoreOverlay() {
@@ -3305,18 +3272,24 @@ function showConnectMoreOverlay() {
   document.getElementById('syn-connect-close')?.addEventListener('click', () => overlay.remove());
 }
 
-function showSyntheticExhaustionMenu() {
+function showTalkOptionsPopup() {
   document.getElementById('synthetic-exhaustion-overlay')?.remove();
 
   const connectionCount = getTalkConnectionCount();
+  const isLoggedIn = !S.isGuest && !!S.userId;
+  const headline = isLoggedIn
+    ? `You have successfully connected with ${connectionCount} ${connectionCount === 1 ? 'person' : 'people'}`
+    : `You have connected with ${connectionCount} ${connectionCount === 1 ? 'person' : 'people'}`;
+
   const overlay = document.createElement('div');
   overlay.className = 'overlay open';
   overlay.id = 'synthetic-exhaustion-overlay';
-
   overlay.innerHTML = `
-    <div class="modal" style="width:min(500px,100%);text-align:center;">
+    <div class="modal talk-options-modal" style="width:min(500px,100%);text-align:center;position:relative;">
+      <button id="syn-talk-close" type="button" aria-label="Close" title="Close"
+        style="position:absolute;top:10px;right:10px;width:36px;height:36px;border-radius:50%;border:1px solid var(--border-strong);background:var(--surface);color:var(--on-surface);font-size:22px;line-height:1;cursor:pointer;">×</button>
       <div class="modal-ico">🤝</div>
-      <div class="modal-title">You have successfully connected with ${connectionCount} ${connectionCount === 1 ? 'person' : 'people'}</div>
+      <div class="modal-title">${headline}</div>
       <div class="modal-sub">
         Mortalive is growing rapidly. To get better matching, pick what you'd like to do next:
       </div>
@@ -3328,17 +3301,19 @@ function showSyntheticExhaustionMenu() {
 
   document.body.appendChild(overlay);
 
+  document.getElementById('syn-talk-close')?.addEventListener('click', () => {
+    overlay.remove();
+  });
+
   document.getElementById('syn-btn-ai')?.addEventListener('click', () => {
     overlay.remove();
     clearSyntheticSearchTimer();
-    // The AI lives in the Messages experience; route there now.
     showPage('pg-messages');
     toast('AI chat is being added to Messages', '🤖');
   });
 
   document.getElementById('syn-btn-more')?.addEventListener('click', () => {
     overlay.remove();
-    clearSyntheticSearchTimer();
     showConnectMoreOverlay();
   });
 }
@@ -3347,7 +3322,7 @@ function showShareOverlay() {
   document.getElementById('syn-share-overlay')?.remove();
 
   const shareUrl  = window.location.origin;
-  const shareText = `Try Mortalive — instant random video chat, no account needed: ${shareUrl}`;
+  const shareText = `Join me on Mortalive — meet people and build your network: ${shareUrl}`;
 
   const overlay = document.createElement('div');
   overlay.className = 'overlay open';
