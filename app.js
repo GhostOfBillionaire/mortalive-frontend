@@ -4036,6 +4036,10 @@ let _feedPollCountsCache = new Map();
 // V107: explicit poll duration state; default remains one day.
 let _feedPollDurationHours = 24;
 let _feedComposerMenuOpen = false;
+// V112 profile composer state: Text / Photo / Poll / Q&A.
+let _profileComposerKind = 'text';
+let _profileQnaCorrectOptionId = null;
+let _profilePollDurationHours = 24;
 
 function getFeedComposerKind() {
   return _feedComposerKind;
@@ -7608,13 +7612,17 @@ function renderProfilePosts(posts = _profilePosts) {
   const countEl = $('profile-post-count');
   if (!strip) return;
 
-  // This section is strictly for text/poll posts. Any post with media is
-  // intentionally routed to the Visuals/Photos section below.
-  const textPosts = (posts || []).filter(post => !post.media_url && post.post_type !== 'reel');
+  // V112: Posts is the combined chronological stream for all non-reel posts:
+  // text, photo, poll, and Q&A. The Photos tab remains media-only.
+  const combinedPosts = (posts || []).filter(post => post?.post_type !== 'reel');
 
-  if (countEl) countEl.textContent = textPosts.length ? `${textPosts.length} ${textPosts.length === 1 ? 'post' : 'posts'}` : 'No text posts';
+  if (countEl) {
+    countEl.textContent = combinedPosts.length
+      ? `${combinedPosts.length} ${combinedPosts.length === 1 ? 'post' : 'posts'}`
+      : 'No posts';
+  }
 
-  if (!textPosts.length) {
+  if (!combinedPosts.length) {
     strip.innerHTML = `
       <article class="profile-post-card profile-post-empty-card">
         <div class="profile-post-header">
@@ -7622,27 +7630,45 @@ function renderProfilePosts(posts = _profilePosts) {
           <div class="profile-post-author">Your first post</div>
           <div class="profile-post-time">Ready</div>
         </div>
-        <div class="profile-post-body">Share a thought, update, question, or conversation starter with your profile.</div>
+        <div class="profile-post-body">Share a thought, photo, poll, or Q&A and it will appear here in one combined stream.</div>
         <div class="profile-post-footer"><span>Posts are saved to Supabase</span></div>
       </article>`;
     const emptyAvatar = $('profile-post-empty-avatar');
     if (emptyAvatar) emptyAvatar.style.background = 'linear-gradient(135deg,#1a6ef5,#7c3aed)';
+    refreshProfileTabCounts(posts);
     return;
   }
 
-  strip.innerHTML = textPosts.map((post) => {
+  strip.innerHTML = combinedPosts.map((post) => {
     const content = renderHashtagRichText(post.content || '');
     const time = sanitizeHTML(formatPostTime(post.created_at));
-    const type = sanitizeHTML(post.post_type || 'text');
-    const ownerName = post.author?.display_name || post.author?.username || _profilePostsOwner?.display_name || _profilePostsOwner?.username || S.username || 'You';
+    const kind = post?.post_meta?.kind === 'qna'
+      ? 'Q&A'
+      : post?.post_meta?.kind === 'poll'
+        ? 'Poll'
+        : post.media_url
+          ? 'Photo'
+          : 'Text';
+
+    const ownerName =
+      post.author?.display_name ||
+      post.author?.username ||
+      _profilePostsOwner?.display_name ||
+      _profilePostsOwner?.username ||
+      S.username ||
+      'You';
     const initial = sanitizeHTML(ownerName.charAt(0).toUpperCase());
     const eng = engagementFor(post.id);
     const likedClass = eng.liked ? 'liked' : '';
     const likeIcon = eng.liked ? '♥' : '♡';
     const structured = post?.post_meta?.kind ? renderStructuredFeedPost(post) : '';
-    const bodyContent = structured
-      ? structured
-      : `${content}${post.media_url ? `<img class="profile-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Shared photo" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">` : ''}`;
+    const photo = post.media_url
+      ? `<button type="button" class="profile-post-photo-wrap js-photo-open" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}" data-photo-caption="${sanitizeHTML(String(post.content || '').trim())}" style="display:block;width:100%;margin-top:10px;padding:0;border:0;background:transparent;text-align:left;cursor:pointer">
+           <img class="profile-post-media" src="${sanitizeHTML(post.media_url)}" alt="Shared photo" loading="lazy" style="width:100%;max-height:560px;object-fit:cover;border-radius:14px;display:block">
+         </button>`
+      : '';
+    const bodyContent = structured ? structured : `${content}${photo}`;
+
     return `
       <article class="profile-post-card" data-post-id="${sanitizeHTML(post.id)}" data-post-owner="${sanitizeHTML(post.user_id || _profilePostsOwner?.id || S.userId || '')}" data-post-type="${sanitizeHTML(post.post_type || 'text')}">
         <div class="profile-post-header">
@@ -7650,17 +7676,22 @@ function renderProfilePosts(posts = _profilePosts) {
           <div class="profile-post-author"><button type="button" class="profile-author-link" data-open-profile="${sanitizeHTML(post.user_id || _profilePostsOwner?.id || S.userId || '')}">${sanitizeHTML(ownerName)}</button></div>
           <div class="profile-post-time">${time}</div>
         </div>
-        <div class="profile-post-body">${bodyContent}</div>
+        <div class="profile-post-body">
+          ${content && !structured ? `<div class="profile-post-text">${content}</div>` : ''}
+          ${structured ? structured : ''}
+          ${(!structured && photo) ? photo : ''}
+        </div>
         <div class="profile-post-footer">
           <button type="button" data-profile-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${eng.liked}" style="background:none;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:0;color:${eng.liked ? 'var(--danger)' : 'var(--on-surface-3)'};font-size:10.5px;font-weight:700;transition:color .14s;" class="profile-like-btn ${likedClass}">${likeIcon} ${eng.likes}</button>
           <span>💬 ${eng.comments}</span>
-          <span>${type === 'text' ? 'Text' : type}</span>
+          <span>◉ ${kind}</span>
+          ${Number(eng.views || post.view_count || 0) ? `<span>👁 ${Number(eng.views || post.view_count || 0)}</span>` : ''}
         </div>
       </article>`;
   }).join('');
+
   refreshProfileTabCounts(posts);
 }
-
 function renderProfileGallery(posts = _profilePosts) {
   const gallery = $('profile-gallery');
   if (!gallery) return;
@@ -7771,87 +7802,330 @@ function initProfilePostComposer() {
   const photoButton = $('btn-profile-photo-upload');
   const photoName = $('profile-photo-name');
   const error = $('profile-post-error');
+  const builder = $('profile-poll-builder');
+  const optionsList = $('profile-poll-options-list');
+  const addOption = $('profile-poll-add-option');
+  const modeLabel = $('profile-compose-mode-label');
   if (!composer || !input || !button) return;
-  // Reset the guard if the input element changed (e.g. after a DOM re-render)
+
   if (composer.dataset.bound === '1' && composer.dataset.boundInputId === input.id + (input.dataset.uid || '')) return;
   composer.dataset.bound = '1';
   composer.dataset.boundInputId = input.id + (input.dataset.uid || '');
 
-  const sync = () => {
+  const resetOptions = () => {
+    if (!optionsList) return;
+    optionsList.innerHTML = '';
+    for (let i = 0; i < 2; i += 1) {
+      const row = document.createElement('div');
+      row.className = 'profile-poll-option-row';
+      row.innerHTML = `
+        ${_profileComposerKind === 'qna'
+          ? `<label class="profile-qna-correct-wrap" title="Mark as correct answer">
+               <input type="radio" class="profile-qna-correct-radio" name="profile-qna-correct-option" value="option-${i + 1}" aria-label="Mark option ${i + 1} as correct">
+               <span>Correct</span>
+             </label>`
+          : '<span aria-hidden="true"></span>'}
+        <input class="profile-poll-option-input" maxlength="80" placeholder="Option ${i + 1}">
+        <button type="button" class="profile-poll-remove-btn" title="Remove option" aria-label="Remove option">×</button>`;
+      row.querySelector('.profile-qna-correct-radio')?.addEventListener('change', event => {
+        _profileQnaCorrectOptionId = event.target.value;
+        syncProfileComposer();
+      });
+      row.querySelector('.profile-poll-remove-btn')?.addEventListener('click', () => {
+        if (optionsList.querySelectorAll('.profile-poll-option-row').length <= 2) {
+          toast('Keep at least 2 choices.', '⚠️');
+          return;
+        }
+        row.remove();
+        syncProfileComposer();
+      });
+      optionsList.appendChild(row);
+    }
+    _profileQnaCorrectOptionId = null;
+  };
+
+  const setKind = (kind) => {
+    const next = ['text', 'photo', 'poll', 'qna'].includes(kind) ? kind : 'text';
+    _profileComposerKind = next;
+
+    document.querySelectorAll('#pg-profile [data-profile-compose-kind]').forEach(btn => {
+      const active = btn.dataset.profileComposeKind === next;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+
+    if (builder) {
+      const structured = next === 'poll' || next === 'qna';
+      builder.hidden = !structured;
+      if (structured && (!optionsList?.children.length || builder.dataset.kind !== next)) {
+        builder.dataset.kind = next;
+        resetOptions();
+      }
+    }
+
+    if (modeLabel) modeLabel.textContent = next === 'qna' ? 'Q&A' : next === 'poll' ? 'Poll' : next === 'photo' ? 'Photo' : 'Text';
+    if (photoButton) photoButton.style.display = next === 'photo' ? 'inline-flex' : 'none';
+    if (next !== 'photo') {
+      clearComposePhotoPreview('profile-photo-input','btn-profile-photo-upload','profile-photo-preview','profile-photo-name');
+    }
+    syncProfileComposer();
+  };
+
+  const getOptionValues = () => Array.from(optionsList?.querySelectorAll('.profile-poll-option-input') || [])
+    .map(inputEl => String(inputEl.value || '').trim());
+
+  const validateStructured = () => {
+    if (!['poll', 'qna'].includes(_profileComposerKind)) return { ok: true, options: [], correctOptionId: null };
+    const question = input.value.trim();
+    if (!question) return { ok: false, message: `${_profileComposerKind === 'qna' ? 'Q&A' : 'Poll'} needs a question.` };
+    const raw = getOptionValues().map((label, index) => ({ label, index })).filter(x => x.label);
+    if (raw.length < 2) return { ok: false, message: 'Add at least 2 choices.' };
+    if (raw.length > FEED_COMPOSER_MAX_OPTIONS) return { ok: false, message: 'Use a maximum of 6 choices.' };
+
+    const seen = new Set();
+    for (const item of raw) {
+      const key = item.label.toLowerCase();
+      if (seen.has(key)) return { ok: false, message: 'Each choice must be unique.' };
+      seen.add(key);
+    }
+
+    const options = raw.map(item => ({ id: `option-${item.index + 1}`, label: item.label }));
+    let correctOptionId = null;
+    if (_profileComposerKind === 'qna') {
+      const checked = optionsList?.querySelector('.profile-qna-correct-radio:checked');
+      if (!checked) return { ok: false, message: 'Select the correct answer before posting this Q&A.' };
+      correctOptionId = checked.value;
+    }
+    return { ok: true, options, correctOptionId };
+  };
+
+  const syncProfileComposer = () => {
     const text = input.value.trim();
     const hasPhoto = !!photoInput?.files?.[0];
+    const structured = _profileComposerKind === 'poll' || _profileComposerKind === 'qna';
+    const validation = structured ? validateStructured() : { ok: true };
     const hashtagCheck = syncHashtagStatus(text, 'profile-hashtag-status');
-    button.disabled = (!text && !hasPhoto) || text.length > 500 || S.isGuest || !S.userId || !hashtagCheck.ok;
+
+    const validContent =
+      _profileComposerKind === 'photo'
+        ? hasPhoto || !!text
+        : structured
+          ? validation.ok
+          : !!text;
+
+    button.disabled = !validContent || text.length > 500 || S.isGuest || !S.userId || !hashtagCheck.ok;
+    button.textContent =
+      _profileComposerKind === 'poll' ? 'Post poll' :
+      _profileComposerKind === 'qna' ? 'Post Q&A' :
+      'Post';
+
     if (photoName) photoName.textContent = hasPhoto ? `${photoInput.files[0].name} · ${formatPhotoSize(photoInput.files[0].size)}` : '';
     const count = $('profile-post-char-count');
     if (count) {
       count.textContent = `${input.value.length} / 500`;
       count.style.color = input.value.length > 500 ? 'var(--danger)' : 'var(--on-surface-3)';
     }
+    if (builder) {
+      builder.hidden = !(structured);
+    }
   };
 
-  input.addEventListener('input', sync);
+  // Bind composer type buttons once.
+  document.querySelectorAll('#pg-profile [data-profile-compose-kind]').forEach(btn => {
+    if (btn.dataset.profileComposeBound === '1') return;
+    btn.dataset.profileComposeBound = '1';
+    btn.addEventListener('click', () => setKind(btn.dataset.profileComposeKind));
+  });
+
+  // V112: profile poll duration buttons use the same 1d / 2d / 1w model as Feed.
+  document.querySelectorAll('#pg-profile [data-profile-poll-duration]').forEach(btn => {
+    if (btn.dataset.profileDurationBound === '1') return;
+    btn.dataset.profileDurationBound = '1';
+    btn.addEventListener('click', () => {
+      const hours = Number(btn.dataset.profilePollDuration);
+      if (![24, 48, 168].includes(hours)) return;
+      _profilePollDurationHours = hours;
+      document.querySelectorAll('#pg-profile [data-profile-poll-duration]').forEach(other => {
+        const active = Number(other.dataset.profilePollDuration) === hours;
+        other.classList.toggle('active', active);
+        other.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      syncProfileComposer();
+    });
+  });
+
+  if (addOption && addOption.dataset.profileComposeBound !== '1') {
+    addOption.dataset.profileComposeBound = '1';
+    addOption.addEventListener('click', () => {
+      if (!optionsList) return;
+      const count = optionsList.querySelectorAll('.profile-poll-option-row').length;
+      if (count >= FEED_COMPOSER_MAX_OPTIONS) {
+        toast('Polls and Q&A posts can have at most 6 choices.', '⚠️');
+        return;
+      }
+      const row = document.createElement('div');
+      row.className = 'profile-poll-option-row';
+      row.innerHTML = `
+        ${_profileComposerKind === 'qna'
+          ? `<label class="profile-qna-correct-wrap" title="Mark as correct answer">
+               <input type="radio" class="profile-qna-correct-radio" name="profile-qna-correct-option" value="option-${count + 1}" aria-label="Mark option ${count + 1} as correct">
+               <span>Correct</span>
+             </label>`
+          : '<span aria-hidden="true"></span>'}
+        <input class="profile-poll-option-input" maxlength="80" placeholder="Option ${count + 1}">
+        <button type="button" class="profile-poll-remove-btn" title="Remove option" aria-label="Remove option">×</button>`;
+      optionsList.appendChild(row);
+      row.querySelector('.profile-qna-correct-radio')?.addEventListener('change', event => {
+        _profileQnaCorrectOptionId = event.target.value;
+        syncProfileComposer();
+      });
+      row.querySelector('.profile-poll-remove-btn')?.addEventListener('click', () => {
+        if (optionsList.querySelectorAll('.profile-poll-option-row').length <= 2) return toast('Keep at least 2 choices.', '⚠️');
+        row.remove();
+        syncProfileComposer();
+      });
+      syncProfileComposer();
+      row.querySelector('.profile-poll-option-input')?.focus();
+    });
+  }
+
+  input.addEventListener('input', syncProfileComposer);
   input.addEventListener('keydown', (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
       event.preventDefault();
-      button.click();
+      if (!button.disabled) button.click();
     }
   });
 
   button.addEventListener('click', async () => {
     const content = input.value.trim();
     const file = photoInput?.files?.[0] || null;
-    if ((!content && !file) || content.length > 500 || S.isGuest || !S.userId) return;
+
+    if (S.isGuest || !S.userId || !sb) {
+      toast('Sign in to post', '🔒');
+      return;
+    }
+
     const hashtagCheck = validateUniqueHashtags(content);
-    if (!hashtagCheck.ok) { toast(hashtagCheck.message, '⚠️'); sync(); return; }
+    if (!hashtagCheck.ok) {
+      toast(hashtagCheck.message, '⚠️');
+      syncProfileComposer();
+      return;
+    }
+
+    const structured = validateStructured();
+    if (_profileComposerKind === 'photo' && !file) {
+      toast('Choose a photo first.', '⚠️');
+      return;
+    }
+    if (['poll', 'qna'].includes(_profileComposerKind) && !structured.ok) {
+      toast(structured.message, '⚠️');
+      syncProfileComposer();
+      return;
+    }
+    if (_profileComposerKind === 'text' && !content) return;
 
     button.disabled = true;
     button.textContent = 'Posting…';
     if (error) error.style.display = 'none';
 
     try {
-      if (file) validatePhotoFile(file);
-      const media = file ? await uploadPhotoFile(file, 'profile') : null;
-      // posts_content_check requires >= 1 char; photo posts may have no caption, so send ' '.
-      const insertContent = content || (media ? ' ' : content);
-      const payload = { user_id: S.userId, content: insertContent, post_type: media ? 'photo' : 'text', visibility: 'public' };
-      if (media) { payload.media_url = media.url; payload.media_type = media.type; payload.media_size = media.size; }
-      const { data, error: postError } = await sb.from('posts').insert(payload)
-        .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta').single();
+      let media = null;
+      if (_profileComposerKind === 'photo' && file) {
+        validatePhotoFile(file);
+        media = await uploadPhotoFile(file, 'profile');
+      }
 
-      if (postError) {
-        throw postError;
+      const payload = {
+        user_id: S.userId,
+        content: content || (media ? ' ' : ''),
+        post_type: media ? 'photo' : 'text',
+        visibility: 'public'
+      };
+
+      if (media) {
+        payload.media_url = media.url;
+        payload.media_type = media.type;
+        payload.media_size = media.size;
       }
-      if (data) {
-        _profilePosts = [data, ..._profilePosts].slice(0, POSTS_PAGE_SIZE);
-        // Hydrate engagement for the new post so like/comment counts are live
-        await hydratePostEngagement([data.id]).catch(() => {});
-        renderProfilePosts(_profilePosts);
-        renderProfileGallery(_profilePosts);
-        renderProfileReels(_profilePosts);
-        refreshProfileTabs(_profilePosts);
-        hydrateTrendingHashtags().catch(() => {});
+
+      if (['poll', 'qna'].includes(_profileComposerKind)) {
+        payload.post_meta = {
+          kind: _profileComposerKind,
+          mode: 'mcq',
+          options: structured.options
+        };
+        if (_profileComposerKind === 'poll') {
+          const durationHours = [24, 48, 168].includes(Number(_profilePollDurationHours))
+            ? Number(_profilePollDurationHours)
+            : 24;
+          payload.post_meta.duration_hours = durationHours;
+          payload.post_meta.expires_at = new Date(Date.now() + durationHours * 60 * 60 * 1000).toISOString();
+        }
       }
+
+      const { data, error: postError } = await sb.from('posts')
+        .insert(payload)
+        .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
+        .single();
+
+      if (postError) throw postError;
+
+      if (_profileComposerKind === 'qna' && structured.correctOptionId) {
+        const { error: answerKeyError } = await sb.from('post_qna_keys').insert({
+          post_id: data.id,
+          owner_id: S.userId,
+          correct_option_id: structured.correctOptionId
+        });
+        if (answerKeyError) {
+          await sb.from('posts').delete().eq('id', data.id).eq('user_id', S.userId);
+          throw answerKeyError;
+        }
+      }
+
+      const postedKind = _profileComposerKind;
+      _profilePosts = [data, ..._profilePosts].filter(post => post?.post_type !== 'reel').slice(0, POSTS_PAGE_SIZE);
+      await hydratePostEngagement([data.id]).catch(() => {});
+      if (data.post_meta?.kind === 'poll') await hydratePollResults([data.id]).catch(() => {});
+      if (data.post_meta?.kind === 'qna') await hydrateQnaResponses([data.id]).catch(() => {});
+
+      renderProfilePosts(_profilePosts);
+      renderProfileGallery(_profilePosts);
+      renderProfileReels(_profilePosts);
+      refreshProfileTabs(_profilePosts);
+
       input.value = '';
+      _profileComposerKind = 'text';
+      _profileQnaCorrectOptionId = null;
+      _profilePollDurationHours = 24;
+      if (optionsList) optionsList.innerHTML = '';
       clearComposePhotoPreview('profile-photo-input','btn-profile-photo-upload','profile-photo-preview','profile-photo-name');
-      sync();
-      // Refresh feed too if it is the active page
+      setKind('text');
+      syncProfileComposer();
+
+      hydrateTrendingHashtags().catch(() => {});
       if ($('pg-feed')?.classList.contains('active')) {
         _feedPosts = [];
         _feedOffset = 0;
         _feedHasMore = true;
         fetchFeedPage(true).catch(() => {});
       }
-      toast(file ? 'Photo post published!' : 'Post published!', '✍️');
+
+      toast(
+        postedKind === 'poll' ? 'Poll published!' :
+        postedKind === 'qna' ? 'Q&A published!' :
+        media ? 'Photo post published!' : 'Post published!',
+        postedKind === 'poll' ? '📊' : postedKind === 'qna' ? '❓' : '✍️'
+      );
     } catch (e) {
-      console.warn('[Posts] create failed:', e);
+      console.warn('[Profile] create failed:', e);
       if (error) {
         error.textContent = e?.message || 'Could not publish the post.';
         error.style.display = 'block';
       }
     } finally {
-      button.textContent = 'Post';
-      sync();
+      button.textContent = _profileComposerKind === 'poll' ? 'Post poll' : _profileComposerKind === 'qna' ? 'Post Q&A' : 'Post';
+      syncProfileComposer();
     }
   });
 
@@ -7861,17 +8135,20 @@ function initProfilePostComposer() {
     photoInput.addEventListener('change', () => {
       try {
         renderComposePhotoPreview({ inputId:'profile-photo-input', buttonId:'btn-profile-photo-upload', previewId:'profile-photo-preview', nameId:'profile-photo-name' });
-        sync();
+        syncProfileComposer();
       } catch (e) {
         clearComposePhotoPreview('profile-photo-input','btn-profile-photo-upload','profile-photo-preview','profile-photo-name');
         toast(e.message,'⚠️');
-        sync();
+        syncProfileComposer();
       }
     });
   }
-  sync();
-}
 
+  if (_profileComposerKind === 'poll' || _profileComposerKind === 'qna') {
+    if (!optionsList?.children.length) resetOptions();
+  }
+  setKind(_profileComposerKind);
+}
 async function fetchPublicProfileData(userId) {
   if (!userId || !sb) return { id: userId, username: 'user', display_name: 'User' };
   // Public profile data is readable without authentication.
@@ -9191,6 +9468,8 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
       </div>`;
   }
 
+  window.renderProfileTalkStats = renderProfileTalkStats;
+
   /* ── DOM Injection helpers ──────────────────────────────────────────────── */
 
   /* LOBBY */
@@ -9351,14 +9630,10 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
     }
   }
 
-  /* PROFILE — inject stats host after gallery section */
+  /* PROFILE — Talk stats now live inside the dedicated Stats tab.
+     Do not inject Talk/activity cards into Posts or Photos. */
   function injectProfileStats() {
-    if ($('profile-talk-stats')) return;
-    const gallery = $('profile-gallery-section');
-    if (!gallery) return;
-    const div = document.createElement('div');
-    div.id = 'profile-talk-stats';
-    gallery.insertAdjacentElement('afterend', div);
+    return;
   }
 
   /* ── Interest chips (built once per lobby visit) ────────────────────────── */
@@ -9535,6 +9810,7 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
     if (id === 'pg-profile') {
       setTimeout(() => {
         injectProfileStats();
+        renderProfileStatsPanel();
         renderProfileTalkStats();
       }, 200);
     }
@@ -9632,7 +9908,7 @@ function renderProfileStatsPanel() {
   const p = publicView ? null : getCurrentProgress();
   const summary = p ? formatProgressLine(p) : null;
   const follow = S.profileViewUserId ? (_followCache.get(S.profileViewUserId) || {followers:0,following:0}) : null;
-  const postCount = (_profilePosts || []).filter(p => !p.media_url && p?.post_type !== 'reel').length;
+  const postCount = (_profilePosts || []).filter(p => p?.post_type !== 'reel').length;
   const photoCount = (_profilePosts || []).filter(p => p.media_url && p?.post_type !== 'reel').length;
   const reelCount = collectAvailableReels().length;
   host.innerHTML = `
@@ -9649,7 +9925,11 @@ function renderProfileStatsPanel() {
       <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(follow?.following ?? _followCache.get(S.userId)?.following).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Streak</span><strong class="profile-stats-val">${publicView ? '—' : `${toNum(summary?.streak)}d`}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Weekly rank</span><strong class="profile-stats-val">${publicView ? '—' : `#${toNum(summary?.rank)}`}</strong></div>
+    </div>
+    <div class="profile-stats-section profile-talk-stats-host-section">
+      <div id="profile-talk-stats"></div>
     </div>`;
+  if (typeof window.renderProfileTalkStats === 'function') window.renderProfileTalkStats();
 }
 
 function initProfileTabs() {
@@ -9690,7 +9970,7 @@ function initProfileTabs() {
 }
 function refreshProfileTabCounts(posts = _profilePosts) {
   const sets = {
-    posts: (posts || []).filter(p => !p.media_url && p?.post_type !== 'reel').length,
+    posts: (posts || []).filter(p => p?.post_type !== 'reel').length,
     photos: (posts || []).filter(p => p.media_url && p?.post_type !== 'reel').length,
     reels: collectAvailableReels(posts).length
   };
