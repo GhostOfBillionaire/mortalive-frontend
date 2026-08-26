@@ -7371,6 +7371,86 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 @media(max-width:720px){
   #pg-profile #profile-gallery{grid-template-columns:repeat(2,minmax(0,1fr));}
 }
+
+/* V130 Talk layout: preserve the earlier proven composition — video on the
+   left in a tall portrait-style feed, chat on the right. Force visibility so
+   a successfully playing synthetic/real stream cannot be hidden by a stale
+   display:none rule from an older layout patch. */
+#pg-chat.active .chat-body {
+  display: grid !important;
+  grid-template-columns: minmax(300px, 42%) minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  align-items: stretch !important;
+  gap: 14px !important;
+  overflow: hidden !important;
+}
+#pg-chat.active .video-panel.visible,
+#pg-chat.active .video-panel.has-remote {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  align-self: stretch !important;
+}
+#pg-chat.active .video-feeds {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: none !important;
+  aspect-ratio: 1 / 1.65 !important;
+  grid-template-columns: 1fr !important;
+  grid-template-rows: 1fr 1fr !important;
+  min-height: 0 !important;
+}
+#pg-chat.active .video-wrapper {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  aspect-ratio: auto !important;
+}
+#pg-chat.active .video-wrapper video,
+#pg-chat.active #vid-remote,
+#pg-chat.active #vid-local {
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
+  visibility: visible !important;
+  object-fit: cover !important;
+}
+#pg-chat.active .chat-panel {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  visibility: visible !important;
+}
+#pg-chat.active .video-panel {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+}
+@media (max-width: 720px) {
+  #pg-chat.active .chat-body {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+  }
+  #pg-chat.active .video-panel.visible,
+  #pg-chat.active .video-panel.has-remote {
+    height: auto !important;
+    align-self: auto !important;
+  }
+  #pg-chat.active .video-feeds {
+    height: auto !important;
+    aspect-ratio: 1 / 1.2 !important;
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: 1fr !important;
+    max-height: 34vh !important;
+  }
+  #pg-chat.active .chat-panel,
+  #pg-chat.active .video-panel { grid-column: 1 !important; }
+  #pg-chat.active .video-panel { grid-row: 1 !important; }
+  #pg-chat.active .chat-panel { grid-row: 2 !important; }
+}
 </style>
 <meta name="mortalive-build" content="v126-synthetic-skip-10s-real-check">
 </head>
@@ -8758,7 +8838,7 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260826-v130-synthetic-on-demand-crokz-live-stats"></script>
+<script src="app.js?v=20260826-v130-video-left-chat-right-visible"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
