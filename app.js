@@ -1,8 +1,9 @@
 // FRESH BUILD MARKER — 2026-08-21 00:03 IST — v40 Messages enhancement merge; stable baseline preserved
+// V132 width/fullscreen: desktop keeps video-left/chat-right; portrait fullscreen reserves controls so both feeds fit.
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-26-v131-video-feed-markup-fixed'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-26-v132-talk-width-fullscreen-fixed'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -4036,8 +4037,10 @@ function getIsPortrait() {
 
 function applyFsGrid() {
   const feeds = $('video-feeds');
-  if (!feeds) return;
-  // Use pre-entry snapshot to avoid the Android auto-rotate race;
+  const panel = $('video-panel');
+  if (!feeds || !panel) return;
+
+  // Use pre-entry snapshot to avoid the Android auto-rotation race;
   // fall back to live reading for mid-fullscreen rotation events.
   const isPortrait = (S.fsEnteredAsPortrait != null)
     ? S.fsEnteredAsPortrait
@@ -4047,13 +4050,23 @@ function applyFsGrid() {
   document.body.classList.toggle('vid-fs-portrait',  isPortrait);
   document.body.classList.toggle('vid-fs-landscape', !isPortrait);
 
-  // Inline styles — highest specificity, belt-and-suspenders
+  // V132: fullscreen controls are fixed/overlaid at the bottom. Reserve their
+  // real height inside the feed area so the second portrait video is never
+  // hidden underneath the control bar or cropped by a 100% + controls layout.
+  feeds.style.flex = '1 1 auto';
+  feeds.style.minHeight = '0';
+  feeds.style.width = '100%';
+  feeds.style.maxHeight = 'none';
+  feeds.style.height = 'auto';
+
   if (isPortrait) {
     feeds.style.gridTemplateColumns = '1fr';
     feeds.style.gridTemplateRows   = '1fr 1fr';
+    feeds.style.paddingBottom = 'calc(76px + env(safe-area-inset-bottom, 0px))';
   } else {
     feeds.style.gridTemplateColumns = '1fr 1fr';
     feeds.style.gridTemplateRows   = '1fr';
+    feeds.style.paddingBottom = '0';
   }
 }
 
@@ -4072,6 +4085,12 @@ function handleFullscreenChange() {
     if (feeds) {
       feeds.style.gridTemplateColumns = '';
       feeds.style.gridTemplateRows   = '';
+      feeds.style.paddingBottom = '';
+      feeds.style.flex = '';
+      feeds.style.minHeight = '';
+      feeds.style.width = '';
+      feeds.style.maxHeight = '';
+      feeds.style.height = '';
     }
     return;
   }
