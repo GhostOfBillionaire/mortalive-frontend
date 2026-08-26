@@ -2,10 +2,9 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-26-v130-talk-shuffle-no-preload-crokz-realtime'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-26-v130-video-left-chat-right-visible'; // bump this string on every deploy to confirm cache is fresh
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
-// V130 engineer note: synthetic inventory is fetched on demand; never preload the full database.
 
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
 const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
@@ -82,7 +81,11 @@ const S = {
   profileViewUserId: null,
   profileViewData: null,
   selectedFeedPhoto: null,
-  selectedProfilePhoto: null
+  selectedProfilePhoto: null,
+  // V129: monotonically increasing Talk search generation. Every search/fallback
+  // timer carries the generation so an old timer cannot strand a newer search.
+  talkSearchGeneration: 0,
+  talkFallbackTimer: null
 };
 
 // EXPLICIT GLOBAL BINDING: Allows index.html inline scripts to accurately read the guest state
@@ -257,7 +260,7 @@ function defaultProgress() {
     profileTheme: 'aurora',
     profileFrame: 'Liquid Glass',
     featuredQuote: 'Building momentum one connection at a time.',
-    pinnedNote: 'Connect with the world, build your Crockz Score, and unlock your profile.',
+    pinnedNote: 'Connect with the world, build your crockroach Score, and unlock your profile.',
     avatarFrame: 'halo',
     lastSyncedAt: 0
   });
@@ -268,7 +271,7 @@ function defaultProfile() {
     theme: 'aurora',
     frame: 'Liquid Glass',
     quote: 'Building momentum one connection at a time.',
-    pinned: 'Connect with the world, build your Crockz Score, and unlock your profile.',
+    pinned: 'Connect with the world, build your crockroach Score, and unlock your profile.',
     accent: 'rgba(90, 177, 255, .95)',
     pattern: 'mesh'
   });
@@ -474,7 +477,7 @@ function updateProgressText() {
 
   const scorePill = $('score-pill-btn');
   if (scorePill) {
-    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} Crockz Score · ${summary.badges} badges`;
+    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} crockroach Score · ${summary.badges} badges`;
     scorePill.title = S.isGuest
       ? 'Guest sessions do not earn status'
       : `Top ${summary.percentile}% · #${summary.rank} weekly rank`;
@@ -492,7 +495,6 @@ function syncAuthProgress(baseScore) {
   updateDerivedProgress();
   persistProgress();
   updateProgressText();
-  refreshProfileStatsRealtime();
   // If local bonusScore accumulated while the user was offline, push the
   // merged total back to Supabase now that they're authenticated again.
   scheduleSyncScoreToSupabase();
@@ -561,12 +563,11 @@ function awardProgress(kind, amount = 1, meta = {}) {
   persistProgress();
   scheduleSyncScoreToSupabase(); // keep Supabase accounts.crockroach_score in sync
   updateProgressText();
-  refreshProfileStatsRealtime();
 
   if (meta.completion) {
     const goal = computeGoalText(progress);
     if (source === 'chat_complete') {
-      toast(`+${delta} Crockz Score · ${goal}`, '🧲');
+      toast(`+${delta} crockroach Score · ${goal}`, '🧲');
     } else {
       toast(`Milestone reached · ${goal}`, '🏁');
     }
@@ -575,31 +576,6 @@ function awardProgress(kind, amount = 1, meta = {}) {
   }
 
   return progress;
-}
-
-function refreshProfileStatsRealtime() {
-  try {
-    const progress = getCurrentProgress();
-    const summary = formatProgressLine(progress);
-    updateProgressText();
-
-    const statMap = {
-      'profile-stat-score': String(summary.score),
-      'profile-stat-streak': String(summary.streak),
-      'profile-stat-completions': String(summary.completions),
-      'profile-stat-rank': `#${summary.rank}`
-    };
-    Object.entries(statMap).forEach(([id, value]) => {
-      const el = $(id);
-      if (el) el.textContent = value;
-    });
-
-    if (typeof renderProfileTalkStats === 'function') renderProfileTalkStats();
-    if (typeof refreshLobbyStats === 'function') refreshLobbyStats();
-    if (typeof renderProfileStatsPanel === 'function') renderProfileStatsPanel();
-  } catch (error) {
-    console.warn('[Profile Stats] realtime refresh failed:', error?.message || error);
-  }
 }
 
 function finalizeChatProgress(reason = 'completed') {
@@ -632,7 +608,7 @@ function copyProgressShareCard() {
   const profile = getCurrentProfile();
   const text = [
     `Mortalive status`,
-    `${S.username || S.guestName || 'Guest'} · ${summary.score} Crockz Score`,
+    `${S.username || S.guestName || 'Guest'} · ${summary.score} crockroach Score`,
     `${summary.streak} day streak · ${summary.completions} completions`,
     `Top ${summary.percentile}% · #${summary.rank} weekly`,
     `Frame: ${profile.frame || 'Liquid Glass'}`
@@ -1025,6 +1001,7 @@ function isFullscreenVideoMode() {
   return !!(panel && fs && (fs === panel || panel.contains(fs)));
 }
 
+// V130: Talk desktop composition is intentionally video-left / chat-right.
 function applyVideoLayout() {
   // Layout is now entirely CSS-driven:
   //   Desktop normal     → 2 squares side by side (grid-template-columns: 1fr 1fr)
@@ -1166,7 +1143,7 @@ function updateIdentityDisplay() {
   const displayUsername = S.username || localStorage.getItem('mortalive_username');
 
   if (!S.isGuest && displayUsername) {
-    if (label) label.textContent = `Logged in as ${displayUsername} · 🧲 ${summary.score} Crockz Score · ${summary.streak} streak · #${summary.rank}`;
+    if (label) label.textContent = `Logged in as ${displayUsername} · 🧲 ${summary.score} crockroach Score · ${summary.streak} streak · #${summary.rank}`;
     if (switchBtn) switchBtn.style.display = 'none';
     if (logoutBtn) logoutBtn.style.display = '';
     if (scorePill) scorePill.style.display = '';
@@ -2650,7 +2627,9 @@ $('vc-fs')?.addEventListener('click', () => {
     clearTimeout(matchTimeout);
     clearTimeout(S.noMatchTimeout);
     clearRealUserCheckTimer();
+    clearTalkFallbackTimer();
     clearTimeout(talkOptionsPopupTimer);
+    S.talkSearchGeneration += 1;
     talkOptionsPopupTimer = null;
     stopSearchSnapshots(); // stop the 2s search loop before leaving pg-match
     disconnectPeer();
@@ -2841,7 +2820,7 @@ function startMatchQueueHeartbeat() {
     if (S.socket?.connected) {
       try {
         S.socket.emit('queue', {
-          mode: 'text',
+          mode: S.mode === 'video' ? 'video' : 'text',
           pref: S.interest,
           token: S.authToken,
           guestName: S.guestName
@@ -2890,106 +2869,132 @@ function startRealUserCheckTimer(checkDurationMs = 30 * 1000, onTimeout = null) 
   }, duration);
 }
 
-function beginRealUserPrioritySearch({ fallbackToSynthetic = false, reason = 'searching', priorityWindowMs = 30 * 1000, quickCheckMs = null } = {}) {
+function clearTalkFallbackTimer() {
+  clearTimeout(S.talkFallbackTimer);
+  S.talkFallbackTimer = null;
+}
+
+function beginRealUserPrioritySearch({
+  fallbackToSynthetic = false,
+  reason = 'searching',
+  priorityWindowMs = 30 * 1000,
+  quickCheckMs = null
+} = {}) {
   clearRealUserCheckTimer();
   clearSyntheticSearchTimer();
+  clearTalkFallbackTimer();
   stopSyntheticVideo();
 
+  const generation = ++S.talkSearchGeneration;
   const totalWindow = Math.max(1000, Number(priorityWindowMs) || 30 * 1000);
-  const quickWindow = quickCheckMs == null ? null : Math.max(1000, Math.min(totalWindow, Number(quickCheckMs) || 10000));
+  const quickWindow = quickCheckMs == null
+    ? null
+    : Math.max(1000, Math.min(totalWindow, Number(quickCheckMs) || 10000));
+
+  // Arm the authoritative fallback BEFORE any socket/UI work. This prevents
+  // a synchronous/re-entrant queue path from ever leaving first search without
+  // a fallback timer.
+  if (fallbackToSynthetic) {
+    S.talkFallbackTimer = setTimeout(() => {
+      if (generation !== S.talkSearchGeneration) return;
+      S.talkFallbackTimer = null;
+
+      const onMatchingScreen = $('pg-match')?.classList.contains('active');
+      if (!onMatchingScreen || S.matched || S.syntheticActive) return;
+
+      console.log(`[Talk] ${Math.round(totalWindow / 1000)}-second real-user priority window expired; offering synthetic Talk video.`);
+      beginSyntheticMatch();
+    }, totalWindow);
+  }
+
   const message = reason === 'synthetic-ended'
     ? '↩ Video ended — searching for real people…'
     : '↩ Searching for another real person…';
 
   startMatching();
+
+  // Restore/reassert the active generation after startMatching() so the
+  // timer cannot be invalidated by setup code.
+  S.talkSearchGeneration = generation;
   addSysLine(message);
 
-  // Preserve the requested early 10-second check without making it an
-  // artificial session limit. The queue stays active after this point.
   if (fallbackToSynthetic && quickWindow && quickWindow < totalWindow) {
     setTimeout(() => {
+      if (generation !== S.talkSearchGeneration) return;
       const onMatchingScreen = $('pg-match')?.classList.contains('active');
       if (!onMatchingScreen || S.matched || S.syntheticActive) return;
       console.log('[Talk] 10-second real-user check completed; continuing to prioritize real users.');
     }, quickWindow);
   }
-
-  if (fallbackToSynthetic) {
-    startRealUserCheckTimer(totalWindow, () => {
-      const onMatchingScreen = $('pg-match')?.classList.contains('active');
-      if (!onMatchingScreen || S.matched) return;
-      console.log(`[Talk] ${Math.round(totalWindow / 1000)}-second real-user priority window expired; offering synthetic Talk video.`);
-      beginSyntheticMatch();
-    });
-  }
 }
 
 function startMatching() {
-  // Explicit user action is the only way to enter matchmaking.
-  // Start a fresh solo-search session for snapshot grouping. Re-announcing
-  // an already-active search keeps the same group instead of splitting it.
+  // Explicit user action (or an already-authorized fallback transition) is the
+  // only way to enter matchmaking. Preserve one searchSessionId per continuous
+  // solo-search phase.
   const alreadySearching = $('pg-match')?.classList.contains('active') && !S.matched && S.searchSessionId;
   if (!alreadySearching) {
     S.searchSessionId = `search-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    // P1 FIX: Clear any stale room ID so search-phase snapshots are grouped under
-    // the new searchSessionId, not under the previous real or synthetic room.
-    // sendSnapshot() uses: S.roomId || S.searchSessionId, so roomId must be null here.
     S.roomId = null;
   }
+
+  const requestedMode = S.mode === 'video' ? 'video' : 'text';
+
+  // Important V129 ordering: mark the state BEFORE touching Socket.IO so a
+  // very fast 'matched' event cannot be overwritten by this function.
+  S.matched = false;
+  S.connectFailed = false;
+
   setMatchResumeIntent();
   clearSyntheticSearchTimer();
-  showSearchScreen(); // also calls startSearchSnapshots() internally
+  showSearchScreen();
   initSocket();
-
-  S.matched = false; // reset; set to true inside the 'matched' socket handler
 
   clearTimeout(matchTimeout);
   clearTimeout(S.noMatchTimeout);
-  S.connectFailed = false;
+  S.noMatchTimeout = null;
 
-  // Don't guess based on a fixed timer how long a handshake "should" take —
-  // that's exactly what was racing the demo fallback against normal,
-  // healthy connections on slower networks (a PC behind a stricter
-  // proxy/firewall can take much longer than a phone on home wifi to
-  // finish the WebSocket → polling fallback dance). Instead, listen for
-  // Socket.io's OWN signal that something is actually wrong, and only
-  // treat it as a real failure after several consecutive failed attempts
-  // (reconnection is enabled, so transient blips resolve on their own).
   let failedAttempts = 0;
   const onConnectError = (err) => {
-    failedAttempts++;
+    failedAttempts += 1;
     console.warn(`[Mortalive] connect_error (#${failedAttempts}):`, err?.message || err);
     if (S.matched || S.connectFailed) return;
+
     if (failedAttempts >= 4) {
       S.connectFailed = true;
-      // P0 FIX: Normalized to 30 s to match the universal priority-window policy.
-      // The old 10-minute value here created a conflicting timer that could leave
-      // the user on the infinite-searching screen far longer than any other path.
-      console.warn('[Mortalive] Server unreachable after repeated attempts — synthetic fallback in 30 s.');
-      startRealUserCheckTimer(30 * 1000, () => beginSyntheticMatch());
+      console.warn('[Mortalive] Server unreachable after repeated attempts — synthetic fallback timer remains authoritative.');
     }
   };
-  // Properly remove any leftover listener from a previous attempt before
-  // attaching a new one — passing a fresh inline function to .off() (the
-  // old code did this) can never match what .on() actually registered, so
-  // stale handlers would silently pile up across repeated search attempts.
+
   if (S.socket && S._lastConnectErrorHandler) {
     S.socket.off('connect_error', S._lastConnectErrorHandler);
   }
   S.socket?.on('connect_error', onConnectError);
   S._lastConnectErrorHandler = onConnectError;
 
-  // No overall Talk/session cap and no automatic exhaustion popup.
-  // Keep the user in the real matchmaking queue indefinitely until they
-  // explicitly cancel, leave, or match with someone.
+  // Re-announce the exact active mode. Never hard-code text during video Talk.
+  if (S.socket?.connected && !S.matched) {
+    try {
+      S.socket.emit('queue', {
+        mode: requestedMode,
+        pref: S.interest,
+        token: S.authToken,
+        guestName: S.guestName
+      });
+    } catch (_) {}
+  }
+
+  // If the socket itself never connects, retain a bounded safety fallback.
+  // The generation-safe real-user priority timer handles the normal path.
+  matchTimeout = setTimeout(() => {
+    if (S.matched || S.connectFailed) return;
+    if (!S.socket?.connected) {
+      console.warn('[Talk] Socket did not connect within safety window; synthetic fallback remains available.');
+    }
+  }, 20000);
+
   clearTimeout(talkOptionsPopupTimer);
-
-  // Keep the user in the real matchmaking queue indefinitely. The popup is
-  // informational/optional and never replaces the queue.
   startMatchQueueHeartbeat();
-
-  clearTimeout(S.noMatchTimeout);
-  S.noMatchTimeout = null;
 }
 
 function removeFromQueueSafely() {
@@ -3156,19 +3161,12 @@ function monitorQuality() {
 // Synthetic never auto-connects two users; real always has priority.
 // ═══════════════════════════════════════════════════════════════════
 
-async function fetchSyntheticVideoBatch(limit = 4, excludeIds = []) {
-  // V130: fetch only a small on-demand batch. Never preload the full
-  // synthetic_videos table; the database remains the source of truth.
-  const requestedLimit = Math.max(1, Math.min(4, Number(limit) || 4));
-  const exclude = new Set((Array.isArray(excludeIds) ? excludeIds : []).map(String));
+async function fetchSyntheticVideoBatch(limit = 12) {
   try {
-    const url = `${SERVER_URL}/api/synthetic-videos?limit=${encodeURIComponent(requestedLimit)}`;
-    const res = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+    const res = await fetch(`${SERVER_URL}/api/synthetic-videos?limit=${encodeURIComponent(limit)}`, { credentials: 'same-origin' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    return Array.isArray(data.videos)
-      ? data.videos.filter(v => v && !exclude.has(String(v.id)))
-      : [];
+    return Array.isArray(data.videos) ? data.videos : [];
   } catch (e) {
     console.warn('[Synthetic] Talk fallback inventory unavailable:', e?.message || e);
     return [];
@@ -3196,31 +3194,20 @@ function scheduleSyntheticSearchResume(delayMs = 900) {
 async function beginSyntheticMatch() {
   clearSyntheticSearchTimer();
   clearRealUserCheckTimer();
-  if (typeof clearTalkFallbackTimer === 'function') clearTalkFallbackTimer();
   stopSearchSnapshots();
   stopMatchQueueHeartbeat();
-
-  // Synthetic playback is never a live queue participant.
+  // A synthetic chat is not a live queue participant. Cancel the real-user
+  // queue before playback so a newly arriving person cannot be paired into
+  // this synthetic session in the background.
   if (S.socket?.connected) {
     try { S.socket.emit('cancel-queue'); } catch (_) {}
   }
 
-  // Never preload the full database. Fetch a small shuffled batch only when
-  // the local batch is exhausted; the database remains the source of truth.
-  const shownIds = Array.isArray(S.syntheticVideos)
-    ? S.syntheticVideos.filter(Boolean).map(v => String(v.id))
-    : [];
-
   if (!S.syntheticVideos.length || S.syntheticCurrentIndex >= S.syntheticVideos.length) {
-    let batch = await fetchSyntheticVideoBatch(4, shownIds);
-    if (!batch.length) {
-      S.syntheticVideos = [];
-      S.syntheticCurrentIndex = 0;
-      batch = await fetchSyntheticVideoBatch(4, []);
-    }
+    const batch = await fetchSyntheticVideoBatch(12);
     if (!batch.length) {
       console.warn('[Synthetic] No Talk fallback inventory; returning to real-user search.');
-      beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'no-synthetic-inventory', priorityWindowMs: 30 * 1000 });
+      beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'no-synthetic-inventory' });
       return;
     }
     S.syntheticVideos = shuffleSyntheticVideos(batch);
@@ -3256,7 +3243,6 @@ async function beginSyntheticMatch() {
     remoteVid.src = String(video.video_url);
     remoteVid.loop = false;
     remoteVid.style.display = 'block';
-
     remoteVid.onended = () => {
       if (!S.syntheticActive) return;
       S.syntheticCurrentIndex += 1;
@@ -3266,47 +3252,33 @@ async function beginSyntheticMatch() {
         videoId: S.syntheticVideoId,
         durationMs: Math.max(0, Date.now() - (S.syntheticVideoStartTime || Date.now()))
       });
-
-      // Every synthetic completion returns to real-user priority first.
-      beginRealUserPrioritySearch({
-        fallbackToSynthetic: true,
-        reason: 'synthetic-ended',
-        priorityWindowMs: 30 * 1000
-      });
+      beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'synthetic-ended' });
     };
-
-    remoteVid.onerror = () => {
-      if (!S.syntheticActive) return;
-      S.syntheticCurrentIndex += 1;
-      console.warn('[Synthetic] Playback error; checking for a real user before next synthetic.');
-      beginRealUserPrioritySearch({
-        fallbackToSynthetic: true,
-        reason: 'synthetic-error',
-        priorityWindowMs: 30 * 1000
-      });
-    };
-
     remoteVid.play().catch((e) => {
       console.warn('[Synthetic] playback failed:', e?.message || e);
-      setText('ph-txt', 'Video could not load — checking for a real user.');
-      setTimeout(() => remoteVid.onerror?.(), 350);
+      setText('ph-txt', 'Video could not load — trying the next connection.');
+      setTimeout(() => remoteVid.onended?.(), 350);
     });
   }
 
   $('no-video-ph')?.style.setProperty('display', 'none');
-  $('video-panel')?.classList.add('visible', 'has-remote');
+  const syntheticPanel = $('video-panel');
+  if (syntheticPanel) {
+    syntheticPanel.classList.add('visible', 'has-remote');
+    syntheticPanel.style.display = 'flex';
+    syntheticPanel.style.visibility = 'visible';
+    syntheticPanel.style.opacity = '1';
+  }
+  $('video-feeds')?.style.setProperty('display', 'grid');
+  $('video-feeds')?.style.setProperty('visibility', 'visible');
+  $('video-feeds')?.style.setProperty('min-height', '0');
   $('quality-bar')?.style.setProperty('display', 'none');
   applyVideoLayout();
   setCallStatus('connected', 'video');
-  logSession('start', {
-    stranger: S.stranger.name,
-    mode: 'video',
-    roomId: S.roomId,
-    isSynthetic: true,
-    syntheticVideoId: video.id
-  });
+  logSession('start', { stranger: S.stranger.name, mode: 'video', roomId: S.roomId, isSynthetic: true, syntheticVideoId: video.id });
   recordSyntheticConnection(video.id);
 }
+
 function stopSyntheticVideo() {
   stopSnapshotCapture();
   S.syntheticActive = false;
@@ -3440,7 +3412,7 @@ function generateProfileShareCard() {
   ctx.fillText(String(score), 135, 610);
   ctx.fillStyle = '#334155';
   ctx.font = '700 27px Inter, Arial, sans-serif';
-  ctx.fillText('Crockz Score', 140, 665);
+  ctx.fillText('crockroach Score', 140, 665);
 
   ctx.fillStyle = '#475569';
   ctx.font = '600 28px Inter, Arial, sans-serif';
@@ -3640,7 +3612,7 @@ function beginChat() {
   const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
   setText('peer-ava', s.emoji);
   setText('peer-name', s.name);
-  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} Crockz Score · connected`);
+  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`);
   bindTalkPeerActions();
   syncTalkPeerFollowUI();
 
@@ -3648,7 +3620,12 @@ function beginChat() {
   
   applyVideoLayout();
   if (S.mode === 'video') {
-    if (panel) panel.classList.add('visible');
+    if (panel) {
+      panel.classList.add('visible');
+      panel.style.display = 'flex';
+      panel.style.visibility = 'visible';
+      panel.style.opacity = '1';
+    }
     $('btn-toggle-video')?.classList.add('active');
   } else {
     if (panel) panel.classList.remove('visible');
@@ -4285,11 +4262,6 @@ ready(async () => {
       }
     });
   }
-
-  // V130: keep profile/Talk stats live without requiring navigation or reload.
-  setInterval(() => {
-    if ($('pg-profile')?.classList.contains('active')) refreshProfileStatsRealtime();
-  }, 2500);
 
   // Sync button states every 200 ms
   setInterval(syncFsButtonStates, 200);
@@ -6377,7 +6349,7 @@ async function openFeedProfileOverlay(userId) {
         <div class="feed-profile-stats">
           <div class="feed-profile-stat"><strong>${toNum(followData.followers).toLocaleString()}</strong><span>Followers</span></div>
           <div class="feed-profile-stat"><strong>${toNum(followData.following).toLocaleString()}</strong><span>Following</span></div>
-          <div class="feed-profile-stat"><strong>${toNum(score).toLocaleString()}</strong><span>Crockz Score</span></div>
+          <div class="feed-profile-stat"><strong>${toNum(score).toLocaleString()}</strong><span>crockroach Score</span></div>
           <div class="feed-profile-stat"><strong>${textPosts.length}</strong><span>Posts</span></div>
           <div class="feed-profile-stat"><strong>${photoPosts.length}</strong><span>Photos</span></div>
         </div>
@@ -6418,7 +6390,7 @@ async function openFeedProfileOverlay(userId) {
             <div class="profile-stats-row"><span class="profile-stats-key">Reels</span><strong class="profile-stats-val">${reels.length}</strong></div>
           </div>
           <div class="profile-stats-section"><div class="profile-stats-section-title">Profile</div>
-            <div class="profile-stats-row"><span class="profile-stats-key">Crockz Score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
+            <div class="profile-stats-row"><span class="profile-stats-key">crockroach Score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Followers</span><strong class="profile-stats-val">${toNum(followData.followers).toLocaleString()}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(followData.following).toLocaleString()}</strong></div>
           </div>
@@ -8931,7 +8903,7 @@ function initProfilePage() {
 
   // Progress Bar
   if ($('rank-label')) $('rank-label').textContent = `${tier.name}${tier.max < Infinity ? ' → ' + RANK_TIERS[RANK_TIERS.indexOf(tier)+1]?.name : ' (Max)'}`;
-  if ($('progress-label')) $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} Crockz Score`;
+  if ($('progress-label')) $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} crockroach Score`;
   if ($('progress-pct')) $('progress-pct').textContent = `${pct}%`;
   if ($('progress-fill')) $('progress-fill').style.width = `${pct}%`;
   if ($('progress-percentile')) $('progress-percentile').textContent = `Top ${summary.percentile}%`;
@@ -9155,7 +9127,7 @@ function openAchievementsSheet() {
       <div style="padding:18px 22px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px;">
           <div style="padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,var(--primary-alpha),rgba(124,58,237,.06));border:1px solid rgba(26,110,245,.14);">
-            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">Crockz Score</div>
+            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">crockroach Score</div>
             <div style="font-size:24px;font-weight:900;letter-spacing:-.04em;margin-top:4px;color:var(--primary);">${score.toLocaleString()}</div>
           </div>
           <div style="padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);">
@@ -9718,13 +9690,13 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
   ];
 
   const MATCH_TIPS = [
-    '💡 Completing chats earns Crockz Score',
+    '💡 Completing chats earns crockroach Score',
     '🌍 Your next match could be from any country on Earth',
     '⭐ Rate your chats to help improve future matches',
     '🔒 Your identity stays private — nothing is shared without your consent',
     '⚡ Average match time is under 30 seconds when others are online',
     '🎯 Adding a topic finds like-minded strangers faster',
-    '🧲 A high Crockz Score boosts your matching priority',
+    '🧲 A high crockroach Score boosts your matching priority',
     '💬 Text mode works without a camera — great for quieter moments',
     '🎬 If no match is found, a recorded stream will appear automatically'
   ];
@@ -10371,7 +10343,6 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
         injectProfileStats();
         renderProfileStatsPanel();
         renderProfileTalkStats();
-        refreshProfileStatsRealtime();
       }, 200);
     }
   }
@@ -10480,7 +10451,7 @@ function renderProfileStatsPanel() {
     </div>
     <div class="profile-stats-section">
       <div class="profile-stats-section-title">Profile</div>
-      <div class="profile-stats-row"><span class="profile-stats-key">Crockz Score</span><strong class="profile-stats-val">${toNum(S.profileViewData?.crockroach_score ?? summary?.score).toLocaleString()}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">crockroach Score</span><strong class="profile-stats-val">${toNum(S.profileViewData?.crockroach_score ?? summary?.score).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Followers</span><strong class="profile-stats-val">${toNum(follow?.followers ?? _followCache.get(S.userId)?.followers).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(follow?.following ?? _followCache.get(S.userId)?.following).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Streak</span><strong class="profile-stats-val">${publicView ? '—' : `${toNum(summary?.streak)}d`}</strong></div>
