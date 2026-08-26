@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-26-v134-talk-controls-shuffle-fullscreen-fixed'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-26-v135-talk-final-controls-shuffle'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -3288,7 +3288,7 @@ function monitorQuality() {
 async function fetchSyntheticVideoBatch(limit = 1, excludeIds = []) {
   try {
     const params = new URLSearchParams({ limit: '1' });
-    const exclusions = Array.from(new Set((Array.isArray(excludeIds) ? excludeIds : []).map(String))).slice(-24);
+    const exclusions = Array.from(new Set((Array.isArray(excludeIds) ? excludeIds : []).map(String))).slice(-40);
     if (exclusions.length) params.set('exclude', exclusions.join(','));
     const res = await fetch(`${SERVER_URL}/api/synthetic-videos?${params.toString()}`, {
       credentials: 'same-origin',
@@ -3312,7 +3312,7 @@ function rememberSyntheticVideo(videoId) {
   const id = String(videoId);
   const ids = getSyntheticSeenIds().filter(existing => existing !== id);
   ids.push(id);
-  S.syntheticSeenIds = ids.slice(-24);
+  S.syntheticSeenIds = ids.slice(-40);
 }
 
 function shuffleSyntheticVideos(videos = []) {
@@ -4108,34 +4108,46 @@ function applyFsGrid() {
   const panel = $('video-panel');
   if (!feeds || !panel) return;
 
-  // Use pre-entry snapshot to avoid the Android auto-rotation race;
-  // fall back to live reading for mid-fullscreen rotation events.
   const isPortrait = (S.fsEnteredAsPortrait != null)
     ? S.fsEnteredAsPortrait
     : getIsPortrait();
 
-  // Body classes — work on every browser regardless of :fullscreen CSS support
-  document.body.classList.toggle('vid-fs-portrait',  isPortrait);
+  document.body.classList.toggle('vid-fs-portrait', isPortrait);
   document.body.classList.toggle('vid-fs-landscape', !isPortrait);
 
-  // V132: fullscreen controls are fixed/overlaid at the bottom. Reserve their
-  // real height inside the feed area so the second portrait video is never
-  // hidden underneath the control bar or cropped by a 100% + controls layout.
   feeds.style.flex = '1 1 auto';
   feeds.style.minHeight = '0';
   feeds.style.width = '100%';
+  feeds.style.maxWidth = 'none';
   feeds.style.maxHeight = 'none';
-  feeds.style.height = 'auto';
+  feeds.style.height = '100%';
+  feeds.style.aspectRatio = 'auto';
+  feeds.style.boxSizing = 'border-box';
+  feeds.style.paddingBottom = '0';
 
-  if (isPortrait) {
-    feeds.style.gridTemplateColumns = '1fr';
-    feeds.style.gridTemplateRows   = '1fr 1fr';
-    feeds.style.paddingBottom = 'calc(76px + env(safe-area-inset-bottom, 0px))';
-  } else {
-    feeds.style.gridTemplateColumns = '1fr 1fr';
-    feeds.style.gridTemplateRows   = '1fr';
-    feeds.style.paddingBottom = '0';
-  }
+  feeds.style.gridTemplateColumns = isPortrait
+    ? '1fr'
+    : 'minmax(0,1fr) minmax(0,1fr)';
+  feeds.style.gridTemplateRows = isPortrait
+    ? 'minmax(0,1fr) minmax(0,1fr)'
+    : 'minmax(0,1fr)';
+
+  feeds.querySelectorAll('.video-wrapper').forEach((wrapper) => {
+    wrapper.style.width = '100%';
+    wrapper.style.height = '100%';
+    wrapper.style.minWidth = '0';
+    wrapper.style.minHeight = '0';
+    wrapper.style.aspectRatio = 'auto';
+  });
+
+  feeds.querySelectorAll('video').forEach((video) => {
+    video.style.width = '100%';
+    video.style.height = '100%';
+    video.style.maxWidth = '100%';
+    video.style.maxHeight = '100%';
+    video.style.objectFit = 'cover';
+    video.style.objectPosition = 'center center';
+  });
 }
 
 function handleFullscreenChange() {
@@ -4252,6 +4264,48 @@ function finishStartupSplash() {
   }, 450);
 }
 
+// V135 fullscreen control delegation
+let __v135FsDelegationInstalled = false;
+function installV135FullscreenControlDelegation() {
+  if (__v135FsDelegationInstalled) return;
+  __v135FsDelegationInstalled = true;
+
+  document.addEventListener('click', (event) => {
+    const target = event.target.closest?.('#fs-mic, #fs-cam, #fs-flip, #fs-exit, #btn-skip-fs');
+    if (!target) return;
+
+    const isFullscreen = !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement
+    );
+    if (!isFullscreen) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (target.id === 'fs-mic') {
+      $('vc-mic')?.click();
+      syncFsButtonStates();
+    } else if (target.id === 'fs-cam') {
+      $('vc-cam')?.click();
+      syncFsButtonStates();
+    } else if (target.id === 'fs-flip') {
+      $('vc-flip')?.click();
+    } else if (target.id === 'btn-skip-fs') {
+      $('btn-skip')?.click();
+    } else if (target.id === 'fs-exit') {
+      try {
+        if (document.fullscreenElement) document.exitFullscreen?.();
+        else if (document.webkitFullscreenElement) document.webkitExitFullscreen?.();
+        else if (document.mozFullScreenElement) document.mozCancelFullScreen?.();
+      } catch (err) {
+        console.warn('[Talk fullscreen] exit failed:', err);
+      }
+    }
+  }, true);
+}
+
 ready(async () => {
   // Load public runtime configuration before binding auth/feed/profile controls.
   // This keeps keys/configuration out of the browser source while preserving
@@ -4285,6 +4339,7 @@ ready(async () => {
   initLobbyControls();
   initChatControls();
   initRatingControls();
+  installV135FullscreenControlDelegation();
   initFeedPage();
 
   // Bind profile controls at startup as well as during page navigation.
