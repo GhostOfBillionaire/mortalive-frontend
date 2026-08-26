@@ -2516,6 +2516,198 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
   z-index: 1;
 }
 
+
+/* =========================================================
+   V132 FINAL TALK DIMENSION OVERRIDE
+   Purpose:
+   - Normal desktop: compact video column on the LEFT, chat on RIGHT.
+   - Keep desktop side-by-side at typical PC widths.
+   - Avoid the 42% video column from making the whole Talk layout feel oversized.
+   - Portrait phone fullscreen: reserve bottom control-bar space so the
+     lower video remains completely visible.
+   ========================================================= */
+
+#pg-chat.active .chat-shell{
+  width:min(1180px, calc(100% - 24px)) !important;
+  max-width:1180px !important;
+  margin-inline:auto !important;
+}
+
+#pg-chat.active .chat-body{
+  grid-template-columns:clamp(300px, 30vw, 360px) minmax(0, 1fr) !important;
+  grid-template-rows:minmax(0, 1fr) !important;
+  gap:12px !important;
+  align-items:stretch !important;
+}
+
+#pg-chat.active .video-panel{
+  min-width:0 !important;
+  max-width:360px !important;
+  width:100% !important;
+}
+
+#pg-chat.active .chat-panel{
+  min-width:0 !important;
+  width:100% !important;
+}
+
+/* The two normal-screen video panes stay portrait/tall in the left column. */
+#pg-chat.active .video-feeds{
+  width:100% !important;
+  max-width:360px !important;
+  height:100% !important;
+  max-height:none !important;
+  aspect-ratio:1 / 1.72 !important;
+  grid-template-columns:1fr !important;
+  grid-template-rows:1fr 1fr !important;
+  overflow:hidden !important;
+}
+
+#pg-chat.active .video-wrapper{
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  aspect-ratio:auto !important;
+  overflow:hidden !important;
+}
+
+#pg-chat.active .video-wrapper video{
+  width:100% !important;
+  height:100% !important;
+  object-fit:cover !important;
+}
+
+/* Keep side-by-side on regular PC/tablet widths; only collapse to
+   video-above-chat on genuinely narrow screens. */
+@media (max-width:760px){
+  #pg-chat.active .chat-shell{
+    width:100% !important;
+    max-width:none !important;
+  }
+  #pg-chat.active .chat-body{
+    grid-template-columns:1fr !important;
+    grid-template-rows:auto minmax(0, 1fr) !important;
+    gap:8px !important;
+  }
+  #pg-chat.active .video-panel{
+    width:100% !important;
+    max-width:none !important;
+    height:auto !important;
+    align-self:auto !important;
+  }
+  #pg-chat.active .video-feeds{
+    width:100% !important;
+    max-width:none !important;
+    height:auto !important;
+    aspect-ratio:1 / 1.18 !important;
+    max-height:34vh !important;
+    grid-template-columns:1fr 1fr !important;
+    grid-template-rows:1fr !important;
+  }
+  #pg-chat.active .video-wrapper{
+    aspect-ratio:auto !important;
+    height:100% !important;
+  }
+}
+
+/* Fullscreen base: the panel is the viewport-sized flex container and the
+   feed area owns the remaining height above the fixed control bar. */
+#video-panel:fullscreen,
+#video-panel:-webkit-full-screen,
+#video-panel:-moz-full-screen{
+  display:flex !important;
+  flex-direction:column !important;
+  width:100vw !important;
+  height:100dvh !important;
+  min-height:0 !important;
+  max-height:none !important;
+  padding:0 !important;
+  gap:0 !important;
+  background:#000 !important;
+  overflow:hidden !important;
+  box-sizing:border-box !important;
+}
+
+#video-panel:fullscreen .video-feeds,
+#video-panel:-webkit-full-screen .video-feeds,
+#video-panel:-moz-full-screen .video-feeds{
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  width:100vw !important;
+  max-width:none !important;
+  max-height:none !important;
+  height:auto !important;
+  aspect-ratio:auto !important;
+  overflow:hidden !important;
+  box-sizing:border-box !important;
+}
+
+body.vid-in-fs #video-panel .video-feeds{
+  margin:0 !important;
+}
+
+/* Portrait fullscreen — true top/bottom panes, with bottom control-bar
+   clearance. This is intentionally separate from normal phone layout. */
+body.vid-in-fs.vid-fs-portrait #video-panel{
+  padding-bottom:0 !important;
+}
+
+body.vid-in-fs.vid-fs-portrait #video-panel .video-feeds{
+  flex:1 1 auto !important;
+  height:auto !important;
+  min-height:0 !important;
+  padding-bottom:calc(76px + env(safe-area-inset-bottom, 0px)) !important;
+  grid-template-columns:1fr !important;
+  grid-template-rows:minmax(0,1fr) minmax(0,1fr) !important;
+  aspect-ratio:auto !important;
+  overflow:hidden !important;
+}
+
+body.vid-in-fs.vid-fs-portrait #video-panel .video-wrapper{
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  aspect-ratio:auto !important;
+  overflow:hidden !important;
+}
+
+body.vid-in-fs.vid-fs-portrait #video-panel .video-wrapper video{
+  width:100% !important;
+  height:100% !important;
+  object-fit:cover !important;
+}
+
+/* Landscape fullscreen — side-by-side panes. */
+body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds{
+  flex:1 1 auto !important;
+  height:auto !important;
+  min-height:0 !important;
+  padding-bottom:0 !important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+  grid-template-rows:1fr !important;
+  aspect-ratio:auto !important;
+}
+
+body.vid-in-fs.vid-fs-landscape #video-panel .video-wrapper{
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  aspect-ratio:auto !important;
+}
+
+/* Fixed fullscreen control bar sits above safe-area; feed padding reserves it. */
+body.vid-in-fs #fs-controls{
+  position:fixed !important;
+  left:0 !important;
+  right:0 !important;
+  bottom:0 !important;
+  width:100vw !important;
+  min-height:76px !important;
+  padding:12px 16px calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+  z-index:2147483647 !important;
+  box-sizing:border-box !important;
+}
+
 </style>
 
 <style id="mortalive-profile-modal-fixes">
@@ -7452,7 +7644,7 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
   #pg-chat.active .chat-panel { grid-row: 2 !important; }
 }
 </style>
-<meta name="mortalive-build" content="v131-video-feed-markup-fixed">
+<meta name="mortalive-build" content="v132-talk-width-fullscreen-fixed">
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
