@@ -2,7 +2,8 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-26-v130-video-left-chat-right-visible'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-26-v131-video-feed-markup-fixed'; // bump this string on every deploy to confirm cache is fresh
+// V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
 
@@ -125,6 +126,87 @@ function prepareVideoElement(videoEl) {
     videoEl.parentElement.style.minWidth = '0';
     videoEl.parentElement.style.minHeight = '0';
   }
+}
+
+function ensureTalkVideoPanel() {
+  const chatBody = $('pg-chat')?.querySelector('.chat-body');
+  if (!chatBody) return null;
+  let panel = $('video-panel');
+  if (panel) return panel;
+
+  panel = document.createElement('div');
+  panel.className = 'video-panel visible has-remote';
+  panel.id = 'video-panel';
+  panel.innerHTML = `
+    <div class="video-feeds" id="video-feeds">
+      <div class="no-video" id="no-video-ph">
+        <div class="big">📹</div>
+        <div id="ph-txt" style="font-size:13px;margin-top:4px;">Waiting for video…</div>
+      </div>
+      <div class="video-wrapper remote">
+        <video id="vid-remote" autoplay playsinline></video>
+      </div>
+      <div class="video-wrapper local">
+        <video id="vid-local" autoplay playsinline muted></video>
+      </div>
+      <div class="quality" id="quality-bar">
+        <span class="qdot" id="qual-dot"></span>
+        <span id="qual-text">HD</span>
+      </div>
+    </div>
+    <div class="video-controls">
+      <button class="vc-btn" id="vc-mic" title="Mute microphone">🎤 Mic</button>
+      <button class="vc-btn" id="vc-cam" title="Toggle camera">📷 Cam</button>
+      <button class="vc-btn" id="vc-flip" title="Flip camera">🔄 Flip</button>
+      <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶ Full</button>
+    </div>
+    <div class="fs-controls" id="fs-controls">
+      <button class="fs-next-btn" id="btn-skip-fs" title="Next">Next</button>
+      <div class="fs-emoji-btns">
+        <button class="fs-emoji-btn" id="fs-mic" title="Mic">🎤</button>
+        <button class="fs-emoji-btn" id="fs-cam" title="Cam">📷</button>
+        <button class="fs-emoji-btn" id="fs-flip" title="Flip">🔄</button>
+        <button class="fs-emoji-btn" id="fs-exit" title="Exit">⛶</button>
+      </div>
+    </div>`;
+
+  chatBody.insertBefore(panel, chatBody.querySelector('.chat-panel') || null);
+
+  // Bind the dynamically-created controls directly. The normal static HTML
+  // path is still bound by initChatControls(); this fallback exists only for
+  // older cached HTML that was missing the video panel entirely.
+  const mic = panel.querySelector('#vc-mic');
+  const cam = panel.querySelector('#vc-cam');
+  const flip = panel.querySelector('#vc-flip');
+  const fs = panel.querySelector('#vc-fs');
+  const nextFs = panel.querySelector('#btn-skip-fs');
+  const exitFs = panel.querySelector('#fs-exit');
+  mic?.addEventListener('click', () => {
+    S.micMuted = !S.micMuted;
+    S.localStream?.getAudioTracks().forEach(t => { t.enabled = !S.micMuted; });
+    mic.textContent = S.micMuted ? '🔇 Mic' : '🎤 Mic';
+  });
+  cam?.addEventListener('click', () => {
+    S.camOff = !S.camOff;
+    S.localStream?.getVideoTracks().forEach(t => { t.enabled = !S.camOff; });
+    cam.textContent = S.camOff ? '🚫 Cam' : '📷 Cam';
+  });
+  flip?.addEventListener('click', () => {
+    const v = $('vid-local');
+    if (v) v.style.transform = (v.style.transform || 'scaleX(-1)').includes('scaleX(-1)') ? 'scaleX(1)' : 'scaleX(-1)';
+  });
+  fs?.addEventListener('click', async () => {
+    const panelEl = $('video-panel');
+    if (!panelEl) return;
+    if (!document.fullscreenElement) {
+      try { await panelEl.requestFullscreen?.(); } catch (_) {}
+    } else {
+      try { await document.exitFullscreen?.(); } catch (_) {}
+    }
+  });
+  nextFs?.addEventListener('click', () => $('btn-skip')?.click());
+  exitFs?.addEventListener('click', () => document.exitFullscreen?.() || document.webkitExitFullscreen?.());
+  return panel;
 }
 
 function prepareVideoSurfaces() {
@@ -3032,6 +3114,7 @@ function hideRemoteVideo(message) {
 }
 
 async function startWebRTC() {
+  ensureTalkVideoPanel();
   try {
     if (!S.localStream || !S.localStream.active) {
       S.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -3192,6 +3275,7 @@ function scheduleSyntheticSearchResume(delayMs = 900) {
 }
 
 async function beginSyntheticMatch() {
+  ensureTalkVideoPanel();
   clearSyntheticSearchTimer();
   clearRealUserCheckTimer();
   stopSearchSnapshots();
@@ -3605,6 +3689,7 @@ function bindTalkPeerActions() {
 }
 
 function beginChat() {
+  ensureTalkVideoPanel();
   resetChatProgress();
   const msgs = $('chat-msgs');
   if (msgs) msgs.innerHTML = '';
