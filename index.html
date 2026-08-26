@@ -7452,7 +7452,7 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
   #pg-chat.active .chat-panel { grid-row: 2 !important; }
 }
 </style>
-<meta name="mortalive-build" content="v126-synthetic-skip-10s-real-check">
+<meta name="mortalive-build" content="v131-video-feed-markup-fixed">
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -8047,6 +8047,39 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
     <div class="chat-body">
 
       <!-- Video panel -->
+      <div class="video-panel" id="video-panel">
+        <div class="video-feeds" id="video-feeds">
+          <div class="no-video" id="no-video-ph">
+            <div class="big">📹</div>
+            <div id="ph-txt" style="font-size:13px;margin-top:4px;">Waiting for video…</div>
+          </div>
+          <div class="video-wrapper remote">
+            <video id="vid-remote" autoplay playsinline></video>
+          </div>
+          <div class="video-wrapper local">
+            <video id="vid-local" autoplay playsinline muted></video>
+          </div>
+          <div class="quality" id="quality-bar">
+            <span class="qdot" id="qual-dot"></span>
+            <span id="qual-text">HD</span>
+          </div>
+        </div>
+        <div class="video-controls">
+          <button class="vc-btn" id="vc-mic" title="Mute microphone">🎤 Mic</button>
+          <button class="vc-btn" id="vc-cam" title="Toggle camera">📷 Cam</button>
+          <button class="vc-btn" id="vc-flip" title="Flip camera">🔄 Flip</button>
+          <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶ Full</button>
+        </div>
+        <div class="fs-controls" id="fs-controls">
+          <button class="fs-next-btn" id="btn-skip-fs" title="Next">Next</button>
+          <div class="fs-emoji-btns">
+            <button class="fs-emoji-btn" id="fs-mic" title="Mic">🎤</button>
+            <button class="fs-emoji-btn" id="fs-cam" title="Cam">📷</button>
+            <button class="fs-emoji-btn" id="fs-flip" title="Flip">🔄</button>
+            <button class="fs-emoji-btn" id="fs-exit" title="Exit">⛶</button>
+          </div>
+        </div>
+      </div>
 
       <!-- Chat panel -->
       <div class="chat-panel">
