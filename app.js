@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-26-v132-talk-width-fullscreen-fixed'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-26-v134-talk-controls-shuffle-fullscreen-fixed'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -77,6 +77,7 @@ const S = {
   guestName: localStorage.getItem('mortalive_guest_name') || '',
   videoLayout: 'horizontal',
   chatStartedAt: null,
+  talkDurationTimer: null,
   chatCounted: false,
   progress: null,
   profile: null,
@@ -206,7 +207,13 @@ function ensureTalkVideoPanel() {
     }
   });
   nextFs?.addEventListener('click', () => $('btn-skip')?.click());
-  exitFs?.addEventListener('click', () => document.exitFullscreen?.() || document.webkitExitFullscreen?.());
+  panel.querySelector('#fs-mic')?.addEventListener('click', () => { panel.querySelector('#vc-mic')?.click(); syncFsButtonStates(); });
+  panel.querySelector('#fs-cam')?.addEventListener('click', () => { panel.querySelector('#vc-cam')?.click(); syncFsButtonStates(); });
+  panel.querySelector('#fs-flip')?.addEventListener('click', () => panel.querySelector('#vc-flip')?.click());
+  exitFs?.addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen?.().catch?.(() => {});
+    else document.webkitExitFullscreen?.();
+  });
   return panel;
 }
 
@@ -659,6 +666,27 @@ function awardProgress(kind, amount = 1, meta = {}) {
   }
 
   return progress;
+}
+
+function formatTalkDuration(ms = 0) {
+  const totalSeconds = Math.max(0, Math.floor(Number(ms) / 1000));
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+function stopTalkDurationTimer() {
+  clearInterval(S.talkDurationTimer);
+  S.talkDurationTimer = null;
+}
+function startTalkDurationTimer() {
+  stopTalkDurationTimer();
+  const render = () => {
+    const started = Number(S.chatStartedAt) || Date.now();
+    const el = $('talk-duration');
+    if (el) el.textContent = formatTalkDuration(Date.now() - started);
+  };
+  render();
+  S.talkDurationTimer = setInterval(render, 1000);
 }
 
 function finalizeChatProgress(reason = 'completed') {
@@ -2585,8 +2613,9 @@ function initChatControls() {
     clearTimeout(S.replyTimer);
     if (S.syntheticActive) {
       S.syntheticSkipCount += 1;
-      // V126: a skipped synthetic must pause on real-user priority for exactly 10s
-      // before the next synthetic fallback is allowed to play.
+      // V134: retire the current clip before the 10s real-user check.
+      S.syntheticCurrentIndex += 1;
+      rememberSyntheticVideo(S.syntheticVideoId);
 
       logSession('end', { reason: 'skip_synthetic', roomId: S.roomId, videoId: S.syntheticVideoId });
       beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'synthetic-skipped', priorityWindowMs: 30 * 1000, quickCheckMs: 10 * 1000 });
@@ -2703,6 +2732,17 @@ $('vc-fs')?.addEventListener('click', () => {
   }
   setTimeout(() => { applyVideoLayout(); prepareVideoSurfaces(); }, 0);
 });
+
+
+  // V134: wire fullscreen toolbar buttons to the working normal controls.
+  $('fs-mic')?.addEventListener('click', () => { $('vc-mic')?.click(); syncFsButtonStates(); });
+  $('fs-cam')?.addEventListener('click', () => { $('vc-cam')?.click(); syncFsButtonStates(); });
+  $('fs-flip')?.addEventListener('click', () => { $('vc-flip')?.click(); });
+  $('fs-exit')?.addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen?.().catch?.(() => {});
+    else document.webkitExitFullscreen?.();
+  });
+
 
   $('btn-cancel')?.addEventListener('click', () => {
     clearMatchResumeIntent();
@@ -3245,9 +3285,15 @@ function monitorQuality() {
 // Synthetic never auto-connects two users; real always has priority.
 // ═══════════════════════════════════════════════════════════════════
 
-async function fetchSyntheticVideoBatch(limit = 12) {
+async function fetchSyntheticVideoBatch(limit = 1, excludeIds = []) {
   try {
-    const res = await fetch(`${SERVER_URL}/api/synthetic-videos?limit=${encodeURIComponent(limit)}`, { credentials: 'same-origin' });
+    const params = new URLSearchParams({ limit: '1' });
+    const exclusions = Array.from(new Set((Array.isArray(excludeIds) ? excludeIds : []).map(String))).slice(-24);
+    if (exclusions.length) params.set('exclude', exclusions.join(','));
+    const res = await fetch(`${SERVER_URL}/api/synthetic-videos?${params.toString()}`, {
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     return Array.isArray(data.videos) ? data.videos : [];
@@ -3255,6 +3301,18 @@ async function fetchSyntheticVideoBatch(limit = 12) {
     console.warn('[Synthetic] Talk fallback inventory unavailable:', e?.message || e);
     return [];
   }
+}
+
+function getSyntheticSeenIds() {
+  if (!Array.isArray(S.syntheticSeenIds)) S.syntheticSeenIds = [];
+  return S.syntheticSeenIds.map(String);
+}
+function rememberSyntheticVideo(videoId) {
+  if (videoId == null) return;
+  const id = String(videoId);
+  const ids = getSyntheticSeenIds().filter(existing => existing !== id);
+  ids.push(id);
+  S.syntheticSeenIds = ids.slice(-24);
 }
 
 function shuffleSyntheticVideos(videos = []) {
@@ -3288,16 +3346,22 @@ async function beginSyntheticMatch() {
     try { S.socket.emit('cancel-queue'); } catch (_) {}
   }
 
-  if (!S.syntheticVideos.length || S.syntheticCurrentIndex >= S.syntheticVideos.length) {
-    const batch = await fetchSyntheticVideoBatch(12);
-    if (!batch.length) {
+  // V134: fetch exactly one database-selected synthetic clip per turn.
+  // No client preload of the full synthetic inventory.
+  const batch = await fetchSyntheticVideoBatch(1, getSyntheticSeenIds());
+  if (!batch.length) {
+    S.syntheticSeenIds = [];
+    const refill = await fetchSyntheticVideoBatch(1, []);
+    if (!refill.length) {
       console.warn('[Synthetic] No Talk fallback inventory; returning to real-user search.');
       beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'no-synthetic-inventory' });
       return;
     }
+    S.syntheticVideos = shuffleSyntheticVideos(refill);
+  } else {
     S.syntheticVideos = shuffleSyntheticVideos(batch);
-    S.syntheticCurrentIndex = 0;
   }
+  S.syntheticCurrentIndex = 0;
 
   const video = S.syntheticVideos[S.syntheticCurrentIndex];
   if (!video?.video_url) {
@@ -3307,6 +3371,7 @@ async function beginSyntheticMatch() {
 
   S.syntheticActive = true;
   S.syntheticVideoId = video.id;
+  rememberSyntheticVideo(video.id);
   S.syntheticVideoStartTime = Date.now();
   S.stranger = {
     name: video.stranger_name || 'Stream User',
@@ -3721,6 +3786,8 @@ function beginChat() {
   showPage('pg-chat');
   applyVideoLayout();
   setCallStatus('connecting', 'connecting');
+  S.chatStartedAt = Date.now();
+  startTalkDurationTimer();
   addSysLine(`✨ Connected to ${s.name}`);
   logSession('start', { stranger: s.name, mode: S.mode, roomId: S.roomId });
   startSnapshotCapture();
@@ -3802,6 +3869,7 @@ function disconnectPeer() {
 
   clearTimeout(S.replyTimer);
   clearTimeout(matchTimeout);
+  stopTalkDurationTimer();
   clearSyntheticSearchTimer();
   stopSearchSnapshots(); // safety net — kills 2s search loop on any disconnect path
   stopSnapshotCapture();
