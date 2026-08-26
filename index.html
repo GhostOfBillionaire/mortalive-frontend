@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v124 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v138" content="talk-mobile-topbar-fullscreen-clean">
+<meta name="mortalive-build-v140" content="talk-fullscreen-containing-grid-fixed">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
@@ -8191,6 +8191,362 @@ body.vid-in-fs .fs-next-btn{
     aspect-ratio:auto !important;
     gap:0 !important;
     overflow:hidden !important;
+  }
+}
+</style>
+
+
+<style id="mortalive-v139-talk-final-fullscreen">
+/* V139 — PC fullscreen structural correction.
+   The legacy #pg-chat.active .video-panel max-width (360px) was winning over
+   lower-specificity fullscreen selectors. This layer intentionally uses the
+   same/high specificity and also explicitly restores the fullscreen controls. */
+
+@media (min-width:721px){
+  #pg-chat.active #video-panel:fullscreen,
+  #pg-chat.active #video-panel:-webkit-full-screen,
+  #pg-chat.active #video-panel:-moz-full-screen{
+    display:grid !important;
+    width:100vw !important;
+    height:100vh !important;
+    max-width:none !important;
+    max-height:none !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+    grid-template-columns:1fr !important;
+    grid-template-rows:minmax(0,1fr) auto !important;
+    gap:0 !important;
+    align-self:stretch !important;
+    justify-self:stretch !important;
+  }
+
+  #pg-chat.active #video-panel:fullscreen #video-feeds,
+  #pg-chat.active #video-panel:-webkit-full-screen #video-feeds,
+  #pg-chat.active #video-panel:-moz-full-screen #video-feeds{
+    display:grid !important;
+    grid-column:1 !important;
+    grid-row:1 !important;
+    width:100vw !important;
+    height:100% !important;
+    max-width:none !important;
+    max-height:none !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    aspect-ratio:auto !important;
+    gap:0 !important;
+    overflow:hidden !important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+    grid-template-rows:minmax(0,1fr) !important;
+  }
+
+  #pg-chat.active #video-panel:fullscreen .video-wrapper,
+  #pg-chat.active #video-panel:-webkit-full-screen .video-wrapper,
+  #pg-chat.active #video-panel:-moz-full-screen .video-wrapper{
+    width:100% !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    aspect-ratio:auto !important;
+    overflow:hidden !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  #pg-chat.active #video-panel:fullscreen #vid-local,
+  #pg-chat.active #video-panel:fullscreen #vid-remote,
+  #pg-chat.active #video-panel:-webkit-full-screen #vid-local,
+  #pg-chat.active #video-panel:-webkit-full-screen #vid-remote,
+  #pg-chat.active #video-panel:-moz-full-screen #vid-local,
+  #pg-chat.active #video-panel:-moz-full-screen #vid-remote{
+    display:block !important;
+    visibility:visible !important;
+    width:100% !important;
+    height:100% !important;
+    max-width:100% !important;
+    max-height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    object-fit:cover !important;
+    object-position:center center !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  /* Beat both the old .fs-controls hidden rule and body-class timing. */
+  #pg-chat.active #video-panel:fullscreen #fs-controls,
+  #pg-chat.active #video-panel:-webkit-full-screen #fs-controls,
+  #pg-chat.active #video-panel:-moz-full-screen #fs-controls{
+    display:grid !important;
+    grid-column:1 !important;
+    grid-row:2 !important;
+    width:100% !important;
+    min-width:0 !important;
+    min-height:62px !important;
+    height:auto !important;
+    position:relative !important;
+    inset:auto !important;
+    box-sizing:border-box !important;
+    z-index:2147483647 !important;
+    pointer-events:auto !important;
+    opacity:1 !important;
+    visibility:visible !important;
+    grid-template-columns:repeat(5,minmax(0,1fr)) !important;
+    gap:8px !important;
+    padding:8px 12px !important;
+  }
+
+  #pg-chat.active #video-panel:fullscreen #fs-emoji-btns,
+  #pg-chat.active #video-panel:fullscreen .fs-emoji-btns,
+  #pg-chat.active #video-panel:-webkit-full-screen .fs-emoji-btns,
+  #pg-chat.active #video-panel:-moz-full-screen .fs-emoji-btns{
+    display:contents !important;
+  }
+
+  #pg-chat.active #video-panel:fullscreen .fs-emoji-btn,
+  #pg-chat.active #video-panel:fullscreen .fs-next-btn,
+  #pg-chat.active #video-panel:-webkit-full-screen .fs-emoji-btn,
+  #pg-chat.active #video-panel:-webkit-full-screen .fs-next-btn,
+  #pg-chat.active #video-panel:-moz-full-screen .fs-emoji-btn,
+  #pg-chat.active #video-panel:-moz-full-screen .fs-next-btn{
+    display:flex !important;
+    width:100% !important;
+    min-width:0 !important;
+    height:42px !important;
+    min-height:42px !important;
+    max-height:42px !important;
+    border-radius:4px !important;
+    pointer-events:auto !important;
+    z-index:2147483647 !important;
+    align-items:center !important;
+    justify-content:center !important;
+    position:relative !important;
+    box-sizing:border-box !important;
+  }
+}
+
+/* Phone fullscreen is still two stacked cropped panes; only ensure the panel
+   itself cannot inherit the normal max-width constraint. */
+@media (max-width:720px){
+  #pg-chat.active #video-panel:fullscreen,
+  #pg-chat.active #video-panel:-webkit-full-screen,
+  #pg-chat.active #video-panel:-moz-full-screen{
+    width:100vw !important;
+    max-width:none !important;
+    max-height:none !important;
+    min-width:0 !important;
+    min-height:0 !important;
+  }
+
+  #pg-chat.active #video-panel:fullscreen #fs-controls,
+  #pg-chat.active #video-panel:-webkit-full-screen #fs-controls,
+  #pg-chat.active #video-panel:-moz-full-screen #fs-controls{
+    display:grid !important;
+    visibility:visible !important;
+    opacity:1 !important;
+    pointer-events:auto !important;
+  }
+}
+</style>
+
+
+<style id="mortalive-v140-talk-fullscreen-root-fix">
+/* V140 — root fullscreen containment fix.
+   V139 tried to override the normal chat grid, but the video panel remained
+   a grid child with legacy sizing constraints. In fullscreen it must become
+   its own viewport layer. Normal/non-fullscreen layout is untouched. */
+
+@media (min-width:721px){
+  #pg-chat.active #video-panel:fullscreen,
+  #pg-chat.active #video-panel:-webkit-full-screen,
+  #pg-chat.active #video-panel:-moz-full-screen{
+    position:fixed !important;
+    inset:0 !important;
+    left:0 !important;
+    top:0 !important;
+    right:0 !important;
+    bottom:0 !important;
+
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    grid-template-rows:minmax(0,1fr) auto !important;
+
+    width:100vw !important;
+    height:100vh !important;
+    max-width:none !important;
+    max-height:none !important;
+    min-width:100vw !important;
+    min-height:100vh !important;
+
+    margin:0 !important;
+    padding:0 !important;
+    border:0 !important;
+    border-radius:0 !important;
+    transform:none !important;
+
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+    z-index:2147483647 !important;
+  }
+
+  #pg-chat.active #video-panel:fullscreen #video-feeds,
+  #pg-chat.active #video-panel:-webkit-full-screen #video-feeds,
+  #pg-chat.active #video-panel:-moz-full-screen #video-feeds{
+    position:relative !important;
+    grid-column:1 !important;
+    grid-row:1 !important;
+
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+    grid-template-rows:minmax(0,1fr) !important;
+
+    width:100% !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    aspect-ratio:auto !important;
+
+    margin:0 !important;
+    padding:0 !important;
+    gap:0 !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+
+  #pg-chat.active #video-panel:fullscreen .video-wrapper,
+  #pg-chat.active #video-panel:-webkit-full-screen .video-wrapper,
+  #pg-chat.active #video-panel:-moz-full-screen .video-wrapper{
+    width:100% !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    aspect-ratio:auto !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+
+  #pg-chat.active #video-panel:fullscreen #vid-local,
+  #pg-chat.active #video-panel:fullscreen #vid-remote,
+  #pg-chat.active #video-panel:-webkit-full-screen #vid-local,
+  #pg-chat.active #video-panel:-webkit-full-screen #vid-remote,
+  #pg-chat.active #video-panel:-moz-full-screen #vid-local,
+  #pg-chat.active #video-panel:-moz-full-screen #vid-remote{
+    display:block !important;
+    visibility:visible !important;
+    width:100% !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:100% !important;
+    max-height:100% !important;
+    object-fit:cover !important;
+    object-position:center center !important;
+    transform:none !important;
+  }
+
+  /* Fullscreen controls are a real second grid row, never overlaid outside
+     the viewport and never allowed to disappear behind legacy rules. */
+  #pg-chat.active #video-panel:fullscreen #fs-controls,
+  #pg-chat.active #video-panel:-webkit-full-screen #fs-controls,
+  #pg-chat.active #video-panel:-moz-full-screen #fs-controls{
+    grid-column:1 !important;
+    grid-row:2 !important;
+
+    display:grid !important;
+    grid-template-columns:repeat(5,minmax(0,1fr)) !important;
+
+    position:relative !important;
+    inset:auto !important;
+
+    width:100% !important;
+    min-width:0 !important;
+    height:auto !important;
+    min-height:62px !important;
+
+    margin:0 !important;
+    padding:8px 12px !important;
+    gap:8px !important;
+
+    opacity:1 !important;
+    visibility:visible !important;
+    pointer-events:auto !important;
+    z-index:2147483647 !important;
+    box-sizing:border-box !important;
+  }
+}
+
+/* Phone fullscreen: preserve stacked two-pane behavior, but escape any
+   inherited normal-page width/max-width constraint too. */
+@media (max-width:720px){
+  #pg-chat.active #video-panel:fullscreen,
+  #pg-chat.active #video-panel:-webkit-full-screen,
+  #pg-chat.active #video-panel:-moz-full-screen{
+    position:fixed !important;
+    inset:0 !important;
+    width:100vw !important;
+    height:100vh !important;
+    max-width:none !important;
+    max-height:none !important;
+    min-width:100vw !important;
+    min-height:100vh !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    grid-template-rows:minmax(0,1fr) auto !important;
+    z-index:2147483647 !important;
+  }
+
+  #pg-chat.active #video-panel:fullscreen #video-feeds,
+  #pg-chat.active #video-panel:-webkit-full-screen #video-feeds,
+  #pg-chat.active #video-panel:-moz-full-screen #video-feeds{
+    grid-column:1 !important;
+    grid-row:1 !important;
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    grid-template-rows:minmax(0,1fr) minmax(0,1fr) !important;
+    width:100% !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    aspect-ratio:auto !important;
+    margin:0 !important;
+    padding:0 !important;
+    gap:0 !important;
+    overflow:hidden !important;
+  }
+
+  #pg-chat.active #video-panel:fullscreen #fs-controls,
+  #pg-chat.active #video-panel:-webkit-full-screen #fs-controls,
+  #pg-chat.active #video-panel:-moz-full-screen #fs-controls{
+    grid-column:1 !important;
+    grid-row:2 !important;
+    display:grid !important;
+    grid-template-columns:repeat(5,minmax(0,1fr)) !important;
+    width:100% !important;
+    min-width:0 !important;
+    height:auto !important;
+    min-height:60px !important;
+    position:relative !important;
+    inset:auto !important;
+    opacity:1 !important;
+    visibility:visible !important;
+    pointer-events:auto !important;
+    z-index:2147483647 !important;
   }
 }
 </style>
