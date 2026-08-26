@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v124 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v134" content="talk-controls-shuffle-fullscreen-fixed">
+<meta name="mortalive-build-v135" content="talk-controls-pcfs-synth-shuffle-fixed">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
@@ -2750,6 +2750,166 @@ body.vid-in-fs #fs-controls{
   body.vid-in-fs.vid-fs-landscape #video-panel .video-wrapper.remote,
   body.vid-in-fs.vid-fs-landscape #video-panel .video-wrapper.local{
     min-width:0 !important;width:100% !important;height:100% !important;aspect-ratio:auto !important;
+  }
+}
+
+
+/* V135 — Talk-only final fixes. Existing button shapes are preserved. */
+
+/* Phone normal controls: Mic | Cam | Flip | Full in ONE row. */
+@media (max-width:720px){
+  #pg-chat.active .video-controls{
+    display:grid !important;
+    grid-template-columns:repeat(4,minmax(0,1fr)) !important;
+    gap:6px !important;
+    width:100% !important;
+    flex-wrap:nowrap !important;
+  }
+  #pg-chat.active .video-controls .vc-btn{
+    width:100% !important;
+    min-width:0 !important;
+    /* no new height/padding/radius/font rules */
+  }
+}
+
+/* Fullscreen toolbar: Cam | Mic | Flip | Full | Next in ONE row. */
+#video-panel:fullscreen .fs-controls,
+#video-panel:-webkit-full-screen .fs-controls,
+#video-panel:-moz-full-screen .fs-controls{
+  display:grid !important;
+  grid-template-columns:repeat(5,minmax(0,1fr)) !important;
+  position:relative !important;
+  inset:auto !important;
+  width:100% !important;
+  height:auto !important;
+  min-height:64px !important;
+  padding:10px 14px !important;
+  gap:10px !important;
+  align-items:center !important;
+  justify-content:stretch !important;
+  z-index:2147483647 !important;
+  pointer-events:auto !important;
+  flex:none !important;
+  box-sizing:border-box !important;
+}
+#video-panel:fullscreen .fs-emoji-btns,
+#video-panel:-webkit-full-screen .fs-emoji-btns,
+#video-panel:-moz-full-screen .fs-emoji-btns{
+  display:contents !important;
+}
+#video-panel:fullscreen .fs-emoji-btn,
+#video-panel:-webkit-full-screen .fs-emoji-btn,
+#video-panel:-moz-full-screen .fs-emoji-btn{
+  width:44px !important;
+  height:44px !important;
+  min-width:44px !important;
+  min-height:44px !important;
+  max-width:44px !important;
+  max-height:44px !important;
+  padding:0 !important;
+  border-radius:50% !important;
+  pointer-events:auto !important;
+  justify-self:center !important;
+}
+#video-panel:fullscreen .fs-next-btn,
+#video-panel:-webkit-full-screen .fs-next-btn,
+#video-panel:-moz-full-screen .fs-next-btn{
+  display:flex !important;
+  min-width:76px !important;
+  height:42px !important;
+  padding:0 20px !important;
+  border-radius:var(--r-full) !important;
+  pointer-events:auto !important;
+  justify-self:center !important;
+}
+
+/* PC fullscreen: FORCE the designed 50/50 layout regardless of source ratio. */
+@media (min-width:721px){
+  #video-panel:fullscreen,
+  #video-panel:-webkit-full-screen,
+  #video-panel:-moz-full-screen{
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    grid-template-rows:minmax(0,1fr) auto !important;
+    width:100vw !important;
+    height:100vh !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    padding:0 !important;
+    margin:0 !important;
+    gap:0 !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds{
+    grid-column:1 !important;
+    grid-row:1 !important;
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+    grid-template-rows:minmax(0,1fr) !important;
+    width:100% !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    aspect-ratio:auto !important;
+    padding:0 !important;
+    margin:0 !important;
+    overflow:hidden !important;
+  }
+  #video-panel:fullscreen .video-wrapper.remote,
+  #video-panel:fullscreen .video-wrapper.local,
+  #video-panel:-webkit-full-screen .video-wrapper.remote,
+  #video-panel:-webkit-full-screen .video-wrapper.local,
+  #video-panel:-moz-full-screen .video-wrapper.remote,
+  #video-panel:-moz-full-screen .video-wrapper.local{
+    width:100% !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    aspect-ratio:auto !important;
+    overflow:hidden !important;
+  }
+  #video-panel:fullscreen #vid-remote,
+  #video-panel:fullscreen #vid-local,
+  #video-panel:-webkit-full-screen #vid-remote,
+  #video-panel:-webkit-full-screen #vid-local,
+  #video-panel:-moz-full-screen #vid-remote,
+  #video-panel:-moz-full-screen #vid-local{
+    width:100% !important;
+    height:100% !important;
+    max-width:100% !important;
+    max-height:100% !important;
+    object-fit:cover !important;
+    object-position:center center !important;
+  }
+}
+
+/* Phone fullscreen: preserve stacked video layout; only make the toolbar one row. */
+@media (max-width:720px){
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds{
+    grid-template-columns:1fr !important;
+    grid-template-rows:minmax(0,1fr) minmax(0,1fr) !important;
+    width:100% !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    aspect-ratio:auto !important;
+  }
+  #video-panel:fullscreen .fs-controls,
+  #video-panel:-webkit-full-screen .fs-controls,
+  #video-panel:-moz-full-screen .fs-controls{
+    grid-template-columns:repeat(5,minmax(0,1fr)) !important;
+    min-height:60px !important;
+    padding:8px !important;
+    gap:6px !important;
   }
 }
 
