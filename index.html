@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v124 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v140" content="talk-fullscreen-containing-grid-fixed">
+<meta name="mortalive-build-v137" content="talk-clean-controls-crop-fixed">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
@@ -1379,7 +1379,7 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 .icon-btn {
   height: 38px;
   padding: 0 14px;
-  border-radius: var(--r-full);
+  border-radius: 6px;
   border: 1.5px solid var(--border-strong);
   background: #fff;
   color: var(--on-surface-3);
@@ -1535,7 +1535,7 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 .vc-btn {
   height: 38px;
   padding: 0 14px;
-  border-radius: var(--r-full);
+  border-radius: 6px;
   border: 1.5px solid var(--border-strong);
   background: #fff;
   color: var(--on-surface-3);
@@ -1647,8 +1647,8 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 }
 .fs-next-btn {
   height: 42px;
-  padding: 0 20px;
-  border-radius: var(--r-full);
+  padding: 0 16px;
+  border-radius: 6px;
   border: 1.5px solid rgba(255,255,255,.24);
   background: rgba(255,255,255,.12);
   color: #fff;
@@ -1671,7 +1671,7 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 .fs-emoji-btn {
   width: 44px;
   height: 44px;
-  border-radius: 50%;
+  border-radius: 6px;
   border: 1.5px solid rgba(255,255,255,.20);
   background: rgba(255,255,255,.12);
   color: #fff;
@@ -1886,15 +1886,27 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
     flex: 1 1 100%;
     width: 100%;
   }
+  /* FIX 4: All action buttons in one row on portrait phone */
   .top-actions {
     flex: 1 1 100%;
     width: 100%;
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0,1fr)) !important;
+    gap: 4px !important;
+    flex-wrap: nowrap !important;
   }
-  .top-actions .icon-btn {
-    flex: 1 1 calc(25% - 6px);
-    padding: 0 6px;
-    font-size: 12px;
-    min-height: 38px;
+  .top-actions .icon-btn,
+  .top-actions .conn-badge {
+    flex: unset;
+    width: 100%;
+    padding: 0 4px;
+    font-size: 10px;
+    min-height: 34px;
+    height: 34px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .landing-shell  { gap: 30px; }
@@ -2307,14 +2319,15 @@ body.reveal-ready .scroll-reveal.in-view{
   #video-panel:-webkit-full-screen .video-feeds,
   #video-panel:-moz-full-screen .video-feeds {
     flex: 1;
-    height: 100%;
+    height: calc(100vh - 70px);
     width: 100vw;
     max-width: none;
-    max-height: none;
+    max-height: calc(100vh - 70px);
     aspect-ratio: unset;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr;
     gap: 0;
+    display: grid;
   }
 
   #video-panel:fullscreen .video-wrapper,
@@ -2383,13 +2396,14 @@ body.reveal-ready .scroll-reveal.in-view{
   #video-panel:-moz-full-screen .video-feeds {
     flex: 1;
     width: 100vw;
-    height: 100%;
+    height: calc(100vh - 70px);
     max-width: none;
-    max-height: none;
+    max-height: calc(100vh - 70px);
     aspect-ratio: unset;
     grid-template-columns: 1fr;
     grid-template-rows: 1fr 1fr;
     gap: 0;
+    display: grid;
   }
 
   #video-panel:fullscreen .video-wrapper,
@@ -2417,6 +2431,18 @@ body.vid-in-fs .video-controls {
 }
 body.vid-in-fs #fs-controls {
   display: flex !important;
+}
+
+/* FIX 5: ALWAYS hide fs-controls when NOT in fullscreen.
+   This prevents the strange buttons appearing at the bottom of portrait phone view. */
+body:not(.vid-in-fs) #fs-controls {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+/* Belt-and-suspenders: the .visible class still gates it on desktop */
+#fs-controls:not(.visible) {
+  display: none !important;
 }
 
 /* Portrait fullscreen: stack videos top-to-bottom */
@@ -2709,6 +2735,20 @@ body.vid-in-fs #fs-controls{
   box-sizing:border-box !important;
 }
 
+/* PC (>=721px): controls are grid children; do NOT use fixed positioning */
+@media (min-width:721px){
+  body.vid-in-fs #fs-controls{
+    position:relative !important;
+    inset:auto !important;
+    left:auto !important;
+    right:auto !important;
+    bottom:auto !important;
+    width:100% !important;
+    min-height:62px !important;
+    padding:10px 14px !important;
+  }
+}
+
 
 /* V134 — requested Talk fixes only */
 .peer-name{display:flex !important;align-items:center !important;gap:6px !important;min-width:0 !important;}
@@ -2721,9 +2761,10 @@ body.vid-in-fs #fs-controls{
 .peer-name-text{min-width:0 !important;overflow:hidden !important;text-overflow:ellipsis !important;white-space:nowrap !important;}
 
 @media(max-width:720px){
-  #pg-chat.active .top-actions{grid-template-columns:repeat(5,minmax(0,1fr)) !important;gap:4px !important;}
+  /* Top actions already fixed to grid in base mobile block above */
+  #pg-chat.active .top-actions{display:grid !important;grid-template-columns:repeat(5,minmax(0,1fr)) !important;gap:4px !important;width:100% !important;}
   #pg-chat.active .top-actions .icon-btn,#pg-chat.active .top-actions .conn-badge{
-    min-height:34px !important;height:34px !important;padding:0 2px !important;font-size:9px !important;
+    min-height:34px !important;height:34px !important;padding:0 2px !important;font-size:9px !important;white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;
   }
   #pg-chat.active .chat-topbar .chat-peer{flex:0 1 auto !important;width:auto !important;max-width:100% !important;}
   #pg-chat.active .chat-topbar .chat-peer>div:last-child{min-width:0 !important;max-width:calc(100vw - 90px) !important;}
@@ -2734,7 +2775,7 @@ body.vid-in-fs #fs-controls{
   .fs-controls .fs-emoji-btns{display:contents !important;}
   .fs-controls .fs-emoji-btn,.fs-controls .fs-next-btn{
     width:100% !important;min-width:0 !important;height:42px !important;padding:0 2px !important;
-    border-radius:12px !important;font-size:18px !important;
+    border-radius:6px !important;font-size:13px !important;cursor:pointer !important;
   }
 }
 .fs-controls{align-items:center !important;justify-content:center !important;gap:8px !important;}
@@ -2807,7 +2848,7 @@ body.vid-in-fs #fs-controls{
   max-width:44px !important;
   max-height:44px !important;
   padding:0 !important;
-  border-radius:50% !important;
+  border-radius:6px !important;
   pointer-events:auto !important;
   justify-self:center !important;
 }
@@ -2817,8 +2858,8 @@ body.vid-in-fs #fs-controls{
   display:flex !important;
   min-width:76px !important;
   height:42px !important;
-  padding:0 20px !important;
-  border-radius:var(--r-full) !important;
+  padding:0 16px !important;
+  border-radius:6px !important;
   pointer-events:auto !important;
   justify-self:center !important;
 }
@@ -7929,84 +7970,14 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 
 </style>
 
+<style id="mortalive-v137-talk-final">
+/* V137 — clean Talk presentation layer.
+   Older V130–V136 fullscreen/layout override layers were removed because they
+   were competing for the same selectors. Only this final Talk override owns
+   fullscreen controls and fullscreen video sizing. */
 
-
-
-<style id="mortalive-v138-talk-final">
-/* V138 — final cleanup for the remaining Talk issues.
-   Only these controls/layout rules are owned here. Core Talk styling remains
-   untouched. */
-
-/* 1) PHONE NORMAL TOP ACTIONS — one line.
-   Back | video/status | Rate | Next | Leave
-   Older flex-wrap rules are explicitly neutralized here. */
+/* PHONE: normal controls stay on one line. Do not alter their native shape. */
 @media (max-width:720px){
-  #pg-chat.active .chat-topbar{
-    display:flex !important;
-    flex-wrap:nowrap !important;
-    align-items:center !important;
-    gap:6px !important;
-    min-width:0 !important;
-    width:100% !important;
-  }
-
-  #pg-chat.active .chat-topbar .chat-peer{
-    flex:0 1 auto !important;
-    width:auto !important;
-    min-width:0 !important;
-    max-width:38% !important;
-    overflow:hidden !important;
-  }
-
-  #pg-chat.active .chat-topbar .peer-name{
-    display:flex !important;
-    flex-direction:row !important;
-    align-items:center !important;
-    gap:6px !important;
-    min-width:0 !important;
-    white-space:nowrap !important;
-  }
-
-  #pg-chat.active .chat-topbar .peer-duration{
-    order:-1 !important;
-    flex:0 0 auto !important;
-  }
-
-  #pg-chat.active .chat-topbar .peer-name-text{
-    min-width:0 !important;
-    overflow:hidden !important;
-    text-overflow:ellipsis !important;
-    white-space:nowrap !important;
-  }
-
-  #pg-chat.active .top-actions{
-    display:grid !important;
-    grid-template-columns:repeat(4,minmax(0,1fr)) !important;
-    flex:1 1 auto !important;
-    width:auto !important;
-    min-width:0 !important;
-    gap:5px !important;
-    flex-wrap:nowrap !important;
-    margin-left:auto !important;
-  }
-
-  #pg-chat.active .top-actions > *{
-    width:100% !important;
-    min-width:0 !important;
-    max-width:none !important;
-    white-space:nowrap !important;
-    overflow:hidden !important;
-  }
-
-  /* Back is outside .top-actions in the existing markup; keep the full
-     header compact instead of allowing another wrap opportunity. */
-  #pg-chat.active .chat-back{
-    flex:0 0 auto !important;
-    width:auto !important;
-    min-width:34px !important;
-  }
-
-  /* Normal phone bottom controls remain a single row. */
   #pg-chat.active .video-controls{
     display:grid !important;
     grid-template-columns:repeat(4,minmax(0,1fr)) !important;
@@ -8015,7 +7986,6 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
     flex-wrap:nowrap !important;
     overflow:visible !important;
   }
-
   #pg-chat.active .video-controls .vc-btn{
     width:100% !important;
     min-width:0 !important;
@@ -8023,33 +7993,26 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
   }
 }
 
-/* 2) FULLSCREEN INNER BUTTONS — five clean rectangular controls in one row.
-   Explicitly hide this toolbar outside fullscreen so no legacy rule can make
-   it appear on the normal page. */
-body:not(.vid-in-fs) #fs-controls,
-html:not(.vid-in-fs) #video-panel:fullscreen #fs-controls{
-  display:none !important;
-}
-
+/* FULLSCREEN CONTROL BAR — one row, rectangular/square inner buttons.
+   The existing outer control bar remains unchanged. */
 #video-panel:fullscreen #fs-controls,
 #video-panel:-webkit-full-screen #fs-controls,
 #video-panel:-moz-full-screen #fs-controls,
 body.vid-in-fs #fs-controls{
   display:grid !important;
   grid-template-columns:repeat(5,minmax(0,1fr)) !important;
-  position:relative !important;
-  inset:auto !important;
   width:100% !important;
   min-height:62px !important;
   height:auto !important;
-  gap:8px !important;
-  padding:8px 12px !important;
+  position:relative !important;
+  inset:auto !important;
   box-sizing:border-box !important;
   align-items:center !important;
   justify-content:stretch !important;
+  gap:8px !important;
+  padding:8px 12px !important;
   z-index:2147483647 !important;
   pointer-events:auto !important;
-  flex:none !important;
 }
 
 #video-panel:fullscreen .fs-emoji-btns,
@@ -8074,7 +8037,7 @@ body.vid-in-fs .fs-next-btn{
   min-height:42px !important;
   max-height:42px !important;
   padding:0 8px !important;
-  border-radius:4px !important;
+  border-radius:6px !important;
   border:1px solid rgba(255,255,255,.20) !important;
   background:rgba(255,255,255,.12) !important;
   color:#fff !important;
@@ -8090,10 +8053,11 @@ body.vid-in-fs .fs-next-btn{
   position:relative !important;
   z-index:2147483647 !important;
   box-sizing:border-box !important;
+  cursor:pointer !important;
+  touch-action:manipulation !important;
 }
 
-/* 3) PC FULLSCREEN — fixed 50/50 video panes and no source-aspect-driven
-   shrinking. Normal PC and phone fullscreen layouts stay unchanged. */
+/* DESKTOP FULLSCREEN: equal 50/50 panes inside a controlled layout. */
 @media (min-width:721px){
   #video-panel:fullscreen,
   #video-panel:-webkit-full-screen,
@@ -8173,8 +8137,8 @@ body.vid-in-fs .fs-next-btn{
   }
 }
 
-/* 4) PHONE FULLSCREEN — preserve the same crop behavior as normal Talk
-   playback while keeping two stacked panes. */
+/* PHONE FULLSCREEN: keep the exact same crop rule as normal video elements:
+   width/height 100% + object-fit:cover. Only the pane geometry changes. */
 @media (max-width:720px){
   #video-panel:fullscreen .video-feeds,
   #video-panel:-webkit-full-screen .video-feeds,
@@ -8192,365 +8156,63 @@ body.vid-in-fs .fs-next-btn{
     gap:0 !important;
     overflow:hidden !important;
   }
-}
-</style>
 
-
-<style id="mortalive-v139-talk-final-fullscreen">
-/* V139 — PC fullscreen structural correction.
-   The legacy #pg-chat.active .video-panel max-width (360px) was winning over
-   lower-specificity fullscreen selectors. This layer intentionally uses the
-   same/high specificity and also explicitly restores the fullscreen controls. */
-
-@media (min-width:721px){
-  #pg-chat.active #video-panel:fullscreen,
-  #pg-chat.active #video-panel:-webkit-full-screen,
-  #pg-chat.active #video-panel:-moz-full-screen{
-    display:grid !important;
-    width:100vw !important;
-    height:100vh !important;
-    max-width:none !important;
-    max-height:none !important;
-    min-width:0 !important;
-    min-height:0 !important;
-    margin:0 !important;
-    padding:0 !important;
-    overflow:hidden !important;
-    box-sizing:border-box !important;
-    grid-template-columns:1fr !important;
-    grid-template-rows:minmax(0,1fr) auto !important;
-    gap:0 !important;
-    align-self:stretch !important;
-    justify-self:stretch !important;
-  }
-
-  #pg-chat.active #video-panel:fullscreen #video-feeds,
-  #pg-chat.active #video-panel:-webkit-full-screen #video-feeds,
-  #pg-chat.active #video-panel:-moz-full-screen #video-feeds{
-    display:grid !important;
-    grid-column:1 !important;
-    grid-row:1 !important;
-    width:100vw !important;
-    height:100% !important;
-    max-width:none !important;
-    max-height:none !important;
-    min-width:0 !important;
-    min-height:0 !important;
-    margin:0 !important;
-    padding:0 !important;
-    aspect-ratio:auto !important;
-    gap:0 !important;
-    overflow:hidden !important;
-    grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
-    grid-template-rows:minmax(0,1fr) !important;
-  }
-
-  #pg-chat.active #video-panel:fullscreen .video-wrapper,
-  #pg-chat.active #video-panel:-webkit-full-screen .video-wrapper,
-  #pg-chat.active #video-panel:-moz-full-screen .video-wrapper{
+  #video-panel:fullscreen .video-wrapper,
+  #video-panel:-webkit-full-screen .video-wrapper,
+  #video-panel:-moz-full-screen .video-wrapper{
     width:100% !important;
     height:100% !important;
     min-width:0 !important;
     min-height:0 !important;
-    max-width:none !important;
-    max-height:none !important;
     aspect-ratio:auto !important;
     overflow:hidden !important;
-    margin:0 !important;
-    padding:0 !important;
   }
 
-  #pg-chat.active #video-panel:fullscreen #vid-local,
-  #pg-chat.active #video-panel:fullscreen #vid-remote,
-  #pg-chat.active #video-panel:-webkit-full-screen #vid-local,
-  #pg-chat.active #video-panel:-webkit-full-screen #vid-remote,
-  #pg-chat.active #video-panel:-moz-full-screen #vid-local,
-  #pg-chat.active #video-panel:-moz-full-screen #vid-remote{
-    display:block !important;
-    visibility:visible !important;
+  #video-panel:fullscreen #vid-local,
+  #video-panel:fullscreen #vid-remote,
+  #video-panel:-webkit-full-screen #vid-local,
+  #video-panel:-webkit-full-screen #vid-remote,
+  #video-panel:-moz-full-screen #vid-local,
+  #video-panel:-moz-full-screen #vid-remote{
     width:100% !important;
     height:100% !important;
     max-width:100% !important;
     max-height:100% !important;
-    min-width:0 !important;
-    min-height:0 !important;
     object-fit:cover !important;
     object-position:center center !important;
-    margin:0 !important;
-    padding:0 !important;
-  }
-
-  /* Beat both the old .fs-controls hidden rule and body-class timing. */
-  #pg-chat.active #video-panel:fullscreen #fs-controls,
-  #pg-chat.active #video-panel:-webkit-full-screen #fs-controls,
-  #pg-chat.active #video-panel:-moz-full-screen #fs-controls{
-    display:grid !important;
-    grid-column:1 !important;
-    grid-row:2 !important;
-    width:100% !important;
-    min-width:0 !important;
-    min-height:62px !important;
-    height:auto !important;
-    position:relative !important;
-    inset:auto !important;
-    box-sizing:border-box !important;
-    z-index:2147483647 !important;
-    pointer-events:auto !important;
-    opacity:1 !important;
-    visibility:visible !important;
-    grid-template-columns:repeat(5,minmax(0,1fr)) !important;
-    gap:8px !important;
-    padding:8px 12px !important;
-  }
-
-  #pg-chat.active #video-panel:fullscreen #fs-emoji-btns,
-  #pg-chat.active #video-panel:fullscreen .fs-emoji-btns,
-  #pg-chat.active #video-panel:-webkit-full-screen .fs-emoji-btns,
-  #pg-chat.active #video-panel:-moz-full-screen .fs-emoji-btns{
-    display:contents !important;
-  }
-
-  #pg-chat.active #video-panel:fullscreen .fs-emoji-btn,
-  #pg-chat.active #video-panel:fullscreen .fs-next-btn,
-  #pg-chat.active #video-panel:-webkit-full-screen .fs-emoji-btn,
-  #pg-chat.active #video-panel:-webkit-full-screen .fs-next-btn,
-  #pg-chat.active #video-panel:-moz-full-screen .fs-emoji-btn,
-  #pg-chat.active #video-panel:-moz-full-screen .fs-next-btn{
-    display:flex !important;
-    width:100% !important;
-    min-width:0 !important;
-    height:42px !important;
-    min-height:42px !important;
-    max-height:42px !important;
-    border-radius:4px !important;
-    pointer-events:auto !important;
-    z-index:2147483647 !important;
-    align-items:center !important;
-    justify-content:center !important;
-    position:relative !important;
-    box-sizing:border-box !important;
-  }
-}
-
-/* Phone fullscreen is still two stacked cropped panes; only ensure the panel
-   itself cannot inherit the normal max-width constraint. */
-@media (max-width:720px){
-  #pg-chat.active #video-panel:fullscreen,
-  #pg-chat.active #video-panel:-webkit-full-screen,
-  #pg-chat.active #video-panel:-moz-full-screen{
-    width:100vw !important;
-    max-width:none !important;
-    max-height:none !important;
-    min-width:0 !important;
-    min-height:0 !important;
-  }
-
-  #pg-chat.active #video-panel:fullscreen #fs-controls,
-  #pg-chat.active #video-panel:-webkit-full-screen #fs-controls,
-  #pg-chat.active #video-panel:-moz-full-screen #fs-controls{
-    display:grid !important;
-    visibility:visible !important;
-    opacity:1 !important;
-    pointer-events:auto !important;
-  }
-}
-</style>
-
-
-<style id="mortalive-v140-talk-fullscreen-root-fix">
-/* V140 — root fullscreen containment fix.
-   V139 tried to override the normal chat grid, but the video panel remained
-   a grid child with legacy sizing constraints. In fullscreen it must become
-   its own viewport layer. Normal/non-fullscreen layout is untouched. */
-
-@media (min-width:721px){
-  #pg-chat.active #video-panel:fullscreen,
-  #pg-chat.active #video-panel:-webkit-full-screen,
-  #pg-chat.active #video-panel:-moz-full-screen{
-    position:fixed !important;
-    inset:0 !important;
-    left:0 !important;
-    top:0 !important;
-    right:0 !important;
-    bottom:0 !important;
-
-    display:grid !important;
-    grid-template-columns:1fr !important;
-    grid-template-rows:minmax(0,1fr) auto !important;
-
-    width:100vw !important;
-    height:100vh !important;
-    max-width:none !important;
-    max-height:none !important;
-    min-width:100vw !important;
-    min-height:100vh !important;
-
-    margin:0 !important;
-    padding:0 !important;
-    border:0 !important;
-    border-radius:0 !important;
-    transform:none !important;
-
-    overflow:hidden !important;
-    box-sizing:border-box !important;
-    z-index:2147483647 !important;
-  }
-
-  #pg-chat.active #video-panel:fullscreen #video-feeds,
-  #pg-chat.active #video-panel:-webkit-full-screen #video-feeds,
-  #pg-chat.active #video-panel:-moz-full-screen #video-feeds{
-    position:relative !important;
-    grid-column:1 !important;
-    grid-row:1 !important;
-
-    display:grid !important;
-    grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
-    grid-template-rows:minmax(0,1fr) !important;
-
-    width:100% !important;
-    height:100% !important;
-    min-width:0 !important;
-    min-height:0 !important;
-    max-width:none !important;
-    max-height:none !important;
-    aspect-ratio:auto !important;
-
-    margin:0 !important;
-    padding:0 !important;
-    gap:0 !important;
-    overflow:hidden !important;
-    box-sizing:border-box !important;
-  }
-
-  #pg-chat.active #video-panel:fullscreen .video-wrapper,
-  #pg-chat.active #video-panel:-webkit-full-screen .video-wrapper,
-  #pg-chat.active #video-panel:-moz-full-screen .video-wrapper{
-    width:100% !important;
-    height:100% !important;
-    min-width:0 !important;
-    min-height:0 !important;
-    max-width:none !important;
-    max-height:none !important;
-    aspect-ratio:auto !important;
-    overflow:hidden !important;
-    box-sizing:border-box !important;
-  }
-
-  #pg-chat.active #video-panel:fullscreen #vid-local,
-  #pg-chat.active #video-panel:fullscreen #vid-remote,
-  #pg-chat.active #video-panel:-webkit-full-screen #vid-local,
-  #pg-chat.active #video-panel:-webkit-full-screen #vid-remote,
-  #pg-chat.active #video-panel:-moz-full-screen #vid-local,
-  #pg-chat.active #video-panel:-moz-full-screen #vid-remote{
     display:block !important;
     visibility:visible !important;
-    width:100% !important;
-    height:100% !important;
-    min-width:0 !important;
-    min-height:0 !important;
-    max-width:100% !important;
-    max-height:100% !important;
-    object-fit:cover !important;
-    object-position:center center !important;
-    transform:none !important;
-  }
-
-  /* Fullscreen controls are a real second grid row, never overlaid outside
-     the viewport and never allowed to disappear behind legacy rules. */
-  #pg-chat.active #video-panel:fullscreen #fs-controls,
-  #pg-chat.active #video-panel:-webkit-full-screen #fs-controls,
-  #pg-chat.active #video-panel:-moz-full-screen #fs-controls{
-    grid-column:1 !important;
-    grid-row:2 !important;
-
-    display:grid !important;
-    grid-template-columns:repeat(5,minmax(0,1fr)) !important;
-
-    position:relative !important;
-    inset:auto !important;
-
-    width:100% !important;
-    min-width:0 !important;
-    height:auto !important;
-    min-height:62px !important;
-
-    margin:0 !important;
-    padding:8px 12px !important;
-    gap:8px !important;
-
-    opacity:1 !important;
-    visibility:visible !important;
-    pointer-events:auto !important;
-    z-index:2147483647 !important;
-    box-sizing:border-box !important;
   }
 }
+/* V139 — Fullscreen fixes: square buttons, no blank space, buttons work, portrait phone layout.
+   Five issues resolved:
+   1. PC landscape: oval → square buttons (border-radius:6px everywhere).
+   2. PC landscape: blank black space removed; video-feeds fills grid-row:1, controls in grid-row:2.
+   3. Fullscreen buttons: V139 handler uses body.vid-in-fs fallback (fixes Safari/Android).
+   4. Portrait phone: duration before username; all 5 action buttons in ONE row (grid 5-col).
+   5. Portrait phone: fs-controls HIDDEN unless body.vid-in-fs class is present. */
 
-/* Phone fullscreen: preserve stacked two-pane behavior, but escape any
-   inherited normal-page width/max-width constraint too. */
-@media (max-width:720px){
-  #pg-chat.active #video-panel:fullscreen,
-  #pg-chat.active #video-panel:-webkit-full-screen,
-  #pg-chat.active #video-panel:-moz-full-screen{
-    position:fixed !important;
-    inset:0 !important;
-    width:100vw !important;
-    height:100vh !important;
-    max-width:none !important;
-    max-height:none !important;
-    min-width:100vw !important;
-    min-height:100vh !important;
-    margin:0 !important;
-    padding:0 !important;
-    overflow:hidden !important;
-    display:grid !important;
-    grid-template-columns:1fr !important;
-    grid-template-rows:minmax(0,1fr) auto !important;
-    z-index:2147483647 !important;
-  }
-
-  #pg-chat.active #video-panel:fullscreen #video-feeds,
-  #pg-chat.active #video-panel:-webkit-full-screen #video-feeds,
-  #pg-chat.active #video-panel:-moz-full-screen #video-feeds{
-    grid-column:1 !important;
-    grid-row:1 !important;
-    display:grid !important;
-    grid-template-columns:1fr !important;
-    grid-template-rows:minmax(0,1fr) minmax(0,1fr) !important;
-    width:100% !important;
-    height:100% !important;
-    min-width:0 !important;
-    min-height:0 !important;
-    max-width:none !important;
-    max-height:none !important;
-    aspect-ratio:auto !important;
-    margin:0 !important;
-    padding:0 !important;
-    gap:0 !important;
-    overflow:hidden !important;
-  }
-
-  #pg-chat.active #video-panel:fullscreen #fs-controls,
-  #pg-chat.active #video-panel:-webkit-full-screen #fs-controls,
-  #pg-chat.active #video-panel:-moz-full-screen #fs-controls{
-    grid-column:1 !important;
-    grid-row:2 !important;
-    display:grid !important;
-    grid-template-columns:repeat(5,minmax(0,1fr)) !important;
-    width:100% !important;
-    min-width:0 !important;
-    height:auto !important;
-    min-height:60px !important;
-    position:relative !important;
-    inset:auto !important;
-    opacity:1 !important;
-    visibility:visible !important;
-    pointer-events:auto !important;
-    z-index:2147483647 !important;
-  }
+/* FIX 4 extra: ensure peer-duration always appears BEFORE peer-name-text in ALL viewports */
+.peer-name {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+  min-width: 0 !important;
+  flex-wrap: nowrap !important;
+}
+.peer-duration {
+  order: -1 !important;
+  flex-shrink: 0 !important;
+}
+.peer-name-text {
+  order: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
 }
 </style>
-
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -9170,12 +8832,12 @@ body.vid-in-fs .fs-next-btn{
         </div>
         <div class="fs-controls" id="fs-controls">
           <div class="fs-emoji-btns">
-            <button class="fs-emoji-btn" id="fs-cam" title="Cam">📷</button>
-            <button class="fs-emoji-btn" id="fs-mic" title="Mic">🎤</button>
-            <button class="fs-emoji-btn" id="fs-flip" title="Flip">🔄</button>
-            <button class="fs-emoji-btn" id="fs-exit" title="Full">⛶</button>
+            <button class="fs-emoji-btn" id="fs-mic" title="Mute microphone">🎤 Mic</button>
+            <button class="fs-emoji-btn" id="fs-cam" title="Toggle camera">📷 Cam</button>
+            <button class="fs-emoji-btn" id="fs-flip" title="Flip camera">🔄 Flip</button>
+            <button class="fs-emoji-btn" id="fs-exit" title="Exit fullscreen">⛶ Full</button>
           </div>
-          <button class="fs-next-btn" id="btn-skip-fs" title="Next">Next</button>
+          <button class="fs-next-btn" id="btn-skip-fs" title="Next">⏭ Next</button>
         </div>
       </div>
 
