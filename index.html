@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v124 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v135" content="talk-controls-pcfs-synth-shuffle-fixed">
+<meta name="mortalive-build-v136" content="talk-all-five-fixes">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
@@ -2910,6 +2910,164 @@ body.vid-in-fs #fs-controls{
     min-height:60px !important;
     padding:8px !important;
     gap:6px !important;
+  }
+}
+
+
+/* V136 — Talk layout/functionality fixes only; existing button styling stays. */
+@media (max-width:720px){
+  #pg-chat.active .video-controls{
+    display:grid !important;
+    grid-template-columns:repeat(4,minmax(0,1fr)) !important;
+    gap:6px !important;
+    width:100% !important;
+    flex-wrap:nowrap !important;
+    overflow:visible !important;
+  }
+  #pg-chat.active .video-controls .vc-btn{
+    width:100% !important;
+    min-width:0 !important;
+    white-space:nowrap !important;
+  }
+
+  #video-panel:fullscreen .fs-controls,
+  #video-panel:-webkit-full-screen .fs-controls,
+  #video-panel:-moz-full-screen .fs-controls,
+  body.vid-in-fs #fs-controls{
+    display:grid !important;
+    grid-template-columns:repeat(5,minmax(0,1fr)) !important;
+    gap:6px !important;
+    width:100% !important;
+    min-height:60px !important;
+    height:auto !important;
+    padding:8px !important;
+    position:relative !important;
+    inset:auto !important;
+    box-sizing:border-box !important;
+    pointer-events:auto !important;
+    align-items:center !important;
+  }
+
+  #video-panel:fullscreen .fs-emoji-btns,
+  #video-panel:-webkit-full-screen .fs-emoji-btns,
+  #video-panel:-moz-full-screen .fs-emoji-btns,
+  body.vid-in-fs .fs-emoji-btns{
+    display:contents !important;
+  }
+
+  #video-panel:fullscreen .fs-emoji-btn,
+  #video-panel:-webkit-full-screen .fs-emoji-btn,
+  #video-panel:-moz-full-screen .fs-emoji-btn,
+  body.vid-in-fs .fs-emoji-btn,
+  #video-panel:fullscreen .fs-next-btn,
+  #video-panel:-webkit-full-screen .fs-next-btn,
+  #video-panel:-moz-full-screen .fs-next-btn,
+  body.vid-in-fs .fs-next-btn{
+    width:100% !important;
+    min-width:0 !important;
+    pointer-events:auto !important;
+  }
+}
+
+/* PC fullscreen: fixed 50/50 panes, source aspect ratio cannot resize them. */
+@media (min-width:721px){
+  #video-panel:fullscreen,
+  #video-panel:-webkit-full-screen,
+  #video-panel:-moz-full-screen{
+    display:grid !important;
+    grid-template-columns:1fr !important;
+    grid-template-rows:minmax(0,1fr) auto !important;
+    width:100vw !important;
+    height:100vh !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    padding:0 !important;
+    margin:0 !important;
+    gap:0 !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds,
+  body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds{
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+    grid-template-rows:minmax(0,1fr) !important;
+    width:100% !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    aspect-ratio:auto !important;
+    padding:0 !important;
+    margin:0 !important;
+    gap:0 !important;
+    overflow:hidden !important;
+  }
+
+  #video-panel:fullscreen .video-wrapper,
+  #video-panel:-webkit-full-screen .video-wrapper,
+  #video-panel:-moz-full-screen .video-wrapper{
+    width:100% !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    aspect-ratio:auto !important;
+    overflow:hidden !important;
+  }
+
+  #video-panel:fullscreen #vid-remote,
+  #video-panel:fullscreen #vid-local,
+  #video-panel:-webkit-full-screen #vid-remote,
+  #video-panel:-webkit-full-screen #vid-local,
+  #video-panel:-moz-full-screen #vid-remote,
+  #video-panel:-moz-full-screen #vid-local{
+    width:100% !important;
+    height:100% !important;
+    max-width:100% !important;
+    max-height:100% !important;
+    object-fit:cover !important;
+    object-position:center center !important;
+  }
+
+  #video-panel:fullscreen .fs-controls,
+  #video-panel:-webkit-full-screen .fs-controls,
+  #video-panel:-moz-full-screen .fs-controls{
+    grid-column:1 !important;
+    grid-row:2 !important;
+    display:grid !important;
+    grid-template-columns:repeat(5,minmax(0,1fr)) !important;
+    width:100% !important;
+    min-height:64px !important;
+    height:auto !important;
+    position:relative !important;
+    inset:auto !important;
+    padding:10px 14px !important;
+    gap:10px !important;
+    pointer-events:auto !important;
+    box-sizing:border-box !important;
+  }
+
+  #video-panel:fullscreen .fs-emoji-btns,
+  #video-panel:-webkit-full-screen .fs-emoji-btns,
+  #video-panel:-moz-full-screen .fs-emoji-btns{
+    display:contents !important;
+  }
+
+  #video-panel:fullscreen .fs-emoji-btn,
+  #video-panel:-webkit-full-screen .fs-emoji-btn,
+  #video-panel:-moz-full-screen .fs-emoji-btn,
+  #video-panel:fullscreen .fs-next-btn,
+  #video-panel:-webkit-full-screen .fs-next-btn,
+  #video-panel:-moz-full-screen .fs-next-btn{
+    width:100% !important;
+    min-width:0 !important;
+    pointer-events:auto !important;
   }
 }
 
