@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v124 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v137" content="talk-clean-controls-crop-fixed">
+<meta name="mortalive-build-v138" content="talk-mobile-topbar-fullscreen-clean">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
@@ -7929,14 +7929,84 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 
 </style>
 
-<style id="mortalive-v137-talk-final">
-/* V137 — clean Talk presentation layer.
-   Older V130–V136 fullscreen/layout override layers were removed because they
-   were competing for the same selectors. Only this final Talk override owns
-   fullscreen controls and fullscreen video sizing. */
 
-/* PHONE: normal controls stay on one line. Do not alter their native shape. */
+
+
+<style id="mortalive-v138-talk-final">
+/* V138 — final cleanup for the remaining Talk issues.
+   Only these controls/layout rules are owned here. Core Talk styling remains
+   untouched. */
+
+/* 1) PHONE NORMAL TOP ACTIONS — one line.
+   Back | video/status | Rate | Next | Leave
+   Older flex-wrap rules are explicitly neutralized here. */
 @media (max-width:720px){
+  #pg-chat.active .chat-topbar{
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    align-items:center !important;
+    gap:6px !important;
+    min-width:0 !important;
+    width:100% !important;
+  }
+
+  #pg-chat.active .chat-topbar .chat-peer{
+    flex:0 1 auto !important;
+    width:auto !important;
+    min-width:0 !important;
+    max-width:38% !important;
+    overflow:hidden !important;
+  }
+
+  #pg-chat.active .chat-topbar .peer-name{
+    display:flex !important;
+    flex-direction:row !important;
+    align-items:center !important;
+    gap:6px !important;
+    min-width:0 !important;
+    white-space:nowrap !important;
+  }
+
+  #pg-chat.active .chat-topbar .peer-duration{
+    order:-1 !important;
+    flex:0 0 auto !important;
+  }
+
+  #pg-chat.active .chat-topbar .peer-name-text{
+    min-width:0 !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+    white-space:nowrap !important;
+  }
+
+  #pg-chat.active .top-actions{
+    display:grid !important;
+    grid-template-columns:repeat(4,minmax(0,1fr)) !important;
+    flex:1 1 auto !important;
+    width:auto !important;
+    min-width:0 !important;
+    gap:5px !important;
+    flex-wrap:nowrap !important;
+    margin-left:auto !important;
+  }
+
+  #pg-chat.active .top-actions > *{
+    width:100% !important;
+    min-width:0 !important;
+    max-width:none !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+  }
+
+  /* Back is outside .top-actions in the existing markup; keep the full
+     header compact instead of allowing another wrap opportunity. */
+  #pg-chat.active .chat-back{
+    flex:0 0 auto !important;
+    width:auto !important;
+    min-width:34px !important;
+  }
+
+  /* Normal phone bottom controls remain a single row. */
   #pg-chat.active .video-controls{
     display:grid !important;
     grid-template-columns:repeat(4,minmax(0,1fr)) !important;
@@ -7945,6 +8015,7 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
     flex-wrap:nowrap !important;
     overflow:visible !important;
   }
+
   #pg-chat.active .video-controls .vc-btn{
     width:100% !important;
     min-width:0 !important;
@@ -7952,26 +8023,33 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
   }
 }
 
-/* FULLSCREEN CONTROL BAR — one row, rectangular/square inner buttons.
-   The existing outer control bar remains unchanged. */
+/* 2) FULLSCREEN INNER BUTTONS — five clean rectangular controls in one row.
+   Explicitly hide this toolbar outside fullscreen so no legacy rule can make
+   it appear on the normal page. */
+body:not(.vid-in-fs) #fs-controls,
+html:not(.vid-in-fs) #video-panel:fullscreen #fs-controls{
+  display:none !important;
+}
+
 #video-panel:fullscreen #fs-controls,
 #video-panel:-webkit-full-screen #fs-controls,
 #video-panel:-moz-full-screen #fs-controls,
 body.vid-in-fs #fs-controls{
   display:grid !important;
   grid-template-columns:repeat(5,minmax(0,1fr)) !important;
+  position:relative !important;
+  inset:auto !important;
   width:100% !important;
   min-height:62px !important;
   height:auto !important;
-  position:relative !important;
-  inset:auto !important;
+  gap:8px !important;
+  padding:8px 12px !important;
   box-sizing:border-box !important;
   align-items:center !important;
   justify-content:stretch !important;
-  gap:8px !important;
-  padding:8px 12px !important;
   z-index:2147483647 !important;
   pointer-events:auto !important;
+  flex:none !important;
 }
 
 #video-panel:fullscreen .fs-emoji-btns,
@@ -7996,7 +8074,7 @@ body.vid-in-fs .fs-next-btn{
   min-height:42px !important;
   max-height:42px !important;
   padding:0 8px !important;
-  border-radius:10px !important;
+  border-radius:4px !important;
   border:1px solid rgba(255,255,255,.20) !important;
   background:rgba(255,255,255,.12) !important;
   color:#fff !important;
@@ -8014,7 +8092,8 @@ body.vid-in-fs .fs-next-btn{
   box-sizing:border-box !important;
 }
 
-/* DESKTOP FULLSCREEN: equal 50/50 panes inside a controlled layout. */
+/* 3) PC FULLSCREEN — fixed 50/50 video panes and no source-aspect-driven
+   shrinking. Normal PC and phone fullscreen layouts stay unchanged. */
 @media (min-width:721px){
   #video-panel:fullscreen,
   #video-panel:-webkit-full-screen,
@@ -8094,8 +8173,8 @@ body.vid-in-fs .fs-next-btn{
   }
 }
 
-/* PHONE FULLSCREEN: keep the exact same crop rule as normal video elements:
-   width/height 100% + object-fit:cover. Only the pane geometry changes. */
+/* 4) PHONE FULLSCREEN — preserve the same crop behavior as normal Talk
+   playback while keeping two stacked panes. */
 @media (max-width:720px){
   #video-panel:fullscreen .video-feeds,
   #video-panel:-webkit-full-screen .video-feeds,
@@ -8112,33 +8191,6 @@ body.vid-in-fs .fs-next-btn{
     aspect-ratio:auto !important;
     gap:0 !important;
     overflow:hidden !important;
-  }
-
-  #video-panel:fullscreen .video-wrapper,
-  #video-panel:-webkit-full-screen .video-wrapper,
-  #video-panel:-moz-full-screen .video-wrapper{
-    width:100% !important;
-    height:100% !important;
-    min-width:0 !important;
-    min-height:0 !important;
-    aspect-ratio:auto !important;
-    overflow:hidden !important;
-  }
-
-  #video-panel:fullscreen #vid-local,
-  #video-panel:fullscreen #vid-remote,
-  #video-panel:-webkit-full-screen #vid-local,
-  #video-panel:-webkit-full-screen #vid-remote,
-  #video-panel:-moz-full-screen #vid-local,
-  #video-panel:-moz-full-screen #vid-remote{
-    width:100% !important;
-    height:100% !important;
-    max-width:100% !important;
-    max-height:100% !important;
-    object-fit:cover !important;
-    object-position:center center !important;
-    display:block !important;
-    visibility:visible !important;
   }
 }
 </style>
