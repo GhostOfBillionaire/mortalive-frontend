@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-26-v136-talk-all-five-fixes'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-26-v139-fullscreen-fixed'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -89,7 +89,12 @@ const S = {
   // timer carries the generation so an old timer cannot strand a newer search.
   talkSearchGeneration: 0,
   talkFallbackTimer: null,
-  talkNextBusy: false
+  talkNextBusy: false,
+  // V138: Typing indicators & Interest feedback
+  peerTyping: false,
+  peerTypingTimeout: null,
+  peerInterest: null,
+  typingIndicatorTimerId: null
 };
 
 // EXPLICIT GLOBAL BINDING: Allows index.html inline scripts to accurately read the guest state
@@ -2643,6 +2648,21 @@ function initChatControls() {
         sendMsg();
       }
     });
+    
+    // V138: Typing indicator
+    let typingActive = false;
+    input.addEventListener('input', () => {
+      const hasText = input.value.trim().length > 0;
+      if (hasText && !typingActive) {
+        typingActive = true;
+        emitTypingStatus(true);
+        clearTimeout(S.typingIndicatorTimerId);
+        S.typingIndicatorTimerId = setTimeout(() => {
+          typingActive = false;
+          emitTypingStatus(false);
+        }, 3000);
+      }
+    });
   }
 
   const handleNext = () => {
@@ -2867,8 +2887,11 @@ function initSocket() {
       score: data.peer && typeof data.peer.score === 'number' ? data.peer.score : null,
       emoji: (data.peer && data.peer.emoji) || '👤',
       userId: data.peer && data.peer.id ? data.peer.id : null,
-      isGuest: !!(data.peer && data.peer.isGuest)
+      isGuest: !!(data.peer && data.peer.isGuest),
+      interest: data.peer && data.peer.interest ? data.peer.interest : null
     };
+    // V138: Store peer's interest for feedback display
+    S.peerInterest = S.stranger.interest;
     beginChat();
     if (S.mode === 'video') await startWebRTC();
   });
@@ -2904,6 +2927,22 @@ function initSocket() {
   });
 
   S.socket.on('peer-chat', ({ text }) => appendMsg(text, 'them'));
+
+  // V138: Typing indicators
+  S.socket.on('peer-typing', ({ isTyping }) => {
+    S.peerTyping = !!isTyping;
+    clearTimeout(S.peerTypingTimeout);
+    if (isTyping) {
+      updateTypingIndicator();
+      // Auto-hide typing after 5 seconds if no update
+      S.peerTypingTimeout = setTimeout(() => {
+        S.peerTyping = false;
+        updateTypingIndicator();
+      }, 5000);
+    } else {
+      updateTypingIndicator();
+    }
+  });
 
   S.socket.on('peer-disconnected', () => {
     finalizeChatProgress('peer-disconnected');
@@ -3783,7 +3822,16 @@ function beginChat() {
   const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
   setText('peer-ava', s.emoji);
   setText('peer-name', s.name);
-  setText('peer-score', s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`);
+  
+  // V138: Interest match feedback
+  let scoreText = s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`;
+  if (S.interest && S.peerInterest) {
+    const interestMatch = S.interest.toLowerCase().trim() === S.peerInterest.toLowerCase().trim();
+    scoreText += interestMatch ? ' ✓ Same interest' : ` · Interest: ${S.peerInterest}`;
+  } else if (S.peerInterest) {
+    scoreText += ` · Interest: ${S.peerInterest}`;
+  }
+  setText('peer-score', scoreText);
   bindTalkPeerActions();
   syncTalkPeerFollowUI();
 
@@ -3827,6 +3875,13 @@ function beginChat() {
 function appendMsg(text, who) {
   const msgs = $('chat-msgs');
   if (!msgs) return;
+
+  // V138: Clear typing indicator when message received from peer
+  if (who === 'them') {
+    S.peerTyping = false;
+    clearTimeout(S.peerTypingTimeout);
+    updateTypingIndicator();
+  }
 
   const wrap = document.createElement('div');
   wrap.className = `msg${who === 'me' ? ' me' : ''}`;
@@ -3872,12 +3927,42 @@ function sendMsg() {
   if (!text) return;
 
   inp.value = '';
+  // V138: Clear typing when message is sent
+  clearTimeout(S.typingIndicatorTimerId);
+  emitTypingStatus(false);
+  
   appendMsg(text, 'me');
   awardProgress('message', 1, { message: true });
 
   if (S.socket && S.socket.connected) {
     S.socket.emit('chat', { roomId: S.roomId, text });
   }
+}
+
+// V138: Typing indicator functions
+function emitTypingStatus(isTyping) {
+  if (S.socket && S.socket.connected && S.roomId) {
+    S.socket.emit('typing', { roomId: S.roomId, isTyping });
+  }
+}
+
+function updateTypingIndicator() {
+  const nameEl = $('peer-score');
+  if (!nameEl) return;
+  
+  const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
+  let scoreText = s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`;
+  
+  if (S.peerTyping) {
+    scoreText += ' · typing…';
+  } else if (S.interest && S.peerInterest) {
+    const interestMatch = S.interest.toLowerCase().trim() === S.peerInterest.toLowerCase().trim();
+    scoreText += interestMatch ? ' ✓ Same interest' : ` · Interest: ${S.peerInterest}`;
+  } else if (S.peerInterest) {
+    scoreText += ` · Interest: ${S.peerInterest}`;
+  }
+  
+  setText('peer-score', scoreText);
 }
 
 function disconnectPeer() {
@@ -3889,6 +3974,8 @@ function disconnectPeer() {
 
   clearTimeout(S.replyTimer);
   clearTimeout(matchTimeout);
+  clearTimeout(S.typingIndicatorTimerId); // V138: Clear typing indicator timer
+  clearTimeout(S.peerTypingTimeout); // V138: Clear peer typing timeout
   stopTalkDurationTimer();
   clearSyntheticSearchTimer();
   stopSearchSnapshots(); // safety net — kills 2s search loop on any disconnect path
@@ -3930,6 +4017,9 @@ function disconnectPeer() {
   S.stranger = null;
   S.isInitiator = false;
   S.syntheticActive = false;
+  // V138: Reset typing state
+  S.peerTyping = false;
+  S.peerInterest = null;
 }
 
 function logSession(event, data) {
@@ -4170,9 +4260,6 @@ function applyFsGrid() {
   });
 }
 
-
-// V140: fullscreen layout is owned by the final CSS layer; no inline geometry override.
-
 function handleFullscreenChange() {
   const feeds      = $('video-feeds');
   const fsControls = $('fs-controls');
@@ -4192,25 +4279,8 @@ function handleFullscreenChange() {
       feeds.style.flex = '';
       feeds.style.minHeight = '';
       feeds.style.width = '';
-      feeds.style.maxWidth = '';
       feeds.style.maxHeight = '';
       feeds.style.height = '';
-    }
-    const panel = $('video-panel');
-    if (panel) {
-      panel.style.position = '';
-      panel.style.inset = '';
-      panel.style.left = '';
-      panel.style.top = '';
-      panel.style.right = '';
-      panel.style.bottom = '';
-      panel.style.width = '';
-      panel.style.height = '';
-      panel.style.minWidth = '';
-      panel.style.minHeight = '';
-      panel.style.maxWidth = '';
-      panel.style.maxHeight = '';
-      panel.style.zIndex = '';
     }
     return;
   }
@@ -4220,9 +4290,7 @@ function handleFullscreenChange() {
   applyVideoLayout();
   prepareVideoSurfaces();
   applyFsGrid();
-  setTimeout(() => {
-    applyFsGrid();
-    }, 150);
+  setTimeout(applyFsGrid, 150);
 }
 
 function syncFsButtonStates() {
@@ -4307,51 +4375,56 @@ function finishStartupSplash() {
 }
 
 
+// V139: Unified fullscreen control handler — reliable across Safari, Firefox, Chrome, mobile.
+// Uses body.vid-in-fs as the authoritative state since document.fullscreenElement
+// is null on some browsers (Safari, Android WebView) even during active fullscreen.
+(function installV139FullscreenControls() {
+  if (document.documentElement.dataset.mortaliveV139Fs === '1') return;
+  document.documentElement.dataset.mortaliveV139Fs = '1';
 
-
-// V138 fullscreen controls — one delegated handler, one canonical action path.
-(function installV138FullscreenControls() {
-  if (document.documentElement.dataset.mortaliveV138Fs === '1') return;
-  document.documentElement.dataset.mortaliveV138Fs = '1';
+  function isActuallyFullscreen() {
+    return !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement ||
+      document.body.classList.contains('vid-in-fs') // body-class is the reliable fallback
+    );
+  }
 
   document.addEventListener('click', (event) => {
     const target = event.target.closest?.('#fs-mic, #fs-cam, #fs-flip, #fs-exit, #btn-skip-fs');
     if (!target) return;
-
-    const fullscreenActive = !!(
-      document.fullscreenElement ||
-      document.webkitFullscreenElement ||
-      document.mozFullScreenElement
-    );
-    if (!fullscreenActive) return;
+    if (!isActuallyFullscreen()) return;
 
     event.preventDefault();
     event.stopImmediatePropagation();
 
-    switch (target.id) {
-      case 'fs-mic':
-        $('vc-mic')?.click();
-        break;
-      case 'fs-cam':
-        $('vc-cam')?.click();
-        break;
-      case 'fs-flip':
-        $('vc-flip')?.click();
-        break;
-      case 'btn-skip-fs':
-        window.mortaliveTalkNext?.();
-        break;
-      case 'fs-exit':
-        try {
-          if (document.fullscreenElement) document.exitFullscreen?.();
-          else if (document.webkitFullscreenElement) document.webkitExitFullscreen?.();
-          else if (document.mozFullScreenElement) document.mozCancelFullScreen?.();
-        } catch (err) {
-          console.warn('[Talk fullscreen] exit failed:', err);
-        }
-        break;
+    if (target.id === 'fs-mic') {
+      $('vc-mic')?.click();
+      setTimeout(syncFsButtonStates, 50);
+    } else if (target.id === 'fs-cam') {
+      $('vc-cam')?.click();
+      setTimeout(syncFsButtonStates, 50);
+    } else if (target.id === 'fs-flip') {
+      $('vc-flip')?.click();
+    } else if (target.id === 'btn-skip-fs') {
+      if (typeof window.mortaliveTalkNext === 'function') {
+        window.mortaliveTalkNext();
+      } else {
+        $('btn-skip')?.click();
+      }
+    } else if (target.id === 'fs-exit') {
+      try {
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
+        else if (document.msExitFullscreen) document.msExitFullscreen();
+      } catch (err) {
+        console.warn('[Talk FS v139] exit failed:', err?.message || err);
+      }
     }
-  }, true);
+  }, true); // capture phase — fires before any bubbling handler can swallow the event
 })();
 
 ready(async () => {
