@@ -5,6 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v124 -->
 <meta charset="UTF-8">
+<meta name="mortalive-build-v133" content="phone-controls-one-line-pc-fullscreen-preserved">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
@@ -7645,6 +7646,175 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 }
 </style>
 <meta name="mortalive-build" content="v132-talk-width-fullscreen-fixed">
+
+<style id="mortalive-v133-talk-controls-only">
+
+/* =========================================================
+   V133 — requested Talk controls only
+   Preserve V132 normal desktop/mobile layout.
+   1) Phone top controls: Back | connection/video | Rate | Next | Leave
+      on ONE line.
+   2) Phone lower controls: Mic | Cam | Flip | Full
+      on ONE line.
+   3) Restore the previous stable PC fullscreen video arrangement:
+      two equal video panes side-by-side; do not alter phone fullscreen.
+   ========================================================= */
+
+/* Phone — top action row: exactly one compact line. */
+@media (max-width:720px){
+  #pg-chat.active .chat-topbar{
+    flex-wrap:wrap !important;
+    row-gap:6px !important;
+  }
+
+  #pg-chat.active .chat-topbar .chat-peer{
+    flex:1 1 100% !important;
+    width:100% !important;
+    min-width:0 !important;
+  }
+
+  #pg-chat.active .top-actions{
+    width:100% !important;
+    flex:0 0 100% !important;
+    display:grid !important;
+    grid-template-columns:repeat(5,minmax(0,1fr)) !important;
+    gap:5px !important;
+    align-items:center !important;
+    flex-wrap:nowrap !important;
+    min-width:0 !important;
+    overflow:hidden !important;
+  }
+
+  #pg-chat.active .top-actions .icon-btn,
+  #pg-chat.active .top-actions .conn-badge{
+    width:100% !important;
+    min-width:0 !important;
+    max-width:none !important;
+    min-height:36px !important;
+    height:36px !important;
+    padding:0 3px !important;
+    margin:0 !important;
+    font-size:10px !important;
+    line-height:1 !important;
+    justify-content:center !important;
+    gap:3px !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+  }
+
+  #pg-chat.active .top-actions .conn-badge{
+    border-radius:999px !important;
+  }
+
+  /* Keep the text field available under the compact control rows. */
+  #pg-chat.active .chat-panel{
+    min-height:0 !important;
+  }
+
+  #pg-chat.active .chat-input{
+    flex:0 0 auto !important;
+    min-height:48px !important;
+    margin-top:6px !important;
+  }
+
+  /* Phone — lower video controls: exactly one line, four equal buttons. */
+  #pg-chat.active .video-controls{
+    display:grid !important;
+    grid-template-columns:repeat(4,minmax(0,1fr)) !important;
+    gap:5px !important;
+    width:100% !important;
+    flex-wrap:nowrap !important;
+    overflow:hidden !important;
+    margin-top:5px !important;
+  }
+
+  #pg-chat.active .video-controls .vc-btn{
+    width:100% !important;
+    min-width:0 !important;
+    max-width:none !important;
+    min-height:36px !important;
+    height:36px !important;
+    padding:0 3px !important;
+    font-size:10px !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:clip !important;
+  }
+}
+
+/* ---------------------------------------------------------
+   PC fullscreen — restore V131's stable side-by-side panes.
+   This block deliberately does NOT target phone fullscreen.
+   --------------------------------------------------------- */
+@media (min-width:721px){
+  #video-panel:fullscreen,
+  #video-panel:-webkit-full-screen,
+  #video-panel:-moz-full-screen{
+    display:flex !important;
+    flex-direction:column !important;
+    align-items:center !important;
+    justify-content:flex-start !important;
+    padding:0 !important;
+    gap:0 !important;
+    background:#000 !important;
+    width:100vw !important;
+    height:100vh !important;
+    min-height:0 !important;
+    max-height:none !important;
+    box-sizing:border-box !important;
+    overflow:hidden !important;
+  }
+
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds{
+    flex:1 1 auto !important;
+    width:100vw !important;
+    height:100% !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    aspect-ratio:unset !important;
+    grid-template-columns:1fr 1fr !important;
+    grid-template-rows:1fr !important;
+    gap:0 !important;
+    overflow:hidden !important;
+  }
+
+  #video-panel:fullscreen .video-wrapper,
+  #video-panel:-webkit-full-screen .video-wrapper,
+  #video-panel:-moz-full-screen .video-wrapper{
+    aspect-ratio:auto !important;
+    width:100% !important;
+    height:100% !important;
+    min-height:0 !important;
+    overflow:hidden !important;
+  }
+
+  #video-panel:fullscreen #vid-remote,
+  #video-panel:fullscreen #vid-local,
+  #video-panel:-webkit-full-screen #vid-remote,
+  #video-panel:-webkit-full-screen #vid-local,
+  #video-panel:-moz-full-screen #vid-remote,
+  #video-panel:-moz-full-screen #vid-local{
+    width:100% !important;
+    height:100% !important;
+    object-fit:cover !important;
+    object-position:center center !important;
+  }
+
+  /* Keep the fullscreen action bar behavior from the stable build without
+     changing the video pane geometry. */
+  body.vid-in-fs #video-panel .video-controls{
+    display:none !important;
+  }
+
+  body.vid-in-fs #fs-controls{
+    display:flex !important;
+  }
+}
+
+</style>
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
