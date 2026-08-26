@@ -4284,11 +4284,13 @@ function finishStartupSplash() {
   }, 450);
 }
 
-// V135 fullscreen control delegation
-let __v135FsDelegationInstalled = false;
-function installV135FullscreenControlDelegation() {
-  if (__v135FsDelegationInstalled) return;
-  __v135FsDelegationInstalled = true;
+
+// V137 fullscreen controls — one handler only.
+// Uses the existing canonical normal controls so Mic/Cam/Flip/Full/Next
+// execute the same actions as their non-fullscreen counterparts.
+(function installV137FullscreenControls() {
+  if (document.documentElement.dataset.mortaliveV137Fs === '1') return;
+  document.documentElement.dataset.mortaliveV137Fs = '1';
 
   document.addEventListener('click', (event) => {
     const target = event.target.closest?.('#fs-mic, #fs-cam, #fs-flip, #fs-exit, #btn-skip-fs');
@@ -4302,52 +4304,12 @@ function installV135FullscreenControlDelegation() {
     if (!isFullscreen) return;
 
     event.preventDefault();
-    event.stopPropagation();
-
-    if (target.id === 'fs-mic') {
-      $('vc-mic')?.click();
-      syncFsButtonStates();
-    } else if (target.id === 'fs-cam') {
-      $('vc-cam')?.click();
-      syncFsButtonStates();
-    } else if (target.id === 'fs-flip') {
-      $('vc-flip')?.click();
-    } else if (target.id === 'btn-skip-fs') {
-      $('btn-skip')?.click();
-    } else if (target.id === 'fs-exit') {
-      try {
-        if (document.fullscreenElement) document.exitFullscreen?.();
-        else if (document.webkitFullscreenElement) document.webkitExitFullscreen?.();
-        else if (document.mozFullScreenElement) document.mozCancelFullScreen?.();
-      } catch (err) {
-        console.warn('[Talk fullscreen] exit failed:', err);
-      }
-    }
-  }, true);
-}
-
-// V136 fullscreen control delegation — controls remain functional even if
-// the Talk panel is dynamically repaired or re-rendered.
-(function installV136FullscreenControlDelegation() {
-  if (document.documentElement.dataset.mortaliveV136Fs === '1') return;
-  document.documentElement.dataset.mortaliveV136Fs = '1';
-
-  document.addEventListener('click', (event) => {
-    const target = event.target.closest?.('#fs-mic, #fs-cam, #fs-flip, #fs-exit, #btn-skip-fs');
-    if (!target) return;
-
-    const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
-    if (!isFs) return;
-
-    event.preventDefault();
     event.stopImmediatePropagation();
 
     if (target.id === 'fs-mic') {
       $('vc-mic')?.click();
-      syncFsButtonStates();
     } else if (target.id === 'fs-cam') {
       $('vc-cam')?.click();
-      syncFsButtonStates();
     } else if (target.id === 'fs-flip') {
       $('vc-flip')?.click();
     } else if (target.id === 'btn-skip-fs') {
@@ -4357,8 +4319,8 @@ function installV135FullscreenControlDelegation() {
         if (document.fullscreenElement) document.exitFullscreen?.();
         else if (document.webkitFullscreenElement) document.webkitExitFullscreen?.();
         else if (document.mozFullScreenElement) document.mozCancelFullScreen?.();
-      } catch (e) {
-        console.warn('[Talk fullscreen] exit failed:', e);
+      } catch (err) {
+        console.warn('[Talk fullscreen] exit failed:', err);
       }
     }
   }, true);
