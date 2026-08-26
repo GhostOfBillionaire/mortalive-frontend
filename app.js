@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-26-v135-talk-final-controls-shuffle'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-26-v136-talk-all-five-fixes'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -88,7 +88,8 @@ const S = {
   // V129: monotonically increasing Talk search generation. Every search/fallback
   // timer carries the generation so an old timer cannot strand a newer search.
   talkSearchGeneration: 0,
-  talkFallbackTimer: null
+  talkFallbackTimer: null,
+  talkNextBusy: false
 };
 
 // EXPLICIT GLOBAL BINDING: Allows index.html inline scripts to accurately read the guest state
@@ -2596,6 +2597,41 @@ function initLobbyControls() {
   }
 }
 
+/**
+ * V136 canonical synthetic transition.
+ * Manual Next and natural video end share one state transition.
+ */
+function transitionFromSyntheticTalk(reason = 'synthetic-ended', quickCheckMs = null) {
+  if (!S.syntheticActive || S.talkNextBusy) return false;
+
+  S.talkNextBusy = true;
+  const currentVideoId = S.syntheticVideoId;
+
+  if (reason === 'synthetic-skipped') {
+    S.syntheticSkipCount = toNum(S.syntheticSkipCount) + 1;
+  }
+
+  S.syntheticCurrentIndex += 1;
+  rememberSyntheticVideo(currentVideoId);
+
+  logSession('end', {
+    reason,
+    roomId: S.roomId,
+    videoId: currentVideoId,
+    durationMs: Math.max(0, Date.now() - (S.syntheticVideoStartTime || Date.now()))
+  });
+
+  beginRealUserPrioritySearch({
+    fallbackToSynthetic: true,
+    reason,
+    priorityWindowMs: 30 * 1000,
+    quickCheckMs
+  });
+
+  window.setTimeout(() => { S.talkNextBusy = false; }, 450);
+  return true;
+}
+
 function initChatControls() {
   $('btn-send')?.addEventListener('click', sendMsg);
 
@@ -2611,25 +2647,29 @@ function initChatControls() {
 
   const handleNext = () => {
     clearTimeout(S.replyTimer);
-    if (S.syntheticActive) {
-      S.syntheticSkipCount += 1;
-      // V134: retire the current clip before the 10s real-user check.
-      S.syntheticCurrentIndex += 1;
-      rememberSyntheticVideo(S.syntheticVideoId);
 
-      logSession('end', { reason: 'skip_synthetic', roomId: S.roomId, videoId: S.syntheticVideoId });
-      beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'synthetic-skipped', priorityWindowMs: 30 * 1000, quickCheckMs: 10 * 1000 });
-      return;
+    if (S.syntheticActive) {
+      return transitionFromSyntheticTalk('synthetic-skipped', 10 * 1000);
     }
 
+    if (S.talkNextBusy) return;
+    S.talkNextBusy = true;
     finalizeChatProgress('skipped');
     logSession('end', { reason: 'skip', roomId: S.roomId });
     disconnectPeer();
-    beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'real-skipped', priorityWindowMs: 30 * 1000 });
+    beginRealUserPrioritySearch({
+      fallbackToSynthetic: true,
+      reason: 'real-skipped',
+      priorityWindowMs: 30 * 1000
+    });
+    window.setTimeout(() => { S.talkNextBusy = false; }, 450);
   };
 
+  window.mortaliveTalkNext = handleNext;
   $('btn-skip')?.addEventListener('click', handleNext);
   $('btn-skip-fs')?.addEventListener('click', handleNext);
+  if ($('btn-skip')) $('btn-skip').dataset.mortaliveTalkBound = '1';
+  if ($('btn-skip-fs')) $('btn-skip-fs').dataset.mortaliveTalkBound = '1';
 
   $('btn-end')?.addEventListener('click', () => {
     clearMatchResumeIntent();
@@ -2732,16 +2772,6 @@ $('vc-fs')?.addEventListener('click', () => {
   }
   setTimeout(() => { applyVideoLayout(); prepareVideoSurfaces(); }, 0);
 });
-
-
-  // V134: wire fullscreen toolbar buttons to the working normal controls.
-  $('fs-mic')?.addEventListener('click', () => { $('vc-mic')?.click(); syncFsButtonStates(); });
-  $('fs-cam')?.addEventListener('click', () => { $('vc-cam')?.click(); syncFsButtonStates(); });
-  $('fs-flip')?.addEventListener('click', () => { $('vc-flip')?.click(); });
-  $('fs-exit')?.addEventListener('click', () => {
-    if (document.fullscreenElement) document.exitFullscreen?.().catch?.(() => {});
-    else document.webkitExitFullscreen?.();
-  });
 
 
   $('btn-cancel')?.addEventListener('click', () => {
@@ -2986,7 +3016,7 @@ function startRealUserCheckTimer(checkDurationMs = 30 * 1000, onTimeout = null) 
       return;
     }
     if (S.socket?.connected) {
-      try { S.socket.emit('queue', { mode: 'text', pref: S.interest, token: S.authToken, guestName: S.guestName }); } catch (_) {}
+      try { S.socket.emit('queue', { mode: S.mode === 'video' ? 'video' : 'text', pref: S.interest, token: S.authToken, guestName: S.guestName }); } catch (_) {}
       startMatchQueueHeartbeat();
     }
   }, duration);
@@ -3393,17 +3423,7 @@ async function beginSyntheticMatch() {
     remoteVid.src = String(video.video_url);
     remoteVid.loop = false;
     remoteVid.style.display = 'block';
-    remoteVid.onended = () => {
-      if (!S.syntheticActive) return;
-      S.syntheticCurrentIndex += 1;
-      logSession('end', {
-        reason: 'synthetic_video_finished',
-        roomId: S.roomId,
-        videoId: S.syntheticVideoId,
-        durationMs: Math.max(0, Date.now() - (S.syntheticVideoStartTime || Date.now()))
-      });
-      beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'synthetic-ended' });
-    };
+    remoteVid.onended = () => transitionFromSyntheticTalk('synthetic-ended');
     remoteVid.play().catch((e) => {
       console.warn('[Synthetic] playback failed:', e?.message || e);
       setText('ph-txt', 'Video could not load — trying the next connection.');
@@ -4305,6 +4325,44 @@ function installV135FullscreenControlDelegation() {
     }
   }, true);
 }
+
+// V136 fullscreen control delegation — controls remain functional even if
+// the Talk panel is dynamically repaired or re-rendered.
+(function installV136FullscreenControlDelegation() {
+  if (document.documentElement.dataset.mortaliveV136Fs === '1') return;
+  document.documentElement.dataset.mortaliveV136Fs = '1';
+
+  document.addEventListener('click', (event) => {
+    const target = event.target.closest?.('#fs-mic, #fs-cam, #fs-flip, #fs-exit, #btn-skip-fs');
+    if (!target) return;
+
+    const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
+    if (!isFs) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    if (target.id === 'fs-mic') {
+      $('vc-mic')?.click();
+      syncFsButtonStates();
+    } else if (target.id === 'fs-cam') {
+      $('vc-cam')?.click();
+      syncFsButtonStates();
+    } else if (target.id === 'fs-flip') {
+      $('vc-flip')?.click();
+    } else if (target.id === 'btn-skip-fs') {
+      window.mortaliveTalkNext?.();
+    } else if (target.id === 'fs-exit') {
+      try {
+        if (document.fullscreenElement) document.exitFullscreen?.();
+        else if (document.webkitFullscreenElement) document.webkitExitFullscreen?.();
+        else if (document.mozFullScreenElement) document.mozCancelFullScreen?.();
+      } catch (e) {
+        console.warn('[Talk fullscreen] exit failed:', e);
+      }
+    }
+  }, true);
+})();
 
 ready(async () => {
   // Load public runtime configuration before binding auth/feed/profile controls.
