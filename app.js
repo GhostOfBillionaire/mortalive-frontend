@@ -4170,6 +4170,9 @@ function applyFsGrid() {
   });
 }
 
+
+// V140: fullscreen layout is owned by the final CSS layer; no inline geometry override.
+
 function handleFullscreenChange() {
   const feeds      = $('video-feeds');
   const fsControls = $('fs-controls');
@@ -4189,8 +4192,25 @@ function handleFullscreenChange() {
       feeds.style.flex = '';
       feeds.style.minHeight = '';
       feeds.style.width = '';
+      feeds.style.maxWidth = '';
       feeds.style.maxHeight = '';
       feeds.style.height = '';
+    }
+    const panel = $('video-panel');
+    if (panel) {
+      panel.style.position = '';
+      panel.style.inset = '';
+      panel.style.left = '';
+      panel.style.top = '';
+      panel.style.right = '';
+      panel.style.bottom = '';
+      panel.style.width = '';
+      panel.style.height = '';
+      panel.style.minWidth = '';
+      panel.style.minHeight = '';
+      panel.style.maxWidth = '';
+      panel.style.maxHeight = '';
+      panel.style.zIndex = '';
     }
     return;
   }
@@ -4200,7 +4220,9 @@ function handleFullscreenChange() {
   applyVideoLayout();
   prepareVideoSurfaces();
   applyFsGrid();
-  setTimeout(applyFsGrid, 150);
+  setTimeout(() => {
+    applyFsGrid();
+    }, 150);
 }
 
 function syncFsButtonStates() {
