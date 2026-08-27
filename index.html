@@ -8824,6 +8824,83 @@ body.vid-in-fs .fs-next-btn{
 }
 </style>
 
+
+<style id="mortalive-v147-synthetic-crop-fullscreen">
+/* V147 — Talk fullscreen synthetic-video crop fix.
+   PC landscape fullscreen must behave like normal Talk video surfaces:
+   the pane fills its available box and the source aspect ratio is cropped
+   with object-fit:cover. Do NOT size the fullscreen feed from the source
+   video's intrinsic height/aspect ratio. The fixed fullscreen action bar
+   remains an overlay and does not consume video width. */
+@media (orientation: landscape) and (min-width: 721px){
+  body.vid-in-fs.vid-fs-landscape #video-panel{
+    width:100vw !important;
+    height:100dvh !important;
+    max-width:none !important;
+    max-height:none !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    padding:0 !important;
+    margin:0 !important;
+    overflow:hidden !important;
+    display:flex !important;
+    flex-direction:column !important;
+    align-items:stretch !important;
+    justify-content:flex-start !important;
+    box-sizing:border-box !important;
+  }
+
+  body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds{
+    flex:1 1 0 !important;
+    width:100vw !important;
+    height:100% !important;
+    max-width:none !important;
+    max-height:none !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    aspect-ratio:auto !important;
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+    grid-template-rows:minmax(0,1fr) !important;
+    gap:0 !important;
+    overflow:hidden !important;
+    align-self:stretch !important;
+    justify-self:stretch !important;
+    box-sizing:border-box !important;
+  }
+
+  body.vid-in-fs.vid-fs-landscape #video-panel .video-wrapper{
+    width:100% !important;
+    height:100% !important;
+    max-width:none !important;
+    max-height:none !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    aspect-ratio:auto !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+
+  body.vid-in-fs.vid-fs-landscape #video-panel .video-wrapper video,
+  body.vid-in-fs.vid-fs-landscape #video-panel #vid-local,
+  body.vid-in-fs.vid-fs-landscape #video-panel #vid-remote{
+    width:100% !important;
+    height:100% !important;
+    max-width:none !important;
+    max-height:none !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    object-fit:cover !important;
+    object-position:center center !important;
+    display:block !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
