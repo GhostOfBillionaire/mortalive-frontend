@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-27-v143-single-fullscreen-toolbar'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-27-v144-working-talk-fullscreen'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -4225,82 +4225,33 @@ function getIsPortrait() {
 
 function applyFsGrid() {
   const feeds = $('video-feeds');
-  const panel = $('video-panel');
-  if (!feeds || !panel) return;
-
+  if (!feeds) return;
+  // Use pre-entry snapshot to avoid the Android auto-rotate race;
+  // fall back to live reading for mid-fullscreen rotation events.
   const isPortrait = (S.fsEnteredAsPortrait != null)
     ? S.fsEnteredAsPortrait
     : getIsPortrait();
 
-  document.body.classList.toggle('vid-fs-portrait', isPortrait);
+  // Body classes — work on every browser regardless of :fullscreen CSS support
+  document.body.classList.toggle('vid-fs-portrait',  isPortrait);
   document.body.classList.toggle('vid-fs-landscape', !isPortrait);
 
-  feeds.style.flex = '1 1 auto';
-  feeds.style.minHeight = '0';
-  // V142: PC landscape fullscreen uses height-driven square panes.
-  // CSS !important owns the final desktop geometry; these base values remain
-  // compatible with the portrait path and are overridden by the PC rule.
-  feeds.style.width = isPortrait ? '100%' : 'auto';
-  feeds.style.maxWidth = isPortrait ? 'none' : 'calc((100vh - 64px) * 2)';
-  feeds.style.maxHeight = isPortrait ? 'none' : 'calc(100vh - 64px)';
-  feeds.style.height = isPortrait ? '100%' : 'auto';
-  feeds.style.aspectRatio = isPortrait ? 'auto' : '2 / 1';
-  feeds.style.boxSizing = 'border-box';
-  feeds.style.paddingBottom = '0';
-
-  feeds.style.gridTemplateColumns = isPortrait
-    ? '1fr'
-    : 'minmax(0,1fr) minmax(0,1fr)';
-  feeds.style.gridTemplateRows = isPortrait
-    ? 'minmax(0,1fr) minmax(0,1fr)'
-    : 'minmax(0,1fr)';
-
-  feeds.querySelectorAll('.video-wrapper').forEach((wrapper) => {
-    wrapper.style.width = '100%';
-    wrapper.style.height = '100%';
-    wrapper.style.minWidth = '0';
-    wrapper.style.minHeight = '0';
-    wrapper.style.aspectRatio = 'auto';
-  });
-
-  feeds.querySelectorAll('video').forEach((video) => {
-    video.style.width = '100%';
-    video.style.height = '100%';
-    video.style.maxWidth = '100%';
-    video.style.maxHeight = '100%';
-    video.style.objectFit = 'cover';
-    video.style.objectPosition = 'center center';
-  });
-}
-
-function dedupeFullscreenControls() {
-  const panel = $('video-panel');
-  if (!panel) return null;
-
-  const controls = Array.from(panel.querySelectorAll('.fs-controls'));
-  if (!controls.length) return null;
-
-  // Keep the canonical control bar that owns #fs-controls. If stale/dynamically
-  // duplicated bars exist, remove them so they cannot create an extra fullscreen
-  // row or appear as a second set of bottom buttons.
-  let primary = controls.find((el) => el.id === 'fs-controls') || controls[0];
-  controls.forEach((el) => {
-    if (el !== primary) {
-      try { el.remove(); } catch (_) {}
-    }
-  });
-
-  primary.id = 'fs-controls';
-  return primary;
+  // Inline styles — highest specificity, belt-and-suspenders
+  if (isPortrait) {
+    feeds.style.gridTemplateColumns = '1fr';
+    feeds.style.gridTemplateRows   = '1fr 1fr';
+  } else {
+    feeds.style.gridTemplateColumns = '1fr 1fr';
+    feeds.style.gridTemplateRows   = '1fr';
+  }
 }
 
 function handleFullscreenChange() {
   const feeds      = $('video-feeds');
-  const fsControls = dedupeFullscreenControls() || $('fs-controls');
+  const fsControls = $('fs-controls');
   const isFs = !!(document.fullscreenElement ||
                   document.webkitFullscreenElement ||
-                  document.mozFullScreenElement ||
-                  document.body.classList.contains('vid-in-fs'));
+                  document.mozFullScreenElement);
   if (!isFs) {
     // Exiting fullscreen — remove all body classes so normal CSS takes over
     document.body.classList.remove('vid-in-fs', 'vid-fs-portrait', 'vid-fs-landscape');
@@ -4310,12 +4261,6 @@ function handleFullscreenChange() {
     if (feeds) {
       feeds.style.gridTemplateColumns = '';
       feeds.style.gridTemplateRows   = '';
-      feeds.style.paddingBottom = '';
-      feeds.style.flex = '';
-      feeds.style.minHeight = '';
-      feeds.style.width = '';
-      feeds.style.maxHeight = '';
-      feeds.style.height = '';
     }
     return;
   }
