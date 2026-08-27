@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v124 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v137" content="talk-clean-controls-crop-fixed">
+<meta name="mortalive-build-v141" content="talk-pc-fullscreen-width-finalized">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
@@ -3172,6 +3172,113 @@ body.vid-in-fs #fs-controls{
     width:100% !important;
     min-width:0 !important;
     pointer-events:auto !important;
+  }
+}
+
+
+/* V141 — PC fullscreen width finalization.
+   Keep phone fullscreen untouched. On desktop, fullscreen videos must consume
+   the full viewport width continuously at every screen size. A final grid
+   geometry wins over older flex/50%-wrapper rules without changing controls. */
+@media (min-width:721px){
+  #video-panel:fullscreen,
+  #video-panel:-webkit-full-screen,
+  #video-panel:-moz-full-screen,
+  body.vid-in-fs #video-panel{
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) !important;
+    grid-template-rows:minmax(0,1fr) auto !important;
+    width:100vw !important;
+    height:100vh !important;
+    max-width:none !important;
+    max-height:none !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    gap:0 !important;
+    box-sizing:border-box !important;
+    overflow:hidden !important;
+  }
+
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds,
+  body.vid-in-fs #video-panel .video-feeds{
+    grid-column:1 !important;
+    grid-row:1 !important;
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+    grid-template-rows:minmax(0,1fr) !important;
+    width:100% !important;
+    max-width:none !important;
+    height:100% !important;
+    max-height:none !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    gap:0 !important;
+    aspect-ratio:auto !important;
+    box-sizing:border-box !important;
+    overflow:hidden !important;
+  }
+
+  #video-panel:fullscreen .video-wrapper,
+  #video-panel:-webkit-full-screen .video-wrapper,
+  #video-panel:-moz-full-screen .video-wrapper,
+  body.vid-in-fs #video-panel .video-wrapper{
+    width:100% !important;
+    max-width:none !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    aspect-ratio:auto !important;
+    box-sizing:border-box !important;
+    overflow:hidden !important;
+  }
+
+  #video-panel:fullscreen .video-wrapper.remote,
+  #video-panel:fullscreen .video-wrapper.local,
+  #video-panel:-webkit-full-screen .video-wrapper.remote,
+  #video-panel:-webkit-full-screen .video-wrapper.local,
+  #video-panel:-moz-full-screen .video-wrapper.remote,
+  #video-panel:-moz-full-screen .video-wrapper.local,
+  body.vid-in-fs #video-panel .video-wrapper.remote,
+  body.vid-in-fs #video-panel .video-wrapper.local{
+    flex:initial !important;
+    width:100% !important;
+    max-width:none !important;
+  }
+
+  #video-panel:fullscreen #vid-remote,
+  #video-panel:fullscreen #vid-local,
+  #video-panel:-webkit-full-screen #vid-remote,
+  #video-panel:-webkit-full-screen #vid-local,
+  #video-panel:-moz-full-screen #vid-remote,
+  #video-panel:-moz-full-screen #vid-local,
+  body.vid-in-fs #vid-remote,
+  body.vid-in-fs #vid-local{
+    display:block !important;
+    width:100% !important;
+    max-width:none !important;
+    height:100% !important;
+    max-height:none !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    object-fit:cover !important;
+    object-position:center center !important;
+  }
+
+  #video-panel:fullscreen #fs-controls,
+  #video-panel:-webkit-full-screen #fs-controls,
+  #video-panel:-moz-full-screen #fs-controls,
+  body.vid-in-fs #fs-controls{
+    grid-column:1 !important;
+    grid-row:2 !important;
+    width:100% !important;
+    max-width:none !important;
+    box-sizing:border-box !important;
   }
 }
 
