@@ -3282,6 +3282,206 @@ body.vid-in-fs #fs-controls{
   }
 }
 
+/* V142 — PC fullscreen: force equal 1:1 square video panes.
+   The square size is driven by the smaller of half the viewport width and
+   the available fullscreen height, not the source video aspect ratio.
+   Controls remain in their dedicated row. */
+@media (min-width:721px){
+  #video-panel:fullscreen,
+  #video-panel:-webkit-full-screen,
+  #video-panel:-moz-full-screen,
+  body.vid-in-fs #video-panel{
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) !important;
+    grid-template-rows:minmax(0,1fr) auto !important;
+    width:100vw !important;
+    height:100vh !important;
+    max-width:none !important;
+    max-height:none !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    padding:0 !important;
+    margin:0 !important;
+    gap:0 !important;
+    box-sizing:border-box !important;
+    overflow:hidden !important;
+    background:#000 !important;
+  }
+
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds,
+  body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds{
+    grid-column:1 !important;
+    grid-row:1 !important;
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+    grid-template-rows:minmax(0,1fr) !important;
+    width:min(100vw, calc((100vh - 64px) * 2)) !important;
+    max-width:min(100vw, calc((100vh - 64px) * 2)) !important;
+    height:min(50vw, calc(100vh - 64px)) !important;
+    max-height:min(50vw, calc(100vh - 64px)) !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    aspect-ratio:2 / 1 !important;
+    margin:auto !important;
+    padding:0 !important;
+    gap:0 !important;
+    box-sizing:border-box !important;
+    overflow:hidden !important;
+    align-self:center !important;
+    justify-self:center !important;
+  }
+
+  #video-panel:fullscreen .video-wrapper,
+  #video-panel:-webkit-full-screen .video-wrapper,
+  #video-panel:-moz-full-screen .video-wrapper,
+  body.vid-in-fs #video-panel .video-wrapper{
+    width:100% !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    aspect-ratio:1 / 1 !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+
+  #video-panel:fullscreen #vid-remote,
+  #video-panel:fullscreen #vid-local,
+  #video-panel:-webkit-full-screen #vid-remote,
+  #video-panel:-webkit-full-screen #vid-local,
+  #video-panel:-moz-full-screen #vid-remote,
+  #video-panel:-moz-full-screen #vid-local,
+  body.vid-in-fs #vid-remote,
+  body.vid-in-fs #vid-local{
+    display:block !important;
+    width:100% !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    object-fit:cover !important;
+    object-position:center center !important;
+  }
+
+  #video-panel:fullscreen #fs-controls,
+  #video-panel:-webkit-full-screen #fs-controls,
+  #video-panel:-moz-full-screen #fs-controls,
+  body.vid-in-fs #fs-controls{
+    grid-column:1 !important;
+    grid-row:2 !important;
+    width:100% !important;
+    max-width:none !important;
+    min-width:0 !important;
+    pointer-events:auto !important;
+    box-sizing:border-box !important;
+    z-index:20 !important;
+  }
+}
+
+/* V142 — PC fullscreen: force equal 1:1 square video panes.
+   The square size is driven by the smaller of half the viewport width and
+   the available fullscreen height, not the source video aspect ratio.
+   Controls remain in their dedicated row. */
+@media (min-width:721px){
+  #video-panel:fullscreen,
+  #video-panel:-webkit-full-screen,
+  #video-panel:-moz-full-screen,
+  body.vid-in-fs #video-panel{
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) !important;
+    grid-template-rows:minmax(0,1fr) auto !important;
+    width:100vw !important;
+    height:100vh !important;
+    max-width:none !important;
+    max-height:none !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    padding:0 !important;
+    margin:0 !important;
+    gap:0 !important;
+    box-sizing:border-box !important;
+    overflow:hidden !important;
+    background:#000 !important;
+  }
+
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds,
+  body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds{
+    grid-column:1 !important;
+    grid-row:1 !important;
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+    grid-template-rows:minmax(0,1fr) !important;
+    width:min(100vw, calc((100vh - 64px) * 2)) !important;
+    max-width:min(100vw, calc((100vh - 64px) * 2)) !important;
+    height:min(50vw, calc(100vh - 64px)) !important;
+    max-height:min(50vw, calc(100vh - 64px)) !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    aspect-ratio:2 / 1 !important;
+    margin:auto !important;
+    padding:0 !important;
+    gap:0 !important;
+    box-sizing:border-box !important;
+    overflow:hidden !important;
+    align-self:center !important;
+    justify-self:center !important;
+  }
+
+  #video-panel:fullscreen .video-wrapper,
+  #video-panel:-webkit-full-screen .video-wrapper,
+  #video-panel:-moz-full-screen .video-wrapper,
+  body.vid-in-fs #video-panel .video-wrapper{
+    width:100% !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    aspect-ratio:1 / 1 !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+
+  #video-panel:fullscreen #vid-remote,
+  #video-panel:fullscreen #vid-local,
+  #video-panel:-webkit-full-screen #vid-remote,
+  #video-panel:-webkit-full-screen #vid-local,
+  #video-panel:-moz-full-screen #vid-remote,
+  #video-panel:-moz-full-screen #vid-local,
+  body.vid-in-fs #vid-remote,
+  body.vid-in-fs #vid-local{
+    display:block !important;
+    width:100% !important;
+    height:100% !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    object-fit:cover !important;
+    object-position:center center !important;
+  }
+
+  #video-panel:fullscreen #fs-controls,
+  #video-panel:-webkit-full-screen #fs-controls,
+  #video-panel:-moz-full-screen #fs-controls,
+  body.vid-in-fs #fs-controls{
+    grid-column:1 !important;
+    grid-row:2 !important;
+    width:100% !important;
+    max-width:none !important;
+    min-width:0 !important;
+    pointer-events:auto !important;
+    box-sizing:border-box !important;
+    z-index:20 !important;
+  }
+}
+
 </style>
 
 <style id="mortalive-profile-modal-fixes">
