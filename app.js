@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-26-v139-fullscreen-fixed'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-27-v140-fullscreen-complete'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -64,6 +64,7 @@ const S = {
   syntheticCurrentIndex: 0,
   syntheticVideoId: null,
   syntheticVideoStartTime: null,
+  syntheticSkippedIds: new Set(),  // V140: Track skipped videos this session
   syntheticSearchTimer: null,
   searchSnapshotTimer: null,  // fires every 2s while user is on the matching/searching screen
   // identity
@@ -2603,7 +2604,8 @@ function initLobbyControls() {
 }
 
 /**
- * V136 canonical synthetic transition.
+ * V140: Enhanced synthetic transition with skip tracking.
+ * Removes skipped videos from the active batch to prevent repetition.
  * Manual Next and natural video end share one state transition.
  */
 function transitionFromSyntheticTalk(reason = 'synthetic-ended', quickCheckMs = null) {
@@ -2614,9 +2616,22 @@ function transitionFromSyntheticTalk(reason = 'synthetic-ended', quickCheckMs = 
 
   if (reason === 'synthetic-skipped') {
     S.syntheticSkipCount = toNum(S.syntheticSkipCount) + 1;
+    // V140 CRITICAL FIX: Mark this video as skipped and remove from current batch
+    if (currentVideoId) {
+      S.syntheticSkippedIds.add(currentVideoId);
+    }
+    // Remove skipped video from the current array to prevent re-selection
+    if (S.currentSyntheticIndex < S.syntheticVideos.length) {
+      S.syntheticVideos.splice(S.currentSyntheticIndex, 1);
+      // Index stays the same; next iteration will use new video at same position
+    }
   }
 
-  S.syntheticCurrentIndex += 1;
+  // Don't increment index here for skipped videos; array splice already adjusted position
+  if (reason !== 'synthetic-skipped') {
+    S.syntheticCurrentIndex += 1;
+  }
+
   rememberSyntheticVideo(currentVideoId);
 
   logSession('end', {
@@ -3417,9 +3432,16 @@ async function beginSyntheticMatch() {
 
   // V134: fetch exactly one database-selected synthetic clip per turn.
   // No client preload of the full synthetic inventory.
-  const batch = await fetchSyntheticVideoBatch(1, getSyntheticSeenIds());
+  // V140: Include both seen IDs and skipped IDs in exclusion list
+  const excludeIds = [
+    ...getSyntheticSeenIds(),
+    ...Array.from(S.syntheticSkippedIds || new Set())
+  ];
+
+  const batch = await fetchSyntheticVideoBatch(1, excludeIds);
   if (!batch.length) {
     S.syntheticSeenIds = [];
+    S.syntheticSkippedIds = new Set();  // Reset skipped on refill
     const refill = await fetchSyntheticVideoBatch(1, []);
     if (!refill.length) {
       console.warn('[Synthetic] No Talk fallback inventory; returning to real-user search.');
@@ -4375,56 +4397,132 @@ function finishStartupSplash() {
 }
 
 
-// V139: Unified fullscreen control handler — reliable across Safari, Firefox, Chrome, mobile.
+// V140: ENHANCED fullscreen control handler — direct bindings + MutationObserver
 // Uses body.vid-in-fs as the authoritative state since document.fullscreenElement
 // is null on some browsers (Safari, Android WebView) even during active fullscreen.
-(function installV139FullscreenControls() {
-  if (document.documentElement.dataset.mortaliveV139Fs === '1') return;
-  document.documentElement.dataset.mortaliveV139Fs = '1';
+(function installV140FullscreenControls() {
+  if (document.documentElement.dataset.mortaliveV140Fs === '1') return;
+  document.documentElement.dataset.mortaliveV140Fs = '1';
 
+  // Helper: Direct element getter with error handling
+  const getButton = (id) => {
+    try {
+      return document.getElementById(id);
+    } catch (_) {
+      return null;
+    }
+  };
+
+  // Helper: Unified fullscreen state check
   function isActuallyFullscreen() {
     return !!(
       document.fullscreenElement ||
       document.webkitFullscreenElement ||
       document.mozFullScreenElement ||
       document.msFullscreenElement ||
-      document.body.classList.contains('vid-in-fs') // body-class is the reliable fallback
+      document.body.classList.contains('vid-in-fs')
     );
   }
 
+  // DIRECT BINDINGS: Don't rely on event delegation in fullscreen context
+  function bindDirectFullscreenControl(buttonId, actionFn) {
+    const btn = getButton(buttonId);
+    if (!btn) return;
+
+    btn.addEventListener('click', (event) => {
+      // Always stop propagation in fullscreen to prevent parent handlers
+      if (isActuallyFullscreen()) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        actionFn();
+      }
+    }, true); // Capture phase for reliability
+
+    // Also bind on touchend for mobile Safari (iOS fullscreen quirk)
+    btn.addEventListener('touchend', (event) => {
+      if (isActuallyFullscreen()) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        actionFn();
+      }
+    }, true);
+  }
+
+  // Bind individual buttons with their actions
+  bindDirectFullscreenControl('fs-mic', () => {
+    const micBtn = $('vc-mic');
+    if (micBtn) {
+      micBtn.click();
+      setTimeout(() => syncFsButtonStates(), 50);
+    }
+  });
+
+  bindDirectFullscreenControl('fs-cam', () => {
+    const camBtn = $('vc-cam');
+    if (camBtn) {
+      camBtn.click();
+      setTimeout(() => syncFsButtonStates(), 50);
+    }
+  });
+
+  bindDirectFullscreenControl('fs-flip', () => {
+    const flipBtn = $('vc-flip');
+    if (flipBtn) flipBtn.click();
+  });
+
+  bindDirectFullscreenControl('btn-skip-fs', () => {
+    if (typeof window.mortaliveTalkNext === 'function') {
+      window.mortaliveTalkNext();
+    } else {
+      const skipBtn = $('btn-skip');
+      if (skipBtn) skipBtn.click();
+    }
+  });
+
+  bindDirectFullscreenControl('fs-exit', () => {
+    try {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
+      else if (document.msExitFullscreen) document.msExitFullscreen();
+    } catch (err) {
+      console.warn('[Talk FS v140] exit failed:', err?.message || err);
+    }
+  });
+
+  // FALLBACK: Global capture-phase listener for nested click events
   document.addEventListener('click', (event) => {
     const target = event.target.closest?.('#fs-mic, #fs-cam, #fs-flip, #fs-exit, #btn-skip-fs');
-    if (!target) return;
-    if (!isActuallyFullscreen()) return;
+    if (!target || !isActuallyFullscreen()) return;
 
+    // Only fire if direct binding didn't handle it
     event.preventDefault();
     event.stopImmediatePropagation();
+  }, true);
 
-    if (target.id === 'fs-mic') {
-      $('vc-mic')?.click();
-      setTimeout(syncFsButtonStates, 50);
-    } else if (target.id === 'fs-cam') {
-      $('vc-cam')?.click();
-      setTimeout(syncFsButtonStates, 50);
-    } else if (target.id === 'fs-flip') {
-      $('vc-flip')?.click();
-    } else if (target.id === 'btn-skip-fs') {
-      if (typeof window.mortaliveTalkNext === 'function') {
-        window.mortaliveTalkNext();
-      } else {
-        $('btn-skip')?.click();
+  // MUTATION OBSERVER: Confirm body.vid-in-fs is set/cleared correctly
+  // This helps debug Safari fullscreen state issues
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.attributeName === 'class' && mutation.target === document.body) {
+        const isFs = document.body.classList.contains('vid-in-fs');
+        const fsControls = $('fs-controls');
+        if (fsControls) {
+          // Ensure fs-controls visibility matches fullscreen state
+          if (isFs) {
+            fsControls.style.visibility = 'visible';
+            fsControls.style.pointerEvents = 'auto';
+          } else {
+            fsControls.style.visibility = 'hidden';
+            fsControls.style.pointerEvents = 'none';
+          }
+        }
+        console.debug(`[FS v140] body.vid-in-fs = ${isFs}, document.fullscreenElement = ${!!document.fullscreenElement}`);
       }
-    } else if (target.id === 'fs-exit') {
-      try {
-        if (document.exitFullscreen) document.exitFullscreen();
-        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-        else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
-        else if (document.msExitFullscreen) document.msExitFullscreen();
-      } catch (err) {
-        console.warn('[Talk FS v139] exit failed:', err?.message || err);
-      }
-    }
-  }, true); // capture phase — fires before any bubbling handler can swallow the event
+    });
+  });
+
+  observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 })();
 
 ready(async () => {
