@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-26-v140-fullscreen-root-cause-fixed'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-27-v142-pc-square-fullscreen-fixed'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -4236,11 +4236,14 @@ function applyFsGrid() {
 
   feeds.style.flex = '1 1 auto';
   feeds.style.minHeight = '0';
-  feeds.style.width = '100%';
-  feeds.style.maxWidth = 'none';
-  feeds.style.maxHeight = 'none';
-  feeds.style.height = '100%';
-  feeds.style.aspectRatio = 'auto';
+  // V142: PC landscape fullscreen uses height-driven square panes.
+  // CSS !important owns the final desktop geometry; these base values remain
+  // compatible with the portrait path and are overridden by the PC rule.
+  feeds.style.width = isPortrait ? '100%' : 'auto';
+  feeds.style.maxWidth = isPortrait ? 'none' : 'calc((100vh - 64px) * 2)';
+  feeds.style.maxHeight = isPortrait ? 'none' : 'calc(100vh - 64px)';
+  feeds.style.height = isPortrait ? '100%' : 'auto';
+  feeds.style.aspectRatio = isPortrait ? 'auto' : '2 / 1';
   feeds.style.boxSizing = 'border-box';
   feeds.style.paddingBottom = '0';
 
