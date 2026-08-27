@@ -2461,6 +2461,275 @@ body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds {
   max-height:            none !important;
 }
 
+/* ========================================
+   V140 FULLSCREEN LAYOUT — CONSOLIDATED
+   PC + Mobile unified approach
+   Enhanced grid positioning and controls layout
+   ======================================== */
+
+/* FULLSCREEN: PC LANDSCAPE (min-width 721px) */
+@media (min-width: 721px) {
+  body.vid-in-fs #video-panel {
+    display: grid !important;
+    grid-template-rows: 1fr auto !important;
+    grid-template-columns: 1fr !important;
+    gap: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #000 !important;
+    z-index: 2147483646 !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+  }
+
+  body.vid-in-fs #video-feeds {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 4px !important;
+    width: 100% !important;
+    height: calc(100vh - 80px) !important;
+    max-height: calc(100vh - 80px) !important;
+    padding: 8px !important;
+    background: #000 !important;
+    overflow: hidden !important;
+    grid-row: 1 !important;
+    grid-column: 1 !important;
+  }
+
+  body.vid-in-fs .video-wrapper {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: #000 !important;
+    border-radius: 4px !important;
+    overflow: hidden !important;
+    min-width: calc(50% - 2px) !important;
+    max-width: calc(50% - 2px) !important;
+    flex: 0 0 calc(50% - 2px) !important;
+  }
+
+  body.vid-in-fs .video-wrapper video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+  }
+
+  body.vid-in-fs .video-wrapper .remote-duration,
+  body.vid-in-fs .video-wrapper .remote-username {
+    position: absolute !important;
+    background: rgba(0, 0, 0, 0.7) !important;
+    color: #fff !important;
+    padding: 4px 8px !important;
+    border-radius: 3px !important;
+    font-size: 12px !important;
+    z-index: 10 !important;
+  }
+
+  body.vid-in-fs .video-wrapper .remote-duration {
+    top: 8px !important;
+    left: 8px !important;
+  }
+
+  body.vid-in-fs .video-wrapper .remote-username {
+    top: 32px !important;
+    left: 8px !important;
+  }
+
+  /* FS Controls: positioned as grid row 2 */
+  body.vid-in-fs #fs-controls {
+    position: relative !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 12px !important;
+    width: 100% !important;
+    height: 72px !important;
+    padding: 8px !important;
+    background: #1a1a1a !important;
+    border-top: 1px solid #333 !important;
+    grid-row: 2 !important;
+    grid-column: 1 !important;
+    z-index: 2147483645 !important;
+    bottom: auto !important;
+    left: auto !important;
+    right: auto !important;
+    top: auto !important;
+    inset: auto !important;
+  }
+
+  body.vid-in-fs #fs-controls .fs-emoji-btn {
+    flex: 0 0 auto !important;
+    padding: 8px 16px !important;
+    background: #333 !important;
+    border: 1px solid #555 !important;
+    border-radius: 6px !important;
+    color: #fff !important;
+    cursor: pointer !important;
+    font-size: 16px !important;
+    transition: all 0.2s !important;
+  }
+
+  body.vid-in-fs #fs-controls .fs-emoji-btn:hover {
+    background: #444 !important;
+    border-color: #666 !important;
+  }
+
+  body.vid-in-fs #fs-controls .fs-emoji-btn:active {
+    background: #555 !important;
+    transform: scale(0.95) !important;
+  }
+
+  body.vid-in-fs .video-controls {
+    display: none !important;
+  }
+
+  body.vid-in-fs #video-panel:not(.has-remote) #fs-controls {
+    display: none !important;
+  }
+}
+
+/* FULLSCREEN: MOBILE PORTRAIT (max-width 720px) */
+@media (max-width: 720px) {
+  body.vid-in-fs #video-panel {
+    display: grid !important;
+    grid-template-rows: 1fr auto !important;
+    grid-template-columns: 1fr !important;
+    gap: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #000 !important;
+    z-index: 2147483646 !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+  }
+
+  body.vid-in-fs #video-feeds {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr 1fr !important;
+    gap: 4px !important;
+    width: 100% !important;
+    height: calc(100vh - 100px) !important;
+    max-height: calc(100vh - 100px) !important;
+    padding: 8px !important;
+    background: #000 !important;
+    overflow: hidden !important;
+    grid-row: 1 !important;
+    grid-column: 1 !important;
+  }
+
+  body.vid-in-fs .video-wrapper {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: #000 !important;
+    border-radius: 4px !important;
+    overflow: hidden !important;
+    min-height: calc(50% - 2px) !important;
+    max-height: calc(50% - 2px) !important;
+    flex: 0 0 calc(50% - 2px) !important;
+  }
+
+  body.vid-in-fs .video-wrapper video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+  }
+
+  body.vid-in-fs .video-wrapper .remote-duration {
+    position: absolute !important;
+    top: 8px !important;
+    left: 8px !important;
+    background: rgba(0, 0, 0, 0.7) !important;
+    color: #fff !important;
+    padding: 4px 8px !important;
+    border-radius: 3px !important;
+    font-size: 12px !important;
+    z-index: 10 !important;
+  }
+
+  body.vid-in-fs .video-wrapper .remote-username {
+    position: absolute !important;
+    top: 32px !important;
+    left: 8px !important;
+    background: rgba(0, 0, 0, 0.7) !important;
+    color: #fff !important;
+    padding: 4px 8px !important;
+    border-radius: 3px !important;
+    font-size: 12px !important;
+    z-index: 10 !important;
+  }
+
+  /* FS Controls: positioned as grid row 2, single row of buttons */
+  body.vid-in-fs #fs-controls {
+    position: relative !important;
+    display: grid !important;
+    grid-template-columns: auto 1fr auto 1fr auto !important;
+    align-items: center !important;
+    justify-items: center !important;
+    gap: 0 !important;
+    width: 100% !important;
+    height: 92px !important;
+    padding: 8px !important;
+    background: #1a1a1a !important;
+    border-top: 1px solid #333 !important;
+    grid-row: 2 !important;
+    grid-column: 1 !important;
+    z-index: 2147483645 !important;
+    bottom: auto !important;
+    left: auto !important;
+    right: auto !important;
+    top: auto !important;
+    inset: auto !important;
+  }
+
+  body.vid-in-fs #fs-controls .fs-emoji-btn {
+    flex: 0 0 auto !important;
+    padding: 8px 12px !important;
+    background: #333 !important;
+    border: 1px solid #555 !important;
+    border-radius: 6px !important;
+    color: #fff !important;
+    cursor: pointer !important;
+    font-size: 16px !important;
+    transition: all 0.2s !important;
+  }
+
+  body.vid-in-fs #fs-controls .fs-emoji-btn:hover {
+    background: #444 !important;
+    border-color: #666 !important;
+  }
+
+  body.vid-in-fs #fs-controls .fs-emoji-btn:active {
+    background: #555 !important;
+    transform: scale(0.95) !important;
+  }
+
+  body.vid-in-fs .video-controls {
+    display: none !important;
+  }
+
+  body.vid-in-fs #video-panel:not(.has-remote) #fs-controls {
+    display: none !important;
+  }
+}
+
+/* END V140 FULLSCREEN CONSOLIDATION */
+
 /* ── Phase 1: Talk base + blank authenticated pages ───────────────── */
 .blank-app-page {
   padding: 28px 0 110px;
