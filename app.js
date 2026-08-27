@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-26-v139-fullscreen-fixed'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-26-v140-fullscreen-root-cause-fixed'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -3419,8 +3419,14 @@ async function beginSyntheticMatch() {
       S.syntheticCurrentIndex >= S.syntheticVideos.length) {
     const batch = await fetchSyntheticVideoBatch(6, getSyntheticSeenIds());
     if (!batch.length) {
+      // V140: preserve recent synthetic IDs during inventory refill so a
+      // skipped video cannot immediately reappear when the normal request
+      // returns no eligible rows.
+      const recentSkips = Array.isArray(S.syntheticSeenIds)
+        ? S.syntheticSeenIds.slice(-5)
+        : [];
       S.syntheticSeenIds = [];
-      const refill = await fetchSyntheticVideoBatch(6, []);
+      const refill = await fetchSyntheticVideoBatch(6, recentSkips);
       if (!refill.length) {
         console.warn('[Synthetic] No Talk fallback inventory; returning to real-user search.');
         beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'no-synthetic-inventory' });
@@ -4464,7 +4470,7 @@ ready(async () => {
   initLobbyControls();
   initChatControls();
   initRatingControls();
-  installV135FullscreenControlDelegation();
+  // V140: dead call removed — installV135FullscreenControlDelegation was never merged.
   initFeedPage();
 
   // Bind profile controls at startup as well as during page navigation.
