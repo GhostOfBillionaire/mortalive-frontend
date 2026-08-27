@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-27-v142-pc-square-fullscreen-fixed'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-27-v143-single-fullscreen-toolbar'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -2768,6 +2768,7 @@ function initChatControls() {
 $('vc-fs')?.addEventListener('click', () => {
   const panel = $('video-panel');
   if (!panel) return;
+  dedupeFullscreenControls();
   if (!document.fullscreenElement) {
     // Snapshot BEFORE requestFullscreen — Android rotates the device after this
     // call, so by fullscreenchange screen.orientation already says "landscape".
@@ -4272,9 +4273,30 @@ function applyFsGrid() {
   });
 }
 
+function dedupeFullscreenControls() {
+  const panel = $('video-panel');
+  if (!panel) return null;
+
+  const controls = Array.from(panel.querySelectorAll('.fs-controls'));
+  if (!controls.length) return null;
+
+  // Keep the canonical control bar that owns #fs-controls. If stale/dynamically
+  // duplicated bars exist, remove them so they cannot create an extra fullscreen
+  // row or appear as a second set of bottom buttons.
+  let primary = controls.find((el) => el.id === 'fs-controls') || controls[0];
+  controls.forEach((el) => {
+    if (el !== primary) {
+      try { el.remove(); } catch (_) {}
+    }
+  });
+
+  primary.id = 'fs-controls';
+  return primary;
+}
+
 function handleFullscreenChange() {
   const feeds      = $('video-feeds');
-  const fsControls = $('fs-controls');
+  const fsControls = dedupeFullscreenControls() || $('fs-controls');
   const isFs = !!(document.fullscreenElement ||
                   document.webkitFullscreenElement ||
                   document.mozFullScreenElement ||
