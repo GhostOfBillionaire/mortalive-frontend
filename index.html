@@ -8583,6 +8583,126 @@ body.vid-in-fs .fs-next-btn{
   white-space: nowrap !important;
 }
 </style>
+
+<style id="mortalive-v143-single-fullscreen-toolbar">
+/* V143 — Talk fullscreen hardening.
+   One authoritative fullscreen action bar; PC landscape uses true 1:1 square panes
+   sized from viewport width, so the video width never hits the old height cap. */
+#video-panel .fs-controls ~ .fs-controls{display:none !important;}
+body:not(.vid-in-fs) #video-panel .fs-controls{display:none !important;visibility:hidden !important;pointer-events:none !important;}
+
+@media (min-width:721px){
+  #video-panel:fullscreen,
+  #video-panel:-webkit-full-screen,
+  #video-panel:-moz-full-screen,
+  body.vid-in-fs #video-panel{
+    position:relative !important;
+    display:block !important;
+    width:100vw !important;
+    height:100vh !important;
+    min-width:100vw !important;
+    max-width:none !important;
+    min-height:100vh !important;
+    max-height:none !important;
+    padding:0 !important;
+    margin:0 !important;
+    overflow:hidden !important;
+    background:#000 !important;
+  }
+
+  #video-panel:fullscreen .video-feeds,
+  #video-panel:-webkit-full-screen .video-feeds,
+  #video-panel:-moz-full-screen .video-feeds,
+  body.vid-in-fs.vid-fs-landscape #video-panel .video-feeds{
+    display:grid !important;
+    grid-template-columns:1fr 1fr !important;
+    grid-template-rows:1fr !important;
+    width:100vw !important;
+    max-width:none !important;
+    height:50vw !important;
+    max-height:none !important;
+    min-width:100vw !important;
+    min-height:0 !important;
+    aspect-ratio:2 / 1 !important;
+    margin:0 !important;
+    padding:0 !important;
+    gap:0 !important;
+    align-self:auto !important;
+    justify-self:auto !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+
+  #video-panel:fullscreen .video-wrapper,
+  #video-panel:-webkit-full-screen .video-wrapper,
+  #video-panel:-moz-full-screen .video-wrapper,
+  body.vid-in-fs.vid-fs-landscape #video-panel .video-wrapper{
+    width:100% !important;
+    height:100% !important;
+    aspect-ratio:1 / 1 !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    overflow:hidden !important;
+    box-sizing:border-box !important;
+  }
+
+  #video-panel:fullscreen #vid-remote,
+  #video-panel:fullscreen #vid-local,
+  #video-panel:-webkit-full-screen #vid-remote,
+  #video-panel:-webkit-full-screen #vid-local,
+  #video-panel:-moz-full-screen #vid-remote,
+  #video-panel:-moz-full-screen #vid-local,
+  body.vid-in-fs.vid-fs-landscape #vid-remote,
+  body.vid-in-fs.vid-fs-landscape #vid-local{
+    display:block !important;
+    width:100% !important;
+    height:100% !important;
+    max-width:none !important;
+    max-height:none !important;
+    object-fit:cover !important;
+    object-position:center center !important;
+  }
+
+  /* The single toolbar overlays the bottom of the fullscreen canvas instead of
+     becoming a second layout row that can compress the video geometry. */
+  #video-panel:fullscreen > #fs-controls,
+  #video-panel:-webkit-full-screen > #fs-controls,
+  #video-panel:-moz-full-screen > #fs-controls,
+  body.vid-in-fs #video-panel > #fs-controls{
+    position:absolute !important;
+    left:0 !important;
+    right:0 !important;
+    bottom:0 !important;
+    width:100% !important;
+    height:auto !important;
+    min-height:62px !important;
+    max-height:none !important;
+    margin:0 !important;
+    z-index:2147483647 !important;
+    pointer-events:auto !important;
+  }
+
+  /* Never allow a stale second toolbar to re-enter through an older selector. */
+  #video-panel > .fs-controls:not(#fs-controls),
+  #video-panel .fs-controls#fs-controls ~ .fs-controls{
+    display:none !important;
+    visibility:hidden !important;
+    pointer-events:none !important;
+  }
+}
+
+@media (max-width:720px){
+  /* Portrait keeps its existing stacked geometry; only guarantee one toolbar. */
+  #video-panel > .fs-controls:not(#fs-controls),
+  #video-panel .fs-controls#fs-controls ~ .fs-controls{
+    display:none !important;
+    visibility:hidden !important;
+    pointer-events:none !important;
+  }
+}
+</style>
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
