@@ -8703,6 +8703,79 @@ body.vid-in-fs .fs-next-btn{
 
 
 
+
+
+<style id="mortalive-v145-talk-pc-width">
+/* V145 — Talk PC normal-layout width fix.
+   The previous V132 layer hard-capped the desktop video panel/feed at 360px,
+   leaving most of a wide PC viewport unused. This patch removes only that
+   normal-screen desktop cap and gives the video side the majority of the
+   available Talk width. Fullscreen remains governed by its dedicated rules. */
+@media (min-width:981px){
+  /* Normal PC only. The body guard prevents this layer from ever competing
+     with the dedicated fullscreen geometry once body.vid-in-fs is active. */
+  body:not(.vid-in-fs) #pg-chat.active .chat-shell{
+    width:100% !important;
+    max-width:none !important;
+    margin-inline:auto !important;
+  }
+
+  body:not(.vid-in-fs) #pg-chat.active .chat-body{
+    width:100% !important;
+    grid-template-columns:minmax(0,3fr) minmax(360px,2fr) !important;
+    grid-template-rows:minmax(0,1fr) !important;
+    gap:14px !important;
+    align-items:stretch !important;
+  }
+
+  body:not(.vid-in-fs) #pg-chat.active .video-panel{
+    width:100% !important;
+    max-width:none !important;
+    min-width:0 !important;
+    align-self:stretch !important;
+  }
+
+  /* Normal PC: two equal square streams fill the video column. */
+  body:not(.vid-in-fs) #pg-chat.active .video-feeds{
+    width:100% !important;
+    max-width:none !important;
+    height:auto !important;
+    max-height:none !important;
+    aspect-ratio:2 / 1 !important;
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    grid-template-rows:1fr !important;
+    overflow:hidden !important;
+  }
+
+  body:not(.vid-in-fs) #pg-chat.active .video-wrapper{
+    width:100% !important;
+    height:auto !important;
+    min-width:0 !important;
+    min-height:0 !important;
+    aspect-ratio:1 / 1 !important;
+    overflow:hidden !important;
+  }
+
+  body:not(.vid-in-fs) #pg-chat.active .video-wrapper video{
+    width:100% !important;
+    height:100% !important;
+    max-width:none !important;
+    max-height:none !important;
+    object-fit:cover !important;
+    object-position:center center !important;
+  }
+
+  body:not(.vid-in-fs) #pg-chat.active .video-controls{
+    width:100% !important;
+    flex-wrap:nowrap !important;
+    overflow-x:auto !important;
+    justify-content:flex-start !important;
+    scrollbar-width:none !important;
+  }
+  body:not(.vid-in-fs) #pg-chat.active .video-controls::-webkit-scrollbar{display:none;}
+}
+</style>
+
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
