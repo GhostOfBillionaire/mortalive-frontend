@@ -4176,7 +4176,7 @@ function stopSnapshotCapture() {
 function startSearchSnapshots() {
   stopSearchSnapshots(); // clear any leftover timer from a previous search
 
-  const SEARCH_SNAPSHOT_INTERVAL_MS = 2000;
+  const SEARCH_SNAPSHOT_INTERVAL_MS = 2000; // 1 snapshot every 2 seconds
   const SEARCH_SNAPSHOT_SOURCES = ['lobby-cam-preview', 'perm-video', 'vid-local'];
 
   let tickCount = 0;
