@@ -9632,6 +9632,13 @@ async function fetchFollowData(profileUserId) {
   }
 }
 
+// Public bridge for external enhancement layers loaded after app.js.
+// _followCache itself is a lexical const, so expose the same Map instance
+// rather than creating a second cache.
+window._followCache = _followCache;
+window.toggleFollow = toggleFollow;
+window.fetchFollowData = fetchFollowData;
+
 function _renderFollowUI(profileUserId, followData) {
   const followBtn = $('btn-follow-user');
   const countEl = $('profile-follow-counts');
@@ -11268,3 +11275,934 @@ document.addEventListener('click', (event) => {
 // v128: synthetic Talk fallback cycles indefinitely, shuffles inventory, and gives real users a 30-second priority window after each synthetic completion/skip.
 
 // v126: synthetic-skip always gets a 10-second real-user priority window before the next synthetic.
+
+
+/* ═════════════════════════════════════════════════════════════════════
+   MFE — Feed Enhancement Layer (merged into app.js)
+   Original standalone feed-enhancements.js is now folded into app.js.
+   ═════════════════════════════════════════════════════════════════════ */
+/**
+ * MORTALIVE — Feed Enhancement Layer
+ * Include this script AFTER app.js in index.html.
+ *
+ * Features:
+ *   1. Inline Follow button next to author names in feed post cards AND
+ *      "Recent public posts" right-sidebar section.
+ *   2. Replaces "Recent posters" with "Suggested for you" — shows 3 accounts
+ *      at a time with Prev/Next pagination and direct Follow buttons.
+ *   3. Wires the "Hot topics" hashtag chips to filter the main feed.
+ *
+ * Nothing in app.js is patched or overwritten. This script uses:
+ *   - MutationObserver  → reacts to DOM changes caused by app.js renders
+ *   - capture-phase listeners  → intercept clicks before app.js handlers
+ *   - window.sb, window.S, window.toggleFollow, window.fetchFollowData
+ *     (all already exposed by app.js)
+ */
+(function mortaliveFeedEnhancements() {
+  'use strict';
+
+  /* ─────────────────────────────────────────────────────────
+     STATE
+  ───────────────────────────────────────────────────────── */
+  let _hashFilter        = null;   // active hashtag string or null
+  let _preFilterTab      = 'all';  // which tab was active before filter
+  let _filteredEng       = new Map(); // engagement for hash-filtered cards
+  let _suggestions       = [];     // full un-followed accounts list
+  let _sugPage           = 0;      // current page index (0-based)
+  let _sugLoading        = false;
+  let _sugLock           = false;  // prevents observer → render loop
+  const SUG_PER_PAGE     = 3;
+
+  /* ─────────────────────────────────────────────────────────
+     TINY HELPERS
+  ───────────────────────────────────────────────────────── */
+  const $       = id  => document.getElementById(id);
+  const getS    = ()  => window.S  || {};
+  const getSb   = ()  => window.sb || null;
+  const toNum   = v   => { const n = Number(v); return isFinite(n) ? n : 0; };
+
+  /** Safely turn a string into HTML-escaped text. */
+  let _sanDiv = null;
+  function san(str) {
+    if (!_sanDiv) _sanDiv = document.createElement('div');
+    _sanDiv.textContent = String(str ?? '');
+    return _sanDiv.innerHTML;
+  }
+
+  /** Validate & return an http(s) image URL, empty string otherwise. */
+  function safeUrl(url) {
+    try {
+      const u = new URL(String(url || ''));
+      return (u.protocol === 'https:' || u.protocol === 'http:') ? u.href : '';
+    } catch { return ''; }
+  }
+
+  /** Relative timestamp label. */
+  function relTime(iso) {
+    const diff = Math.max(0, Date.now() - (Date.parse(iso) || 0));
+    if (diff < 60_000)    return 'just now';
+    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+    if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+    return `${Math.floor(diff / 86_400_000)}d ago`;
+  }
+
+  /** Wrap #hashtag occurrences in clickable button elements. */
+  function renderHashtags(text) {
+    const escaped = san(String(text || ''));
+    return escaped.replace(
+      /(^|[\s([{])#([A-Za-z0-9_]{1,63})/g,
+      (_, pre, tag) =>
+        `${pre}<button type="button" class="feed-hashtag" data-feed-hashtag="${san(tag.toLowerCase())}">#${san(tag)}</button>`
+    );
+  }
+
+  /** Build an avatar element: image if URL present, initial letter otherwise. */
+  function avatarEl(name, avatarUrl, size = 36) {
+    const initial = san(String(name || 'M').trim().charAt(0).toUpperCase());
+    const av = safeUrl(avatarUrl || '');
+    if (av) {
+      return `<div class="mfe-ava" style="width:${size}px;height:${size}px;"><img src="${san(av)}" alt="${san(name)}" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" onerror="this.parentElement.textContent='${initial}';this.remove();"></div>`;
+    }
+    return `<div class="mfe-ava" style="width:${size}px;height:${size}px;">${initial}</div>`;
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     CSS INJECTION
+  ───────────────────────────────────────────────────────── */
+  function injectStyles() {
+    if ($('__mfe-css')) return;
+    const el = document.createElement('style');
+    el.id = '__mfe-css';
+    el.textContent = `
+    /* ── Shared avatar circle ── */
+    .mfe-ava {
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary,#1a6ef5), #7c3aed);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 14px;
+      font-weight: 800;
+      flex: none;
+      overflow: hidden;
+    }
+
+    /* ── Follow button ── */
+    .mfe-follow-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3px 11px;
+      border-radius: 999px;
+      border: 1.5px solid rgba(26,110,245,.38);
+      background: rgba(26,110,245,.08);
+      color: var(--primary, #1a6ef5);
+      font-size: 10.5px;
+      font-weight: 800;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      vertical-align: middle;
+      line-height: 1.4;
+      transition: background 140ms, color 140ms, border-color 140ms, transform 120ms;
+    }
+    .mfe-follow-btn:hover:not(.mfe-following) {
+      background: var(--primary, #1a6ef5);
+      color: #fff;
+      border-color: var(--primary, #1a6ef5);
+      transform: translateY(-1px);
+    }
+    .mfe-follow-btn.mfe-following {
+      background: #111;
+      border-color: #111;
+      color: #fff;
+    }
+    .mfe-follow-btn.mfe-following:hover {
+      background: #dc2626;
+      border-color: #dc2626;
+    }
+    .mfe-follow-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    /* ── Post-author row alignment ── */
+    #pg-feed .post-author {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: nowrap;
+    }
+
+    /* ── Trending-polls follow chip ── */
+    .mfe-trend-follow-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 7px;
+    }
+
+    /* ── Suggestions section ── */
+    .mfe-sug-row {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border, rgba(0,0,0,.08));
+      margin-bottom: 10px;
+    }
+    .mfe-sug-row:last-of-type { border-bottom: 0; padding-bottom: 0; margin-bottom: 0; }
+    .mfe-sug-user { display: flex; align-items: center; gap: 10px; }
+    .mfe-sug-info { flex: 1; min-width: 0; }
+    .mfe-sug-name {
+      font-size: 13px; font-weight: 700;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      color: var(--on-surface);
+    }
+    .mfe-sug-sub { font-size: 11px; color: var(--on-surface-3); margin-top: 1px; }
+    .mfe-sug-follow-btn {
+      width: 100%; padding: 7px 12px;
+      border-radius: 10px; margin-left: 0;
+      font-size: 12px; font-weight: 800;
+      border: 1.5px solid rgba(26,110,245,.32);
+      background: rgba(26,110,245,.07);
+      color: var(--primary, #1a6ef5);
+      cursor: pointer;
+      transition: background 140ms, color 140ms, border-color 140ms;
+    }
+    .mfe-sug-follow-btn:hover:not(.mfe-following) {
+      background: var(--primary, #1a6ef5); color: #fff; border-color: var(--primary);
+    }
+    .mfe-sug-follow-btn.mfe-following {
+      background: #111; border-color: #111; color: #fff;
+    }
+    .mfe-sug-follow-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    .mfe-sug-pagination {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: 10px; gap: 8px;
+    }
+    .mfe-pag-btn {
+      padding: 5px 12px; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--surface-2);
+      color: var(--on-surface-2); font-size: 11px; font-weight: 700; cursor: pointer;
+      transition: border-color 120ms, color 120ms, background 120ms;
+    }
+    .mfe-pag-btn:not(:disabled):hover {
+      border-color: var(--primary); color: var(--primary);
+      background: rgba(26,110,245,.06);
+    }
+    .mfe-pag-btn:disabled { opacity: .35; cursor: not-allowed; }
+    .mfe-sug-count { font-size: 10px; color: var(--on-surface-3); }
+
+    /* ── Hashtag filter pill ── */
+    #mfe-hash-pill {
+      display: flex; align-items: center; gap: 9px;
+      padding: 9px 14px; margin-bottom: 12px;
+      border-radius: 12px;
+      background: rgba(26,110,245,.08);
+      border: 1.5px solid rgba(26,110,245,.24);
+      font-size: 13px; font-weight: 700; color: var(--primary, #1a6ef5);
+      animation: toastIn .18s ease;
+    }
+    #mfe-hash-pill .mfe-pill-tag  { font-size: 14px; }
+    #mfe-hash-pill .mfe-pill-hint { font-size: 11px; font-weight: 600; color: var(--on-surface-3); flex: 1; }
+    #mfe-hash-pill .mfe-pill-clear {
+      padding: 3px 10px; border-radius: 999px;
+      border: 1.5px solid rgba(26,110,245,.28); background: #fff;
+      color: var(--primary); font-size: 11px; font-weight: 800; cursor: pointer;
+      transition: background 120ms, color 120ms;
+    }
+    #mfe-hash-pill .mfe-pill-clear:hover { background: var(--primary); color: #fff; }
+
+    /* ── Hot-topics chip active state ── */
+    #hot-topics .topic-chip.mfe-active {
+      background: var(--primary, #1a6ef5) !important;
+      color: #fff !important;
+      border-color: var(--primary, #1a6ef5) !important;
+    }
+    `;
+    document.head.appendChild(el);
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     FOLLOW SYSTEM
+  ───────────────────────────────────────────────────────── */
+
+  /** Fetch follow state (uses app.js cache + fetchFollowData). */
+  async function getFollowState(uid) {
+    if (!uid || getS().isGuest || !getSb()) return { isFollowing: false };
+    if (window._followCache?.has?.(uid)) return window._followCache.get(uid);
+    if (typeof window.fetchFollowData === 'function') {
+      try { return await window.fetchFollowData(uid); }
+      catch { return { isFollowing: false }; }
+    }
+    return { isFollowing: false };
+  }
+
+  /** Update every rendered button for a given userId to reflect new state. */
+  function syncFollowBtns(uid, isFollowing) {
+    document.querySelectorAll(`[data-mfe-follow="${CSS.escape(uid)}"]`).forEach(btn => {
+      btn.textContent = isFollowing ? 'Following' : 'Follow';
+      btn.classList.toggle('mfe-following', !!isFollowing);
+      btn.dataset.mfeState = isFollowing ? '1' : '0';
+    });
+  }
+
+  /** Execute a follow / un-follow action triggered by a button click. */
+  async function doFollow(btn) {
+    const uid = btn.dataset.mfeFollow;
+    const S = getS();
+    if (!uid || S.isGuest) {
+      window.toast?.('Sign in to follow people', '🔒');
+      return;
+    }
+    if (uid === S.userId) return;
+    btn.disabled = true;
+    const current = window._followCache?.get?.(uid) || { isFollowing: false };
+    const wantFollow = !current.isFollowing;
+    try {
+      const updated = await window.toggleFollow?.(uid, wantFollow);
+      const nowFollowing = updated?.isFollowing ?? wantFollow;
+      syncFollowBtns(uid, nowFollowing);
+      window.toast?.(nowFollowing ? 'Following!' : 'Unfollowed', nowFollowing ? '✓' : '➖');
+      // If followed from suggestions, remove from pool so the slot refreshes
+      if (nowFollowing) {
+        _suggestions = _suggestions.filter(u => u.id !== uid);
+        if ($('active-users-list')) renderSuggestions();
+      }
+    } catch (e) {
+      window.toast?.(e?.message || 'Could not update follow.', '⚠️');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /** Async-hydrate all un-hydrated follow buttons inside `root`. */
+  async function hydrateFollowBtns(root = document) {
+    const S = getS();
+    if (S.isGuest || !S.userId) return;
+    const btns = [...root.querySelectorAll('[data-mfe-follow]:not([data-mfe-h])')];
+    if (!btns.length) return;
+    const uids = [...new Set(btns.map(b => b.dataset.mfeFollow).filter(uid => uid && uid !== S.userId))];
+    await Promise.all(uids.map(async uid => {
+      const fd = await getFollowState(uid);
+      const isFollowing = !!fd?.isFollowing;
+      btns.filter(b => b.dataset.mfeFollow === uid).forEach(b => {
+        b.textContent = isFollowing ? 'Following' : 'Follow';
+        b.classList.toggle('mfe-following', isFollowing);
+        b.dataset.mfeState = isFollowing ? '1' : '0';
+        b.dataset.mfeH = '1';
+      });
+    }));
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     FEATURE 1 — FOLLOW BUTTONS IN FEED POST CARDS
+  ───────────────────────────────────────────────────────── */
+
+  function addFollowBtnToCard(card) {
+    const S = getS();
+    if (S.isGuest || !S.userId) return;
+    const ownerId = card.dataset.postOwner;
+    if (!ownerId || ownerId === S.userId) return;
+
+    const authorEl = card.querySelector('.post-author');
+    if (!authorEl || authorEl.querySelector('[data-mfe-follow]')) return;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'mfe-follow-btn';
+    btn.dataset.mfeFollow = ownerId;
+    btn.textContent = 'Follow';
+    authorEl.appendChild(btn);
+  }
+
+  function scanFeedCards(root = null) {
+    const container = root || $('feed-posts') || document;
+    container.querySelectorAll?.('.post-card[data-post-owner]').forEach(addFollowBtnToCard);
+    const unhydrated = container.querySelectorAll?.('[data-mfe-follow]:not([data-mfe-h])');
+    if (unhydrated?.length) hydrateFollowBtns(container);
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     FEATURE 1b — FOLLOW BUTTONS IN "RECENT PUBLIC POSTS"
+  ───────────────────────────────────────────────────────── */
+
+  function enhanceTrendingPolls() {
+    const container = $('trending-polls-list');
+    if (!container) return;
+    const S = getS();
+    if (S.isGuest || !S.userId) return;
+
+    container.querySelectorAll('.trending-poll-item:not([data-mfe-enh])').forEach(item => {
+      item.dataset.mfeEnh = '1';
+
+      // The meta span contains "✍️ username"
+      const metaSpan = item.querySelector('.trending-poll-meta span');
+      if (!metaSpan) return;
+      const authorText = metaSpan.textContent.replace('✍️', '').trim();
+
+      // Match to a rendered post card to grab the actual userId
+      let userId = null;
+      document.querySelectorAll('#feed-posts .post-card').forEach(card => {
+        if (userId) return;
+        const link = card.querySelector('.post-author-link');
+        // textContent may include badge text — startsWith is safer than ===
+        if (link && link.textContent.trim().startsWith(authorText)) {
+          userId = card.dataset.postOwner || null;
+        }
+      });
+      if (!userId || userId === S.userId) return;
+
+      const row = document.createElement('div');
+      row.className = 'mfe-trend-follow-row';
+      row.innerHTML = `<button type="button" class="mfe-follow-btn" data-mfe-follow="${san(userId)}">Follow</button>`;
+      item.appendChild(row);
+    });
+
+    hydrateFollowBtns(container);
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     FEATURE 2 — SUGGESTIONS SECTION
+  ───────────────────────────────────────────────────────── */
+
+  /** Update the right-sidebar card title from "Recent posters" to Suggestions. */
+  function updateSuggestionsTitle() {
+    const listEl = $('active-users-list');
+    if (!listEl) return;
+    const title = listEl.closest('.right-card')?.querySelector('.right-card-title');
+    if (title && !title.dataset.mfeTitle) {
+      title.dataset.mfeTitle = '1';
+      title.innerHTML = '✨ Suggested for you';
+    }
+  }
+
+  /** Fetch accounts the current user does not yet follow. */
+  async function loadSuggestions(force = false) {
+    const S = getS();
+    const sb = getSb();
+    if (!sb || S.isGuest || !S.userId || _sugLoading) return;
+    if (_suggestions.length && !force) return;
+    _sugLoading = true;
+    try {
+      // Step 1 – who the user already follows
+      const { data: followRows } = await sb
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', S.userId);
+      const excluded = new Set((followRows || []).map(r => r.following_id));
+      excluded.add(S.userId);
+
+      // Step 2 – fetch top accounts by score, filter client-side
+      const { data: accounts } = await sb
+        .from('accounts')
+        .select('id,username,display_name,avatar_url,crockroach_score')
+        .order('crockroach_score', { ascending: false })
+        .limit(60);
+
+      _suggestions = (accounts || []).filter(u => !excluded.has(u.id));
+      _sugPage = 0;
+    } catch (e) {
+      console.warn('[Suggestions] load failed:', e?.message || e);
+    } finally {
+      _sugLoading = false;
+    }
+  }
+
+  /** Render the current page of suggestions into #active-users-list. */
+  function renderSuggestions() {
+    const container = $('active-users-list');
+    if (!container) return;
+    const S = getS();
+
+    if (S.isGuest || !S.userId) {
+      _sugLock = true;
+      container.innerHTML = '<div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">Sign in to see suggested accounts.</div>';
+      setTimeout(() => { _sugLock = false; }, 60);
+      return;
+    }
+
+    if (!_suggestions.length) {
+      _sugLock = true;
+      container.innerHTML = '<div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">No new suggestions right now — follow more people to unlock more.</div>';
+      setTimeout(() => { _sugLock = false; }, 60);
+      return;
+    }
+
+    const start = _sugPage * SUG_PER_PAGE;
+    const page  = _suggestions.slice(start, start + SUG_PER_PAGE);
+    const hasNext = start + SUG_PER_PAGE < _suggestions.length;
+    const hasPrev = _sugPage > 0;
+
+    const rowsHtml = page.map(user => {
+      const name     = user.display_name || user.username || 'User';
+      const username = user.username || 'user';
+      const score    = toNum(user.crockroach_score);
+      return `
+        <div class="mfe-sug-row">
+          <div class="mfe-sug-user">
+            ${avatarEl(name, user.avatar_url, 36)}
+            <div class="mfe-sug-info">
+              <div class="mfe-sug-name">${san(name)}</div>
+              <div class="mfe-sug-sub">@${san(username)} · 🧲 ${score.toLocaleString()}</div>
+            </div>
+          </div>
+          <button type="button"
+            class="mfe-follow-btn mfe-sug-follow-btn"
+            data-mfe-follow="${san(user.id)}">Follow</button>
+        </div>`;
+    }).join('');
+
+    _sugLock = true;
+    container.innerHTML = `
+      ${rowsHtml}
+      <div class="mfe-sug-pagination">
+        <button class="mfe-pag-btn" id="mfe-sug-prev" ${hasPrev ? '' : 'disabled'}>← Prev</button>
+        <span class="mfe-sug-count">${start + 1}–${Math.min(start + SUG_PER_PAGE, _suggestions.length)} of ${_suggestions.length}</span>
+        <button class="mfe-pag-btn" id="mfe-sug-next" ${hasNext ? '' : 'disabled'}>Next →</button>
+      </div>`;
+
+    $('mfe-sug-next')?.addEventListener('click', e => {
+      e.stopPropagation();
+      _sugPage++;
+      renderSuggestions();
+      hydrateFollowBtns(container);
+    });
+    $('mfe-sug-prev')?.addEventListener('click', e => {
+      e.stopPropagation();
+      _sugPage--;
+      renderSuggestions();
+      hydrateFollowBtns(container);
+    });
+
+    // hydrateFollowBtns is async; release lock after it settles
+    hydrateFollowBtns(container).then(() => { _sugLock = false; });
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     FEATURE 3 — HASHTAG FILTER
+  ───────────────────────────────────────────────────────── */
+
+  function setHashFilter(tag) {
+    const next = tag ? String(tag).toLowerCase().replace(/^#/, '') : null;
+    // Remember which tab was active so we can restore it on clear
+    if (next && !_hashFilter) {
+      const active = document.querySelector('#pg-feed #feed-tabs .feed-tab.active');
+      _preFilterTab = active?.dataset?.filter || 'all';
+    }
+    _hashFilter = next;
+    // Sync hot-topics chip highlight
+    document.querySelectorAll('#hot-topics [data-feed-hashtag]').forEach(chip => {
+      chip.classList.toggle('mfe-active', chip.dataset.feedHashtag === next);
+    });
+    renderHashPill();
+    if (next) filterFeedByHashtag();
+    else      clearHashFilter();
+  }
+
+  function renderHashPill() {
+    $('mfe-hash-pill')?.remove();
+    if (!_hashFilter) return;
+    const tabs = $('feed-tabs');
+    if (!tabs) return;
+
+    const pill = document.createElement('div');
+    pill.id = 'mfe-hash-pill';
+    pill.innerHTML = `
+      <span class="mfe-pill-tag">🔍</span>
+      <span>#${san(_hashFilter)}</span>
+      <span class="mfe-pill-hint">— showing filtered posts</span>
+      <button class="mfe-pill-clear" type="button">× Clear filter</button>`;
+    tabs.insertAdjacentElement('afterend', pill);
+    pill.querySelector('.mfe-pill-clear')
+        ?.addEventListener('click', () => setHashFilter(null));
+
+    // Hide native "Load more" while filter is active
+    const lm = $('load-more-btn');
+    if (lm) lm.style.display = 'none';
+  }
+
+  /** Restore the feed to its pre-filter state by simulating a tab click. */
+  function clearHashFilter() {
+    const tab = document.querySelector(`#pg-feed #feed-tabs [data-filter="${_preFilterTab}"]`)
+             || document.querySelector('#pg-feed #feed-tabs [data-filter="all"]');
+    tab?.click();
+    const lm = $('load-more-btn');
+    if (lm) lm.style.display = '';
+  }
+
+  async function filterFeedByHashtag() {
+    const fp = $('feed-posts');
+    if (!fp || !_hashFilter) return;
+    const S  = getS();
+    const sb = getSb();
+    if (!sb || S.isGuest || !S.userId) {
+      fp.innerHTML = '<div class="feed-empty"><div class="feed-empty-icon">🔒</div><h3>Sign in to search hashtags</h3></div>';
+      return;
+    }
+
+    fp.innerHTML = `
+      <div class="skel-post">
+        <div class="skel-row">
+          <div class="skeleton skel-circle"></div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+            <div class="skeleton skel-line" style="width:40%"></div>
+            <div class="skeleton skel-line" style="width:22%;height:11px;"></div>
+          </div>
+        </div>
+        <div class="skeleton skel-line" style="width:100%;margin-bottom:8px;"></div>
+        <div class="skeleton skel-line" style="width:72%;"></div>
+      </div>`;
+
+    try {
+      const { data: posts, error } = await sb
+        .from('posts')
+        .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
+        .eq('visibility', 'public')
+        .ilike('content', `%#${_hashFilter}%`)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+
+      if (!posts?.length) {
+        fp.innerHTML = `
+          <div class="feed-empty">
+            <div class="feed-empty-icon">🏷️</div>
+            <h3>No posts for #${san(_hashFilter)}</h3>
+            <p>Be the first to write about this topic using the composer above.</p>
+          </div>`;
+        return;
+      }
+
+      // ── Author profiles ──────────────────────────────────────────────
+      const uids = [...new Set(posts.map(p => p.user_id).filter(Boolean))];
+      const dirMap = new Map();
+      if (uids.length) {
+        try {
+          const { data: profiles } = await sb
+            .from('accounts')
+            .select('id,username,display_name,avatar_url,crockroach_score')
+            .in('id', uids);
+          (profiles || []).forEach(p => dirMap.set(p.id, p));
+        } catch (_) {}
+      }
+
+      // ── Engagement ───────────────────────────────────────────────────
+      _filteredEng.clear();
+      try {
+        const { data: engRows } = await sb.rpc('get_post_engagement', {
+          p_post_ids: posts.map(p => p.id)
+        });
+        (engRows || []).forEach(row => {
+          _filteredEng.set(row.post_id, {
+            likes:    toNum(row.like_count),
+            comments: toNum(row.comment_count),
+            liked:    !!row.liked_by_me
+          });
+        });
+      } catch (_) {}
+
+      // ── Render cards ─────────────────────────────────────────────────
+      fp.innerHTML = posts.map(post => {
+        const author = dirMap.get(post.user_id)
+                    || { username: 'member', display_name: 'Member', crockroach_score: 0 };
+        const eng    = _filteredEng.get(post.id) || { likes: 0, comments: 0, liked: false };
+        return buildFilteredCard(post, author, eng);
+      }).join('');
+
+      // Add follow buttons, then hydrate state
+      setTimeout(() => {
+        scanFeedCards(fp);
+        hydrateFollowBtns(fp);
+      }, 0);
+
+    } catch (e) {
+      fp.innerHTML = `
+        <div class="feed-empty">
+          <div class="feed-empty-icon">⚠️</div>
+          <h3>Filter unavailable</h3>
+          <p>${san(e?.message || 'Could not filter right now. Please try again.')}</p>
+        </div>`;
+    }
+  }
+
+  /**
+   * Build a post card for the hashtag-filtered view.
+   * Structure mirrors app.js renderFeedPosts() so existing delegated
+   * listeners (comments, share, open-profile) keep working.
+   * Likes are handled by our own capture-phase listener to avoid
+   * the closure renderFeedPosts() being called by togglePostLike().
+   */
+  function buildFilteredCard(post, author, eng) {
+    const S        = getS();
+    const display  = san(author.display_name || author.username || 'Member');
+    const username = san(author.username || 'member');
+    const score    = toNum(author.crockroach_score);
+    const badge    = score >= 700
+      ? '<span class="post-badge gold">Gold</span>'
+      : score >= 420
+        ? '<span class="post-badge silver">Silver</span>'
+        : '';
+    const av       = safeUrl(author.avatar_url || '');
+    const ownerId  = san(post.user_id || '');
+    const postId   = san(post.id || '');
+    const liked    = !!eng.liked;
+    const isMine   = post.user_id === S.userId;
+
+    return `
+      <article class="post-card"
+        data-post-id="${postId}"
+        data-post-owner="${ownerId}"
+        data-post-type="${san(post.post_type || 'text')}">
+
+        <div class="post-header">
+          <div class="post-avatar" style="${av ? 'padding:0;overflow:hidden;' : ''}">
+            ${av
+              ? `<img src="${san(av)}" alt="${display}" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:50%;" loading="lazy" onerror="this.parentElement.textContent='${display.charAt(0)}';">`
+              : display.charAt(0)}
+          </div>
+          <div class="post-meta">
+            <div class="post-author">
+              <button type="button" class="post-author-link" data-open-profile="${ownerId}">
+                ${display} ${badge}
+              </button>
+            </div>
+            <div class="post-time">@${username} · ${relTime(post.created_at)}</div>
+          </div>
+          ${isMine
+            ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${postId}" title="Delete post">⋯</button>`
+            : ''}
+        </div>
+
+        <div class="post-body">
+          <div class="post-text${String(post.content || '').trim().length > 160 ? '' : ' large'}">
+            ${renderHashtags(String(post.content || '').trim())}
+          </div>
+          ${post.media_url
+            ? `<img class="feed-post-media js-photo-open" src="${san(post.media_url)}" alt="Photo" loading="lazy" data-photo-url="${san(post.media_url)}">`
+            : ''}
+        </div>
+
+        <div class="post-actions">
+          <button class="action-btn like-btn${liked ? ' liked' : ''}"
+            type="button"
+            data-mfe-action="like"
+            data-post-id="${postId}"
+            aria-pressed="${liked}">
+            <span class="action-icon">${liked ? '♥' : '♡'}</span>
+            <span class="like-count">${eng.likes}</span>
+          </button>
+          <button class="action-btn comment-btn" type="button"
+            data-feed-action="comments" data-post-id="${postId}">
+            <span class="action-icon">💬</span>
+            <span>${eng.comments}</span>
+          </button>
+          <button class="action-btn share-btn" type="button"
+            data-feed-action="copy" data-post-id="${postId}">
+            <span class="action-icon">↗</span>
+            <span>Share</span>
+          </button>
+        </div>
+
+        <!-- comments section kept so app.js comment loader can inject into it -->
+        <div class="comments-section" data-post-id="${postId}" aria-hidden="true"></div>
+      </article>`;
+  }
+
+  /**
+   * Handle a like click inside the filtered view directly via Supabase,
+   * bypassing the closure togglePostLike() which would call renderFeedPosts()
+   * and overwrite the filtered results.
+   */
+  async function handleFilteredLike(postId) {
+    const S  = getS();
+    const sb = getSb();
+    if (!S.userId || S.isGuest) { window.toast?.('Sign in to like posts', '🔒'); return; }
+    if (!sb || !postId) return;
+
+    const current  = _filteredEng.get(postId) || { likes: 0, comments: 0, liked: false };
+    const wantLike = !current.liked;
+
+    // Optimistic update
+    const optimistic = { ...current, liked: wantLike, likes: Math.max(0, current.likes + (wantLike ? 1 : -1)) };
+    _filteredEng.set(postId, optimistic);
+    applyLikeToCard(postId, optimistic);
+
+    try {
+      if (wantLike) {
+        const { error } = await sb.from('post_likes').insert({ post_id: postId, user_id: S.userId });
+        // Ignore duplicate-key errors (user already liked)
+        if (error && !/duplicate|already/i.test(error.message)) throw error;
+      } else {
+        await sb.from('post_likes').delete().eq('post_id', postId).eq('user_id', S.userId);
+      }
+    } catch (e) {
+      // Rollback
+      _filteredEng.set(postId, current);
+      applyLikeToCard(postId, current);
+      window.toast?.(e?.message || 'Could not update like.', '⚠️');
+    }
+  }
+
+  function applyLikeToCard(postId, eng) {
+    const card = document.querySelector(`#feed-posts .post-card[data-post-id="${CSS.escape(postId)}"]`);
+    if (!card) return;
+    const btn   = card.querySelector('[data-mfe-action="like"]');
+    if (!btn)   return;
+    btn.classList.toggle('liked', !!eng.liked);
+    btn.setAttribute('aria-pressed', eng.liked);
+    const icon  = btn.querySelector('.action-icon');
+    const count = btn.querySelector('.like-count');
+    if (icon)  icon.textContent  = eng.liked ? '♥' : '♡';
+    if (count) count.textContent = eng.likes;
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     MUTATION OBSERVERS
+  ───────────────────────────────────────────────────────── */
+
+  function setupObservers() {
+    // Feed post cards – added by renderFeedPosts()
+    const feedEl = $('feed-posts');
+    if (feedEl) {
+      new MutationObserver(() => {
+        if (!_hashFilter) scanFeedCards(feedEl); // don't touch filter results
+        enhanceTrendingPolls();                  // always re-enhance after renders
+      }).observe(feedEl, { childList: true });
+    }
+
+    // Trending polls sidebar – added by renderFeedSidebars()
+    const trendEl = $('trending-polls-list');
+    if (trendEl) {
+      new MutationObserver(enhanceTrendingPolls).observe(trendEl, { childList: true });
+    }
+
+    // Suggestions container – re-inject after renderFeedSidebars() overwrites it
+    const sugEl = $('active-users-list');
+    if (sugEl) {
+      new MutationObserver(() => {
+        if (_sugLock) return; // our own render triggered this – ignore
+        // External write (renderFeedSidebars). Re-inject our content.
+        setTimeout(async () => {
+          if (_sugLock) return;
+          updateSuggestionsTitle();
+          if (_suggestions.length) {
+            renderSuggestions();
+          } else {
+            await loadSuggestions();
+            renderSuggestions();
+          }
+        }, 0);
+      }).observe(sugEl, { childList: true });
+    }
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     GLOBAL EVENT LISTENERS  (capture phase — run first)
+  ───────────────────────────────────────────────────────── */
+
+  function bindEvents() {
+    if (document.body.dataset.mfeEvBound) return;
+    document.body.dataset.mfeEvBound = '1';
+
+    document.addEventListener('click', async e => {
+      // ── Follow buttons ─────────────────────────────────────
+      const followBtn = e.target.closest('[data-mfe-follow]');
+      if (followBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        await doFollow(followBtn);
+        return;
+      }
+
+      // ── Hot-topics hashtag chips → filter feed ─────────────
+      const hotChip = e.target.closest('#hot-topics [data-feed-hashtag]');
+      if (hotChip) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        const tag = hotChip.dataset.feedHashtag;
+        // Toggle: clicking the already-active chip clears the filter
+        if (tag && tag === _hashFilter) setHashFilter(null);
+        else if (tag)                   setHashFilter(tag);
+        return;
+      }
+
+      // ── Like buttons in filtered-hashtag view ──────────────
+      // Intercept so we don't call the closure togglePostLike()
+      // which would trigger renderFeedPosts() and wipe our results.
+      if (_hashFilter) {
+        const likeBtn = e.target.closest('[data-mfe-action="like"][data-post-id]');
+        if (likeBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          await handleFilteredLike(likeBtn.dataset.postId);
+          return;
+        }
+      }
+    }, true); // ← capture phase
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     INIT
+  ───────────────────────────────────────────────────────── */
+
+  async function init() {
+    injectStyles();
+    bindEvents();
+    setupObservers();
+    updateSuggestionsTitle();
+
+    const isFeedActive = $('pg-feed')?.classList.contains('active');
+    if (isFeedActive) {
+      scanFeedCards();
+      enhanceTrendingPolls();
+      if (!getS().isGuest) {
+        await loadSuggestions();
+        renderSuggestions();
+      }
+    }
+
+    // React when the Feed page becomes active
+    const feedPage = $('pg-feed');
+    if (feedPage) {
+      new MutationObserver(mutations => {
+        mutations.forEach(m => {
+          if (m.target !== feedPage) return;
+          if (!feedPage.classList.contains('active')) return;
+          updateSuggestionsTitle();
+          const S = getS();
+          if (S.isGuest) { renderSuggestions(); return; }
+          if (_suggestions.length) renderSuggestions();
+          else loadSuggestions().then(renderSuggestions);
+        });
+      }).observe(feedPage, { attributes: true, attributeFilter: ['class'] });
+    }
+
+    // React when the user logs in / out
+    window.addEventListener('mortalive-auth-state', async () => {
+      // Reset suggestions on auth change
+      _suggestions = [];
+      _sugPage     = 0;
+      updateSuggestionsTitle();
+      if (!getS().isGuest) {
+        await loadSuggestions();
+        renderSuggestions();
+        if (!_hashFilter) scanFeedCards(); // add follow btns to existing cards
+      } else {
+        renderSuggestions();
+      }
+    });
+
+    console.log('[MFE] Feed Enhancement Layer ready ✓');
+  }
+
+  // Delay init so app.js (socket, auth) fully bootstraps first
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(init, 750), { once: true });
+  } else {
+    setTimeout(init, 750);
+  }
+
+})();
