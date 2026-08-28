@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-28-v149-feed-messages-final'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-28-v152-messages-rls-search-audit'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -12065,12 +12065,17 @@ document.addEventListener('click', (event) => {
       ensureEmptyFindButton();
       ensureRandomUserModal();
 
+      // Always resolve the Messages search element from the current DOM.
+      // The Messages page can be mounted/re-rendered after app bootstrap;
+      // never rely on a stale or out-of-scope `searchInput` variable.
+      const messageSearchInput = () => $('msg-search-input');
+
       if (!M42.initialized) {
         M42.initialized = true;
 
-        const searchInput = $('msg-search-input');
-        if (searchInput) {
-          searchInput.addEventListener('input', e => dbRenderConversationList(e.target.value));
+        const searchEl = messageSearchInput();
+        if (searchEl) {
+          searchEl.addEventListener('input', e => dbRenderConversationList(e.target.value));
         }
 
         // Thread-level menu is already wired by the base UI; make sure it
@@ -12082,7 +12087,7 @@ document.addEventListener('click', (event) => {
 
       await ownHash();
       await loadDbConversations();
-      dbRenderConversationList(searchInput?.value || '');
+      dbRenderConversationList(messageSearchInput()?.value || '');
       updateSidebarSubtitle();
       setupRealtime();
 
