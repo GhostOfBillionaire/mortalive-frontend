@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-28-v148-feed-messages-production'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-28-v149-feed-messages-final'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -4976,12 +4976,7 @@ const messagesState = {
   messages: {},
   threads: {},
   selectedMembers: new Set(),
-  selectedMemberProfiles: new Map(),
-  eligibleContacts: [],   // Existing conversations/contacts surfaced in the inbox
-  randomSearchResults: [],
-  randomSearchLoading: false,
-  outboundInvites: [],
-  conversationMeta: {},
+  eligibleContacts: [],   // Contacts unlocked by follows or Talk history
   initialized: false
 };
 
@@ -5002,9 +4997,9 @@ function messagesStorageKey(base) {
 
 
 // ── Eligible contacts cache ──────────────────────────────────────────────────
-// Existing inbox contacts are still hydrated from follow relationships and Talk history.
-// New-message discovery is intentionally separate and can search the public account
-// directory without requiring a follow relationship.
+// A user can only be messaged if they:
+//   (a) follow the current user OR the current user follows them, OR
+//   (b) they had a real (non-guest, non-bot) Talk conversation together.
 let _eligibleContactsCache = null;
 let _eligibleContactsFetchedAt = 0;
 const ELIGIBLE_CONTACTS_TTL = 5 * 60 * 1000; // 5 min
@@ -5087,8 +5082,12 @@ function updateSidebarSubtitle() {
     sub.textContent = 'Sign in to message your connections';
     return;
   }
-  const count = Array.isArray(messagesState.eligibleContacts) ? messagesState.eligibleContacts.length : 0;
-  sub.textContent = count ? `${count} contact${count === 1 ? '' : 's'} in your inbox` : 'Search any username to start a conversation';
+  const count = messagesState.eligibleContacts.length;
+  if (!count) {
+    sub.textContent = 'Follow or chat on Talk to unlock messaging';
+    return;
+  }
+  sub.textContent = `${count} contact${count === 1 ? '' : 's'} you can message`;
 }
 
 /**
@@ -5098,7 +5097,6 @@ function updateSidebarSubtitle() {
 async function initMessages() {
   if (!messagesState.initialized) {
     messagesState.initialized = true;
-    ensureMessageDiscoveryStyles();
     loadMessagesFromStorage();
     setupMessageEventListeners();
     if (typeof subscribeToMessages === 'function') subscribeToMessages();
@@ -5116,7 +5114,6 @@ async function initMessages() {
   }
 
   renderConversationList();
-  renderNoContactShareCard();
   updateSidebarSubtitle();
 }
 
@@ -5128,9 +5125,7 @@ function loadMessagesFromStorage() {
     const stored = {
       conversations: localStorage.getItem(messagesStorageKey('mortalive_conversations')),
       groups: localStorage.getItem(messagesStorageKey('mortalive_groups')),
-      messages: localStorage.getItem(messagesStorageKey('mortalive_messages')),
-      conversationMeta: localStorage.getItem(messagesStorageKey('mortalive_conversation_meta')),
-      outboundInvites: localStorage.getItem(messagesStorageKey('mortalive_outbound_invites'))
+      messages: localStorage.getItem(messagesStorageKey('mortalive_messages'))
     };
 
     if (stored.conversations) {
@@ -5139,9 +5134,9 @@ function loadMessagesFromStorage() {
     if (stored.groups) {
       messagesState.groups = JSON.parse(stored.groups);
     }
-    if (stored.messages) messagesState.messages = JSON.parse(stored.messages);
-    if (stored.conversationMeta) messagesState.conversationMeta = JSON.parse(stored.conversationMeta) || {};
-    if (stored.outboundInvites) messagesState.outboundInvites = JSON.parse(stored.outboundInvites) || [];
+    if (stored.messages) {
+      messagesState.messages = JSON.parse(stored.messages);
+    }
   } catch (error) {
     console.error('Failed to load messages from storage:', error);
   }
@@ -5155,8 +5150,6 @@ function saveMessagesToStorage() {
     localStorage.setItem(messagesStorageKey('mortalive_conversations'), JSON.stringify(messagesState.conversations));
     localStorage.setItem(messagesStorageKey('mortalive_groups'), JSON.stringify(messagesState.groups));
     localStorage.setItem(messagesStorageKey('mortalive_messages'), JSON.stringify(messagesState.messages));
-    localStorage.setItem(messagesStorageKey('mortalive_conversation_meta'), JSON.stringify(messagesState.conversationMeta || {}));
-    localStorage.setItem(messagesStorageKey('mortalive_outbound_invites'), JSON.stringify(messagesState.outboundInvites || []));
   } catch (error) {
     console.error('Failed to save messages to storage:', error);
   }
@@ -5181,22 +5174,6 @@ function setupMessageEventListeners() {
     groupDescInput: $('group-desc'),
     groupMembersInput: $('group-members-input')
   };
-
-  ensureMessageDiscoveryStyles();
-  let newMessageBtn = document.getElementById('btn-new-message');
-  if (!newMessageBtn) {
-    const headerTop = document.querySelector('#pg-messages .messages-sidebar-header .sidebar-header-top');
-    if (headerTop) {
-      newMessageBtn = document.createElement('button');
-      newMessageBtn.id = 'btn-new-message';
-      newMessageBtn.type = 'button';
-      newMessageBtn.className = 'messages-new-group-btn';
-      newMessageBtn.title = 'Find a user to message';
-      newMessageBtn.innerHTML = '<span style="font-size:17px;line-height:1">✉</span>';
-      headerTop.insertBefore(newMessageBtn, headerTop.lastElementChild || null);
-    }
-  }
-  newMessageBtn?.addEventListener('click', ensureMessageDiscoveryModal);
 
   // Create group modal
   if (elements.newGroupBtn) {
@@ -5304,7 +5281,6 @@ function closeCreateGroupModal() {
   if (membersList) membersList.innerHTML = '';
 
   messagesState.selectedMembers.clear();
-  messagesState.selectedMemberProfiles.clear();
   updateCharCounts();
 }
 
@@ -5369,7 +5345,7 @@ function renderMemberProfileSuggestions(profiles) {
     const display = String(profile.display_name || username || 'Profile').trim();
     const key = username || profile.id;
     if (!key) return '';
-    return `<button type="button" class="form-member-suggestion" data-member-id="${escapeHtml(profile.id || '')}" data-member-username="${escapeHtml(username)}" data-member-name="${escapeHtml(display)}" data-member-avatar="${escapeHtml(profile.avatar_url || '')}">` +
+    return `<button type="button" class="form-member-suggestion" data-member-id="${escapeHtml(profile.id || '')}" data-member-username="${escapeHtml(username)}" data-member-name="${escapeHtml(display)}">` +
       `${profile.avatar_url ? `<img src="${escapeHtml(profile.avatar_url)}" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:6px">` : '👤 '} ` +
       `${escapeHtml(display)}${username ? ` <span style="opacity:.62">@${escapeHtml(username)}</span>` : ''}</button>`;
   }).join('');
@@ -5380,7 +5356,6 @@ function renderMemberProfileSuggestions(profiles) {
       addMemberTag(btn.dataset.memberName || btn.dataset.memberUsername || '', {
         id: btn.dataset.memberId || null,
         username: btn.dataset.memberUsername || null,
-        avatar_url: btn.dataset.memberAvatar || '',
         profileUrl: btn.dataset.memberUsername ? `${window.location.origin}/@${encodeURIComponent(btn.dataset.memberUsername)}` : null
       });
     });
@@ -5394,50 +5369,57 @@ async function handleMemberSearch(e) {
 
   if (!query) { suggestionsContainer.innerHTML = ''; return; }
 
-  const seq = ++_memberProfileSearchSeq;
-  clearTimeout(_memberProfileSearchTimer);
-  _memberProfileSearchTimer = setTimeout(async () => {
-    try {
-      const profiles = await searchMemberProfiles(query);
-      if (seq !== _memberProfileSearchSeq) return;
-      const filtered = profiles.filter(p => !messagesState.selectedMemberProfiles.has(p.id));
-      renderMemberProfileSuggestions(filtered);
-    } catch (error) {
-      if (seq !== _memberProfileSearchSeq) return;
-      console.warn('[Messages] member search failed:', error?.message || error);
-      suggestionsContainer.innerHTML = '<div class="form-field-hint">Search is unavailable right now. Please try again.</div>';
-    }
-  }, 180);
+  // Groups can only include eligible contacts (follows or Talk history)
+  const eligible = messagesState.eligibleContacts || [];
+  if (!eligible.length) {
+    suggestionsContainer.innerHTML = '<div class="form-field-hint">No eligible contacts yet. Follow users or complete a Talk chat first.</div>';
+    return;
+  }
+
+  const q = query.toLowerCase();
+  const alreadyAdded = new Set(messagesState.selectedMembers);
+  const filtered = eligible.filter(c => {
+    const name = (c.display_name || c.username || '').toLowerCase();
+    const username = (c.username || '').toLowerCase();
+    if (alreadyAdded.has(`@${username}`) || alreadyAdded.has(name)) return false;
+    return name.includes(q) || username.includes(q);
+  });
+
+  if (!filtered.length) {
+    suggestionsContainer.innerHTML = '<div class="form-field-hint">No matching contacts. Only people you follow or have chatted with on Talk can be added.</div>';
+    return;
+  }
+
+  renderMemberProfileSuggestions(filtered);
 }
 
 function addMemberTag(name, member = {}) {
   const displayName = String(name || '').trim();
-  const id = String(member.id || '').trim();
-  const username = String(member.username || '').trim().toLowerCase();
-  if (!displayName || !id || !S.userId || id === S.userId) return;
-  if (messagesState.selectedMemberProfiles.has(id)) return;
+  const key = member.username ? `@${String(member.username).toLowerCase()}` : displayName.toLowerCase();
+  if (!displayName || messagesState.selectedMembers.has(key)) return;
 
-  messagesState.selectedMembers.add(id);
-  messagesState.selectedMemberProfiles.set(id, {
-    id,
-    username,
-    display_name: displayName,
-    avatar_url: member.avatar_url || ''
-  });
+  // Only eligible contacts (follows or Talk history) may be added to groups
+  if (!member.id) return;
+  const isEligible = (messagesState.eligibleContacts || []).some(c => c.id === member.id);
+  if (!isEligible) {
+    toast('Only people you follow or have chatted with on Talk can be added.', '⚠️');
+    return;
+  }
+
+  messagesState.selectedMembers.add(key);
 
   const membersList = $('group-members-list');
   if (!membersList) return;
 
   const tag = document.createElement('div');
   tag.className = 'form-tag';
-  tag.dataset.memberId = id;
+  tag.dataset.memberKey = key;
   tag.innerHTML = `
-    <span>${escapeHtml(displayName)}${username ? ` <small style="opacity:.62">@${escapeHtml(username)}</small>` : ''}</span>
-    <button type="button" class="form-tag-remove" data-member-id="${escapeHtml(id)}" aria-label="Remove ${escapeHtml(displayName)}">×</button>
+    <span>${escapeHtml(displayName)}${member.username ? ` <small style="opacity:.62">@${escapeHtml(member.username)}</small>` : ''}</span>
+    <span class="form-tag-remove" data-member-key="${escapeHtml(key)}">×</span>
   `;
   tag.querySelector('.form-tag-remove').addEventListener('click', () => {
-    messagesState.selectedMembers.delete(id);
-    messagesState.selectedMemberProfiles.delete(id);
+    messagesState.selectedMembers.delete(key);
     tag.remove();
   });
   membersList.appendChild(tag);
@@ -5451,86 +5433,68 @@ function addMemberTag(name, member = {}) {
 async function handleCreateGroup(e) {
   e.preventDefault();
 
-  if (S.isGuest || !S.userId) {
-    showToast('🔒 Sign in to create a group');
-    return;
-  }
-
   const nameInput = $('group-name');
   const descInput = $('group-desc');
   const typeRadio = document.querySelector('input[name="group-type"]:checked');
-  const groupName = String(nameInput?.value || '').trim();
-  const description = String(descInput?.value || '').trim();
 
-  if (!groupName) {
+  if (!nameInput || !nameInput.value.trim()) {
     showToast('⚠️ Group name is required');
     return;
   }
-  if (groupName.length > 60) {
+
+  const groupData = {
+    name: nameInput.value.trim(),
+    description: descInput ? descInput.value.trim() : '',
+    type: typeRadio ? typeRadio.value : 'public',
+    members: Array.from(messagesState.selectedMembers)
+  };
+
+  // Validate
+  if (groupData.name.length > 60) {
     showToast('⚠️ Group name is too long');
     return;
   }
 
-  const members = Array.from(messagesState.selectedMembers).filter(Boolean);
-  const newGroup = {
-    id: `g_${S.userId}_${Date.now()}`,
-    type: 'group',
-    name: groupName,
-    emoji: typeRadio?.value === 'private' ? '🔒' : '👥',
-    description,
-    groupType: typeRadio?.value || 'public',
-    members: Array.from(new Set([S.userId, ...members])),
-    createdAt: new Date().toISOString(),
-    createdBy: S.userId,
-    lastMessage: 'Group created',
-    lastAt: Date.now(),
-    unread: 0
-  };
+  try {
+    // Try to create via API if available
+    let newGroup;
+    if (typeof createGroup === 'function') {
+      newGroup = await createGroup(groupData);
+    } else {
+      // Create locally
+      newGroup = {
+        id: 'g' + Date.now(),
+        name: groupData.name,
+        emoji: groupData.type === 'public' ? '👥' : '🔒',
+        description: groupData.description,
+        type: groupData.type,
+        members: groupData.members,
+        createdAt: new Date(),
+        createdBy: S.username || 'You'
+      };
+    }
 
-  // The prior implementation called an empty API stub and then pushed its
-  // undefined result, which is what caused groups to disappear/break. Until
-  // a real server-side group table/API exists, keep the client state coherent
-  // and scoped to the signed-in account rather than pretending persistence.
-  messagesState.groups = Array.isArray(messagesState.groups) ? messagesState.groups : [];
-  messagesState.groups.unshift(newGroup);
-  messagesState.messages[newGroup.id] = [];
-  messagesState.activeConvId = newGroup.id;
-  messagesState.activeConvType = 'group';
-  messagesState.activePeer = null;
-  saveMessagesToStorage();
-  renderConversationList();
-  closeCreateGroupModal();
-  loadGroupThread(newGroup.id);
-  showToast('✅ Group created');
+    messagesState.groups.push(newGroup);
+    saveMessagesToStorage();
+
+    renderConversationList();
+    closeCreateGroupModal();
+
+    showToast('✅ Group created successfully!');
+  } catch (error) {
+    console.error('Failed to create group:', error);
+    showToast('❌ Failed to create group');
+  }
 }
 
 // ━━━━━━━━━━━━━━━━━ CONVERSATION MANAGEMENT ━━━━━━━━━━━━━━━━━
-
-function renderNoContactShareCard() {
-  const empty = $('msg-thread-empty');
-  if (!empty || S.isGuest || (messagesState.eligibleContacts?.length || messagesState.groups?.length)) return;
-  const existing = empty.querySelector('[data-no-contact-share]');
-  if (existing) return;
-  const username = S.username || 'your Mortalive profile';
-  const invite = `I’m on Mortalive — a place for real conversations with people worldwide. Join me: ${window.location.origin}${S.username ? `/@${encodeURIComponent(username)}` : ''}`;
-  const card = document.createElement('div');
-  card.dataset.noContactShare = '1';
-  card.style.cssText = 'margin-top:16px;width:min(420px,100%);padding:14px 16px;border-radius:18px;background:var(--surface-2);border:1px solid var(--border);text-align:left;';
-  card.innerHTML = `<div style="font-size:11px;font-weight:800;color:var(--on-surface-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px">Share something</div><div style="font-size:13px;line-height:1.55;color:var(--on-surface-2)">${escapeHtml(invite)}</div><button type="button" data-copy-no-contact style="margin-top:10px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--primary);font-size:12px;font-weight:800">📋 Copy text</button>`;
-  empty.appendChild(card);
-  card.querySelector('[data-copy-no-contact]')?.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(invite); toast('Share text copied', '📋'); }
-    catch (_) { toast('Could not copy share text', '⚠️'); }
-  });
-}
 
 function renderConversationList(searchQuery = '') {
   const list = $('msg-conv-list');
   if (!list) return;
   const q = String(searchQuery || '').toLowerCase().trim();
-  const contacts = Array.isArray(messagesState.eligibleContacts) ? messagesState.eligibleContacts : [];
-  const groups = Array.isArray(messagesState.groups) ? messagesState.groups : [];
-  const meta = messagesState.conversationMeta || {};
+  const contacts = messagesState.eligibleContacts || [];
+  const groups = messagesState.groups || [];
 
   const filteredContacts = q
     ? contacts.filter(c => {
@@ -5538,200 +5502,49 @@ function renderConversationList(searchQuery = '') {
         return name.includes(q) || (c.username || '').toLowerCase().includes(q);
       })
     : contacts;
+
   const filteredGroups = q
     ? groups.filter(g => (g.name || '').toLowerCase().includes(q))
     : groups;
 
-  const visibleContacts = filteredContacts.filter(c => !meta[c.id]?.archived);
-  const visibleGroups = filteredGroups.filter(g => !meta[g.id]?.archived);
-  const allRows = [...visibleGroups, ...visibleContacts].sort((a, b) => {
-    const ap = meta[a.id]?.pinned ? 1 : 0;
-    const bp = meta[b.id]?.pinned ? 1 : 0;
-    if (ap !== bp) return bp - ap;
-    return (Number(b.lastAt || 0) - Number(a.lastAt || 0));
-  });
-
-  if (!allRows.length) {
+  if (!filteredContacts.length && !filteredGroups.length) {
     if (S.isGuest) {
-      list.innerHTML = `<div class="messages-list-empty"><div class="empty-icon">🔒</div><p>Sign in to message</p><p class="empty-hint">Create an account to start conversations.</p></div>`;
+      list.innerHTML = `
+        <div class="messages-list-empty">
+          <div class="empty-icon">🔒</div>
+          <p>Sign in to message</p>
+          <p class="empty-hint">Create an account to message people you meet</p>
+        </div>`;
     } else if (q) {
-      list.innerHTML = `<div class="messages-list-empty"><div class="empty-icon">🔍</div><p>No inbox match</p><p class="empty-hint">Use <strong>New message</strong> to search any Mortalive username.</p></div>`;
+      list.innerHTML = `
+        <div class="messages-list-empty">
+          <div class="empty-icon">🔍</div>
+          <p>No results for "${escapeHtml(searchQuery)}"</p>
+          <p class="empty-hint">Try a different name or username</p>
+        </div>`;
     } else {
-      list.innerHTML = `<div class="messages-list-empty"><div class="empty-icon">💬</div><p>No conversations yet</p><p class="empty-hint">Search any username to start an invite, or create a group.</p><button type="button" class="messages-inline-action" data-message-discover="1">Find someone</button></div>`;
-      list.querySelector('[data-message-discover]')?.addEventListener('click', ensureMessageDiscoveryModal);
+      list.innerHTML = `
+        <div class="messages-list-empty">
+          <div class="empty-icon">💬</div>
+          <p>No contacts yet</p>
+          <p class="empty-hint">Follow someone or complete a Talk chat to unlock messaging</p>
+        </div>`;
     }
     return;
   }
 
   list.innerHTML = '';
-  allRows.forEach(row => {
-    const isGroup = row.type === 'group' || !row.username;
-    const item = isGroup
-      ? createConvItem(row.id, row.name, row.emoji || '👥', `${(row.members || []).length} members · Group`, true)
-      : createContactConvItem(row);
-    if (meta[row.id]?.muted) item.classList.add('messages-conv-muted');
-    if (meta[row.id]?.pinned) item.classList.add('messages-conv-pinned');
+
+  // Groups first
+  filteredGroups.forEach(group => {
+    const item = createConvItem(group.id, group.name, group.emoji || '👥', `${(group.members || []).length} members · Group`, true);
     list.appendChild(item);
   });
-}
 
-function messageInviteText(user) {
-  const username = String(user?.username || '').replace(/^@/, '');
-  return `Hey${user?.display_name ? ` ${user.display_name}` : ''}! I’m on Mortalive — a place for real conversations. Find me here: ${window.location.origin}/@${encodeURIComponent(username || 'mortalive')} 🌍`;
-}
-
-function ensureMessageDiscoveryStyles() {
-  if ($('__mortalive-message-discovery-css')) return;
-  const style = document.createElement('style');
-  style.id = '__mortalive-message-discovery-css';
-  style.textContent = `
-    .messages-inline-action{margin-top:12px;padding:9px 14px;border-radius:999px;border:1px solid rgba(26,110,245,.22);background:rgba(26,110,245,.07);color:var(--primary);font-weight:800;font-size:12px;cursor:pointer}
-    .messages-conv-item.messages-conv-muted{opacity:.62}.messages-conv-item.messages-conv-pinned{background:rgba(26,110,245,.025)}
-    .mortalive-msg-discovery{position:fixed;inset:0;z-index:2100;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(8,14,28,.40);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
-    .mortalive-msg-discovery-card{width:min(520px,100%);max-height:min(760px,90vh);overflow:hidden;background:var(--surface,#fff);color:var(--on-surface);border:1px solid var(--border);border-radius:26px;box-shadow:var(--elev-4);display:flex;flex-direction:column}
-    .mortalive-msg-discovery-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--border)}
-    .mortalive-msg-discovery-body{padding:14px 20px 20px;overflow:auto}.mortalive-msg-discovery-input{width:100%;padding:12px 14px;border-radius:14px;border:1.5px solid var(--border-strong);background:var(--surface-2);color:var(--on-surface);outline:none}
-    .mortalive-msg-user-row{display:flex;align-items:center;gap:10px;padding:11px 4px;border-bottom:1px solid var(--border)}.mortalive-msg-user-row:last-child{border-bottom:0}.mortalive-msg-user-row button{margin-left:auto;padding:7px 11px;border-radius:999px;border:1px solid rgba(26,110,245,.22);background:rgba(26,110,245,.07);color:var(--primary);font-size:11px;font-weight:800;cursor:pointer}.mortalive-msg-user-row button:disabled{opacity:.45;cursor:not-allowed}
-    .mortalive-msg-selected{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.mortalive-msg-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border-radius:999px;background:var(--primary-alpha);color:var(--primary);font-size:11px;font-weight:800}
-    .mortalive-msg-discovery-foot{display:flex;gap:10px;padding:12px 20px 18px;border-top:1px solid var(--border)}.mortalive-msg-discovery-foot button{flex:1;padding:10px 14px;border-radius:12px;font-weight:800;font-size:12px;cursor:pointer}.mortalive-msg-secondary{border:1px solid var(--border-strong);background:var(--surface)}.mortalive-msg-primary{border:0;background:linear-gradient(145deg,var(--primary),var(--secondary));color:#fff}
-    .mortalive-msg-sharebox{margin-top:14px;padding:14px;border-radius:16px;background:var(--surface-2);border:1px solid var(--border)}
-  `;
-  document.head.appendChild(style);
-}
-
-async function searchMessageUsers(query) {
-  if (!sb || !S.userId) return [];
-  const q = String(query || '').trim().replace(/^@/, '');
-  if (q.length < 2) return [];
-  const safe = q.replace(/[%_]/g, m => `\\${m}`);
-  let data = null;
-  let error = null;
-  try {
-    const res = await sb.from('accounts')
-      .select('id,username,display_name,avatar_url,crockroach_score')
-      .neq('id', S.userId)
-      .ilike('username', `%${safe}%`)
-      .order('username', { ascending: true })
-      .limit(20);
-    data = res.data; error = res.error;
-  } catch (e) { error = e; }
-  if (error) {
-    console.warn('[Messages] user search failed:', error?.message || error);
-    return [];
-  }
-  return Array.isArray(data) ? data : [];
-}
-
-function ensureMessageDiscoveryModal() {
-  ensureMessageDiscoveryStyles();
-  let existing = $('mortalive-message-discovery');
-  if (existing) { existing.remove(); return; }
-  if (S.isGuest || !S.userId) { toast('Sign in to message people', '🔒'); return; }
-
-  const overlay = document.createElement('div');
-  overlay.id = 'mortalive-message-discovery';
-  overlay.className = 'mortalive-msg-discovery';
-  overlay.innerHTML = `
-    <div class="mortalive-msg-discovery-card" role="dialog" aria-modal="true" aria-label="Find users to message">
-      <div class="mortalive-msg-discovery-head">
-        <div><div style="font-size:17px;font-weight:800;letter-spacing:-.03em">Find someone</div><div style="font-size:11.5px;color:var(--on-surface-3);margin-top:3px">Search any Mortalive username — no follow required.</div></div>
-        <button type="button" data-msg-discovery-close style="width:32px;height:32px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--on-surface-3);font-size:18px">×</button>
-      </div>
-      <div class="mortalive-msg-discovery-body">
-        <input class="mortalive-msg-discovery-input" id="mortalive-message-user-search" placeholder="Search username…" autocomplete="off" maxlength="24">
-        <div style="display:flex;justify-content:space-between;gap:8px;margin-top:8px;font-size:11px;color:var(--on-surface-3)"><span>Choose up to 10 people</span><span id="mortalive-message-selected-count">0 / 10</span></div>
-        <div class="mortalive-msg-selected" id="mortalive-message-selected"></div>
-        <div id="mortalive-message-search-results" style="margin-top:10px"></div>
-        <div id="mortalive-message-invite-status"></div>
-      </div>
-      <div class="mortalive-msg-discovery-foot">
-        <button type="button" class="mortalive-msg-secondary" data-msg-discovery-close>Cancel</button>
-        <button type="button" class="mortalive-msg-primary" id="mortalive-message-send-invite" disabled>Send invites</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-
-  const searchInput = $('mortalive-message-user-search');
-  const results = $('mortalive-message-search-results');
-  const selectedEl = $('mortalive-message-selected');
-  const countEl = $('mortalive-message-selected-count');
-  const sendBtn = $('mortalive-message-send-invite');
-  const selected = new Map();
-  let timer = null;
-  let seq = 0;
-
-  const close = () => overlay.remove();
-  overlay.querySelectorAll('[data-msg-discovery-close]').forEach(btn => btn.addEventListener('click', close));
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-
-  const renderSelected = () => {
-    countEl.textContent = `${selected.size} / 10`;
-    sendBtn.disabled = selected.size === 0;
-    selectedEl.innerHTML = Array.from(selected.values()).map(u => `<span class="mortalive-msg-chip">@${escapeHtml(u.username)} <button type="button" data-remove-user="${escapeHtml(u.id)}" style="border:0;background:none;color:inherit;padding:0;cursor:pointer">×</button></span>`).join('');
-    selectedEl.querySelectorAll('[data-remove-user]').forEach(btn => btn.addEventListener('click', () => { selected.delete(btn.dataset.removeUser); renderSelected(); renderResults(); }));
-  };
-
-  const renderResults = () => {
-    const q = searchInput.value.trim();
-    if (q.length < 2) { results.innerHTML = '<div style="padding:14px 2px;font-size:12px;color:var(--on-surface-3)">Type at least 2 characters to search usernames.</div>'; return; }
-    if (messagesState.randomSearchLoading) { results.innerHTML = '<div style="padding:14px 2px;font-size:12px;color:var(--on-surface-3)">Searching…</div>'; return; }
-    const rows = messagesState.randomSearchResults || [];
-    if (!rows.length) { results.innerHTML = `<div style="padding:14px 2px;font-size:12px;color:var(--on-surface-3)">No users found for “${escapeHtml(q)}”.</div>`; return; }
-    results.innerHTML = rows.map(u => {
-      const chosen = selected.has(u.id);
-      const display = u.display_name || u.username || 'User';
-      return `<div class="mortalive-msg-user-row"><div class="messages-peer-ava" style="width:38px;height:38px;flex:none;">${escapeHtml(feedAvatarLetter(display))}</div><div style="min-width:0;flex:1"><div style="font-weight:800;font-size:13px">${escapeHtml(display)}</div><div style="font-size:11px;color:var(--on-surface-3)">@${escapeHtml(u.username || '')}${Number.isFinite(Number(u.crockroach_score)) ? ` · 🧲 ${toNum(u.crockroach_score)}` : ''}</div></div><button type="button" data-pick-user="${escapeHtml(u.id)}" ${chosen ? 'disabled' : ''}>${chosen ? 'Selected' : 'Invite'}</button></div>`;
-    }).join('');
-    results.querySelectorAll('[data-pick-user]').forEach(btn => btn.addEventListener('click', () => {
-      const user = rows.find(u => u.id === btn.dataset.pickUser);
-      if (!user) return;
-      if (selected.size >= 10) { toast('You can invite up to 10 users at once', '⚠️'); return; }
-      selected.set(user.id, user); renderSelected(); renderResults();
-    }));
-  };
-
-  const runSearch = async () => {
-    const mySeq = ++seq;
-    const q = searchInput.value.trim();
-    if (q.length < 2) { messagesState.randomSearchResults = []; messagesState.randomSearchLoading = false; renderResults(); return; }
-    messagesState.randomSearchLoading = true; renderResults();
-    const rows = await searchMessageUsers(q);
-    if (mySeq !== seq) return;
-    messagesState.randomSearchResults = rows;
-    messagesState.randomSearchLoading = false;
-    renderResults();
-  };
-
-  searchInput.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(runSearch, 220); });
-  sendBtn.addEventListener('click', async () => {
-    if (!selected.size) return;
-    const users = Array.from(selected.values());
-    messagesState.outboundInvites = Array.isArray(messagesState.outboundInvites) ? messagesState.outboundInvites : [];
-    const now = Date.now();
-    users.forEach(u => {
-      const existing = messagesState.outboundInvites.find(x => x.userId === u.id);
-      if (existing) existing.sentAt = now;
-      else messagesState.outboundInvites.push({ id: `invite_${S.userId}_${u.id}_${now}`, userId: u.id, username: u.username, display_name: u.display_name, sentAt: now, text: messageInviteText(u) });
-    });
-    saveMessagesToStorage();
-
-    // No message-request table/API exists in the supplied production codebase.
-    // We therefore never claim these invites reached another account. The UI
-    // records them as pending and offers a real share/copy path for the invite text.
-    const status = $('mortalive-message-invite-status');
-    if (status) {
-      status.innerHTML = `<div class="mortalive-msg-sharebox"><div style="font-size:12px;font-weight:800">Invite${users.length > 1 ? 's' : ''} prepared</div><div style="font-size:11px;color:var(--on-surface-3);line-height:1.5;margin-top:4px">In-app recipient delivery needs a message-request backend, which this current production build does not expose. You can copy/share the generated invite below.</div><button type="button" id="mortalive-copy-message-invite" style="margin-top:9px;width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--primary);font-weight:800">📋 Copy invite</button></div>`;
-      $('mortalive-copy-message-invite')?.addEventListener('click', async () => {
-        const text = users.map(u => messageInviteText(u)).join('\n\n');
-        try { await navigator.clipboard.writeText(text); toast('Invite text copied', '📋'); } catch (_) { toast('Could not copy invite', '⚠️'); }
-      });
-    }
-    selected.clear(); renderSelected();
-    if (status) setTimeout(() => overlay.remove(), 1500);
+  // Then eligible direct contacts
+  filteredContacts.forEach(contact => {
+    list.appendChild(createContactConvItem(contact));
   });
-
-  searchInput.focus();
-  renderResults();
 }
 
 function createContactConvItem(contact) {
@@ -5892,7 +5705,7 @@ function renderDirectMessages(userId) {
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px 20px;text-align:center;flex:1;color:var(--msg-text-3,rgba(255,255,255,.38));">
         <span style="font-size:38px;opacity:.55;">💬</span>
         <div style="font-size:14px;font-weight:600;color:rgba(255,255,255,.7);">Start a conversation</div>
-        <div style="font-size:12px;max-width:28ch;line-height:1.6;">Say hi to ${escapeHtml(display)} — you can message people here even when you do not follow each other.</div>
+        <div style="font-size:12px;max-width:28ch;line-height:1.6;">Say hi to ${escapeHtml(display)} — you're connected through ${peer?.source === 'talk' ? 'a Talk chat' : 'follows'}.</div>
       </div>`;
     return;
   }
@@ -6028,69 +5841,72 @@ function handleConversationSearch(e) {
 
 function openThreadMenu(e) {
   e.stopPropagation();
-  const convId = messagesState.activeConvId;
-  if (!convId) return;
-  document.querySelector('.messages-context-menu')?.remove();
 
-  const meta = messagesState.conversationMeta?.[convId] || {};
   const menu = document.createElement('div');
   menu.className = 'messages-context-menu';
   menu.innerHTML = `
-    <button data-action="${meta.pinned ? 'unpin' : 'pin'}">${meta.pinned ? '📌 Unpin conversation' : '📌 Pin conversation'}</button>
-    <button data-action="${meta.muted ? 'unmute' : 'mute'}">${meta.muted ? '🔔 Unmute notifications' : '🔇 Mute notifications'}</button>
-    <button data-action="copy-link">🔗 Copy conversation link</button>
-    <button data-action="${meta.archived ? 'unarchive' : 'archive'}">${meta.archived ? '📂 Unarchive' : '📦 Archive'}</button>
-    <button data-action="delete" style="color:var(--danger,#dc2626)">🗑 Delete conversation</button>`;
-  menu.querySelectorAll('button').forEach(btn => {
-    btn.style.cssText = 'display:block;width:100%;padding:9px 12px;border:0;border-radius:9px;background:transparent;text-align:left;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--on-surface);';
-    btn.addEventListener('click', () => handleConvAction(convId, btn.dataset.action));
+    <button data-action="mute" style="width:100%;padding:8px 12px;text-align:left;border:none;background:transparent;cursor:pointer;">🔇 Mute notifications</button>
+    <button data-action="pin" style="width:100%;padding:8px 12px;text-align:left;border:none;background:transparent;cursor:pointer;">📌 Pin conversation</button>
+    <button data-action="archive" style="width:100%;padding:8px 12px;text-align:left;border:none;background:transparent;cursor:pointer;">📦 Archive</button>
+    <button data-action="delete" style="width:100%;padding:8px 12px;text-align:left;border:none;background:transparent;cursor:pointer;color:#ef4444;">🗑️ Delete</button>
+  `;
+
+  menu.addEventListener('click', (e) => {
+    const action = e.target.dataset.action;
+    handleConvAction(messagesState.activeConvId, action);
+    menu.remove();
   });
 
   document.body.appendChild(menu);
-  const rect = e.currentTarget?.getBoundingClientRect?.() || e.target.getBoundingClientRect();
-  Object.assign(menu.style, { position:'fixed', top:`${Math.min(rect.bottom + 8, window.innerHeight - 220)}px`, left:`${Math.min(Math.max(12, rect.right - 210), window.innerWidth - 222)}px`, background:'var(--surface,#fff)', border:'1px solid var(--border)', borderRadius:'14px', boxShadow:'var(--elev-4)', padding:'6px', minWidth:'210px', zIndex:'2101' });
+
+  const rect = e.target.getBoundingClientRect();
+  menu.style.cssText = `
+    position: fixed;
+    top: ${rect.bottom + 8}px;
+    left: ${Math.min(rect.left - 100, window.innerWidth - 150)}px;
+    background: var(--msg-bg-2, #0d1520);
+    border: 1px solid var(--msg-border, rgba(255,255,255,.07));
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.5);
+    z-index: 1001;
+  `;
+
   setTimeout(() => {
-    const close = (event) => { if (!menu.contains(event.target)) { menu.remove(); document.removeEventListener('click', close); } };
-    document.addEventListener('click', close);
+    document.addEventListener('click', function closeMenu(e) {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu);
+      }
+    });
   }, 0);
 }
 
-async function copyConversationLink(convId) {
-  const conv = messagesState.groups.find(g => g.id === convId) || messagesState.eligibleContacts.find(c => c.id === convId);
-  const username = conv?.username || conv?.handle || '';
-  const link = username ? `${window.location.origin}/@${encodeURIComponent(String(username).replace(/^@/, ''))}` : `${window.location.origin}/`;
-  try { await navigator.clipboard.writeText(link); showToast('🔗 Conversation link copied'); }
-  catch (_) { showToast('⚠️ Could not copy link'); }
-}
-
 function handleConvAction(convId, action) {
-  if (!convId) return;
-  messagesState.conversationMeta = messagesState.conversationMeta || {};
-  const prev = messagesState.conversationMeta[convId] || {};
-  const nextMeta = { ...prev };
-
-  if (action === 'mute' || action === 'unmute') nextMeta.muted = action === 'mute';
-  else if (action === 'pin' || action === 'unpin') nextMeta.pinned = action === 'pin';
-  else if (action === 'archive' || action === 'unarchive') nextMeta.archived = action === 'archive';
-  else if (action === 'copy-link') { copyConversationLink(convId); return; }
-  else if (action === 'delete') {
-    messagesState.conversations = messagesState.conversations.filter(c => c.id !== convId);
-    messagesState.groups = messagesState.groups.filter(g => g.id !== convId);
-    delete messagesState.messages[convId];
-    delete messagesState.conversationMeta[convId];
-    if (messagesState.activeConvId === convId) closeThread();
-    saveMessagesToStorage();
-    renderConversationList($('msg-search-input')?.value || '');
-    showToast('🗑 Conversation deleted');
-    return;
+  switch (action) {
+    case 'mute':
+      // TODO: Mute notifications
+      showToast('🔇 Notifications muted');
+      break;
+    case 'pin':
+      // TODO: Pin conversation
+      showToast('📌 Conversation pinned');
+      break;
+    case 'archive':
+      // TODO: Archive conversation
+      messagesState.activeConvId = null;
+      renderConversationList();
+      closeThread();
+      showToast('📦 Conversation archived');
+      break;
+    case 'delete':
+      if (confirm('Delete this conversation?')) {
+        messagesState.activeConvId = null;
+        renderConversationList();
+        closeThread();
+        showToast('🗑️ Conversation deleted');
+      }
+      break;
   }
-
-  messagesState.conversationMeta[convId] = nextMeta;
-  saveMessagesToStorage();
-  document.querySelector('.messages-context-menu')?.remove();
-  renderConversationList($('msg-search-input')?.value || '');
-  if (nextMeta.archived && messagesState.activeConvId === convId) closeThread();
-  showToast(nextMeta.muted ? '🔇 Notifications muted' : nextMeta.pinned ? '📌 Conversation pinned' : nextMeta.archived ? '📦 Conversation archived' : 'Conversation updated');
 }
 
 // ━━━━━━━━━━━━━━━━━ UTILITIES ━━━━━━━━━━━━━━━━━
@@ -6172,9 +5988,17 @@ async function sendMessageToAPI(convId, text) {
  * @returns {Promise<Object>} Created group
  */
 async function createGroup(data) {
-  throw new Error('Server-side group creation is not configured in this build.');
+  // POST /api/groups
+  // return (await fetch(`${SERVER_URL}/api/groups`, {
+  //   method: 'POST',
+  //   headers: { 'Content-Type': 'application/json' },
+  //   body: JSON.stringify(data)
+  // })).json();
 }
 
+/**
+ * Subscribe to real-time message updates
+ */
 function subscribeToMessages() {
   // Use Supabase or similar for real-time updates
   // Example:
@@ -6226,7 +6050,6 @@ let _feedOffset = 0;
 let _feedHasMore = true;
 let _feedLoading = false;
 let _feedPosts = [];
-let _feedSearchQuery = '';
 
 let _feedEngagement = new Map();
 // V106: persistent per-user post view counts, hydrated from Supabase RPCs.
@@ -6375,12 +6198,6 @@ async function fetchFeedPage(reset = false) {
       query = query.eq('user_id', S.userId);
     } else {
       query = query.eq('visibility', 'public');
-    }
-
-    const searchText = String(_feedSearchQuery || '').trim();
-    if (searchText) {
-      const escapedSearch = searchText.replace(/[\%_]/g, match => `\\${match}`);
-      query = query.ilike('content', `%${escapedSearch}%`);
     }
 
     const { data, error } = await query;
@@ -7461,10 +7278,7 @@ function renderFeedPosts() {
         <div class="post-header">
           ${avatarMarkup}
           <div class="post-meta">
-            <div class="post-author">
-              <button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(post.user_id)}">${sanitizeHTML(display)} ${badge}</button>
-              ${(!mine && S.userId && !S.isGuest) ? `<button type="button" class="mfe-follow-btn" data-mfe-follow="${sanitizeHTML(post.user_id)}">Follow</button>` : ''}
-            </div>
+            <div class="post-author"><button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(post.user_id)}">${sanitizeHTML(display)} ${badge}</button></div>
             <div class="post-time">@${sanitizeHTML(username)} · ${sanitizeHTML(feedRelTime(post.created_at))} · ${sanitizeHTML(typeLabel)}</div>
           </div>
           ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
@@ -7782,7 +7596,6 @@ function renderFeedSidebars() {
       <div class="trending-poll-item">
         <div class="trending-poll-q">${sanitizeHTML(post.content || '').slice(0, 100)}${(post.content || '').length > 100 ? '…' : ''}</div>
         <div class="trending-poll-meta"><span>✍️ ${sanitizeHTML(post.author?.username || 'member')}</span><span>⏱ ${sanitizeHTML(feedRelTime(post.created_at))}</span></div>
-        ${(!S.isGuest && S.userId && post.user_id && post.user_id !== S.userId) ? `<button type="button" class="mfe-follow-btn mfe-recent-follow" data-mfe-follow="${sanitizeHTML(post.user_id)}">Follow</button>` : ''}
       </div>`).join('') : '<div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">No public posts yet.</div>';
   }
 
@@ -11463,6 +11276,879 @@ document.addEventListener('click', (event) => {
 
 // v126: synthetic-skip always gets a 10-second real-user priority window before the next synthetic.
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MESSAGING DB PATCH v42 — aligned to production messages schema
+// Production schema:
+//   messages(id BIGINT, room_id, sender_hash, direction, content, created_at)
+//   message_rooms(room_id, type, name, description, ...)
+//   message_room_members(room_id, user_id, role, archived, muted, pinned, ...)
+//   message_requests(sender_id, recipient_id, message, status, ...)
+// No separate group_messages table.
+// ═══════════════════════════════════════════════════════════════════════════════
+(function installMessagingDatabasePatchV42() {
+  'use strict';
+  if (typeof window === 'undefined') return;
+
+  const M42 = {
+    initialized: false,
+    searchTimer: null,
+    searchSeq: 0,
+    realtime: null,
+    ownSenderHash: null,
+    selectedProfiles: new Map()
+  };
+
+  const msgToast = (text, icon = '💬') => {
+    try { toast(text, icon); } catch (_) { console.warn('[Messages]', text); }
+  };
+
+  const ownHash = async () => {
+    if (M42.ownSenderHash) return M42.ownSenderHash;
+    const raw = `mortalive:${String(S.userId || '')}`;
+    if (window.crypto?.subtle) {
+      const bytes = new TextEncoder().encode(raw);
+      const digest = await crypto.subtle.digest('SHA-256', bytes);
+      M42.ownSenderHash = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+    } else {
+      // Deterministic fallback for environments without SubtleCrypto.
+      let h = 2166136261;
+      for (let i = 0; i < raw.length; i++) h = Math.imul(h ^ raw.charCodeAt(i), 16777619);
+      M42.ownSenderHash = `fnv1a:${(h >>> 0).toString(16)}`;
+    }
+    return M42.ownSenderHash;
+  };
+
+  const normalizeRoom = (row) => ({
+    id: row.room_id,
+    type: row.type === 'group' ? 'group' : 'direct',
+    name: row.name || '',
+    description: row.description || '',
+    createdBy: row.created_by || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at || row.created_at,
+    emoji: row.type === 'group' ? '👥' : '👤',
+    members: [],
+    archived: !!row.archived,
+    muted: !!row.muted,
+    pinned: !!row.pinned,
+    unread: 0,
+    role: row.role || 'member'
+  });
+
+  function ensureMessageSearchButton() {
+    const head = document.querySelector('#pg-messages .sidebar-header-top');
+    if (!head || document.getElementById('btn-new-message')) return;
+    const btn = document.createElement('button');
+    btn.id = 'btn-new-message';
+    btn.className = 'messages-new-group-btn';
+    btn.type = 'button';
+    btn.title = 'Find any Mortalive user';
+    btn.setAttribute('aria-label', 'Find any Mortalive user');
+    btn.innerHTML = '<span style="font-size:17px;line-height:1;">✉</span>';
+    btn.addEventListener('click', openRandomUserMessageModal);
+    head.querySelector('#btn-new-group')?.before(btn);
+  }
+
+  function ensureEmptyFindButton() {
+    const empty = $('msg-thread-empty');
+    if (!empty || empty.querySelector('[data-m42-find-user]')) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'messages-cta-btn';
+    b.dataset.m42FindUser = '1';
+    b.textContent = 'Find someone';
+    b.addEventListener('click', openRandomUserMessageModal);
+    const groupBtn = $('btn-empty-new-group');
+    groupBtn?.parentElement?.appendChild(b);
+  }
+
+  function ensureRandomUserModal() {
+    let overlay = $('m42-user-search-overlay');
+    if (overlay) return overlay;
+    overlay = document.createElement('div');
+    overlay.id = 'm42-user-search-overlay';
+    overlay.className = 'messages-modal-overlay';
+    overlay.innerHTML = `
+      <div class="messages-modal" style="max-width:560px;">
+        <div class="messages-modal-header">
+          <h2>Find someone</h2>
+          <button type="button" class="messages-modal-close" data-m42-close>×</button>
+        </div>
+        <div class="messages-modal-form">
+          <div class="form-field">
+            <label for="m42-user-search">Search any username</label>
+            <input id="m42-user-search" type="text" maxlength="24" autocomplete="off" placeholder="@username or display name…">
+            <span class="form-field-hint">Follow relationship is not required. Select up to 10 people for message requests.</span>
+          </div>
+          <div id="m42-selected-users" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+          <div id="m42-user-results" style="max-height:300px;overflow:auto;"></div>
+          <div class="form-actions">
+            <button type="button" class="form-btn form-btn-secondary" data-m42-close>Cancel</button>
+            <button type="button" class="form-btn form-btn-primary" id="m42-send-invites" disabled>Send invites</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay || e.target.closest('[data-m42-close]')) closeRandomUserMessageModal();
+    });
+
+    overlay.querySelector('#m42-send-invites')?.addEventListener('click', sendRandomUserInvites);
+    overlay.querySelector('#m42-user-search')?.addEventListener('input', e => {
+      clearTimeout(M42.searchTimer);
+      const query = String(e.target.value || '').trim().replace(/^@/, '');
+      const seq = ++M42.searchSeq;
+      if (query.length < 2) {
+        renderRandomUserResults([]);
+        return;
+      }
+      M42.searchTimer = setTimeout(async () => {
+        if (seq !== M42.searchSeq) return;
+        try {
+          const { data, error } = await sb
+            .from('accounts')
+            .select('id,username,display_name,avatar_url,crockroach_score')
+            .neq('id', S.userId)
+            .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
+            .order('username', { ascending: true })
+            .limit(20);
+          if (seq !== M42.searchSeq) return;
+          if (error) throw error;
+          renderRandomUserResults(Array.isArray(data) ? data : []);
+        } catch (err) {
+          console.warn('[Messages] random user search failed:', err?.message || err);
+          const box = $('m42-user-results');
+          if (box) box.innerHTML = '<div class="form-field-hint">Search is unavailable right now.</div>';
+        }
+      }, 220);
+    });
+
+    return overlay;
+  }
+
+  function renderSelectedUsers() {
+    const wrap = $('m42-selected-users');
+    const btn = $('m42-send-invites');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    M42.selectedProfiles.forEach(u => {
+      const chip = document.createElement('span');
+      chip.className = 'form-tag';
+      chip.innerHTML = `${escapeHtml(u.display_name || u.username || 'User')} <span style="cursor:pointer;" data-m42-remove="${escapeHtml(u.id)}">×</span>`;
+      chip.querySelector('[data-m42-remove]')?.addEventListener('click', () => {
+        M42.selectedProfiles.delete(u.id);
+        renderSelectedUsers();
+        renderRandomUserResults();
+      });
+      wrap.appendChild(chip);
+    });
+    if (btn) btn.disabled = M42.selectedProfiles.size === 0;
+  }
+
+  function renderRandomUserResults(users = null) {
+    const box = $('m42-user-results');
+    if (!box) return;
+    if (Array.isArray(users)) box._m42Users = users;
+    const rows = box._m42Users || [];
+    const query = $('m42-user-search')?.value?.trim() || '';
+    if (!rows.length) {
+      box.innerHTML = query.length >= 2
+        ? '<div class="form-field-hint">No users found.</div>'
+        : '<div class="form-field-hint">Type at least 2 characters to search all Mortalive users.</div>';
+      return;
+    }
+    box.innerHTML = rows.map(u => {
+      const id = String(u.id);
+      const selected = M42.selectedProfiles.has(id);
+      const safeName = escapeHtml(u.display_name || u.username || 'User');
+      const safeUser = escapeHtml(u.username || 'user');
+      const score = Number(u.crockroach_score || 0);
+      return `<button type="button" class="form-member-suggestion" data-m42-user="${escapeHtml(id)}" style="display:flex;align-items:center;gap:10px;width:100%;">
+        ${u.avatar_url ? `<img src="${escapeHtml(u.avatar_url)}" alt="" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">` : '<span style="width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--surface-3,#eef0f4);">👤</span>'}
+        <span style="display:flex;flex-direction:column;align-items:flex-start;flex:1;min-width:0;">
+          <strong style="font-size:13px;">${safeName}</strong>
+          <span style="font-size:11px;opacity:.65;">@${safeUser} · 🧲 ${score.toLocaleString()}</span>
+        </span>
+        <span>${selected ? '✓' : '+'}</span>
+      </button>`;
+    }).join('');
+    box.querySelectorAll('[data-m42-user]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = String(btn.dataset.m42User);
+        const user = rows.find(u => String(u.id) === id);
+        if (!user) return;
+        if (M42.selectedProfiles.has(id)) M42.selectedProfiles.delete(id);
+        else if (M42.selectedProfiles.size < 10) M42.selectedProfiles.set(id, user);
+        else { msgToast('You can invite up to 10 users at a time.', '⚠️'); return; }
+        renderSelectedUsers();
+        renderRandomUserResults();
+      });
+    });
+  }
+
+  function openRandomUserMessageModal() {
+    if (S.isGuest || !S.userId || !sb) {
+      msgToast('Sign in to message people.', '🔒');
+      return;
+    }
+    const overlay = ensureRandomUserModal();
+    M42.selectedProfiles.clear();
+    const input = overlay.querySelector('#m42-user-search');
+    if (input) input.value = '';
+    const box = overlay.querySelector('#m42-user-results');
+    if (box) box._m42Users = [];
+    renderSelectedUsers();
+    renderRandomUserResults([]);
+    overlay.style.display = 'flex';
+    input?.focus();
+  }
+
+  function closeRandomUserMessageModal() {
+    const overlay = $('m42-user-search-overlay');
+    if (overlay) overlay.style.display = 'none';
+  }
+
+  async function sendRandomUserInvites() {
+    const profiles = Array.from(M42.selectedProfiles.values());
+    if (!profiles.length) return;
+    const btn = $('m42-send-invites');
+    if (btn) btn.disabled = true;
+    try {
+      const recipientIds = profiles.map(p => p.id).filter(id => id && id !== S.userId);
+      if (!recipientIds.length) throw new Error('No valid recipients selected.');
+
+      const { data: existing, error: existingErr } = await sb
+        .from('message_requests')
+        .select('recipient_id')
+        .eq('sender_id', S.userId)
+        .eq('status', 'pending')
+        .in('recipient_id', recipientIds);
+
+      if (existingErr) throw existingErr;
+
+      const pending = new Set((existing || []).map(r => String(r.recipient_id)));
+      const rows = recipientIds
+        .filter(id => !pending.has(String(id)))
+        .map(id => ({
+          sender_id: S.userId,
+          recipient_id: id,
+          message: null,
+          status: 'pending'
+        }));
+
+      if (!rows.length) {
+        closeRandomUserMessageModal();
+        msgToast('Those users already have pending invites.', 'ℹ️');
+        return;
+      }
+
+      const { error } = await sb.from('message_requests').insert(rows);
+      if (error) throw error;
+
+      closeRandomUserMessageModal();
+      msgToast(`${rows.length} invite${rows.length === 1 ? '' : 's'} sent.`, '✓');
+    } catch (e) {
+      console.error('[Messages] send invites failed:', e);
+      msgToast(e?.message || 'Could not send invites.', '⚠️');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function loadDbConversations() {
+    if (S.isGuest || !S.userId || !sb) return;
+
+    const { data: memberships, error: memberErr } = await sb
+      .from('message_room_members')
+      .select('room_id,role,archived,muted,pinned,joined_at,message_rooms(room_id,type,name,description,created_by,created_at,updated_at,last_message_at)')
+      .eq('user_id', S.userId)
+      .order('joined_at', { ascending: false });
+
+    if (memberErr) throw memberErr;
+
+    const rooms = (memberships || [])
+      .map(m => normalizeRoom({ ...(m.message_rooms || {}), room_id: m.room_id, role: m.role, archived: m.archived, muted: m.muted, pinned: m.pinned }))
+      .filter(r => r.id);
+
+    const ids = rooms.map(r => r.id);
+    const membershipMap = new Map();
+
+    if (ids.length) {
+      const { data: members, error } = await sb
+        .from('message_room_members')
+        .select('room_id,user_id,role')
+        .in('room_id', ids);
+      if (error) throw error;
+      (members || []).forEach(m => {
+        const key = String(m.room_id);
+        if (!membershipMap.has(key)) membershipMap.set(key, []);
+        membershipMap.get(key).push(m);
+      });
+    }
+
+    const peerIds = [...new Set(
+      rooms
+        .filter(r => r.type === 'direct')
+        .flatMap(r => (membershipMap.get(String(r.id)) || []).map(m => m.user_id))
+        .filter(id => id && id !== S.userId)
+    )];
+
+    const profileMap = new Map();
+    if (peerIds.length) {
+      const { data: profiles, error } = await sb
+        .from('accounts')
+        .select('id,username,display_name,avatar_url,crockroach_score')
+        .in('id', peerIds);
+      if (error) throw error;
+      (profiles || []).forEach(p => profileMap.set(String(p.id), p));
+    }
+
+    const lastByRoom = new Map();
+    if (ids.length) {
+      const { data: lastRows } = await sb
+        .from('messages')
+        .select('id,room_id,sender_hash,direction,content,created_at')
+        .in('room_id', ids)
+        .order('created_at', { ascending: false })
+        .limit(Math.min(1000, Math.max(100, ids.length * 8)));
+      (lastRows || []).forEach(m => {
+        const key = String(m.room_id);
+        if (!lastByRoom.has(key)) lastByRoom.set(key, m);
+      });
+    }
+
+    messagesState.conversations = [];
+    messagesState.groups = [];
+    messagesState.messages = messagesState.messages || {};
+
+    for (const room of rooms) {
+      room.members = membershipMap.get(String(room.id)) || [];
+      const last = lastByRoom.get(String(room.id));
+      room.lastMessage = last?.content || '';
+      room.lastAt = last?.created_at || room.updatedAt || room.createdAt;
+
+      if (room.type === 'group') {
+        messagesState.groups.push(room);
+        continue;
+      }
+
+      const peerId = room.members.find(m => String(m.user_id) !== String(S.userId))?.user_id;
+      const peer = peerId ? profileMap.get(String(peerId)) : null;
+      if (!peer) continue;
+
+      messagesState.conversations.push({
+        ...room,
+        userId: peer.id,
+        username: peer.username || '',
+        display_name: peer.display_name || peer.username || 'User',
+        avatar_url: peer.avatar_url || null,
+        crockroach_score: peer.crockroach_score || 0,
+        source: 'message'
+      });
+    }
+
+    saveMessagesToStorage();
+  }
+
+  async function loadDbMessages(roomId, limit = 100) {
+    if (!roomId || !sb || S.isGuest) return [];
+    const { data, error } = await sb
+      .from('messages')
+      .select('id,room_id,sender_hash,direction,content,created_at')
+      .eq('room_id', roomId)
+      .order('created_at', { ascending: true })
+      .limit(limit);
+    if (error) throw error;
+
+    const me = await ownHash();
+    const rows = Array.isArray(data) ? data : [];
+    messagesState.messages[roomId] = rows.map(m => {
+      const isMine = String(m.direction || '').toLowerCase() === 'outgoing' || String(m.sender_hash || '') === me;
+      return {
+        id: m.id,
+        text: m.content || '',
+        isMe: isMine,
+        senderId: isMine ? S.userId : null,
+        senderHash: m.sender_hash || '',
+        conversationId: roomId,
+        timestamp: new Date(m.created_at),
+        time: formatTime(new Date(m.created_at))
+      };
+    });
+    return rows;
+  }
+
+  async function createDbGroup(data) {
+    const ids = Array.from(messagesState.selectedMembers || [])
+      .map(v => String(v))
+      .filter(id => id && id !== String(S.userId))
+      .slice(0, 10);
+
+    const { data: roomId, error } = await sb.rpc('create_message_group', {
+      p_name: data.name,
+      p_description: data.description || null,
+      p_member_ids: ids
+    });
+    if (error) throw error;
+    return String(roomId);
+  }
+
+  async function dbHandleMemberSearch(e) {
+    const query = String(e?.target?.value || '').trim().replace(/^@/, '');
+    const suggestions = $('group-members-suggestions');
+    if (!suggestions) return;
+    if (query.length < 2) {
+      suggestions.innerHTML = '';
+      return;
+    }
+
+    try {
+      const { data, error } = await sb
+        .from('accounts')
+        .select('id,username,display_name,avatar_url')
+        .neq('id', S.userId)
+        .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
+        .order('username', { ascending: true })
+        .limit(12);
+      if (error) throw error;
+
+      renderMemberProfileSuggestions(Array.isArray(data) ? data : []);
+
+      suggestions.querySelectorAll('[data-member-id]').forEach(el => {
+        el.addEventListener('click', () => {
+          dbAddMemberTag({
+            id: el.dataset.memberId,
+            username: el.dataset.memberUsername || '',
+            display_name: el.dataset.memberName || el.dataset.memberUsername || 'User'
+          });
+        });
+      });
+    } catch (err) {
+      suggestions.innerHTML = '<div class="form-field-hint">User search is unavailable right now.</div>';
+      console.warn('[Messages] group member search failed:', err?.message || err);
+    }
+  }
+
+  function dbAddMemberTag(member) {
+    if (!member?.id || String(member.id) === String(S.userId)) return;
+    const key = String(member.id);
+    messagesState.selectedMembers = messagesState.selectedMembers || new Set();
+    if (messagesState.selectedMembers.has(key)) return;
+    if (messagesState.selectedMembers.size >= 10) {
+      msgToast('Groups can add up to 10 members at creation.', '⚠️');
+      return;
+    }
+    messagesState.selectedMembers.add(key);
+
+    const list = $('group-members-list');
+    if (!list) return;
+
+    const tag = document.createElement('div');
+    tag.className = 'form-tag';
+    tag.dataset.memberKey = key;
+    tag.innerHTML = `<span>${escapeHtml(member.display_name || member.username || 'User')} <small style="opacity:.62">@${escapeHtml(member.username || '')}</small></span><span class="form-tag-remove">×</span>`;
+    tag.querySelector('.form-tag-remove')?.addEventListener('click', () => {
+      messagesState.selectedMembers.delete(key);
+      tag.remove();
+    });
+    list.appendChild(tag);
+
+    const input = $('group-members-input');
+    if (input) input.value = '';
+    const suggestions = $('group-members-suggestions');
+    if (suggestions) suggestions.innerHTML = '';
+  }
+
+  async function dbHandleCreateGroup(e) {
+    e?.preventDefault?.();
+    if (S.isGuest || !S.userId || !sb) {
+      msgToast('Sign in to create groups.', '🔒');
+      return;
+    }
+
+    const name = String($('group-name')?.value || '').trim();
+    const description = String($('group-desc')?.value || '').trim();
+    if (!name) { msgToast('Group name is required.', '⚠️'); return; }
+    if (name.length > 60) { msgToast('Group name is too long.', '⚠️'); return; }
+
+    const submit = $('btn-submit-create-group');
+    try {
+      if (submit) { submit.disabled = true; submit.textContent = 'Creating…'; }
+
+      const groupId = await createDbGroup({ name, description });
+      messagesState.selectedMembers = new Set();
+      await loadDbConversations();
+      dbRenderConversationList($('msg-search-input')?.value || '');
+      closeCreateGroupModal();
+      await openDbConversation(groupId, 'group');
+      msgToast('Group created successfully.', '✓');
+    } catch (err) {
+      console.error('[Messages] create group failed:', err);
+      msgToast(err?.message || 'Could not create group.', '⚠️');
+    } finally {
+      if (submit) { submit.disabled = false; submit.textContent = 'Create group'; }
+    }
+  }
+
+  async function openDbConversation(roomId, type = null) {
+    const all = [...(messagesState.groups || []), ...(messagesState.conversations || [])];
+    const conv = all.find(c => String(c.id) === String(roomId));
+    if (!conv) return;
+
+    if (!conv.members?.length) {
+      await loadDbConversations();
+    }
+
+    const fresh = [...(messagesState.groups || []), ...(messagesState.conversations || [])]
+      .find(c => String(c.id) === String(roomId)) || conv;
+
+    messagesState.activeConvId = fresh.id;
+    messagesState.activeConvType = type || fresh.type;
+    messagesState.activePeer = messagesState.activeConvType === 'direct' ? fresh : null;
+
+    if (messagesState.activeConvType === 'group') loadGroupThread(fresh.id);
+    else loadDirectThread(fresh);
+
+    try {
+      await loadDbMessages(fresh.id);
+      if (messagesState.activeConvType === 'group') renderMessages(fresh.id);
+      else renderDirectMessages(fresh.id);
+    } catch (e) {
+      console.warn('[Messages] message load failed:', e?.message || e);
+    }
+  }
+
+  async function dbSendMessage() {
+    const input = $('msg-composer-input');
+    if (!input || !messagesState.activeConvId || !S.userId || S.isGuest || !sb) return;
+    const text = input.value.trim();
+    if (!text) return;
+    if (text.length > 1000) { msgToast('Message is too long.', '⚠️'); return; }
+
+    const roomId = messagesState.activeConvId;
+    const sendBtn = $('msg-composer-send');
+
+    try {
+      if (sendBtn) sendBtn.disabled = true;
+      const senderHash = await ownHash();
+
+      const { data, error } = await sb
+        .from('messages')
+        .insert({
+          room_id: roomId,
+          sender_hash: senderHash,
+          direction: 'outgoing',
+          content: text
+        })
+        .select('id,room_id,sender_hash,direction,content,created_at')
+        .single();
+
+      if (error) throw error;
+
+      if (!messagesState.messages[roomId]) messagesState.messages[roomId] = [];
+      messagesState.messages[roomId].push({
+        id: data.id,
+        text: data.content || text,
+        isMe: true,
+        senderId: S.userId,
+        senderHash: data.sender_hash,
+        conversationId: data.room_id,
+        timestamp: new Date(data.created_at),
+        time: formatTime(new Date(data.created_at))
+      });
+
+      input.value = '';
+      input.style.height = 'auto';
+
+      const conv = [...(messagesState.groups || []), ...(messagesState.conversations || [])]
+        .find(c => String(c.id) === String(roomId));
+      if (conv) {
+        conv.lastMessage = text;
+        conv.lastAt = data.created_at;
+      }
+
+      if (messagesState.activeConvType === 'group') renderMessages(roomId);
+      else renderDirectMessages(roomId);
+
+      dbRenderConversationList($('msg-search-input')?.value || '');
+      saveMessagesToStorage();
+    } catch (err) {
+      console.error('[Messages] send failed:', err);
+      msgToast(err?.message || 'Could not send message.', '⚠️');
+    } finally {
+      updateComposerButton();
+    }
+  }
+
+  function dbRenderConversationList(searchQuery = '') {
+    const list = $('msg-conv-list');
+    if (!list) return;
+
+    const q = String(searchQuery || '').trim().toLowerCase();
+    const groups = (messagesState.groups || [])
+      .filter(g => !g.archived && (!q || String(g.name || '').toLowerCase().includes(q)));
+    const contacts = (messagesState.conversations || [])
+      .filter(c => !c.archived && (!q ||
+        String(c.display_name || c.username || '').toLowerCase().includes(q) ||
+        String(c.username || '').toLowerCase().includes(q)));
+
+    const sortFn = (a, b) => {
+      const pinA = a.pinned ? 1 : 0;
+      const pinB = b.pinned ? 1 : 0;
+      if (pinA !== pinB) return pinB - pinA;
+      return new Date(b.lastAt || b.updatedAt || 0) - new Date(a.lastAt || a.updatedAt || 0);
+    };
+
+    groups.sort(sortFn);
+    contacts.sort(sortFn);
+
+    if (!groups.length && !contacts.length) {
+      list.innerHTML = `<div class="messages-list-empty">
+        <div class="empty-icon">${q ? '🔍' : '💬'}</div>
+        <p>${q ? `No conversations found for "${escapeHtml(q)}"` : 'No conversations yet'}</p>
+        <p class="empty-hint">${q ? 'Try another name or username.' : 'Use ✉ to find any Mortalive user or + to create a group.'}</p>
+      </div>`;
+      return;
+    }
+
+    list.innerHTML = '';
+    groups.forEach(group => {
+      const item = createConvItem(group.id, group.name || 'Group', group.emoji || '👥', `${group.members?.length || 1} members · Group`, true);
+      item.dataset.m42Room = group.id;
+      list.appendChild(item);
+    });
+
+    contacts.forEach(contact => {
+      const item = createContactConvItem({
+        ...contact,
+        id: contact.id,
+        userId: contact.userId,
+        username: contact.username,
+        display_name: contact.display_name,
+        avatar_url: contact.avatar_url,
+        source: 'message'
+      });
+      item.dataset.m42Room = contact.id;
+      list.appendChild(item);
+    });
+  }
+
+  async function setupRealtime() {
+    if (!sb || M42.realtime || S.isGuest || !S.userId) return;
+    try {
+      M42.realtime = sb.channel(`mortalive-messages-v42-${S.userId}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages'
+        }, async payload => {
+          const row = payload?.new;
+          if (!row?.room_id) return;
+
+          const all = [...(messagesState.groups || []), ...(messagesState.conversations || [])];
+          let conv = all.find(c => String(c.id) === String(row.room_id));
+
+          if (!conv) {
+            try {
+              await loadDbConversations();
+              conv = [...(messagesState.groups || []), ...(messagesState.conversations || [])]
+                .find(c => String(c.id) === String(row.room_id));
+            } catch (_) {}
+          }
+
+          if (!conv) return;
+
+          const me = await ownHash();
+          const isMine = String(row.direction || '').toLowerCase() === 'outgoing' || String(row.sender_hash || '') === me;
+          if (isMine) {
+            // Local send already appended this row; avoid duplicates.
+            const existing = messagesState.messages[row.room_id] || [];
+            if (existing.some(m => String(m.id) === String(row.id))) return;
+          }
+
+          if (!messagesState.messages[row.room_id]) messagesState.messages[row.room_id] = [];
+          messagesState.messages[row.room_id].push({
+            id: row.id,
+            text: row.content || '',
+            isMe: isMine,
+            senderId: isMine ? S.userId : null,
+            senderHash: row.sender_hash || '',
+            conversationId: row.room_id,
+            timestamp: new Date(row.created_at),
+            time: formatTime(new Date(row.created_at))
+          });
+
+          conv.lastMessage = row.content || '';
+          conv.lastAt = row.created_at;
+
+          if (messagesState.activeConvId === row.room_id) {
+            if (messagesState.activeConvType === 'group') renderMessages(row.room_id);
+            else renderDirectMessages(row.room_id);
+          } else if (!isMine) {
+            conv.unread = (Number(conv.unread) || 0) + 1;
+            dbRenderConversationList($('msg-search-input')?.value || '');
+          }
+          saveMessagesToStorage();
+        })
+        .subscribe();
+    } catch (e) {
+      console.warn('[Messages] realtime setup failed:', e?.message || e);
+    }
+  }
+
+  async function dbHandleConvAction(roomId, action) {
+    const conv = [...(messagesState.groups || []), ...(messagesState.conversations || [])]
+      .find(c => String(c.id) === String(roomId));
+    if (!conv || !sb) return;
+
+    try {
+      if (['archive','unarchive','mute','unmute','pin','unpin'].includes(action)) {
+        const patch = {
+          ...(action.includes('archive') ? { archived: action === 'archive' } : {}),
+          ...(action.includes('mute') ? { muted: action === 'mute' } : {}),
+          ...(action.includes('pin') ? { pinned: action === 'pin' } : {})
+        };
+        const { error } = await sb
+          .from('message_room_members')
+          .update(patch)
+          .eq('room_id', roomId)
+          .eq('user_id', S.userId);
+        if (error) throw error;
+
+        Object.assign(conv, patch);
+        dbRenderConversationList($('msg-search-input')?.value || '');
+        if (action === 'archive' && String(messagesState.activeConvId) === String(roomId)) closeThread();
+      } else if (action === 'delete') {
+        const { error } = await sb
+          .from('message_room_members')
+          .delete()
+          .eq('room_id', roomId)
+          .eq('user_id', S.userId);
+        if (error) throw error;
+
+        await loadDbConversations();
+        dbRenderConversationList($('msg-search-input')?.value || '');
+        if (String(messagesState.activeConvId) === String(roomId)) closeThread();
+      }
+    } catch (e) {
+      msgToast(e?.message || 'Could not update conversation.', '⚠️');
+    }
+  }
+
+  async function initMessagesDbV42() {
+    if (S.isGuest || !S.userId || !sb) return;
+    try {
+      ensureMessageSearchButton();
+      ensureEmptyFindButton();
+      ensureRandomUserModal();
+
+      if (!M42.initialized) {
+        M42.initialized = true;
+
+        const searchInput = $('msg-search-input');
+        if (searchInput) {
+          searchInput.addEventListener('input', e => dbRenderConversationList(e.target.value));
+        }
+
+        // Thread-level menu is already wired by the base UI; make sure it
+        // delegates to the database-backed action handler.
+        $('msg-thread-menu')?.addEventListener('click', e => {
+          try { openThreadMenu(e); } catch (_) {}
+        });
+      }
+
+      await ownHash();
+      await loadDbConversations();
+      dbRenderConversationList(searchInput?.value || '');
+      updateSidebarSubtitle();
+      setupRealtime();
+
+      const memberInput = $('group-members-input');
+      if (memberInput && !memberInput.dataset.m42Bound) {
+        memberInput.dataset.m42Bound = '1';
+        memberInput.addEventListener('input', dbHandleMemberSearch, true);
+      }
+
+      const groupForm = $('form-create-group');
+      if (groupForm && !groupForm.dataset.m42Bound) {
+        groupForm.dataset.m42Bound = '1';
+        groupForm.addEventListener('submit', dbHandleCreateGroup, true);
+      }
+
+      const composer = $('msg-composer-send');
+      if (composer && !composer.dataset.m42Bound) {
+        composer.dataset.m42Bound = '1';
+        composer.addEventListener('click', e => {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          dbSendMessage();
+        }, true);
+      }
+
+      const input = $('msg-composer-input');
+      if (input && !input.dataset.m42Bound) {
+        input.dataset.m42Bound = '1';
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            dbSendMessage();
+          }
+        }, true);
+        input.addEventListener('input', updateComposerButton);
+      }
+    } catch (e) {
+      console.error('[Messages DB v42] initialization failed:', e);
+      msgToast('Messages database is not ready. Check the production messaging schema.', '⚠️');
+      dbRenderConversationList();
+    }
+  }
+
+  window.handleMemberSearch = dbHandleMemberSearch;
+  window.handleCreateGroup = dbHandleCreateGroup;
+  window.sendMessage = dbSendMessage;
+  window.handleConvAction = dbHandleConvAction;
+  window.renderConversationList = dbRenderConversationList;
+  window.openRandomUserMessageModal = openRandomUserMessageModal;
+  window.closeRandomUserMessageModal = closeRandomUserMessageModal;
+
+  // Route conversation item clicks to DB-backed rooms.
+  document.addEventListener('click', async e => {
+    const item = e.target.closest?.('.messages-conv-item[data-conv-id]');
+    if (!item) return;
+    const roomId = item.dataset.convId;
+    const group = (messagesState.groups || []).find(g => String(g.id) === String(roomId));
+    const contact = (messagesState.conversations || []).find(c => String(c.id) === String(roomId));
+    if (!group && !contact) return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    try {
+      await openDbConversation(roomId, group ? 'group' : 'direct');
+    } catch (err) {
+      msgToast(err?.message || 'Could not open conversation.', '⚠️');
+    }
+  }, true);
+
+  const originalInitMessages = window.initMessages;
+  window.initMessages = async function patchedInitMessagesV42() {
+    if (typeof originalInitMessages === 'function') {
+      try { await originalInitMessages(); } catch (e) { console.warn('[Messages] legacy init warning:', e?.message || e); }
+    }
+    await initMessagesDbV42();
+  };
+
+  window.addEventListener('mortalive-auth-state', () => {
+    M42.ownSenderHash = null;
+    if (!S.isGuest && S.userId && $('pg-messages')?.classList.contains('active')) {
+      initMessagesDbV42();
+    }
+  });
+
+  console.log('[Messages DB v42] production schema alignment ready ✓');
+})();
 
 /* ═════════════════════════════════════════════════════════════════════
    MFE — Feed Enhancement Layer (merged into app.js)
