@@ -11278,7 +11278,7 @@ document.addEventListener('click', (event) => {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MESSAGING DB PATCH v42 — aligned to production messages schema
+// MESSAGING DB PATCH v43 — aligned to production messages schema
 // Production schema:
 //   messages(id BIGINT, room_id, sender_hash, direction, content, created_at)
 //   message_rooms(room_id, type, name, description, ...)
@@ -11389,7 +11389,12 @@ document.addEventListener('click', (event) => {
           </div>
         </div>
       </div>`;
-    document.body.appendChild(overlay);
+    // Keep the dynamically-created modal inside the Messages page so the
+    // production #pg-messages modal styles apply. Appending this overlay to
+    // <body> leaves it unstyled because the stylesheet scopes these classes
+    // under #pg-messages.
+    const messagePage = $('pg-messages') || document.body;
+    messagePage.appendChild(overlay);
 
     overlay.addEventListener('click', e => {
       if (e.target === overlay || e.target.closest('[data-m42-close]')) closeRandomUserMessageModal();
@@ -11560,16 +11565,32 @@ document.addEventListener('click', (event) => {
   async function loadDbConversations() {
     if (S.isGuest || !S.userId || !sb) return;
 
+    // Do not depend on PostgREST's nested-resource relationship cache here.
+    // Production projects can have the correct FK while PostgREST's schema
+    // cache is temporarily stale, which makes `message_rooms(...)` fail even
+    // though both tables are healthy. Read the two tables explicitly.
     const { data: memberships, error: memberErr } = await sb
       .from('message_room_members')
-      .select('room_id,role,archived,muted,pinned,joined_at,message_rooms(room_id,type,name,description,created_by,created_at,updated_at,last_message_at)')
+      .select('room_id,role,archived,muted,pinned,joined_at')
       .eq('user_id', S.userId)
       .order('joined_at', { ascending: false });
 
     if (memberErr) throw memberErr;
 
+    const roomIds = [...new Set((memberships || []).map(m => m.room_id).filter(Boolean).map(String))];
+    let roomRows = [];
+    if (roomIds.length) {
+      const { data, error: roomErr } = await sb
+        .from('message_rooms')
+        .select('room_id,type,name,description,created_by,created_at,updated_at,last_message_at')
+        .in('room_id', roomIds);
+      if (roomErr) throw roomErr;
+      roomRows = Array.isArray(data) ? data : [];
+    }
+    const roomMap = new Map(roomRows.map(r => [String(r.room_id), r]));
+
     const rooms = (memberships || [])
-      .map(m => normalizeRoom({ ...(m.message_rooms || {}), room_id: m.room_id, role: m.role, archived: m.archived, muted: m.muted, pinned: m.pinned }))
+      .map(m => normalizeRoom({ ...(roomMap.get(String(m.room_id)) || {}), room_id: m.room_id, role: m.role, archived: m.archived, muted: m.muted, pinned: m.pinned }))
       .filter(r => r.id);
 
     const ids = rooms.map(r => r.id);
@@ -11938,7 +11959,7 @@ document.addEventListener('click', (event) => {
   async function setupRealtime() {
     if (!sb || M42.realtime || S.isGuest || !S.userId) return;
     try {
-      M42.realtime = sb.channel(`mortalive-messages-v42-${S.userId}`)
+      M42.realtime = sb.channel(`mortalive-messages-v43-${S.userId}`)
         .on('postgres_changes', {
           event: 'INSERT',
           schema: 'public',
@@ -12100,8 +12121,12 @@ document.addEventListener('click', (event) => {
         input.addEventListener('input', updateComposerButton);
       }
     } catch (e) {
-      console.error('[Messages DB v42] initialization failed:', e);
-      msgToast('Messages database is not ready. Check the production messaging schema.', '⚠️');
+      console.error('[Messages DB v43] initialization failed:', e);
+      const rawMessage = String(e?.message || e || 'Unknown database error');
+      const friendly = /relation .* does not exist|could not find the table|schema cache/i.test(rawMessage)
+        ? 'Messages database tables are missing or Supabase schema cache needs refreshing.'
+        : rawMessage;
+      msgToast(friendly, '⚠️');
       dbRenderConversationList();
     }
   }
@@ -12147,7 +12172,7 @@ document.addEventListener('click', (event) => {
     }
   });
 
-  console.log('[Messages DB v42] production schema alignment ready ✓');
+  console.log('[Messages DB v43] production schema alignment ready ✓');
 })();
 
 /* ═════════════════════════════════════════════════════════════════════
