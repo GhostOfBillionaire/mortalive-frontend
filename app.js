@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-27-v146-fullscreen-only'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-28-v147-feed-enhancements-merged'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -6050,6 +6050,7 @@ let _feedOffset = 0;
 let _feedHasMore = true;
 let _feedLoading = false;
 let _feedPosts = [];
+let _feedSearchQuery = '';
 
 let _feedEngagement = new Map();
 // V106: persistent per-user post view counts, hydrated from Supabase RPCs.
@@ -6198,6 +6199,12 @@ async function fetchFeedPage(reset = false) {
       query = query.eq('user_id', S.userId);
     } else {
       query = query.eq('visibility', 'public');
+    }
+
+    const searchText = String(_feedSearchQuery || '').trim();
+    if (searchText) {
+      const escapedSearch = searchText.replace(/[\%_]/g, match => `\\${match}`);
+      query = query.ilike('content', `%${escapedSearch}%`);
     }
 
     const { data, error } = await query;
@@ -7278,7 +7285,10 @@ function renderFeedPosts() {
         <div class="post-header">
           ${avatarMarkup}
           <div class="post-meta">
-            <div class="post-author"><button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(post.user_id)}">${sanitizeHTML(display)} ${badge}</button></div>
+            <div class="post-author">
+              <button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(post.user_id)}">${sanitizeHTML(display)} ${badge}</button>
+              ${(!mine && S.userId && !S.isGuest) ? `<button type="button" class="mfe-follow-btn" data-mfe-follow="${sanitizeHTML(post.user_id)}">Follow</button>` : ''}
+            </div>
             <div class="post-time">@${sanitizeHTML(username)} · ${sanitizeHTML(feedRelTime(post.created_at))} · ${sanitizeHTML(typeLabel)}</div>
           </div>
           ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
@@ -7596,6 +7606,7 @@ function renderFeedSidebars() {
       <div class="trending-poll-item">
         <div class="trending-poll-q">${sanitizeHTML(post.content || '').slice(0, 100)}${(post.content || '').length > 100 ? '…' : ''}</div>
         <div class="trending-poll-meta"><span>✍️ ${sanitizeHTML(post.author?.username || 'member')}</span><span>⏱ ${sanitizeHTML(feedRelTime(post.created_at))}</span></div>
+        ${(!S.isGuest && S.userId && post.user_id && post.user_id !== S.userId) ? `<button type="button" class="mfe-follow-btn mfe-recent-follow" data-mfe-follow="${sanitizeHTML(post.user_id)}">Follow</button>` : ''}
       </div>`).join('') : '<div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">No public posts yet.</div>';
   }
 
@@ -11491,6 +11502,17 @@ document.addEventListener('click', (event) => {
     .mfe-pag-btn:disabled { opacity: .35; cursor: not-allowed; }
     .mfe-sug-count { font-size: 10px; color: var(--on-surface-3); }
 
+    /* ── Feed search ── */
+    .mfe-feed-search {
+      display:flex; align-items:center; gap:8px; padding:9px 12px; margin-bottom:12px;
+      border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,.94); box-shadow:var(--elev-1);
+    }
+    .mfe-feed-search-icon { flex:none; font-size:14px; opacity:.7; }
+    .mfe-feed-search-input { width:100%; min-width:0; border:0; outline:0; background:transparent; color:var(--on-surface); font-size:13px; font-weight:600; }
+    .mfe-feed-search-input::placeholder { color:var(--on-surface-3); font-weight:500; }
+    .mfe-feed-search-clear { width:26px; height:26px; border-radius:50%; border:0; background:var(--surface-2); color:var(--on-surface-3); display:grid; place-items:center; cursor:pointer; flex:none; }
+    .mfe-recent-follow { margin-top:7px; }
+
     /* ── Hashtag filter pill ── */
     #mfe-hash-pill {
       display: flex; align-items: center; gap: 9px;
@@ -11633,19 +11655,29 @@ document.addEventListener('click', (event) => {
 
     container.querySelectorAll('.trending-poll-item:not([data-mfe-enh])').forEach(item => {
       item.dataset.mfeEnh = '1';
+      if (item.querySelector('[data-mfe-follow]')) return;
 
       // The meta span contains "✍️ username"
       const metaSpan = item.querySelector('.trending-poll-meta span');
       if (!metaSpan) return;
       const authorText = metaSpan.textContent.replace('✍️', '').trim();
 
-      // Match to a rendered post card to grab the actual userId
+      // Resolve the sidebar username against rendered feed cards. Prefer the
+      // canonical @username in .post-time; fall back to display-name matching
+      // only for older cached markup.
       let userId = null;
-      document.querySelectorAll('#feed-posts .post-card').forEach(card => {
+      const wantedUsername = authorText.replace(/^@/, '').trim().toLowerCase();
+      document.querySelectorAll('#feed-posts .post-card[data-post-owner]').forEach(card => {
         if (userId) return;
+        const timeEl = card.querySelector('.post-time');
+        const usernameMatch = timeEl?.textContent?.match(/@([^\s·]+)/);
+        const cardUsername = usernameMatch?.[1]?.trim().toLowerCase() || '';
+        if (wantedUsername && cardUsername === wantedUsername) {
+          userId = card.dataset.postOwner || null;
+          return;
+        }
         const link = card.querySelector('.post-author-link');
-        // textContent may include badge text — startsWith is safer than ===
-        if (link && link.textContent.trim().startsWith(authorText)) {
+        if (!userId && link && link.textContent.trim().toLowerCase().startsWith(wantedUsername)) {
           userId = card.dataset.postOwner || null;
         }
       });
@@ -11789,13 +11821,14 @@ document.addEventListener('click', (event) => {
       _preFilterTab = active?.dataset?.filter || 'all';
     }
     _hashFilter = next;
-    // Sync hot-topics chip highlight
+    _feedSearchQuery = next ? `#${next}` : '';
+    const searchInput = $('feed-search-input');
+    if (searchInput) searchInput.value = _feedSearchQuery;
     document.querySelectorAll('#hot-topics [data-feed-hashtag]').forEach(chip => {
       chip.classList.toggle('mfe-active', chip.dataset.feedHashtag === next);
     });
     renderHashPill();
-    if (next) filterFeedByHashtag();
-    else      clearHashFilter();
+    fetchFeedPage(true);
   }
 
   function renderHashPill() {
@@ -11815,16 +11848,20 @@ document.addEventListener('click', (event) => {
     pill.querySelector('.mfe-pill-clear')
         ?.addEventListener('click', () => setHashFilter(null));
 
-    // Hide native "Load more" while filter is active
+    // Search results use the same paginated Feed loader, so Load more remains available.
     const lm = $('load-more-btn');
-    if (lm) lm.style.display = 'none';
+    if (lm) lm.style.display = '';
   }
 
   /** Restore the feed to its pre-filter state by simulating a tab click. */
   function clearHashFilter() {
-    const tab = document.querySelector(`#pg-feed #feed-tabs [data-filter="${_preFilterTab}"]`)
-             || document.querySelector('#pg-feed #feed-tabs [data-filter="all"]');
-    tab?.click();
+    _hashFilter = null;
+    _feedSearchQuery = '';
+    const searchInput = $('feed-search-input');
+    if (searchInput) searchInput.value = '';
+    document.querySelectorAll('#hot-topics [data-feed-hashtag]').forEach(chip => chip.classList.remove('mfe-active'));
+    $('mfe-hash-pill')?.remove();
+    fetchFeedPage(true);
     const lm = $('load-more-btn');
     if (lm) lm.style.display = '';
   }
@@ -12148,9 +12185,48 @@ document.addEventListener('click', (event) => {
      INIT
   ───────────────────────────────────────────────────────── */
 
+  function ensureFeedSearch() {
+    const tabs = $('feed-tabs');
+    if (!tabs || !$('pg-feed')) return;
+    let wrap = $('feed-search-wrap');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'feed-search-wrap';
+      wrap.className = 'mfe-feed-search';
+      wrap.innerHTML = `
+        <span class="mfe-feed-search-icon" aria-hidden="true">🔎</span>
+        <input id="feed-search-input" class="mfe-feed-search-input" type="search" maxlength="80" autocomplete="off" placeholder="Search posts or #hashtags…">
+        <button type="button" class="mfe-feed-search-clear" id="feed-search-clear" aria-label="Clear search">×</button>`;
+      tabs.parentNode.insertBefore(wrap, tabs);
+    }
+    const input = $('feed-search-input');
+    if (!input || input.dataset.mfeBound) return;
+    input.dataset.mfeBound = '1';
+    let timer = null;
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      _feedSearchQuery = String(input.value || '').trim();
+      const hashtag = _feedSearchQuery.match(/^#([A-Za-z0-9_]{1,63})$/);
+      _hashFilter = hashtag ? hashtag[1].toLowerCase() : null;
+      document.querySelectorAll('#hot-topics [data-feed-hashtag]').forEach(chip => chip.classList.toggle('mfe-active', chip.dataset.feedHashtag === _hashFilter));
+      renderHashPill();
+      timer = setTimeout(() => fetchFeedPage(true), 240);
+    });
+    $('feed-search-clear')?.addEventListener('click', () => {
+      input.value = '';
+      _feedSearchQuery = '';
+      _hashFilter = null;
+      document.querySelectorAll('#hot-topics [data-feed-hashtag]').forEach(chip => chip.classList.remove('mfe-active'));
+      $('mfe-hash-pill')?.remove();
+      fetchFeedPage(true);
+      input.focus();
+    });
+  }
+
   async function init() {
     injectStyles();
     bindEvents();
+    ensureFeedSearch();
     setupObservers();
     updateSuggestionsTitle();
 
@@ -12172,6 +12248,7 @@ document.addEventListener('click', (event) => {
           if (m.target !== feedPage) return;
           if (!feedPage.classList.contains('active')) return;
           updateSuggestionsTitle();
+          ensureFeedSearch();
           const S = getS();
           if (S.isGuest) { renderSuggestions(); return; }
           if (_suggestions.length) renderSuggestions();
