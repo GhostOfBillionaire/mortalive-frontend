@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v124 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v144" content="working-talk-fullscreen-merged">
+<meta name="mortalive-build-v148" content="working-talk-fullscreen-merged">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
@@ -9800,7 +9800,7 @@ body.vid-in-fs .fs-next-btn{
       <div class="messages-thread-empty" id="msg-thread-empty">
         <div class="empty-illustration">💬</div>
         <h2>Your messages</h2>
-        <p>Select someone from your contacts, or start a group chat. You can message people you follow or have chatted with on Talk.</p>
+        <p>Select a conversation, find any Mortalive username, or start a group chat.</p>
         <button class="messages-cta-btn" id="btn-empty-new-group">Create a group</button>
       </div>
 
@@ -9833,7 +9833,7 @@ body.vid-in-fs .fs-next-btn{
 
         <!-- Composer -->
         <div class="messages-composer-wrap">
-          <div class="messages-composer-hint" id="msg-composer-hint">Messages are saved locally until the API is connected.</div>
+          <div class="messages-composer-hint" id="msg-composer-hint">Messages are stored securely in your conversations.</div>
           <div class="messages-composer-input-group">
             <input class="messages-composer-input" id="msg-composer-input"
                    placeholder="Write a message…" maxlength="1000" autocomplete="off">
@@ -9900,11 +9900,11 @@ body.vid-in-fs .fs-next-btn{
         <div class="form-field">
           <label for="group-members">Add members (optional)</label>
           <div class="form-tag-input" id="form-group-members">
-            <input type="text" class="form-tag-input-field" id="group-members-input" placeholder="Search your contacts…">
+            <input type="text" class="form-tag-input-field" id="group-members-input" placeholder="Search any username…">
             <div class="form-tag-list" id="group-members-list"></div>
           </div>
           <div class="form-members-suggestions" id="group-members-suggestions"></div>
-          <span class="form-field-hint">Search among people you follow or have chatted with on Talk</span>
+          <span class="form-field-hint">Search any Mortalive username to add members</span>
         </div>
 
         <!-- Form actions -->
@@ -10324,7 +10324,7 @@ body.vid-in-fs .fs-next-btn{
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260828-v147-feed-enhancements-merged"></script>
+<script src="app.js?v=20260828-v148-messages-schema-v2"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
