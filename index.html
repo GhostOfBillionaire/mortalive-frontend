@@ -9029,11 +9029,28 @@ body.vid-in-fs .fs-next-btn{
 }
 #pg-messages .m160-reaction-chip.mine{background:var(--primary-alpha);border-color:rgba(26,110,245,.25);color:var(--primary);}
 #pg-messages .m160-reaction-picker{
-  position:absolute;left:0;bottom:28px;z-index:55;display:flex;gap:3px;padding:6px;
-  background:rgba(255,255,255,.98);border:1px solid var(--border);border-radius:12px;box-shadow:var(--elev-3);
+  position:absolute;left:0;bottom:34px;z-index:55;
+  display:grid;grid-template-columns:repeat(6,30px);gap:4px;padding:7px;
+  width:max-content;max-width:min(206px,calc(100vw - 32px));
+  background:rgba(255,255,255,.98);border:1px solid var(--border);
+  border-radius:12px;box-shadow:var(--elev-3);box-sizing:border-box;
 }
-#pg-messages .m160-reaction-picker button{width:30px;height:30px;border-radius:8px;font-size:17px;}
+#pg-messages .msg-row.me .m160-reaction-picker{left:auto;right:0;}
+#pg-messages .m160-reaction-picker button{
+  width:30px;height:30px;border-radius:8px;font-size:17px;
+  display:grid;place-items:center;line-height:1;
+}
 #pg-messages .m160-reaction-picker button:hover{background:var(--primary-alpha);}
+@media(max-width:720px){
+  #pg-messages .m160-reaction-picker{
+    grid-template-columns:repeat(6,28px);
+    padding:6px;gap:3px;max-width:calc(100vw - 24px);
+  }
+  #pg-messages .m160-reaction-picker button{width:28px;height:28px;font-size:16px;}
+}
+#pg-messages .messages-start-chat-item .messages-conv-preview{color:var(--primary);}
+#pg-messages .messages-start-chat-item.loading{opacity:.58;pointer-events:none;}
+#pg-messages .messages-start-chat-item.loading .messages-conv-preview::after{content:' · Opening…';}
 #pg-messages .m160-forward-backdrop{
   position:fixed;inset:0;z-index:3000;display:flex;align-items:center;justify-content:center;
   padding:18px;background:rgba(8,14,28,.38);backdrop-filter:blur(10px);
@@ -10488,7 +10505,7 @@ body.vid-in-fs .fs-next-btn{
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260829-v160-basic-messaging"></script>
+<script src="app.js?v=20260829-v161-message-sidebar-reactions-fix"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
