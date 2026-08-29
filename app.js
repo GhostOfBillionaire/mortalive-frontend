@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-29-v158-group-invites-first'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-29-v158-group-invites-first-app'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -5751,7 +5751,7 @@ function closeThread() {
 // ━━━━━━━━━━━━━━━━━ MESSAGE SENDING ━━━━━━━━━━━━━━━━━
 
 // NOTE: window.sendMessage is replaced by dbSendMessage() in the
-// "MESSAGING DB PATCH v43" block below. This stub is a safety fallback
+// "MESSAGING DB PATCH v44" block below. This stub is a safety fallback
 // only (e.g. guest / no-Supabase context before the patch activates).
 async function sendMessage() {
   const input = $('msg-composer-input');
@@ -5822,7 +5822,7 @@ function openThreadMenu(e) {
   }, 0);
 }
 
-function handleConvAction(convId, action) {
+async function handleConvAction(convId, action) {
   switch (action) {
     case 'mute':
       // TODO: Mute notifications
@@ -5839,14 +5839,21 @@ function handleConvAction(convId, action) {
       closeThread();
       showToast('📦 Conversation archived');
       break;
-    case 'delete':
-      if (confirm('Delete this conversation?')) {
-        messagesState.activeConvId = null;
-        renderConversationList();
-        closeThread();
-        showToast('🗑️ Conversation deleted');
-      }
+    case 'delete': {
+      const confirmed = await showConfirmDialog({
+        title: 'Delete conversation?',
+        body: 'This conversation will be removed from your Messages list.',
+        confirmLabel: 'Delete',
+        cancelLabel: 'Cancel',
+        danger: true
+      });
+      if (!confirmed) return;
+      messagesState.activeConvId = null;
+      renderConversationList();
+      closeThread();
+      showToast('🗑️ Conversation deleted');
       break;
+    }
   }
 }
 
@@ -11186,6 +11193,99 @@ document.addEventListener('click', (event) => {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// MESSAGES VISUAL THEME PATCH v158 — keep Messages visually aligned with the
+// main Mortalive site palette used by index.html. This is intentionally injected
+// from app.js so the single-file JS build remains deployable without requiring a
+// second manual CSS edit. The selector is scoped to #pg-messages and is idempotent.
+// ═══════════════════════════════════════════════════════════════════════════════
+(function installMortaliveMessagesThemeV158() {
+  'use strict';
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('mortalive-messages-theme-v158')) return;
+
+  const style = document.createElement('style');
+  style.id = 'mortalive-messages-theme-v158';
+  style.textContent = `
+    #pg-messages {
+      --msg-bg: var(--surface, #ffffff);
+      --msg-bg-2: var(--surface-2, #f6f7f9);
+      --msg-bg-3: var(--surface-3, #eef0f4);
+      --msg-bg-4: rgba(26,110,245,.075);
+      --msg-text: var(--on-surface, #0d1117);
+      --msg-text-2: var(--on-surface-2, #3d4451);
+      --msg-text-3: var(--on-surface-3, #6b7280);
+      --msg-blue: var(--primary, #1a6ef5);
+      --msg-blue-dim: var(--primary-alpha, rgba(26,110,245,.12));
+      --msg-blue-glow: rgba(26,110,245,.18);
+      --msg-border: var(--border, rgba(0,0,0,.08));
+      --msg-border-2: var(--border-strong, rgba(0,0,0,.14));
+      --msg-shadow: 0 4px 20px rgba(13,17,23,.10);
+      --msg-shadow-lg: 0 12px 40px rgba(13,17,23,.16);
+    }
+
+    #pg-messages .messages-modal-overlay {
+      background: rgba(13,17,23,.38);
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+    }
+
+    #pg-messages .messages-cta-btn:hover,
+    #pg-messages .messages-composer-send:hover:not(:disabled) {
+      background: var(--primary-dark, #1459cc);
+    }
+
+    #pg-messages .messages-composer-hint {
+      background: var(--primary-alpha, rgba(26,110,245,.12));
+      border-left-color: var(--primary, #1a6ef5);
+    }
+
+    #pg-messages .messages-online-dot {
+      border-color: var(--surface-2, #f6f7f9);
+    }
+
+    #pg-messages .messages-modal,
+    #pg-messages .messages-modal-header,
+    #pg-messages .messages-thread-header,
+    #pg-messages .messages-composer-wrap {
+      border-color: var(--border, rgba(0,0,0,.08));
+    }
+
+    #pg-messages .msg-row.them .msg-bubble {
+      background: var(--surface-3, #eef0f4);
+      color: var(--on-surface, #0d1117);
+    }
+
+    #pg-messages .msg-row.me .msg-bubble {
+      background: linear-gradient(145deg, var(--primary, #1a6ef5), var(--secondary, #7c3aed));
+      color: #fff;
+    }
+
+    #pg-messages .messages-context-menu {
+      background: var(--surface, #fff) !important;
+      border-color: var(--border-strong, rgba(0,0,0,.14)) !important;
+      box-shadow: 0 8px 30px rgba(13,17,23,.14) !important;
+      color: var(--on-surface, #0d1117);
+    }
+
+    #pg-messages .messages-context-menu button:hover {
+      background: var(--surface-2, #f6f7f9) !important;
+    }
+  `;
+
+  const mount = () => {
+    const head = document.head || document.documentElement;
+    if (!head) return;
+    if (!document.getElementById(style.id)) head.appendChild(style);
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mount, { once: true });
+  } else {
+    mount();
+  }
+})();
+
 // MESSAGING DB PATCH v43 — aligned to production messages schema
 // Production schema:
 //   messages(id BIGINT, room_id, sender_hash, direction, content, created_at)
@@ -11503,6 +11603,51 @@ document.addEventListener('click', (event) => {
       if (roomErr) throw roomErr;
       roomRows = Array.isArray(data) ? data : [];
     }
+
+    // Recovery for solo groups created by an older build that stored the room
+    // but failed to persist the creator's membership row. Because normal
+    // loading starts from message_room_members, those rooms would otherwise
+    // disappear after refresh. Reconcile only groups created by the current
+    // authenticated user, never unrelated rooms.
+    try {
+      const { data: ownedGroups, error: ownedGroupsError } = await sb
+        .from('message_rooms')
+        .select('room_id,type,name,description,created_by,created_at,updated_at,last_message_at')
+        .eq('created_by', S.userId)
+        .eq('type', 'group');
+      if (!ownedGroupsError && Array.isArray(ownedGroups)) {
+        const known = new Set(roomRows.map(r => String(r.room_id)));
+        const missingOwnedGroups = ownedGroups.filter(r => !known.has(String(r.room_id)));
+        for (const room of missingOwnedGroups) {
+          try {
+            const { error: repairError } = await sb
+              .from('message_room_members')
+              .upsert({ room_id: room.room_id, user_id: S.userId, role: 'owner' },
+                      { onConflict: 'room_id,user_id', ignoreDuplicates: true });
+            if (repairError) {
+              console.warn('[Messages] solo-group membership repair failed:', repairError);
+              continue;
+            }
+            // Keep the in-memory membership list aligned with the repaired
+            // database row so this room is included in the current render too.
+            memberships.push({
+              room_id: room.room_id,
+              role: 'owner',
+              archived: false,
+              muted: false,
+              pinned: false,
+              joined_at: room.created_at
+            });
+            roomRows.push(room);
+            roomIds.push(String(room.room_id));
+          } catch (repairErr) {
+            console.warn('[Messages] solo-group membership repair failed:', repairErr);
+          }
+        }
+      }
+    } catch (recoveryErr) {
+      console.warn('[Messages] owned-group recovery skipped:', recoveryErr?.message || recoveryErr);
+    }
     const roomMap = new Map(roomRows.map(r => [String(r.room_id), r]));
 
     const rooms = (memberships || [])
@@ -11617,9 +11762,7 @@ document.addEventListener('click', (event) => {
   }
 
   async function createDbGroup(data) {
-    // Use provided memberIds if available, otherwise fall back to selectedMembers
-    const memberIds = data.memberIds || Array.from(messagesState.selectedMembers || []);
-    const ids = memberIds
+    const ids = Array.from(messagesState.selectedMembers || [])
       .map(v => String(v))
       .filter(id => id && id !== String(S.userId))
       .slice(0, 10);
@@ -11630,7 +11773,37 @@ document.addEventListener('click', (event) => {
       p_member_ids: ids
     });
     if (error) throw error;
-    return String(roomId);
+
+    const normalizedRoomId = String(roomId);
+
+    // Hard guarantee: the creator must be a persisted room member. The
+    // conversation loader is membership-based, so a room without this row
+    // appears to vanish as soon as the page is refreshed. Use an idempotent
+    // upsert so this is safe whether the RPC already added the creator.
+    if (S.userId) {
+      const { error: memberError } = await sb
+        .from('message_room_members')
+        .upsert({
+          room_id: normalizedRoomId,
+          user_id: S.userId,
+          role: 'owner'
+        }, { onConflict: 'room_id,user_id', ignoreDuplicates: true });
+      if (memberError) {
+        // Do not hide a successfully-created group if the RPC already persisted
+        // the creator but the client cannot repeat the membership write.
+        const { data: existingMember, error: verifyError } = await sb
+          .from('message_room_members')
+          .select('room_id')
+          .eq('room_id', normalizedRoomId)
+          .eq('user_id', S.userId)
+          .maybeSingle();
+        if (verifyError || !existingMember) {
+          throw memberError;
+        }
+      }
+    }
+
+    return normalizedRoomId;
   }
 
   async function dbHandleMemberSearch(e) {
@@ -11710,59 +11883,24 @@ document.addEventListener('click', (event) => {
     const description = String($('group-desc')?.value || '').trim();
     if (!name) { msgToast('Group name is required.', '⚠️'); return; }
     if (name.length > 60) { msgToast('Group name is too long.', '⚠️'); return; }
-
-    const selectedMemberIds = Array.from(messagesState.selectedMembers || [])
+    
+    // A group may contain only its creator. The creator's membership is persisted
+    // explicitly below so the group survives reload even when no other member
+    // was selected. Additional members remain optional at creation.
+    const selectedMembers = Array.from(messagesState.selectedMembers || [])
       .filter(id => id && id !== String(S.userId));
-
-    // Separate: contacts (add directly) vs. random users (send invites)
-    const contactIds = [];
-    const inviteIds = [];
-    const existingConvs = new Map((messagesState.conversations || []).map(c => [String(c.id), c]));
-
-    selectedMemberIds.forEach(memberId => {
-      if (existingConvs.has(String(memberId))) {
-        contactIds.push(memberId); // Already have a conversation = contact → add directly
-      } else {
-        inviteIds.push(memberId); // No conversation = random user → send invite
-      }
-    });
 
     const submit = $('btn-submit-create-group');
     try {
       if (submit) { submit.disabled = true; submit.textContent = 'Creating…'; }
 
-      // Create group with direct contacts; zero direct members is valid.
-      const groupId = await createDbGroup({ name, description, memberIds: contactIds });
-      
-      // Send invites to random/non-contact users for this group
-      if (inviteIds.length > 0) {
-        const inviteRows = inviteIds.map(recipientId => ({
-          sender_id: S.userId,
-          recipient_id: recipientId,
-          message: `I added you to the group "${name}"`,
-          status: 'pending',
-          created_at: new Date().toISOString()
-        }));
-        const { error: inviteErr } = await sb.from('message_requests').insert(inviteRows);
-        if (inviteErr) console.warn('[Messages] group invite insert error:', inviteErr);
-      }
-
+      const groupId = await createDbGroup({ name, description });
       messagesState.selectedMembers = new Set();
       await loadDbConversations();
       dbRenderConversationList($('msg-search-input')?.value || '');
       closeCreateGroupModal();
       await openDbConversation(groupId, 'group');
-      
-      // Show different messages based on what happened
-      if (inviteIds.length > 0) {
-        const addedCount = contactIds.length;
-        const invitedCount = inviteIds.length;
-        msgToast(`Group created. ${addedCount} member${addedCount === 1 ? '' : 's'} added, ${invitedCount} invite${invitedCount === 1 ? '' : 's'} sent.`, '✓');
-      } else if (contactIds.length > 0) {
-        msgToast('Group created with your contacts.', '✓');
-      } else {
-        msgToast('Group created. Invites can be sent to members.', '✓');
-      }
+      msgToast('Group created successfully.', '✓');
     } catch (err) {
       console.error('[Messages] create group failed:', err);
       msgToast(err?.message || 'Could not create group.', '⚠️');
@@ -11996,9 +12134,16 @@ document.addEventListener('click', (event) => {
         dbRenderConversationList($('msg-search-input')?.value || '');
         if (action === 'archive' && String(messagesState.activeConvId) === String(roomId)) closeThread();
       } else if (action === 'delete') {
-        // Show confirmation before deleting
+        // Show the site's themed confirmation dialog before deleting.
         const convName = conv.name || conv.display_name || 'this conversation';
-        if (!confirm(`Delete "${convName}"? This cannot be undone.`)) return;
+        const confirmed = await showConfirmDialog({
+          title: `Delete "${convName}"?`,
+          body: 'This cannot be undone.',
+          confirmLabel: 'Delete',
+          cancelLabel: 'Cancel',
+          danger: true
+        });
+        if (!confirmed) return;
 
         const { error } = await sb
           .from('message_room_members')
@@ -12085,7 +12230,7 @@ document.addEventListener('click', (event) => {
         input.addEventListener('input', updateComposerButton);
       }
     } catch (e) {
-      console.error('[Messages DB v43] initialization failed:', e);
+      console.error('[Messages DB v44] initialization failed:', e);
       const rawMessage = String(e?.message || e || 'Unknown database error');
       const friendly = /relation .* does not exist|could not find the table|schema cache/i.test(rawMessage)
         ? 'Messages database tables are missing or Supabase schema cache needs refreshing.'
@@ -12136,7 +12281,7 @@ document.addEventListener('click', (event) => {
     }
   });
 
-  console.log('[Messages DB v43] production schema alignment ready ✓');
+  console.log('[Messages DB v44] production schema alignment ready ✓');
 })();
 
 /* ═════════════════════════════════════════════════════════════════════
