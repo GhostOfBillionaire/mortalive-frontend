@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-29-v156-smart-group-create'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-29-v157-group-zero-member'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -11709,6 +11709,8 @@ document.addEventListener('click', (event) => {
       msgToast('Sign in to create groups.', '🔒');
       return;
     }
+    // Zero direct members is valid: groups can be created by the owner
+    // first, with members/invites handled separately afterward.
 
     const name = String($('group-name')?.value || '').trim();
     const description = String($('group-desc')?.value || '').trim();
