@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-29-v155-group-fixes'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-29-v156-smart-group-create'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -5214,10 +5214,10 @@ function setupMessageEventListeners() {
     elements.groupDescInput.addEventListener('input', updateCharCounts);
   }
 
-  // Member search
-  if (elements.groupMembersInput) {
-    elements.groupMembersInput.addEventListener('input', handleMemberSearch);
-  }
+  // Member search is owned by the production DB messaging patch (v43/v156).
+  // Do not bind the legacy eligibility-only handler here: it would run after
+  // the DB handler and overwrite all-user search results with follow/Talk-only
+  // contacts. The DB handler is attached in capture phase during its init.
 
   // Message composer
   if (elements.composerSend) {
@@ -11187,6 +11187,7 @@ document.addEventListener('click', (event) => {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MESSAGING DB PATCH v43 — aligned to production messages schema
+// v156: smart group creation — existing chats join directly; random users receive invites; zero direct members is allowed.
 // Production schema:
 //   messages(id BIGINT, room_id, sender_hash, direction, content, created_at)
 //   message_rooms(room_id, type, name, description, ...)
@@ -11617,7 +11618,10 @@ document.addEventListener('click', (event) => {
   }
 
   async function createDbGroup(data) {
-    const ids = Array.from(messagesState.selectedMembers || [])
+    // `memberIds` deliberately accepts an empty array: the group creator is
+    // always added by the RPC, while zero additional direct members is valid
+    // when the selected people are all random/non-contact invite targets.
+    const ids = Array.from(data?.memberIds || [])
       .map(v => String(v))
       .filter(id => id && id !== String(S.userId))
       .slice(0, 10);
@@ -11628,6 +11632,7 @@ document.addEventListener('click', (event) => {
       p_member_ids: ids
     });
     if (error) throw error;
+    if (!roomId) throw new Error('Group was not created.');
     return String(roomId);
   }
 
@@ -11699,6 +11704,7 @@ document.addEventListener('click', (event) => {
 
   async function dbHandleCreateGroup(e) {
     e?.preventDefault?.();
+    e?.stopImmediatePropagation?.();
     if (S.isGuest || !S.userId || !sb) {
       msgToast('Sign in to create groups.', '🔒');
       return;
@@ -11708,26 +11714,88 @@ document.addEventListener('click', (event) => {
     const description = String($('group-desc')?.value || '').trim();
     if (!name) { msgToast('Group name is required.', '⚠️'); return; }
     if (name.length > 60) { msgToast('Group name is too long.', '⚠️'); return; }
-    
-    // Validate: groups require at least 1 member to be added (minimum 2 total: creator + 1)
-    const selectedMembers = Array.from(messagesState.selectedMembers || [])
-      .filter(id => id && id !== String(S.userId));
-    if (!selectedMembers.length) {
-      msgToast('Add at least 1 member to create a group.', '⚠️');
-      return;
-    }
+
+    const selectedMemberIds = Array.from(messagesState.selectedMembers || [])
+      .map(id => String(id))
+      .filter(id => id && id !== String(S.userId))
+      .slice(0, 10);
 
     const submit = $('btn-submit-create-group');
     try {
       if (submit) { submit.disabled = true; submit.textContent = 'Creating…'; }
 
-      const groupId = await createDbGroup({ name, description });
+      // Refresh the DB-backed direct conversations immediately before
+      // classification so an existing chat is always treated as a contact.
+      await loadDbConversations();
+
+      const directContactIds = new Set(
+        (messagesState.conversations || [])
+          .map(c => String(c.userId || c.id || ''))
+          .filter(Boolean)
+      );
+
+      const contactIds = [];
+      const inviteIds = [];
+      selectedMemberIds.forEach(id => {
+        if (directContactIds.has(id)) contactIds.push(id);
+        else inviteIds.push(id);
+      });
+
+      // Create the group with ONLY existing direct contacts. An empty array is
+      // intentional: the creator can create an otherwise empty group while
+      // random users receive message invites below.
+      const groupId = await createDbGroup({
+        name,
+        description,
+        memberIds: contactIds
+      });
+
+      // Random/non-contact users are not inserted into group membership.
+      // They receive ordinary pending message requests instead.
+      let invitedCount = 0;
+      if (inviteIds.length) {
+        const { data: pendingRows, error: pendingErr } = await sb
+          .from('message_requests')
+          .select('recipient_id')
+          .eq('sender_id', S.userId)
+          .eq('status', 'pending')
+          .in('recipient_id', inviteIds);
+        if (pendingErr) throw pendingErr;
+
+        const pending = new Set((pendingRows || []).map(r => String(r.recipient_id)));
+        const freshInviteIds = inviteIds.filter(id => !pending.has(String(id)));
+        if (freshInviteIds.length) {
+          const { error: inviteErr } = await sb.from('message_requests').insert(
+            freshInviteIds.map(recipientId => ({
+              sender_id: S.userId,
+              recipient_id: recipientId,
+              message: `I invited you to the group "${name}"`,
+              status: 'pending',
+              created_at: new Date().toISOString()
+            }))
+          );
+          if (inviteErr) throw inviteErr;
+          invitedCount = freshInviteIds.length;
+        }
+      }
+
       messagesState.selectedMembers = new Set();
       await loadDbConversations();
       dbRenderConversationList($('msg-search-input')?.value || '');
       closeCreateGroupModal();
       await openDbConversation(groupId, 'group');
-      msgToast('Group created successfully.', '✓');
+
+      if (contactIds.length && invitedCount) {
+        msgToast(`Group created. ${contactIds.length} member${contactIds.length === 1 ? '' : 's'} added, ${invitedCount} invite${invitedCount === 1 ? '' : 's'} sent.`, '✓');
+      } else if (contactIds.length) {
+        msgToast(`Group created with ${contactIds.length} contact${contactIds.length === 1 ? '' : 's'}.`, '✓');
+      } else if (invitedCount) {
+        msgToast(`Group created. ${invitedCount} invite${invitedCount === 1 ? '' : 's'} sent.`, '✓');
+      } else if (inviteIds.length) {
+        msgToast('Group created. Those users already have pending invites.', '✓');
+      } else {
+        msgToast('Group created. You can invite people anytime.', '✓');
+      }
     } catch (err) {
       console.error('[Messages] create group failed:', err);
       msgToast(err?.message || 'Could not create group.', '⚠️');
