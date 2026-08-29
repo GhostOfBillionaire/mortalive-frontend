@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-29-v163-reaction-inner-side'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-29-v164-message-actions-inside-bubble'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -13792,7 +13792,10 @@ document.addEventListener('click', (event) => {
       <button type="button" class="m160-mini-action" data-m160-quick-react title="React">😊</button>
       <button type="button" class="m160-mini-action" data-m160-more title="More">⋯</button>
     `;
-    row.appendChild(actions);
+    // Keep reply/react/more controls inside the bubble as an absolute
+    // overlay. Appending them to .msg-row makes them a normal flex child,
+    // which widens the message row and pushes the actual message inward.
+    bubble.appendChild(actions);
 
     oldTime?.classList.add('m160-time');
   }
@@ -14198,7 +14201,8 @@ document.addEventListener('click', (event) => {
     picker.className = 'm160-reaction-picker';
     picker.innerHTML = M160.emojiSet.slice(0, 12)
       .map(e => `<button type="button" data-m160-picker-emoji="${esc(e)}">${e}</button>`).join('');
-    row.appendChild(picker);
+    const bubble = row.querySelector('.msg-bubble');
+    (bubble || row).appendChild(picker);
     picker.addEventListener('click', async (event) => {
       const b = event.target.closest('[data-m160-picker-emoji]');
       if (!b) return;
