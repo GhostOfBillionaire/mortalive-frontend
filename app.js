@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-29-v164-message-actions-inside-bubble'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-29-v165-dynamic-island-search'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -14324,4 +14324,598 @@ document.addEventListener('click', (event) => {
   M160.ready = true;
   ensureComposerTools();
   console.log('[Messages v160] basic messaging features ready ✓');
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MORTALIVE DYNAMIC ISLAND SEARCH v165 — integrated search module
+   ═══════════════════════════════════════════════════════════════════════════ */
+/**
+ * Dynamic Island Search — Mortalive
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Replaces the in-feed mfe-feed-search bar with a polished, Apple Dynamic
+ * Island–inspired search pill in the topbar.
+ *
+ * Features:
+ *  • Live Supabase search: accounts (users) + posts (content/hashtags)
+ *  • Category filters: All | Users | Posts | Hashtags
+ *  • Recent search history (localStorage, last 8 terms)
+ *  • Keyboard navigation (↑ ↓ Enter Escape)
+ *  • Bridges to the existing MFE hashtag-filter machinery
+ *  • Graceful guest-mode fallback (no sign-in required to see UI)
+ *  • Spring animation pill expansion identical to Apple Dynamic Island
+ *
+ * Compatibility: works alongside existing mortaliveFeedEnhancements() IIFE
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+(function MortaliveDynamicSearch () {
+  'use strict';
+
+  /* ── constants ─────────────────────────────────────────── */
+  const HISTORY_KEY   = 'mortalive_search_hist_v2';
+  const HISTORY_MAX   = 8;
+  const DEBOUNCE_MS   = 230;
+  const MAX_USERS     = 5;
+  const MAX_POSTS     = 5;
+  const MAX_TAGS      = 6;
+
+  /* ── element refs ─────────────────────────────────────── */
+  const $ = id => document.getElementById(id);
+
+  /* ── state ─────────────────────────────────────────────── */
+  let _filter        = 'all';   // all | users | posts | tags
+  let _query         = '';
+  let _debounceTimer = null;
+  let _reqId         = 0;       // cancels stale fetch responses
+  let _selectedIdx   = -1;      // keyboard navigation cursor
+  let _resultItems   = [];      // flat list of rendered rows for keyboard nav
+  let _history       = loadHistory();
+  let _open          = false;
+
+  /* ─────────────────────────────────────────────────────────
+     HISTORY HELPERS
+  ───────────────────────────────────────────────────────── */
+  function loadHistory () {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]').slice(0, HISTORY_MAX); }
+    catch { return []; }
+  }
+  function saveHistory (term) {
+    if (!term || term.length < 2) return;
+    _history = [term, ..._history.filter(h => h !== term)].slice(0, HISTORY_MAX);
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(_history)); } catch {}
+  }
+  function clearHistory () {
+    _history = [];
+    try { localStorage.removeItem(HISTORY_KEY); } catch {}
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     SUPABASE BRIDGE
+  ───────────────────────────────────────────────────────── */
+  function sb ()    { return window.sb    || null; }
+  function getS ()  { return window.S     || {}; }
+  function isAuth() { const s = getS(); return !s.isGuest && !!s.userId; }
+
+  /** Search users from the accounts table */
+  async function searchUsers (q) {
+    const client = sb();
+    if (!client) return [];
+    try {
+      const { data } = await client
+        .from('accounts')
+        .select('id, username, display_name, avatar_emoji, avatar_url, crockroach_score')
+        .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
+        .order('crockroach_score', { ascending: false })
+        .limit(MAX_USERS);
+      return Array.isArray(data) ? data : [];
+    } catch (e) {
+      console.warn('[DiSearch] users error', e?.message);
+      return [];
+    }
+  }
+
+  /** Search public posts by content */
+  async function searchPosts (q) {
+    const client = sb();
+    if (!client || !isAuth()) return [];
+    try {
+      const { data } = await client
+        .from('posts')
+        .select('id, user_id, content, post_type, created_at, post_meta')
+        .eq('visibility', 'public')
+        .ilike('content', `%${q}%`)
+        .order('created_at', { ascending: false })
+        .limit(MAX_POSTS);
+      return Array.isArray(data) ? data : [];
+    } catch (e) {
+      console.warn('[DiSearch] posts error', e?.message);
+      return [];
+    }
+  }
+
+  /** Search hashtags from the hot-topics index (DOM + Supabase) */
+  async function searchTags (q) {
+    // Pull from the already-rendered hot-topics list first (fast)
+    const domTags = [];
+    document.querySelectorAll('#hot-topics [data-feed-hashtag]').forEach(el => {
+      const tag = el.dataset.feedHashtag || '';
+      if (tag.toLowerCase().includes(q.toLowerCase())) {
+        const count = el.querySelector('.topic-count')?.textContent || '';
+        domTags.push({ tag, count });
+      }
+    });
+
+    // Also query Supabase for broader results
+    const client = sb();
+    let sbTags = [];
+    if (client) {
+      try {
+        const { data } = await client
+          .from('posts')
+          .select('content')
+          .eq('visibility', 'public')
+          .ilike('content', `%#${q}%`)
+          .order('created_at', { ascending: false })
+          .limit(60);
+        if (Array.isArray(data)) {
+          const freq = {};
+          data.forEach(row => {
+            const matches = (row.content || '').match(/#([A-Za-z0-9_]{2,50})/g) || [];
+            matches.forEach(m => {
+              const t = m.slice(1).toLowerCase();
+              if (t.includes(q.toLowerCase())) {
+                freq[t] = (freq[t] || 0) + 1;
+              }
+            });
+          });
+          sbTags = Object.entries(freq)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, MAX_TAGS)
+            .map(([tag, count]) => ({ tag, count: count + ' posts' }));
+        }
+      } catch {}
+    }
+
+    // Merge, de-dupe
+    const merged = [...domTags];
+    sbTags.forEach(st => {
+      if (!merged.some(d => d.tag === st.tag)) merged.push(st);
+    });
+    return merged.slice(0, MAX_TAGS);
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     HIGHLIGHT HELPER
+  ───────────────────────────────────────────────────────── */
+  function esc (s) {
+    return String(s ?? '').replace(/[&<>"']/g, m =>
+      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+  }
+  function highlight (text, q) {
+    if (!q) return esc(text);
+    const rx = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    return esc(text).replace(rx, '<mark>$1</mark>');
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     RENDER HELPERS
+  ───────────────────────────────────────────────────────── */
+  function skeletonHTML () {
+    const row = () => `
+      <div class="di-skel-row">
+        <div class="skeleton di-skel-circle"></div>
+        <div class="di-skel-lines">
+          <div class="skeleton di-skel-line" style="width:55%"></div>
+          <div class="skeleton di-skel-line" style="width:35%"></div>
+        </div>
+      </div>`;
+    return row() + row() + row();
+  }
+
+  function userRowHTML (u, q) {
+    const avatar = u.avatar_url
+      ? `<img src="${esc(u.avatar_url)}" alt="" loading="lazy">`
+      : (u.avatar_emoji || '🦊');
+    const name   = highlight(u.display_name || u.username, q);
+    const handle = `@${esc(u.username)}`;
+    const score  = u.crockroach_score ? `🧲 ${Number(u.crockroach_score).toLocaleString()}` : '';
+    return `
+      <div class="di-result-row" role="option" data-di-type="user" data-di-id="${esc(u.id)}">
+        <div class="di-result-avatar">${avatar}</div>
+        <div class="di-result-body">
+          <div class="di-result-title">${name}</div>
+          <div class="di-result-sub">${handle}</div>
+        </div>
+        ${score ? `<span class="di-result-badge">${score}</span>` : ''}
+      </div>`;
+  }
+
+  function postRowHTML (p, q) {
+    const snippet = (p.content || '').replace(/#\S+/g, '').trim().slice(0, 90);
+    const tags    = ((p.content || '').match(/#([A-Za-z0-9_]+)/g) || []).slice(0, 3).join(' ');
+    const kind    = p.post_meta?.kind || p.post_type || 'text';
+    const icon    = kind === 'photo' ? '📷' : kind === 'poll' ? '📊' : kind === 'qna' ? '❓' : '💬';
+    return `
+      <div class="di-result-row" role="option" data-di-type="post" data-di-id="${esc(p.id)}">
+        <div class="di-result-avatar">${icon}</div>
+        <div class="di-result-body">
+          <div class="di-result-title">${highlight(snippet || '(no text)', q)}</div>
+          <div class="di-result-sub">${esc(tags)}</div>
+        </div>
+      </div>`;
+  }
+
+  function tagRowHTML (t, q) {
+    const trendIcon = '📈';
+    return `
+      <div class="di-result-row" role="option" data-di-type="hashtag" data-di-id="${esc(t.tag)}">
+        <div class="di-result-avatar">${trendIcon}</div>
+        <div class="di-result-body">
+          <div class="di-result-title">#${highlight(t.tag, q)}</div>
+          <div class="di-result-sub">${esc(String(t.count || ''))}</div>
+        </div>
+      </div>`;
+  }
+
+  function sectionHTML (label, rowsHTML) {
+    return `
+      <div class="di-section-head">
+        <span class="di-section-label">${label}</span>
+      </div>
+      ${rowsHTML}`;
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     SHOW / HIDE DROPDOWN
+  ───────────────────────────────────────────────────────── */
+  function openResults () {
+    const r = $('di-results');
+    if (!r) return;
+    r.classList.add('visible');
+    $('di-input')?.setAttribute('aria-expanded', 'true');
+    _open = true;
+  }
+  function closeResults () {
+    const r = $('di-results');
+    if (!r) return;
+    r.classList.remove('visible');
+    $('di-input')?.setAttribute('aria-expanded', 'false');
+    _selectedIdx = -1;
+    _resultItems = [];
+    _open = false;
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     RENDER RESULTS
+  ───────────────────────────────────────────────────────── */
+  function renderHistory () {
+    const r = $('di-results');
+    if (!r) return;
+    if (_history.length === 0) {
+      r.innerHTML = `
+        <div class="di-empty">
+          <div class="di-empty-icon">✨</div>
+          <div class="di-empty-text">Start typing to search</div>
+          <div class="di-empty-hint">Users · Posts · #Hashtags</div>
+        </div>`;
+    } else {
+      const rows = _history.map(h => `
+        <div class="di-result-row" role="option" data-di-type="history" data-di-id="${esc(h)}">
+          <div class="di-result-avatar">🕐</div>
+          <div class="di-result-body">
+            <div class="di-result-title">${esc(h)}</div>
+          </div>
+        </div>`).join('');
+      r.innerHTML = `
+        <div class="di-recent-row">
+          <span class="di-recent-label">Recent searches</span>
+          <span class="di-recent-clear-all" id="di-clear-hist">Clear all</span>
+        </div>
+        ${rows}`;
+      $('di-clear-hist')?.addEventListener('click', e => {
+        e.stopPropagation();
+        clearHistory();
+        renderHistory();
+        bindResultClicks();
+      });
+    }
+    openResults();
+    bindResultClicks();
+    refreshKeyboardList();
+  }
+
+  async function renderSearchResults (q) {
+    const r = $('di-results');
+    const pill = $('di-search-pill');
+    if (!r) return;
+
+    // Show skeleton immediately
+    r.innerHTML = skeletonHTML();
+    openResults();
+    pill?.classList.add('is-loading');
+
+    const reqId = ++_reqId;
+    const f = _filter;
+
+    let users = [], posts = [], tags = [];
+    try {
+      const promises = [];
+      if (f === 'all' || f === 'users') promises.push(searchUsers(q).then(d => { users = d; }));
+      if (f === 'all' || f === 'posts') promises.push(searchPosts(q).then(d => { posts = d; }));
+      if (f === 'all' || f === 'tags' || q.startsWith('#'))
+        promises.push(searchTags(q.replace(/^#/, '')).then(d => { tags = d; }));
+      await Promise.allSettled(promises);
+    } finally {
+      pill?.classList.remove('is-loading');
+    }
+
+    // Stale response? Discard.
+    if (reqId !== _reqId) return;
+
+    const hasAny = users.length || posts.length || tags.length;
+    if (!hasAny) {
+      r.innerHTML = `
+        <div class="di-empty">
+          <div class="di-empty-icon">🔍</div>
+          <div class="di-empty-text">No results for &ldquo;${esc(q)}&rdquo;</div>
+          <div class="di-empty-hint">Try a different word, handle, or #hashtag</div>
+        </div>`;
+      openResults();
+      bindResultClicks();
+      return;
+    }
+
+    let html = '';
+    if (users.length) html += sectionHTML('👤 Users',    users.map(u => userRowHTML(u, q)).join(''));
+    if (posts.length) html += sectionHTML('💬 Posts',    posts.map(p => postRowHTML(p, q)).join(''));
+    if (tags.length)  html += sectionHTML('#️⃣ Hashtags', tags.map(t => tagRowHTML(t, q)).join(''));
+
+    r.innerHTML = html;
+    openResults();
+    bindResultClicks();
+    refreshKeyboardList();
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     CLICK HANDLERS FOR RESULT ROWS
+  ───────────────────────────────────────────────────────── */
+  function bindResultClicks () {
+    $('di-results')?.querySelectorAll('[data-di-type]').forEach(row => {
+      row.addEventListener('click', () => selectRow(row));
+    });
+  }
+
+  function selectRow (row) {
+    const type = row.dataset.diType;
+    const id   = row.dataset.diId;
+
+    switch (type) {
+      case 'history':
+        // Re-run that search
+        $('di-input').value = id;
+        _query = id;
+        updatePillState();
+        scheduleSearch(0);
+        break;
+
+      case 'user':
+        saveHistory(_query);
+        closeResults();
+        clearPill();
+        // Navigate to user's profile via the existing app.js profile viewer
+        if (typeof window.showProfile === 'function') {
+          window.showProfile(id);
+        } else {
+          // Fallback: dispatch a custom event that app.js can listen to
+          document.dispatchEvent(new CustomEvent('mortalive-view-profile', { detail: { userId: id } }));
+        }
+        break;
+
+      case 'post':
+        saveHistory(_query);
+        closeResults();
+        clearPill();
+        if (typeof window.mortaliveOpenPostViewer === 'function') {
+          window.mortaliveOpenPostViewer(id);
+        }
+        break;
+
+      case 'hashtag':
+        saveHistory(`#${id}`);
+        closeResults();
+        // Set the query in the hidden mfe feed-search-input so the existing
+        // MFE module's hash-filter logic fires exactly as normal
+        const fsi = $('feed-search-input');
+        if (fsi) {
+          fsi.value = `#${id}`;
+          fsi.dispatchEvent(new Event('input', { bubbles: true }));
+        } else {
+          // MFE not ready yet — expose and call setHashFilter if accessible
+          if (typeof window.mortaliveSetHashFilter === 'function') {
+            window.mortaliveSetHashFilter(id);
+          }
+        }
+        // Mirror in the topbar input as a visual cue
+        $('di-input').value = `#${id}`;
+        _query = `#${id}`;
+        updatePillState();
+        break;
+    }
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     KEYBOARD NAVIGATION  ↑  ↓  Enter  Escape
+  ───────────────────────────────────────────────────────── */
+  function refreshKeyboardList () {
+    _resultItems = Array.from($('di-results')?.querySelectorAll('[data-di-type]') || []);
+    _selectedIdx = -1;
+  }
+
+  function moveSelection (delta) {
+    if (!_resultItems.length) return;
+    _resultItems[_selectedIdx]?.classList.remove('keyboard-selected');
+    _selectedIdx = Math.max(0, Math.min(_resultItems.length - 1,
+      _selectedIdx === -1 ? (delta > 0 ? 0 : _resultItems.length - 1)
+                          : _selectedIdx + delta));
+    const el = _resultItems[_selectedIdx];
+    el?.classList.add('keyboard-selected');
+    el?.scrollIntoView({ block: 'nearest' });
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     PILL STATE
+  ───────────────────────────────────────────────────────── */
+  function updatePillState () {
+    const pill = $('di-search-pill');
+    if (!pill) return;
+    const hasVal = _query.length > 0;
+    pill.classList.toggle('has-value', hasVal);
+  }
+
+  function clearPill () {
+    const inp = $('di-input');
+    if (inp) inp.value = '';
+    _query = '';
+    $('di-search-pill')?.classList.remove('has-value', 'is-focused', 'is-loading');
+    closeResults();
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     DEBOUNCED SEARCH TRIGGER
+  ───────────────────────────────────────────────────────── */
+  function scheduleSearch (delay = DEBOUNCE_MS) {
+    clearTimeout(_debounceTimer);
+    _debounceTimer = setTimeout(() => {
+      if (_query.length >= 1) {
+        renderSearchResults(_query);
+      } else {
+        renderHistory();
+      }
+    }, delay);
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     PAGE VISIBILITY OBSERVER
+     Show/hide the whole search wrap depending on active page
+  ───────────────────────────────────────────────────────── */
+  function observeActivePage () {
+    const wrap   = $('di-search-wrap');
+    const feed   = $('pg-feed');
+    if (!wrap || !feed) return;
+
+    const sync = () => {
+      const onFeed = feed.classList.contains('active');
+      wrap.style.display = onFeed ? '' : 'none';
+      if (!onFeed) closeResults();
+    };
+
+    sync();
+    new MutationObserver(sync).observe(feed, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     SUPPRESS IN-FEED SEARCH (mfe creates it dynamically)
+     Watch for the old #feed-search-wrap and hide it the moment
+     it appears — our topbar search replaces it completely.
+  ───────────────────────────────────────────────────────── */
+  function suppressLegacySearch () {
+    const hide = el => { if (el) el.style.display = 'none'; };
+    hide($('feed-search-wrap'));
+
+    // MutationObserver catches it being injected later
+    new MutationObserver(muts => {
+      muts.forEach(m => m.addedNodes.forEach(n => {
+        if (n.nodeType !== 1) return;
+        if (n.id === 'feed-search-wrap') hide(n);
+        n.querySelectorAll?.('#feed-search-wrap').forEach(hide);
+      }));
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     INIT
+  ───────────────────────────────────────────────────────── */
+  function init () {
+    observeActivePage();
+    suppressLegacySearch();
+
+    const pill    = $('di-search-pill');
+    const input   = $('di-input');
+    const clearBtn= $('di-clear');
+    const results = $('di-results');
+    const chips   = $('di-chips');
+
+    if (!input) { console.warn('[DiSearch] #di-input not found'); return; }
+
+    /* ── Input events ── */
+    input.addEventListener('focus', () => {
+      pill?.classList.add('is-focused');
+      if (_query.length === 0) renderHistory();
+      else openResults();
+    });
+
+    input.addEventListener('input', () => {
+      _query = input.value.trim();
+      updatePillState();
+      scheduleSearch();
+    });
+
+    input.addEventListener('keydown', e => {
+      switch (e.key) {
+        case 'ArrowDown': e.preventDefault(); moveSelection(+1); break;
+        case 'ArrowUp':   e.preventDefault(); moveSelection(-1); break;
+        case 'Enter':
+          if (_selectedIdx >= 0 && _resultItems[_selectedIdx]) {
+            e.preventDefault();
+            selectRow(_resultItems[_selectedIdx]);
+          }
+          break;
+        case 'Escape':
+          clearPill();
+          input.blur();
+          break;
+      }
+    });
+
+    /* ── Clear button ── */
+    clearBtn?.addEventListener('click', () => {
+      clearPill();
+      input.focus();
+      // Also reset the legacy MFE search
+      const fsi = $('feed-search-input');
+      if (fsi) { fsi.value = ''; fsi.dispatchEvent(new Event('input', { bubbles: true })); }
+    });
+
+    /* ── Filter chips ── */
+    chips?.addEventListener('click', e => {
+      const chip = e.target.closest('[data-di-filter]');
+      if (!chip) return;
+      chips.querySelectorAll('.di-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      _filter = chip.dataset.diFilter;
+      if (_query) scheduleSearch(0);
+    });
+
+    /* ── Click outside to close ── */
+    document.addEventListener('click', e => {
+      if (!$('di-search-wrap')?.contains(e.target)) {
+        pill?.classList.remove('is-focused');
+        closeResults();
+      }
+    }, true);
+
+    /* ── Pill click (focuses input) ── */
+    pill?.addEventListener('click', () => input.focus());
+
+    console.log('[DiSearch] Dynamic Island Search ready ✓');
+  }
+
+  /* ─────────────────────────────────────────────────────────
+     BOOT
+  ───────────────────────────────────────────────────────── */
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(init, 400), { once: true });
+  } else {
+    setTimeout(init, 400);
+  }
+
 })();
