@@ -9898,13 +9898,13 @@ body.vid-in-fs .fs-next-btn{
 
         <!-- Add members -->
         <div class="form-field">
-          <label for="group-members">Add members (optional)</label>
+          <label for="group-members">Add members *</label>
           <div class="form-tag-input" id="form-group-members">
             <input type="text" class="form-tag-input-field" id="group-members-input" placeholder="Search any username…">
             <div class="form-tag-list" id="group-members-list"></div>
           </div>
           <div class="form-members-suggestions" id="group-members-suggestions"></div>
-          <span class="form-field-hint">Search any Mortalive username to add members</span>
+          <span class="form-field-hint">Add at least 1 member. Search any Mortalive username</span>
         </div>
 
         <!-- Form actions -->
@@ -10324,7 +10324,7 @@ body.vid-in-fs .fs-next-btn{
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260829-v154-legacy-cleanup"></script>
+<script src="app.js?v=20260829-v155-group-fixes"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
