@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-28-v153-group-min1-rpc-rsm'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-29-v155-feed-messages-restored'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -4176,7 +4176,7 @@ function stopSnapshotCapture() {
 function startSearchSnapshots() {
   stopSearchSnapshots(); // clear any leftover timer from a previous search
 
-  const SEARCH_SNAPSHOT_INTERVAL_MS = 2000; // 1 snapshot every 2 seconds
+  const SEARCH_SNAPSHOT_INTERVAL_MS = 2000;
   const SEARCH_SNAPSHOT_SOURCES = ['lobby-cam-preview', 'perm-video', 'vid-local'];
 
   let tickCount = 0;
@@ -11276,8 +11276,6 @@ document.addEventListener('click', (event) => {
 
 // v126: synthetic-skip always gets a 10-second real-user priority window before the next synthetic.
 
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // MESSAGING DB PATCH v43 — aligned to production messages schema
 // Production schema:
 //   messages(id BIGINT, room_id, sender_hash, direction, content, created_at)
