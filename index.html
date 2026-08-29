@@ -8993,12 +8993,37 @@ body.vid-in-fs .fs-next-btn{
 
 /* Message actions + media */
 #pg-messages .m160-message-row{position:relative;}
-#pg-messages .m160-message-actions{display:flex;gap:4px;opacity:0;transition:opacity .14s;margin-top:3px;}
+#pg-messages .msg-bubble{position:relative;}
+#pg-messages .m160-message-actions{
+  position:absolute;
+  z-index:40;
+  bottom:5px;
+  display:flex;
+  gap:4px;
+  opacity:0;
+  transition:opacity .14s;
+  margin:0;
+  padding:2px;
+  border-radius:999px;
+  background:rgba(255,255,255,.92);
+  box-shadow:0 2px 8px rgba(0,0,0,.08);
+  border:1px solid var(--border);
+  pointer-events:none;
+}
 #pg-messages .msg-row:hover .m160-message-actions,
-#pg-messages .m160-message-actions:focus-within{opacity:1;}
+#pg-messages .m160-message-actions:focus-within{
+  opacity:1;
+  pointer-events:auto;
+}
+#pg-messages .msg-row.them .m160-message-actions{
+  right:5px;
+}
+#pg-messages .msg-row.me .m160-message-actions{
+  left:5px;
+}
 #pg-messages .m160-mini-action{
-  width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
-  background:var(--surface-2);border:1px solid var(--border);color:var(--on-surface-3);font-size:13px;
+  width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+  background:transparent;border:0;color:var(--on-surface-3);font-size:12px;
 }
 #pg-messages .m160-mini-action:hover{background:var(--primary-alpha);color:var(--primary);}
 #pg-messages .m160-message-menu{
@@ -9028,7 +9053,7 @@ body.vid-in-fs .fs-next-btn{
   color:var(--on-surface-2);font-size:11px;
 }
 #pg-messages .m160-reaction-chip.mine{background:var(--primary-alpha);border-color:rgba(26,110,245,.25);color:var(--primary);}
-#pg-messages .m160-reaction-picker{
+#pg-messages .msg-bubble > .m160-reaction-picker{
   position:absolute!important;
   bottom:calc(100% + 6px)!important;
   z-index:9999!important;
@@ -9051,11 +9076,11 @@ body.vid-in-fs .fs-next-btn{
    incoming/left bubbles -> menu extends rightward from the bubble;
    own/right bubbles -> menu extends leftward from the bubble.
    It never opens into the page edge / outer side. */
-#pg-messages .msg-row:not(.me) .m160-reaction-picker{
+#pg-messages .msg-row:not(.me) .msg-bubble > .m160-reaction-picker{
   left:0!important;
   right:auto!important;
 }
-#pg-messages .msg-row.me .m160-reaction-picker{
+#pg-messages .msg-row.me .msg-bubble > .m160-reaction-picker{
   left:auto!important;
   right:0!important;
 }
@@ -10529,7 +10554,7 @@ body.vid-in-fs .fs-next-btn{
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260829-v163-reaction-inner-side"></script>
+<script src="app.js?v=20260829-v164-message-actions-inside-bubble"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -11077,5 +11102,18 @@ body.vid-in-fs .fs-next-btn{
 #pg-messages .m160-reaction-picker{
   contain:layout paint;
   transform:none!important;
+}
+</style>
+
+<style id="m163-message-action-inner-fix">
+@media(max-width:720px){
+  #pg-messages .m160-message-actions{
+    opacity:1;
+    pointer-events:auto;
+    gap:3px;
+    bottom:4px;
+  }
+  #pg-messages .msg-row.them .m160-message-actions{right:4px;}
+  #pg-messages .msg-row.me .m160-message-actions{left:4px;}
 }
 </style>
