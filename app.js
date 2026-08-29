@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-29-v158-group-invites-first-app'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-29-v160-basic-messaging'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -5751,7 +5751,7 @@ function closeThread() {
 // ━━━━━━━━━━━━━━━━━ MESSAGE SENDING ━━━━━━━━━━━━━━━━━
 
 // NOTE: window.sendMessage is replaced by dbSendMessage() in the
-// "MESSAGING DB PATCH v44" block below. This stub is a safety fallback
+// "MESSAGING DB PATCH v43" block below. This stub is a safety fallback
 // only (e.g. guest / no-Supabase context before the patch activates).
 async function sendMessage() {
   const input = $('msg-composer-input');
@@ -5794,7 +5794,7 @@ function openThreadMenu(e) {
 
   menu.addEventListener('click', (e) => {
     const action = e.target.dataset.action;
-    handleConvAction(messagesState.activeConvId, action);
+    window.handleConvAction?.(messagesState.activeConvId, action);
     menu.remove();
   });
 
@@ -5822,7 +5822,7 @@ function openThreadMenu(e) {
   }, 0);
 }
 
-async function handleConvAction(convId, action) {
+function handleConvAction(convId, action) {
   switch (action) {
     case 'mute':
       // TODO: Mute notifications
@@ -5839,21 +5839,14 @@ async function handleConvAction(convId, action) {
       closeThread();
       showToast('📦 Conversation archived');
       break;
-    case 'delete': {
-      const confirmed = await showConfirmDialog({
-        title: 'Delete conversation?',
-        body: 'This conversation will be removed from your Messages list.',
-        confirmLabel: 'Delete',
-        cancelLabel: 'Cancel',
-        danger: true
-      });
-      if (!confirmed) return;
-      messagesState.activeConvId = null;
-      renderConversationList();
-      closeThread();
-      showToast('🗑️ Conversation deleted');
+    case 'delete':
+      if (confirm('Delete this conversation?')) {
+        messagesState.activeConvId = null;
+        renderConversationList();
+        closeThread();
+        showToast('🗑️ Conversation deleted');
+      }
       break;
-    }
   }
 }
 
@@ -11193,99 +11186,6 @@ document.addEventListener('click', (event) => {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════════════════════
-// MESSAGES VISUAL THEME PATCH v158 — keep Messages visually aligned with the
-// main Mortalive site palette used by index.html. This is intentionally injected
-// from app.js so the single-file JS build remains deployable without requiring a
-// second manual CSS edit. The selector is scoped to #pg-messages and is idempotent.
-// ═══════════════════════════════════════════════════════════════════════════════
-(function installMortaliveMessagesThemeV158() {
-  'use strict';
-  if (typeof document === 'undefined') return;
-  if (document.getElementById('mortalive-messages-theme-v158')) return;
-
-  const style = document.createElement('style');
-  style.id = 'mortalive-messages-theme-v158';
-  style.textContent = `
-    #pg-messages {
-      --msg-bg: var(--surface, #ffffff);
-      --msg-bg-2: var(--surface-2, #f6f7f9);
-      --msg-bg-3: var(--surface-3, #eef0f4);
-      --msg-bg-4: rgba(26,110,245,.075);
-      --msg-text: var(--on-surface, #0d1117);
-      --msg-text-2: var(--on-surface-2, #3d4451);
-      --msg-text-3: var(--on-surface-3, #6b7280);
-      --msg-blue: var(--primary, #1a6ef5);
-      --msg-blue-dim: var(--primary-alpha, rgba(26,110,245,.12));
-      --msg-blue-glow: rgba(26,110,245,.18);
-      --msg-border: var(--border, rgba(0,0,0,.08));
-      --msg-border-2: var(--border-strong, rgba(0,0,0,.14));
-      --msg-shadow: 0 4px 20px rgba(13,17,23,.10);
-      --msg-shadow-lg: 0 12px 40px rgba(13,17,23,.16);
-    }
-
-    #pg-messages .messages-modal-overlay {
-      background: rgba(13,17,23,.38);
-      backdrop-filter: blur(3px);
-      -webkit-backdrop-filter: blur(3px);
-    }
-
-    #pg-messages .messages-cta-btn:hover,
-    #pg-messages .messages-composer-send:hover:not(:disabled) {
-      background: var(--primary-dark, #1459cc);
-    }
-
-    #pg-messages .messages-composer-hint {
-      background: var(--primary-alpha, rgba(26,110,245,.12));
-      border-left-color: var(--primary, #1a6ef5);
-    }
-
-    #pg-messages .messages-online-dot {
-      border-color: var(--surface-2, #f6f7f9);
-    }
-
-    #pg-messages .messages-modal,
-    #pg-messages .messages-modal-header,
-    #pg-messages .messages-thread-header,
-    #pg-messages .messages-composer-wrap {
-      border-color: var(--border, rgba(0,0,0,.08));
-    }
-
-    #pg-messages .msg-row.them .msg-bubble {
-      background: var(--surface-3, #eef0f4);
-      color: var(--on-surface, #0d1117);
-    }
-
-    #pg-messages .msg-row.me .msg-bubble {
-      background: linear-gradient(145deg, var(--primary, #1a6ef5), var(--secondary, #7c3aed));
-      color: #fff;
-    }
-
-    #pg-messages .messages-context-menu {
-      background: var(--surface, #fff) !important;
-      border-color: var(--border-strong, rgba(0,0,0,.14)) !important;
-      box-shadow: 0 8px 30px rgba(13,17,23,.14) !important;
-      color: var(--on-surface, #0d1117);
-    }
-
-    #pg-messages .messages-context-menu button:hover {
-      background: var(--surface-2, #f6f7f9) !important;
-    }
-  `;
-
-  const mount = () => {
-    const head = document.head || document.documentElement;
-    if (!head) return;
-    if (!document.getElementById(style.id)) head.appendChild(style);
-  };
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', mount, { once: true });
-  } else {
-    mount();
-  }
-})();
-
 // MESSAGING DB PATCH v43 — aligned to production messages schema
 // Production schema:
 //   messages(id BIGINT, room_id, sender_hash, direction, content, created_at)
@@ -11542,23 +11442,22 @@ document.addEventListener('click', (event) => {
       if (existingErr) throw existingErr;
 
       const pending = new Set((existing || []).map(r => String(r.recipient_id)));
-      const rows = recipientIds
-        .filter(id => !pending.has(String(id)))
-        .map(id => ({
-          sender_id: S.userId,
-          recipient_id: id,
-          message: null,
-          status: 'pending'
-        }));
+      const newRecipients = recipientIds.filter(id => !pending.has(String(id)));
 
-      if (!rows.length) {
+      if (!newRecipients.length) {
         closeRandomUserMessageModal();
         msgToast('Those users already have pending invites.', 'ℹ️');
         return;
       }
 
-      const { error } = await sb.from('message_requests').insert(rows);
-      if (error) throw error;
+      for (const recipientId of newRecipients) {
+        const { error } = await sb.rpc('send_message_request', {
+          p_recipient_id: recipientId,
+          p_room_id: null,
+          p_message: null
+        });
+        if (error) throw error;
+      }
 
       // Refresh conversation list so invited users appear as pending
       try {
@@ -11602,51 +11501,6 @@ document.addEventListener('click', (event) => {
         .in('room_id', roomIds);
       if (roomErr) throw roomErr;
       roomRows = Array.isArray(data) ? data : [];
-    }
-
-    // Recovery for solo groups created by an older build that stored the room
-    // but failed to persist the creator's membership row. Because normal
-    // loading starts from message_room_members, those rooms would otherwise
-    // disappear after refresh. Reconcile only groups created by the current
-    // authenticated user, never unrelated rooms.
-    try {
-      const { data: ownedGroups, error: ownedGroupsError } = await sb
-        .from('message_rooms')
-        .select('room_id,type,name,description,created_by,created_at,updated_at,last_message_at')
-        .eq('created_by', S.userId)
-        .eq('type', 'group');
-      if (!ownedGroupsError && Array.isArray(ownedGroups)) {
-        const known = new Set(roomRows.map(r => String(r.room_id)));
-        const missingOwnedGroups = ownedGroups.filter(r => !known.has(String(r.room_id)));
-        for (const room of missingOwnedGroups) {
-          try {
-            const { error: repairError } = await sb
-              .from('message_room_members')
-              .upsert({ room_id: room.room_id, user_id: S.userId, role: 'owner' },
-                      { onConflict: 'room_id,user_id', ignoreDuplicates: true });
-            if (repairError) {
-              console.warn('[Messages] solo-group membership repair failed:', repairError);
-              continue;
-            }
-            // Keep the in-memory membership list aligned with the repaired
-            // database row so this room is included in the current render too.
-            memberships.push({
-              room_id: room.room_id,
-              role: 'owner',
-              archived: false,
-              muted: false,
-              pinned: false,
-              joined_at: room.created_at
-            });
-            roomRows.push(room);
-            roomIds.push(String(room.room_id));
-          } catch (repairErr) {
-            console.warn('[Messages] solo-group membership repair failed:', repairErr);
-          }
-        }
-      }
-    } catch (recoveryErr) {
-      console.warn('[Messages] owned-group recovery skipped:', recoveryErr?.message || recoveryErr);
     }
     const roomMap = new Map(roomRows.map(r => [String(r.room_id), r]));
 
@@ -11762,7 +11616,9 @@ document.addEventListener('click', (event) => {
   }
 
   async function createDbGroup(data) {
-    const ids = Array.from(messagesState.selectedMembers || [])
+    // Use provided memberIds if available, otherwise fall back to selectedMembers
+    const memberIds = data.memberIds || Array.from(messagesState.selectedMembers || []);
+    const ids = memberIds
       .map(v => String(v))
       .filter(id => id && id !== String(S.userId))
       .slice(0, 10);
@@ -11773,37 +11629,7 @@ document.addEventListener('click', (event) => {
       p_member_ids: ids
     });
     if (error) throw error;
-
-    const normalizedRoomId = String(roomId);
-
-    // Hard guarantee: the creator must be a persisted room member. The
-    // conversation loader is membership-based, so a room without this row
-    // appears to vanish as soon as the page is refreshed. Use an idempotent
-    // upsert so this is safe whether the RPC already added the creator.
-    if (S.userId) {
-      const { error: memberError } = await sb
-        .from('message_room_members')
-        .upsert({
-          room_id: normalizedRoomId,
-          user_id: S.userId,
-          role: 'owner'
-        }, { onConflict: 'room_id,user_id', ignoreDuplicates: true });
-      if (memberError) {
-        // Do not hide a successfully-created group if the RPC already persisted
-        // the creator but the client cannot repeat the membership write.
-        const { data: existingMember, error: verifyError } = await sb
-          .from('message_room_members')
-          .select('room_id')
-          .eq('room_id', normalizedRoomId)
-          .eq('user_id', S.userId)
-          .maybeSingle();
-        if (verifyError || !existingMember) {
-          throw memberError;
-        }
-      }
-    }
-
-    return normalizedRoomId;
+    return String(roomId);
   }
 
   async function dbHandleMemberSearch(e) {
@@ -11883,24 +11709,68 @@ document.addEventListener('click', (event) => {
     const description = String($('group-desc')?.value || '').trim();
     if (!name) { msgToast('Group name is required.', '⚠️'); return; }
     if (name.length > 60) { msgToast('Group name is too long.', '⚠️'); return; }
-    
-    // A group may contain only its creator. The creator's membership is persisted
-    // explicitly below so the group survives reload even when no other member
-    // was selected. Additional members remain optional at creation.
-    const selectedMembers = Array.from(messagesState.selectedMembers || [])
+
+    const selectedMemberIds = Array.from(messagesState.selectedMembers || [])
       .filter(id => id && id !== String(S.userId));
+
+    // Separate: contacts (add directly) vs. random users (send invites)
+    const contactIds = [];
+    const inviteIds = [];
+    const existingConvs = new Map((messagesState.conversations || []).map(c => [String(c.id), c]));
+
+    selectedMemberIds.forEach(memberId => {
+      if (existingConvs.has(String(memberId))) {
+        contactIds.push(memberId); // Already have a conversation = contact → add directly
+      } else {
+        inviteIds.push(memberId); // No conversation = random user → send invite
+      }
+    });
 
     const submit = $('btn-submit-create-group');
     try {
       if (submit) { submit.disabled = true; submit.textContent = 'Creating…'; }
 
-      const groupId = await createDbGroup({ name, description });
+      // Create group with direct contacts; zero direct members is valid.
+      const groupId = await createDbGroup({ name, description, memberIds: contactIds });
+
+      // Verify/repair the creator's owner membership so a newly-created group
+      // remains visible after refresh on every production deployment.
+      const { error: ownerErr } = await sb.rpc('ensure_message_room_owner', {
+        p_room_id: groupId
+      });
+      if (ownerErr) throw ownerErr;
+
+      // Random/non-contact users are invited to this exact group. They are not
+      // added as members until they accept the invitation.
+      if (inviteIds.length > 0) {
+        const inviteRows = inviteIds.map(recipientId => ({
+          sender_id: S.userId,
+          recipient_id: recipientId,
+          room_id: groupId,
+          message: `I invited you to join the group "${name}"`,
+          status: 'pending',
+          created_at: new Date().toISOString()
+        }));
+        const { error: inviteErr } = await sb.from('message_requests').insert(inviteRows);
+        if (inviteErr) throw inviteErr;
+      }
+
       messagesState.selectedMembers = new Set();
       await loadDbConversations();
       dbRenderConversationList($('msg-search-input')?.value || '');
       closeCreateGroupModal();
       await openDbConversation(groupId, 'group');
-      msgToast('Group created successfully.', '✓');
+      
+      // Show different messages based on what happened
+      if (inviteIds.length > 0) {
+        const addedCount = contactIds.length;
+        const invitedCount = inviteIds.length;
+        msgToast(`Group created. ${addedCount} member${addedCount === 1 ? '' : 's'} added, ${invitedCount} invite${invitedCount === 1 ? '' : 's'} sent.`, '✓');
+      } else if (contactIds.length > 0) {
+        msgToast('Group created with your contacts.', '✓');
+      } else {
+        msgToast('Group created. Invites can be sent to members.', '✓');
+      }
     } catch (err) {
       console.error('[Messages] create group failed:', err);
       msgToast(err?.message || 'Could not create group.', '⚠️');
@@ -12114,52 +11984,303 @@ document.addEventListener('click', (event) => {
   async function dbHandleConvAction(roomId, action) {
     const conv = [...(messagesState.groups || []), ...(messagesState.conversations || [])]
       .find(c => String(c.id) === String(roomId));
-    if (!conv || !sb) return;
+    if (!conv || !sb || !S.userId) return;
 
     try {
       if (['archive','unarchive','mute','unmute','pin','unpin'].includes(action)) {
         const patch = {
-          ...(action.includes('archive') ? { archived: action === 'archive' } : {}),
-          ...(action.includes('mute') ? { muted: action === 'mute' } : {}),
-          ...(action.includes('pin') ? { pinned: action === 'pin' } : {})
+          ...(action === 'archive' || action === 'unarchive' ? { archived: action === 'archive' } : {}),
+          ...(action === 'mute' || action === 'unmute' ? { muted: action === 'mute' } : {}),
+          ...(action === 'pin' || action === 'unpin' ? { pinned: action === 'pin' } : {})
         };
-        const { error } = await sb
-          .from('message_room_members')
-          .update(patch)
-          .eq('room_id', roomId)
-          .eq('user_id', S.userId);
+        const { error } = await sb.from('message_room_members')
+          .update(patch).eq('room_id', roomId).eq('user_id', S.userId);
         if (error) throw error;
-
         Object.assign(conv, patch);
         dbRenderConversationList($('msg-search-input')?.value || '');
         if (action === 'archive' && String(messagesState.activeConvId) === String(roomId)) closeThread();
-      } else if (action === 'delete') {
-        // Show the site's themed confirmation dialog before deleting.
-        const convName = conv.name || conv.display_name || 'this conversation';
-        const confirmed = await showConfirmDialog({
-          title: `Delete "${convName}"?`,
-          body: 'This cannot be undone.',
-          confirmLabel: 'Delete',
-          cancelLabel: 'Cancel',
-          danger: true
-        });
-        if (!confirmed) return;
+        msgToast(
+          action === 'archive' ? 'Conversation archived.' :
+          action === 'unarchive' ? 'Conversation restored.' :
+          action === 'mute' ? 'Notifications muted.' :
+          action === 'unmute' ? 'Notifications unmuted.' :
+          action === 'pin' ? 'Conversation pinned.' : 'Conversation unpinned.',
+          '✓'
+        );
+        return;
+      }
 
-        const { error } = await sb
-          .from('message_room_members')
-          .delete()
-          .eq('room_id', roomId)
-          .eq('user_id', S.userId);
+      if (action === 'mark_unread') {
+        conv.unread = 1;
+        dbRenderConversationList($('msg-search-input')?.value || '');
+        msgToast('Marked as unread.', '✓');
+        return;
+      }
+
+      if (action === 'view_members') {
+        const members = conv.members || [];
+        const ids = members.map(m => m.user_id).filter(Boolean);
+        let profiles = [];
+        if (ids.length) {
+          const { data, error } = await sb.from('accounts')
+            .select('id,username,display_name,avatar_url').in('id', ids);
+          if (error) throw error;
+          profiles = data || [];
+        }
+        const pmap = new Map(profiles.map(p => [String(p.id), p]));
+        const body = members.map(m => {
+          const p = pmap.get(String(m.user_id)) || {};
+          return `<div class="m159-member-row">
+            <div class="m159-member-avatar">${p.avatar_url ? `<img src="${escapeHtml(p.avatar_url)}" alt="">` : '👤'}</div>
+            <div><strong>${escapeHtml(p.display_name || p.username || 'Member')}</strong>
+              <small>${p.username ? '@' + escapeHtml(p.username) : ''}${m.role === 'owner' ? ' · Owner' : m.role === 'admin' ? ' · Admin' : ''}</small>
+            </div>
+          </div>`;
+        }).join('');
+        openM159Dialog('Group members', body || '<div class="m159-request-meta">No members found.</div>');
+        return;
+      }
+
+      if (action === 'add_people') {
+        if (conv.type === 'group') openM159GroupPeopleDialog(conv);
+        return;
+      }
+
+      if (action === 'leave_group') {
+        if (conv.type !== 'group') return;
+        if (!confirm(`Leave "${conv.name || 'this group'}"? You will need a new invitation to rejoin.`)) return;
+        const { error } = await sb.from('message_room_members')
+          .delete().eq('room_id', roomId).eq('user_id', S.userId);
         if (error) throw error;
-
         await loadDbConversations();
         dbRenderConversationList($('msg-search-input')?.value || '');
         if (String(messagesState.activeConvId) === String(roomId)) closeThread();
-        msgToast('🗑️ Conversation deleted', '✓');
+        msgToast('You left the group.', '✓');
+        return;
+      }
+
+      if (action === 'view_profile') {
+        const peerId = conv.type === 'direct' ? conv.userId : null;
+        if (peerId && typeof openPublicProfile === 'function') openPublicProfile(peerId);
+        else if (peerId && typeof window.openProfile === 'function') window.openProfile(peerId);
+        else msgToast('Profile view is unavailable here.', 'ℹ️');
+        return;
+      }
+
+      if (action === 'delete') {
+        const convName = conv.name || conv.display_name || 'this conversation';
+        if (!confirm(`Remove "${convName}" from your inbox? This does not delete shared message history.`)) return;
+        const { error } = await sb.from('message_room_members')
+          .delete().eq('room_id', roomId).eq('user_id', S.userId);
+        if (error) throw error;
+        await loadDbConversations();
+        dbRenderConversationList($('msg-search-input')?.value || '');
+        if (String(messagesState.activeConvId) === String(roomId)) closeThread();
+        msgToast('Conversation removed from your inbox.', '✓');
       }
     } catch (e) {
+      console.error('[Messages] conversation action failed:', e);
       msgToast(e?.message || 'Could not update conversation.', '⚠️');
     }
+  }
+
+
+  function ensureM159Styles() {
+    if ($('m159-message-polish')) return;
+    const style = document.createElement('style');
+    style.id = 'm159-message-polish';
+    style.textContent = `
+      /* Mortalive site theme: white surfaces, primary blue, soft borders. */
+      #pg-messages{background:var(--surface)!important;color:var(--on-surface)!important}
+      #pg-messages .messages-shell{background:var(--surface)!important;border:1px solid var(--border)!important;border-radius:var(--r-lg)!important;overflow:hidden;box-shadow:var(--elev-2)!important}
+      #pg-messages .messages-sidebar{width:340px;background:var(--surface-2)!important;border-right:1px solid var(--border)!important}
+      #pg-messages .messages-sidebar-header{background:var(--surface)!important;border-color:var(--border)!important;padding:18px 16px 12px}
+      #pg-messages .sidebar-header-sub,#pg-messages .messages-conv-preview,#pg-messages .messages-peer-status,#pg-messages .empty-hint{color:var(--on-surface-3)!important}
+      #pg-messages .messages-title,#pg-messages .messages-conv-name,#pg-messages .messages-peer-name{color:var(--on-surface)!important}
+      #pg-messages .messages-new-group-btn{background:var(--primary-alpha)!important;color:var(--primary)!important}
+      #pg-messages .messages-new-group-btn:hover{background:rgba(26,110,245,.18)!important}
+      #pg-messages .messages-search-wrap{background:var(--surface)!important;border-color:var(--border)!important}
+      #pg-messages .messages-search-input,#pg-messages .messages-composer-input{background:var(--surface)!important;color:var(--on-surface)!important;border-color:var(--border)!important}
+      #pg-messages .messages-search-input::placeholder,#pg-messages .messages-composer-input::placeholder{color:var(--on-surface-3)!important}
+      #pg-messages .messages-search-input:focus,#pg-messages .messages-composer-input:focus{border-color:var(--primary)!important;box-shadow:0 0 0 3px var(--primary-alpha)!important}
+      #pg-messages .messages-conv-item{color:var(--on-surface)!important}
+      #pg-messages .messages-conv-item:hover{background:var(--surface-3)!important}
+      #pg-messages .messages-conv-item.active{background:var(--primary-alpha)!important}
+      #pg-messages .messages-conv-ava{background:var(--surface)!important;border-color:var(--border-strong)!important}
+      #pg-messages .messages-thread,#pg-messages .messages-thread-header,#pg-messages .messages-composer-wrap,#pg-messages .messages-thread-empty{background:var(--surface)!important;border-color:var(--border)!important;color:var(--on-surface)!important}
+      #pg-messages .messages-thread-messages{background:var(--surface-2)!important}
+      #pg-messages .msg-row.them .msg-bubble{background:var(--surface)!important;color:var(--on-surface)!important;border:1px solid var(--border)!important;box-shadow:var(--elev-1)!important}
+      #pg-messages .msg-row.me .msg-bubble{background:var(--primary)!important;color:#fff!important;box-shadow:0 2px 8px rgba(26,110,245,.18)!important}
+      #pg-messages .msg-time{color:var(--on-surface-3)!important}
+      #pg-messages .messages-thread-menu,#pg-messages .messages-thread-back{color:var(--on-surface-2)!important}
+      #pg-messages .messages-thread-menu:hover,#pg-messages .messages-thread-back:hover{background:var(--surface-3)!important}
+      #pg-messages .messages-cta-btn{background:var(--primary)!important;color:#fff!important;border-radius:var(--r-full)!important;box-shadow:var(--elev-1)!important}
+      #pg-messages .messages-cta-btn:hover{background:var(--primary-dark)!important;transform:translateY(-1px)}
+      #pg-messages .messages-thread-empty .empty-illustration{background:var(--primary-alpha)!important;color:var(--primary)!important;border-radius:var(--r-md)!important}
+      #msg-request-center{flex:0 0 auto}
+      .m159-request-center{margin:8px 12px;border:1px solid var(--border);background:var(--surface);border-radius:var(--r-md);overflow:hidden;box-shadow:var(--elev-1)}
+      .m159-request-head{display:flex;align-items:center;justify-content:space-between;width:100%;padding:10px 12px;color:var(--on-surface);font-size:12px;font-weight:800;text-align:left}
+      .m159-request-head:hover{background:var(--surface-2)}
+      .m159-request-badge{min-width:20px;height:20px;padding:0 6px;border-radius:var(--r-full);display:grid;place-items:center;background:var(--primary);color:#fff;font-size:11px}
+      .m159-request-row{padding:10px 12px;border-top:1px solid var(--border)}
+      .m159-request-name{font-size:13px;font-weight:750;color:var(--on-surface)}
+      .m159-request-meta{font-size:11px;color:var(--on-surface-3);margin-top:2px;line-height:1.45}
+      .m159-request-actions{display:flex;gap:7px;margin-top:8px}
+      .m159-request-actions button,.m159-dialog-actions button{border-radius:var(--r-full);padding:7px 11px;font-size:11px;font-weight:750}
+      .m159-accept{background:var(--primary);color:#fff}.m159-decline{background:var(--surface-3);color:var(--on-surface-2)}
+      .m159-context-menu{min-width:220px;padding:6px;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--r-md);box-shadow:var(--elev-3);z-index:10050}
+      .m159-context-menu button{display:flex;align-items:center;gap:9px;width:100%;padding:9px 11px;border-radius:10px;text-align:left;color:var(--on-surface);font-size:12px}
+      .m159-context-menu button:hover{background:var(--surface-2)}.m159-context-menu .danger{color:var(--danger)}
+      .m159-dialog-backdrop{position:fixed;inset:0;background:rgba(13,17,23,.42);display:flex;align-items:center;justify-content:center;padding:18px;z-index:10060}
+      .m159-dialog{width:min(460px,100%);max-height:82vh;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--elev-4);color:var(--on-surface)}
+      .m159-dialog-head{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--border);font-weight:800}
+      .m159-dialog-body{padding:16px 18px}.m159-dialog-close{font-size:20px;color:var(--on-surface-3);padding:4px}
+      .m159-member-row{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)}
+      .m159-member-avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--surface-3);overflow:hidden}
+      .m159-member-avatar img{width:100%;height:100%;object-fit:cover}.m159-member-row strong{display:block;font-size:13px}.m159-member-row small{display:block;color:var(--on-surface-3);font-size:11px}
+      @media(max-width:760px){#pg-messages .messages-sidebar{width:100%}#pg-messages .messages-shell{border-radius:0;border-left:0;border-right:0}}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function openM159Dialog(title, bodyHtml) {
+    document.getElementById('m159-dialog-backdrop')?.remove();
+    const wrap=document.createElement('div');
+    wrap.id='m159-dialog-backdrop'; wrap.className='m159-dialog-backdrop';
+    wrap.innerHTML=`<div class="m159-dialog" role="dialog" aria-modal="true">
+      <div class="m159-dialog-head"><span>${escapeHtml(title)}</span><button class="m159-dialog-close" aria-label="Close">×</button></div>
+      <div class="m159-dialog-body">${bodyHtml}</div></div>`;
+    document.body.appendChild(wrap);
+    const close=()=>wrap.remove();
+    wrap.querySelector('.m159-dialog-close')?.addEventListener('click',close);
+    wrap.addEventListener('click',e=>{if(e.target===wrap)close();});
+    return wrap;
+  }
+
+  async function loadM159Requests() {
+    const host=$('msg-request-center');
+    if(!host || !S.userId || S.isGuest || !sb) return;
+    try {
+      const {data:requests,error}=await sb.from('message_requests')
+        .select('id,sender_id,recipient_id,room_id,message,status,created_at')
+        .eq('recipient_id',S.userId).eq('status','pending')
+        .order('created_at',{ascending:false}).limit(20);
+      if(error) throw error;
+      const rows=requests||[];
+      const senderIds=[...new Set(rows.map(r=>r.sender_id).filter(Boolean))];
+      let profiles=[];
+      if(senderIds.length){
+        const {data,error:e}=await sb.from('accounts').select('id,username,display_name,avatar_url').in('id',senderIds);
+        if(e)throw e; profiles=data||[];
+      }
+      const pmap=new Map(profiles.map(p=>[String(p.id),p]));
+      const groupIds=[...new Set(rows.map(r=>r.room_id).filter(Boolean).map(String))];
+      let groups=[];
+      if(groupIds.length){
+        const {data,error:e}=await sb.from('message_rooms').select('room_id,name,type').in('room_id',groupIds);
+        if(e)throw e; groups=data||[];
+      }
+      const gmap=new Map(groups.map(g=>[String(g.room_id),g]));
+      host.innerHTML=`<button type="button" class="m159-request-head" id="m159-request-toggle">
+        <span>✉ Message requests</span><span class="m159-request-badge">${rows.length}</span></button>
+        <div id="m159-request-list" style="display:${rows.length?'block':'none'}"></div>`;
+      const list=$('m159-request-list');
+      rows.forEach(r=>{
+        const p=pmap.get(String(r.sender_id))||{}, g=r.room_id?gmap.get(String(r.room_id)):null;
+        const row=document.createElement('div'); row.className='m159-request-row';
+        row.innerHTML=`<div class="m159-request-name">${escapeHtml(p.display_name||p.username||'User')}</div>
+          <div class="m159-request-meta">@${escapeHtml(p.username||'user')} · ${escapeHtml(g?.name?`Group invite · ${g.name}`:'Message request')}</div>
+          ${r.message?`<div class="m159-request-meta" style="margin-top:6px;">${escapeHtml(r.message)}</div>`:''}
+          <div class="m159-request-actions"><button class="m159-accept" data-m159-accept="${escapeHtml(r.id)}">Accept</button><button class="m159-decline" data-m159-decline="${escapeHtml(r.id)}">Decline</button></div>`;
+        list.appendChild(row);
+      });
+      $('m159-request-toggle')?.addEventListener('click',()=>{list.style.display=list.style.display==='none'?'block':'none';});
+      list.querySelectorAll('[data-m159-accept]').forEach(b=>b.addEventListener('click',async()=>{
+        b.disabled=true;
+        try{
+          const request=rows.find(r=>String(r.id)===String(b.dataset.m159Accept));
+          const {data,error}=await sb.rpc('accept_message_request',{p_request_id:b.dataset.m159Accept});
+          if(error)throw error;
+          await loadDbConversations(); dbRenderConversationList($('msg-search-input')?.value||''); await loadM159Requests();
+          if(data) await openDbConversation(String(data), request?.room_id?'group':'direct');
+          msgToast(request?.room_id?'Group invitation accepted.':'Message request accepted.','✓');
+        }catch(e){b.disabled=false;msgToast(e?.message||'Could not accept request.','⚠️');}
+      }));
+      list.querySelectorAll('[data-m159-decline]').forEach(b=>b.addEventListener('click',async()=>{
+        b.disabled=true;
+        try{const {error}=await sb.rpc('decline_message_request',{p_request_id:b.dataset.m159Decline});if(error)throw error;await loadM159Requests();msgToast('Request declined.','✓');}
+        catch(e){b.disabled=false;msgToast(e?.message||'Could not decline request.','⚠️');}
+      }));
+    }catch(e){
+      console.warn('[Messages] request center failed:',e?.message||e);
+      host.innerHTML='<div class="m159-request-head"><span>✉ Message requests</span></div><div class="m159-request-row m159-request-meta">Requests are unavailable right now.</div>';
+    }
+  }
+
+  function ensureM159RequestCenter() {
+    let host=$('msg-request-center');
+    if(host)return host;
+    const list=$('msg-conv-list');
+    if(!list)return null;
+    host=document.createElement('div'); host.id='msg-request-center'; host.className='m159-request-center';
+    list.parentNode.insertBefore(host,list);
+    return host;
+  }
+
+  function ensureM159ThreadMenu() {
+    const btn=$('msg-thread-menu');
+    if(!btn || btn.dataset.m159Bound)return;
+    btn.dataset.m159Bound='1';
+    btn.addEventListener('click',e=>{
+      e.preventDefault();e.stopImmediatePropagation();
+      const conv=[...(messagesState.groups||[]),...(messagesState.conversations||[])].find(c=>String(c.id)===String(messagesState.activeConvId));
+      if(!conv)return;
+      document.querySelector('.m159-context-menu')?.remove();
+      const group=conv.type==='group';
+      const items=group
+        ? [['view_members','👥 View members'],['add_people','➕ Add people'],['mute',conv.muted?'🔔 Unmute':'🔕 Mute notifications'],['pin',conv.pinned?'📍 Unpin':'📌 Pin conversation'],['archive',conv.archived?'📂 Restore':'📦 Archive'],['mark_unread','✓ Mark as unread'],['leave_group','🚪 Leave group'],['delete','🗑️ Remove from inbox']]
+        : [['view_profile','👤 View profile'],['mute',conv.muted?'🔔 Unmute':'🔕 Mute notifications'],['pin',conv.pinned?'📍 Unpin':'📌 Pin conversation'],['archive',conv.archived?'📂 Restore':'📦 Archive'],['mark_unread','✓ Mark as unread'],['delete','🗑️ Remove from inbox']];
+      const menu=document.createElement('div'); menu.className='m159-context-menu';
+      menu.innerHTML=items.map(([a,l])=>`<button type="button" data-m159-action="${a}" class="${a==='delete'||a==='leave_group'?'danger':''}">${l}</button>`).join('');
+      document.body.appendChild(menu);
+      const r=btn.getBoundingClientRect();
+      menu.style.position='fixed'; menu.style.top=`${Math.max(8,Math.min(window.innerHeight-menu.offsetHeight-8,r.bottom+6))}px`; menu.style.left=`${Math.max(8,Math.min(window.innerWidth-menu.offsetWidth-8,r.right-menu.offsetWidth))}px`;
+      menu.addEventListener('click',async ev=>{const b=ev.target.closest('[data-m159-action]');if(!b)return;menu.remove();await dbHandleConvAction(conv.id,b.dataset.m159Action);});
+      setTimeout(()=>document.addEventListener('click',function close(ev){if(!menu.contains(ev.target)){menu.remove();document.removeEventListener('click',close)}},{once:true}),0);
+    },true);
+  }
+
+  function openM159GroupPeopleDialog(conv) {
+    const dlg=openM159Dialog(`Add people · ${conv.name||'Group'}`,`<div class="m159-request-meta" style="margin-bottom:10px;">Existing contacts are added directly. Everyone else receives an invitation and joins only after accepting.</div><input id="m159-group-user-search" class="messages-search-input" placeholder="Search any username…" autocomplete="off"><div id="m159-group-user-results" style="margin-top:10px;"></div>`);
+    const input=dlg.querySelector('#m159-group-user-search'), results=dlg.querySelector('#m159-group-user-results');
+    let timer=null,seq=0;
+    input?.addEventListener('input',()=>{
+      clearTimeout(timer);const q=input.value.trim().replace(/^@/,'');const s=++seq;
+      if(q.length<2){results.innerHTML='<div class="m159-request-meta">Type at least 2 characters.</div>';return;}
+      timer=setTimeout(async()=>{
+        try{
+          const {data,error}=await sb.from('accounts').select('id,username,display_name,avatar_url').neq('id',S.userId).or(`username.ilike.%${q}%,display_name.ilike.%${q}%`).limit(12);
+          if(s!==seq)return;if(error)throw error;
+          results.innerHTML=(data||[]).map(u=>`<button type="button" data-m159-add="${escapeHtml(u.id)}" style="display:flex;align-items:center;gap:10px;width:100%;padding:9px;border-radius:10px;color:var(--on-surface);text-align:left;"><span>${u.avatar_url?`<img src="${escapeHtml(u.avatar_url)}" style="width:30px;height:30px;border-radius:50%;object-fit:cover">`:'👤'}</span><span><strong>${escapeHtml(u.display_name||u.username||'User')}</strong><small style="display:block;color:var(--on-surface-3)">@${escapeHtml(u.username||'user')}</small></span></button>`).join('')||'<div class="m159-request-meta">No users found.</div>';
+          results.querySelectorAll('[data-m159-add]').forEach(b=>b.addEventListener('click',async()=>{
+            b.disabled=true;
+            try{
+              const u=(data||[]).find(x=>String(x.id)===String(b.dataset.m159Add));if(!u)return;
+              const isContact=(messagesState.conversations||[]).some(c=>String(c.id)===String(u.id));
+              if(isContact){
+                const {error}=await sb.from('message_room_members').insert({room_id:conv.id,user_id:u.id,role:'member'});
+                if(error && !/duplicate|unique/i.test(error.message||''))throw error;
+                await loadDbConversations();msgToast(`${u.display_name||'Contact'} added to the group.`,'✓');
+              }else{
+                const {error}=await sb.rpc('send_message_request',{p_recipient_id:u.id,p_room_id:conv.id,p_message:`I invited you to join the group "${conv.name||'this group'}"`});
+                if(error)throw error;msgToast('Group invitation sent.','✓');
+              }
+            }catch(e){msgToast(e?.message||'Could not add or invite this user.','⚠️');}
+            finally{b.disabled=false;}
+          }));
+        }catch(e){if(s===seq)results.innerHTML='<div class="m159-request-meta">Search is unavailable right now.</div>';}
+      },220);
+    });
   }
 
   async function initMessagesDbV42() {
@@ -12168,6 +12289,10 @@ document.addEventListener('click', (event) => {
       ensureMessageSearchButton();
       ensureEmptyFindButton();
       ensureRandomUserModal();
+      ensureM159Styles();
+      ensureM159RequestCenter();
+      ensureM159ThreadMenu();
+      await loadM159Requests();
 
       // Always resolve the Messages search element from the current DOM.
       // The Messages page can be mounted/re-rendered after app bootstrap;
@@ -12204,7 +12329,11 @@ document.addEventListener('click', (event) => {
       const groupForm = $('form-create-group');
       if (groupForm && !groupForm.dataset.m42Bound) {
         groupForm.dataset.m42Bound = '1';
-        groupForm.addEventListener('submit', dbHandleCreateGroup, true);
+        groupForm.addEventListener('submit', e => {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          dbHandleCreateGroup(e);
+        }, true);
       }
 
       const composer = $('msg-composer-send');
@@ -12230,7 +12359,7 @@ document.addEventListener('click', (event) => {
         input.addEventListener('input', updateComposerButton);
       }
     } catch (e) {
-      console.error('[Messages DB v44] initialization failed:', e);
+      console.error('[Messages DB v43] initialization failed:', e);
       const rawMessage = String(e?.message || e || 'Unknown database error');
       const friendly = /relation .* does not exist|could not find the table|schema cache/i.test(rawMessage)
         ? 'Messages database tables are missing or Supabase schema cache needs refreshing.'
@@ -12281,7 +12410,7 @@ document.addEventListener('click', (event) => {
     }
   });
 
-  console.log('[Messages DB v44] production schema alignment ready ✓');
+  console.log('[Messages DB v43] production schema alignment ready ✓');
 })();
 
 /* ═════════════════════════════════════════════════════════════════════
@@ -12290,7 +12419,7 @@ document.addEventListener('click', (event) => {
    ═════════════════════════════════════════════════════════════════════ */
 /**
  * MORTALIVE — Feed Enhancement Layer
- * Include this script AFTER app.js in index.html.
+ * Merged directly into app.js; no standalone script is required.
  *
  * Features:
  *   1. Inline Follow button next to author names in feed post cards AND
@@ -13278,4 +13407,854 @@ document.addEventListener('click', (event) => {
     setTimeout(init, 750);
   }
 
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MORTALIVE MESSAGES v160 — BASIC WEB MESSAGING
+   Adds:
+   • emoji picker
+   • image/video attachments (50 MB client guard; Storage bucket also capped)
+   • reply to message
+   • reactions
+   • forward to up to 5 chats
+   • copy message
+   • delete for me
+   • delete for everyone (sender only)
+   • edit own text messages
+   • attachment previews + signed private URLs
+   • durable per-user message deletion
+   • message action menus
+   Search tab is intentionally untouched.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function installMessagesV160BasicFeatures() {
+  'use strict';
+  if (typeof window === 'undefined') return;
+
+  const M160 = {
+    ready: false,
+    loadingByRoom: new Set(),
+    extrasByRoom: new Map(),
+    replyToId: null,
+    attachment: null,
+    reactionEmoji: '❤️',
+    maxAttachmentBytes: 50 * 1024 * 1024,
+    emojiSet: ['❤️','😂','👍','😮','😢','🔥','👏','🎉','😍','🙏','💯','🤝','😎','🙌','✅','❌','💙','🤣']
+  };
+
+  const esc = (value) => {
+    const div = document.createElement('div');
+    div.textContent = String(value ?? '');
+    return div.innerHTML;
+  };
+
+  const msgToast = (text, icon='💬') => {
+    try { toast(text, icon); } catch (_) { console.warn('[Messages v160]', text); }
+  };
+
+  function activeRoom() {
+    return messagesState.activeConvId ? String(messagesState.activeConvId) : '';
+  }
+
+  function activeMessages() {
+    const roomId = activeRoom();
+    return roomId ? (messagesState.messages[roomId] || []) : [];
+  }
+
+  function baseMessageById(id) {
+    return activeMessages().find(m => String(m.id) === String(id)) || null;
+  }
+
+  function ensureComposerTools() {
+    const wrap = document.querySelector('#pg-messages .messages-composer-input-group');
+    const input = $('msg-composer-input');
+    if (!wrap || !input || wrap.dataset.m160Ready === '1') return;
+    wrap.dataset.m160Ready = '1';
+
+    const tools = document.createElement('div');
+    tools.className = 'm160-composer-tools';
+    tools.innerHTML = `
+      <button type="button" class="m160-tool-btn" id="m160-emoji-btn" aria-label="Add emoji" title="Emoji">😊</button>
+      <button type="button" class="m160-tool-btn" id="m160-attach-btn" aria-label="Attach image or video" title="Image or video">＋</button>
+      <input type="file" id="m160-attach-input" accept="image/*,video/*" hidden>
+    `;
+    wrap.insertBefore(tools, input);
+
+    const reply = document.createElement('div');
+    reply.id = 'm160-reply-bar';
+    reply.className = 'm160-reply-bar';
+    reply.innerHTML = `<div><strong>Replying to</strong><span id="m160-reply-text"></span></div><button type="button" id="m160-reply-cancel" aria-label="Cancel reply">×</button>`;
+    const composerWrap = wrap.closest('.messages-composer-wrap');
+    if (composerWrap) composerWrap.insertBefore(reply, wrap);
+
+    const attachInfo = document.createElement('div');
+    attachInfo.id = 'm160-attachment-preview';
+    attachInfo.className = 'm160-attachment-preview';
+    if (composerWrap) composerWrap.insertBefore(attachInfo, wrap);
+
+    $('m160-emoji-btn')?.addEventListener('click', toggleEmojiPicker);
+    $('m160-attach-btn')?.addEventListener('click', () => $('m160-attach-input')?.click());
+    $('m160-attach-input')?.addEventListener('change', handleAttachmentSelect);
+    $('m160-reply-cancel')?.addEventListener('click', cancelReply);
+
+    input.addEventListener('input', updateV160SendState);
+    updateV160SendState();
+  }
+
+  function toggleEmojiPicker() {
+    let picker = $('m160-emoji-picker');
+    if (picker) {
+      picker.remove();
+      return;
+    }
+    picker = document.createElement('div');
+    picker.id = 'm160-emoji-picker';
+    picker.className = 'm160-emoji-picker';
+    picker.innerHTML = M160.emojiSet.map(e => `<button type="button" class="m160-emoji" data-m160-emoji="${esc(e)}">${e}</button>`).join('');
+    const composer = document.querySelector('#pg-messages .messages-composer-wrap');
+    if (!composer) return;
+    composer.appendChild(picker);
+    picker.addEventListener('click', (event) => {
+      const b = event.target.closest('[data-m160-emoji]');
+      if (!b) return;
+      const input = $('msg-composer-input');
+      if (!input) return;
+      input.value += b.dataset.m160Emoji || '';
+      input.focus();
+      updateV160SendState();
+    });
+  }
+
+  function updateV160SendState() {
+    const input = $('msg-composer-input');
+    const btn = $('msg-composer-send');
+    if (!btn) return;
+    btn.disabled = !(input?.value.trim() || M160.attachment);
+  }
+
+  async function handleAttachmentSelect(event) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      M160.attachment = null;
+      updateAttachmentPreview();
+      updateV160SendState();
+      return;
+    }
+    if (file.size > M160.maxAttachmentBytes) {
+      event.target.value = '';
+      M160.attachment = null;
+      updateAttachmentPreview();
+      msgToast('Images and videos must be 50 MB or smaller.', '⚠️');
+      return;
+    }
+    if (!/^image\/|^video\//i.test(file.type)) {
+      event.target.value = '';
+      M160.attachment = null;
+      updateAttachmentPreview();
+      msgToast('Only images and videos can be attached.', '⚠️');
+      return;
+    }
+    M160.attachment = file;
+    updateAttachmentPreview();
+    updateV160SendState();
+  }
+
+  function updateAttachmentPreview() {
+    const host = $('m160-attachment-preview');
+    if (!host) return;
+    if (!M160.attachment) {
+      host.innerHTML = '';
+      host.style.display = 'none';
+      return;
+    }
+    host.style.display = 'flex';
+    host.innerHTML = `
+      <span class="m160-attachment-icon">${M160.attachment.type.startsWith('video/') ? '🎬' : '🖼️'}</span>
+      <span class="m160-attachment-name">${esc(M160.attachment.name)}</span>
+      <span class="m160-attachment-size">${(M160.attachment.size / (1024*1024)).toFixed(1)} MB</span>
+      <button type="button" id="m160-attachment-remove" aria-label="Remove attachment">×</button>
+    `;
+    $('m160-attachment-remove')?.addEventListener('click', clearAttachment);
+  }
+
+  function clearAttachment() {
+    M160.attachment = null;
+    const input = $('m160-attach-input');
+    if (input) input.value = '';
+    updateAttachmentPreview();
+    updateV160SendState();
+  }
+
+  function setReply(messageId) {
+    const msg = baseMessageById(messageId);
+    if (!msg) return;
+    M160.replyToId = messageId;
+    const bar = $('m160-reply-bar');
+    const text = $('m160-reply-text');
+    if (text) text.textContent = ` ${String(msg.text || 'Message').slice(0, 120)}`;
+    if (bar) bar.style.display = 'flex';
+    $('msg-composer-input')?.focus();
+  }
+
+  function cancelReply() {
+    M160.replyToId = null;
+    const bar = $('m160-reply-bar');
+    if (bar) bar.style.display = 'none';
+  }
+
+  function messageActionItems(message) {
+    const own = !!message?.isMe;
+    const hasText = !!String(message?.text || '').trim();
+    const items = [
+      ['reply', '↩ Reply'],
+      ['react', '😊 React'],
+      ['forward', '↗ Forward'],
+      ['copy', '📋 Copy']
+    ];
+    if (hasText && own) items.push(['edit', '✏️ Edit']);
+    items.push(['delete_me', '🗑️ Delete for me']);
+    if (own) items.push(['delete_all', '🗑️ Delete for everyone']);
+    return items;
+  }
+
+  function openMessageMenu(row, message) {
+    document.querySelector('.m160-message-menu')?.remove();
+    const menu = document.createElement('div');
+    menu.className = 'm160-message-menu';
+    menu.innerHTML = messageActionItems(message)
+      .map(([action, label]) => `<button type="button" data-m160-message-action="${action}">${label}</button>`)
+      .join('');
+    row.appendChild(menu);
+    const close = (ev) => {
+      if (!menu.contains(ev.target) && ev.target !== row) {
+        menu.remove();
+        document.removeEventListener('click', close, true);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', close, true), 0);
+  }
+
+  function enhanceMessageRow(row, message, extra) {
+    row.dataset.m160MessageId = String(message.id);
+    row.classList.add('m160-message-row');
+    const bubble = row.querySelector('.msg-bubble');
+    if (!bubble) return;
+
+    const deleted = !!extra?.deleted_for_everyone_at;
+    if (extra?.deletedForMe) {
+      row.style.display = 'none';
+      return;
+    }
+    row.style.display = '';
+    bubble.innerHTML = '';
+
+    if (deleted) {
+      bubble.innerHTML = '<span class="m160-deleted">This message was deleted</span>';
+      row.querySelector('.m160-message-actions')?.remove();
+      return;
+    }
+
+    const content = document.createElement('div');
+    content.className = 'm160-message-content';
+
+    if (extra?.reply_to_id) {
+      const replied = activeMessages().find(m => String(m.id) === String(extra.reply_to_id));
+      const replyText = replied?.text || extra.replyText || 'Original message';
+      const quote = document.createElement('div');
+      quote.className = 'm160-reply-quote';
+      quote.textContent = `↩ ${String(replyText).slice(0, 100)}`;
+      content.appendChild(quote);
+    }
+
+    if (extra?.forwarded_from_message_id) {
+      const forwarded = document.createElement('div');
+      forwarded.className = 'm160-forwarded-label';
+      forwarded.textContent = '↗ Forwarded message';
+      content.appendChild(forwarded);
+    }
+
+    if (extra?.attachment_path && extra?.attachment_url) {
+      const kind = String(extra.attachment_kind || '').toLowerCase();
+      const media = kind === 'video'
+        ? `<video src="${esc(extra.attachment_url)}" controls preload="metadata" class="m160-media-video"></video>`
+        : `<img src="${esc(extra.attachment_url)}" alt="${esc(extra.attachment_name || 'Image')}" loading="lazy" class="m160-media-image">`;
+      const mediaWrap = document.createElement('div');
+      mediaWrap.className = 'm160-media-wrap';
+      mediaWrap.innerHTML = media;
+      content.appendChild(mediaWrap);
+    }
+
+    if (extra?.content || message.text) {
+      const textNode = document.createElement('div');
+      textNode.className = 'm160-text';
+      textNode.textContent = extra?.content ?? message.text ?? '';
+      content.appendChild(textNode);
+    }
+
+    if (extra?.edited_at) {
+      const edited = document.createElement('span');
+      edited.className = 'm160-edited';
+      edited.textContent = 'edited';
+      content.appendChild(edited);
+    }
+
+    bubble.appendChild(content);
+
+    const oldTime = row.querySelector('.msg-time');
+    if (extra?.reactions?.length) {
+      const reactions = document.createElement('div');
+      reactions.className = 'm160-reactions';
+      const grouped = new Map();
+      extra.reactions.forEach(r => {
+        if (!grouped.has(r.emoji)) grouped.set(r.emoji, []);
+        grouped.get(r.emoji).push(r.user_id);
+      });
+      grouped.forEach((users, emoji) => {
+        const mine = users.includes(S.userId);
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = `m160-reaction-chip${mine ? ' mine' : ''}`;
+        chip.dataset.m160ReactEmoji = emoji;
+        chip.dataset.m160MessageId = String(message.id);
+        chip.textContent = `${emoji} ${users.length}`;
+        reactions.appendChild(chip);
+      });
+      content.appendChild(reactions);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'm160-message-actions';
+    actions.innerHTML = `
+      <button type="button" class="m160-mini-action" data-m160-quick-reply title="Reply">↩</button>
+      <button type="button" class="m160-mini-action" data-m160-quick-react title="React">😊</button>
+      <button type="button" class="m160-mini-action" data-m160-more title="More">⋯</button>
+    `;
+    row.appendChild(actions);
+
+    oldTime?.classList.add('m160-time');
+  }
+
+  async function loadExtras(roomId) {
+    const key = String(roomId || '');
+    if (!key || !sb || M160.loadingByRoom.has(key)) return;
+    M160.loadingByRoom.add(key);
+    try {
+      const rows = activeMessages();
+      const ids = rows.map(m => m.id).filter(Boolean);
+      if (!ids.length) {
+        M160.extrasByRoom.set(key, new Map());
+        return;
+      }
+
+      const [msgRes, reactRes, delRes] = await Promise.all([
+        sb.from('messages')
+          .select('id,content,reply_to_id,forwarded_from_message_id,deleted_for_everyone_at,deleted_by,edited_at,attachment_path,attachment_name,attachment_mime,attachment_size,attachment_kind')
+          .in('id', ids),
+        sb.from('message_reactions')
+          .select('message_id,user_id,emoji')
+          .in('message_id', ids),
+        sb.from('message_deletions')
+          .select('message_id,user_id')
+          .eq('user_id', S.userId)
+          .in('message_id', ids)
+      ]);
+
+      if (msgRes.error) throw msgRes.error;
+      if (reactRes.error) throw reactRes.error;
+      if (delRes.error) throw delRes.error;
+
+      const reactMap = new Map();
+      (reactRes.data || []).forEach(r => {
+        const id = String(r.message_id);
+        if (!reactMap.has(id)) reactMap.set(id, []);
+        reactMap.get(id).push(r);
+      });
+
+      const deletedForMe = new Set((delRes.data || []).map(r => String(r.message_id)));
+      const extraMap = new Map();
+
+      for (const r of (msgRes.data || [])) {
+        let attachment_url = null;
+        if (r.attachment_path && !r.deleted_for_everyone_at) {
+          try {
+            const { data, error } = await sb.storage.from('message-media').createSignedUrl(r.attachment_path, 3600);
+            if (!error) attachment_url = data?.signedUrl || null;
+          } catch (_) {}
+        }
+        extraMap.set(String(r.id), {
+          ...r,
+          attachment_url,
+          deletedForMe: deletedForMe.has(String(r.id)),
+          reactions: reactMap.get(String(r.id)) || []
+        });
+      }
+      M160.extrasByRoom.set(key, extraMap);
+    } finally {
+      M160.loadingByRoom.delete(key);
+    }
+  }
+
+  async function enhanceActiveRoom() {
+    ensureComposerTools();
+    const roomId = activeRoom();
+    if (!roomId) return;
+    await loadExtras(roomId);
+    const container = $('msg-thread-messages');
+    if (!container) return;
+    const rows = Array.from(container.querySelectorAll('.msg-row'));
+    const msgs = messagesState.messages[roomId] || [];
+    rows.forEach((row, index) => {
+      const message = msgs[index];
+      if (!message) return;
+      enhanceMessageRow(row, message, M160.extrasByRoom.get(roomId)?.get(String(message.id)) || {});
+    });
+    // Mark read as soon as the conversation is viewed.
+    try {
+      await sb.from('message_room_members')
+        .update({ last_read_at: new Date().toISOString() })
+        .eq('room_id', roomId)
+        .eq('user_id', S.userId);
+    } catch (_) {}
+  }
+
+  async function renderAfterBase(roomId) {
+    // Allow DOM paint before adding action controls/media.
+    requestAnimationFrame(() => { enhanceActiveRoom().catch(e => console.warn('[Messages v160] enhance:', e)); });
+  }
+
+  const baseRenderMessages = window.renderMessages;
+  if (typeof renderMessages === 'function') {
+    const original = renderMessages;
+    renderMessages = function v160RenderMessages(convId) {
+      original.call(this, convId);
+      renderAfterBase(convId);
+    };
+  } else if (baseRenderMessages) {
+    window.renderMessages = function v160RenderMessages(convId) {
+      baseRenderMessages(convId);
+      renderAfterBase(convId);
+    };
+  }
+
+  if (typeof renderDirectMessages === 'function') {
+    const originalDirect = renderDirectMessages;
+    renderDirectMessages = function v160RenderDirectMessages(convId) {
+      originalDirect.call(this, convId);
+      renderAfterBase(convId);
+    };
+  }
+
+  async function uploadAttachment(file, roomId) {
+    const ext = (file.name.split('.').pop() || (file.type.startsWith('video/') ? 'mp4' : 'jpg'))
+      .toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) || 'bin';
+    const path = `${S.userId}/${roomId}/${crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}.${ext}`;
+    const { error } = await sb.storage.from('message-media').upload(path, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type
+    });
+    if (error) throw error;
+    return path;
+  }
+
+  async function sendV160Message() {
+    const input = $('msg-composer-input');
+    const roomId = activeRoom();
+    if (!input || !roomId || !S.userId || S.isGuest || !sb) return;
+    const text = input.value.trim();
+    if (!text && !M160.attachment) return;
+    if (text.length > 1000) {
+      msgToast('Message is too long.', '⚠️');
+      return;
+    }
+
+    const sendBtn = $('msg-composer-send');
+    try {
+      if (sendBtn) sendBtn.disabled = true;
+
+      let attachment_path = null;
+      let attachment_kind = null;
+      let attachment_mime = null;
+      let attachment_name = null;
+      let attachment_size = null;
+
+      if (M160.attachment) {
+        if (M160.attachment.size > M160.maxAttachmentBytes) throw new Error('Images and videos must be 50 MB or smaller.');
+        attachment_path = await uploadAttachment(M160.attachment, roomId);
+        attachment_kind = M160.attachment.type.startsWith('video/') ? 'video' : 'image';
+        attachment_mime = M160.attachment.type;
+        attachment_name = M160.attachment.name;
+        attachment_size = M160.attachment.size;
+      }
+
+      const senderHash = await (typeof ownHash === 'function'
+        ? ownHash()
+        : `mortalive:${S.userId}`);
+
+      const payload = {
+        room_id: roomId,
+        sender_user_id: S.userId,
+        sender_hash: senderHash,
+        direction: 'outgoing',
+        content: text,
+        reply_to_id: M160.replyToId ? Number(M160.replyToId) : null,
+        forwarded_from_message_id: null,
+        attachment_path,
+        attachment_kind,
+        attachment_mime,
+        attachment_name,
+        attachment_size
+      };
+
+      const { data, error } = await sb.from('messages').insert(payload)
+        .select('id,room_id,sender_hash,direction,content,created_at')
+        .single();
+      if (error) throw error;
+
+      if (!messagesState.messages[roomId]) messagesState.messages[roomId] = [];
+      messagesState.messages[roomId].push({
+        id: data.id,
+        text: data.content || text,
+        isMe: true,
+        senderId: S.userId,
+        senderHash: data.sender_hash,
+        timestamp: new Date(data.created_at),
+        time: formatTime(new Date(data.created_at))
+      });
+
+      input.value = '';
+      input.style.height = 'auto';
+      cancelReply();
+      clearAttachment();
+
+      const conv = [...(messagesState.groups || []), ...(messagesState.conversations || [])]
+        .find(c => String(c.id) === String(roomId));
+      if (conv) {
+        conv.lastMessage = text || (attachment_kind === 'video' ? '🎬 Video' : '🖼️ Image');
+        conv.lastAt = data.created_at;
+      }
+
+      M160.extrasByRoom.delete(String(roomId));
+      if (messagesState.activeConvType === 'group') renderMessages(roomId);
+      else renderDirectMessages(roomId);
+      dbRenderConversationList($('msg-search-input')?.value || '');
+      saveMessagesToStorage();
+    } catch (err) {
+      console.error('[Messages v160] send failed:', err);
+      msgToast(err?.message || 'Could not send message.', '⚠️');
+      // If upload succeeded but message insert failed, remove the orphan object.
+      // This is best-effort and scoped to the current user's object path.
+      if (M160.attachment === null && attachment_path) {
+        try { await sb.storage.from('message-media').remove([attachment_path]); } catch (_) {}
+      }
+    } finally {
+      updateV160SendState();
+    }
+  }
+
+  // Intercept the existing composer handlers before the older DB handler.
+  document.addEventListener('click', (event) => {
+    const btn = event.target.closest?.('#msg-composer-send');
+    if (!btn) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    sendV160Message().catch(e => console.warn('[Messages v160] send handler:', e));
+  }, true);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.target?.id !== 'msg-composer-input' || event.key !== 'Enter' || event.shiftKey) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    sendV160Message().catch(e => console.warn('[Messages v160] enter handler:', e));
+  }, true);
+
+  async function mutateReaction(messageId, emoji) {
+    const existing = await sb.from('message_reactions')
+      .select('message_id,user_id,emoji')
+      .eq('message_id', messageId)
+      .eq('user_id', S.userId)
+      .maybeSingle();
+    if (existing.error) throw existing.error;
+    if (existing.data) {
+      if (existing.data.emoji === emoji) {
+        const { error } = await sb.from('message_reactions')
+          .delete().eq('message_id', messageId).eq('user_id', S.userId);
+        if (error) throw error;
+      } else {
+        const { error } = await sb.from('message_reactions')
+          .update({ emoji }).eq('message_id', messageId).eq('user_id', S.userId);
+        if (error) throw error;
+      }
+    } else {
+      const { error } = await sb.from('message_reactions')
+        .insert({ message_id: messageId, user_id: S.userId, emoji });
+      if (error) throw error;
+    }
+    M160.extrasByRoom.delete(activeRoom());
+    await enhanceActiveRoom();
+  }
+
+  async function deleteForMe(messageId) {
+    const { error } = await sb.from('message_deletions')
+      .upsert({ message_id: Number(messageId), user_id: S.userId }, { onConflict: 'message_id,user_id' });
+    if (error) throw error;
+    M160.extrasByRoom.delete(activeRoom());
+    await enhanceActiveRoom();
+  }
+
+  async function deleteForEveryone(messageId) {
+    const message = baseMessageById(messageId);
+    if (!message?.isMe) throw new Error('You can only delete your own messages for everyone.');
+    const ok = window.confirm('Delete this message for everyone?');
+    if (!ok) return;
+    const { error } = await sb.from('messages')
+      .update({ deleted_for_everyone_at: new Date().toISOString(), deleted_by: S.userId })
+      .eq('id', Number(messageId))
+      .eq('sender_user_id', S.userId);
+    if (error) throw error;
+    M160.extrasByRoom.delete(activeRoom());
+    await enhanceActiveRoom();
+  }
+
+  async function editMessage(messageId) {
+    const message = baseMessageById(messageId);
+    if (!message?.isMe) return;
+    const extra = M160.extrasByRoom.get(activeRoom())?.get(String(messageId));
+    if (extra?.attachment_path) {
+      msgToast('Attachment messages cannot be edited.', 'ℹ️');
+      return;
+    }
+    const next = window.prompt('Edit message:', String(message.text || ''));
+    if (next === null) return;
+    const clean = next.trim();
+    if (!clean) {
+      msgToast('Edited message cannot be empty.', '⚠️');
+      return;
+    }
+    if (clean.length > 1000) {
+      msgToast('Message is too long.', '⚠️');
+      return;
+    }
+    const { error } = await sb.from('messages')
+      .update({ content: clean, edited_at: new Date().toISOString() })
+      .eq('id', Number(messageId))
+      .eq('sender_user_id', S.userId);
+    if (error) throw error;
+    M160.extrasByRoom.delete(activeRoom());
+    await loadDbMessages(activeRoom());
+    if (messagesState.activeConvType === 'group') renderMessages(activeRoom());
+    else renderDirectMessages(activeRoom());
+  }
+
+  async function copyMessage(messageId) {
+    const message = baseMessageById(messageId);
+    const extra = M160.extrasByRoom.get(activeRoom())?.get(String(messageId));
+    const text = String(extra?.content ?? message?.text ?? '');
+    if (!text) {
+      msgToast('Nothing to copy.', 'ℹ️');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      msgToast('Message copied.', '✓');
+    } catch (_) {
+      msgToast('Could not copy the message.', '⚠️');
+    }
+  }
+
+  function openForwardDialog(messageId) {
+    document.querySelector('.m160-forward-backdrop')?.remove();
+    const rooms = [...(messagesState.groups || []), ...(messagesState.conversations || [])]
+      .filter(r => !r.archived && String(r.id) !== activeRoom());
+    const backdrop = document.createElement('div');
+    backdrop.className = 'm160-forward-backdrop';
+    backdrop.innerHTML = `
+      <div class="m160-forward-dialog" role="dialog" aria-modal="true">
+        <div class="m160-forward-head"><strong>Forward message</strong><button type="button" data-m160-forward-close>×</button></div>
+        <div class="m160-forward-list">
+          ${rooms.map(r => `
+            <label class="m160-forward-item">
+              <input type="checkbox" value="${esc(r.id)}">
+              <span>${r.type === 'group' ? '👥' : '👤'}</span>
+              <span>${esc(r.name || r.display_name || r.username || 'Conversation')}</span>
+            </label>`).join('') || '<div class="m160-forward-empty">No other conversations.</div>'}
+        </div>
+        <div class="m160-forward-actions"><button type="button" data-m160-forward-cancel>Cancel</button><button type="button" data-m160-forward-send>Forward</button></div>
+      </div>`;
+    document.querySelector('#pg-messages')?.appendChild(backdrop);
+    const send = backdrop.querySelector('[data-m160-forward-send]');
+    backdrop.addEventListener('change', () => {
+      const checks = [...backdrop.querySelectorAll('input[type=checkbox]:checked')];
+      if (checks.length > 5) checks[5].checked = false;
+    });
+    backdrop.addEventListener('click', async (event) => {
+      if (event.target === backdrop || event.target.closest('[data-m160-forward-close],[data-m160-forward-cancel]')) {
+        backdrop.remove(); return;
+      }
+      if (!event.target.closest('[data-m160-forward-send]')) return;
+      const targetIds = [...backdrop.querySelectorAll('input[type=checkbox]:checked')].map(i => i.value).slice(0,5);
+      if (!targetIds.length) {
+        msgToast('Choose at least one conversation.', '⚠️'); return;
+      }
+      try {
+        send.disabled = true;
+        const source = await sb.from('messages')
+          .select('content,attachment_path,attachment_name,attachment_mime,attachment_size,attachment_kind')
+          .eq('id', Number(messageId)).maybeSingle();
+        if (source.error) throw source.error;
+        if (!source.data) throw new Error('Message no longer exists.');
+        for (const targetId of targetIds) {
+          const senderHash = await ownHash();
+          const { error } = await sb.from('messages').insert({
+            room_id: targetId,
+            sender_user_id: S.userId,
+            sender_hash: senderHash,
+            direction: 'outgoing',
+            content: source.data.content || '',
+            forwarded_from_message_id: Number(messageId),
+            attachment_path: source.data.attachment_path || null,
+            attachment_name: source.data.attachment_name || null,
+            attachment_mime: source.data.attachment_mime || null,
+            attachment_size: source.data.attachment_size || null,
+            attachment_kind: source.data.attachment_kind || null
+          });
+          if (error) throw error;
+        }
+        backdrop.remove();
+        msgToast(`Forwarded to ${targetIds.length} conversation${targetIds.length===1?'':'s'}.`, '✓');
+      } catch (e) {
+        send.disabled = false;
+        msgToast(e?.message || 'Could not forward message.', '⚠️');
+      }
+    });
+  }
+
+  function showReactionPicker(row, messageId) {
+    row.querySelector('.m160-reaction-picker')?.remove();
+    const picker = document.createElement('div');
+    picker.className = 'm160-reaction-picker';
+    picker.innerHTML = M160.emojiSet.slice(0, 12)
+      .map(e => `<button type="button" data-m160-picker-emoji="${esc(e)}">${e}</button>`).join('');
+    row.appendChild(picker);
+    picker.addEventListener('click', async (event) => {
+      const b = event.target.closest('[data-m160-picker-emoji]');
+      if (!b) return;
+      try {
+        await mutateReaction(Number(messageId), b.dataset.m160PickerEmoji);
+        picker.remove();
+      } catch (e) {
+        msgToast(e?.message || 'Could not add reaction.', '⚠️');
+      }
+    });
+  }
+
+  const messageHost = $('msg-thread-messages');
+  if (messageHost) {
+    messageHost.addEventListener('click', async (event) => {
+      const row = event.target.closest('.msg-row[data-m160-message-id]');
+      if (!row) return;
+      const id = row.dataset.m160MessageId;
+      const message = baseMessageById(id);
+      if (!message) return;
+
+      const quickReply = event.target.closest('[data-m160-quick-reply]');
+      const quickReact = event.target.closest('[data-m160-quick-react]');
+      const more = event.target.closest('[data-m160-more]');
+      const reactionChip = event.target.closest('[data-m160-react-emoji]');
+      const action = event.target.closest('[data-m160-message-action]');
+
+      if (quickReply) { setReply(id); return; }
+      if (quickReact) { showReactionPicker(row, id); return; }
+      if (more) { openMessageMenu(row, message); return; }
+      if (reactionChip) {
+        try { await mutateReaction(Number(id), reactionChip.dataset.m160ReactEmoji); }
+        catch (e) { msgToast(e?.message || 'Could not update reaction.', '⚠️'); }
+        return;
+      }
+      if (action) {
+        const a = action.dataset.m160MessageAction;
+        document.querySelector('.m160-message-menu')?.remove();
+        try {
+          if (a === 'reply') setReply(id);
+          else if (a === 'react') showReactionPicker(row, id);
+          else if (a === 'forward') openForwardDialog(id);
+          else if (a === 'copy') await copyMessage(id);
+          else if (a === 'delete_me') await deleteForMe(id);
+          else if (a === 'delete_all') await deleteForEveryone(id);
+          else if (a === 'edit') await editMessage(id);
+        } catch (e) {
+          msgToast(e?.message || 'Message action failed.', '⚠️');
+        }
+      }
+    });
+  }
+
+  // Keep the enhancement layer synchronized with v43 realtime INSERT renders.
+  const originalSetup = window.setupRealtime;
+  // We don't replace the existing realtime connection; add a lightweight
+  // channel for message UPDATE/DELETE + reaction/deletion changes.
+  async function setupV160Realtime() {
+    if (!sb || S.isGuest || !S.userId || M160.realtime) return;
+    try {
+      M160.realtime = sb.channel(`mortalive-message-actions-v160-${S.userId}`)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, payload => {
+          if (!payload?.new?.room_id) return;
+          if (String(payload.new.room_id) === activeRoom()) {
+            M160.extrasByRoom.delete(activeRoom());
+            enhanceActiveRoom().catch(()=>{});
+          }
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions' }, payload => {
+          if (activeRoom()) {
+            M160.extrasByRoom.delete(activeRoom());
+            enhanceActiveRoom().catch(()=>{});
+          }
+        })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_deletions' }, payload => {
+          if (String(payload?.new?.user_id || '') === String(S.userId)) {
+            M160.extrasByRoom.delete(activeRoom());
+            enhanceActiveRoom().catch(()=>{});
+          }
+        })
+        .subscribe();
+    } catch (e) {
+      console.warn('[Messages v160] realtime actions setup failed:', e);
+    }
+  }
+
+  const originalInit = window.initMessages;
+  window.initMessages = async function v160InitMessages() {
+    if (typeof originalInit === 'function') {
+      try { await originalInit(); } catch (e) { console.warn('[Messages v160] base init:', e?.message || e); }
+    }
+    ensureComposerTools();
+    await loadExtras(activeRoom());
+    await setupV160Realtime();
+  };
+
+  document.addEventListener('mortalive-auth-state', () => {
+    if (!S.isGuest && S.userId && $('pg-messages')?.classList.contains('active')) {
+      setTimeout(() => {
+        ensureComposerTools();
+        enhanceActiveRoom().catch(()=>{});
+        setupV160Realtime().catch(()=>{});
+      }, 50);
+    }
+  });
+
+  // Re-run after conversation switches. The current v43 conversation click
+  // listener uses capture phase and updates the DOM asynchronously.
+  const observeThread = $('msg-thread-messages');
+  if (observeThread) {
+    const observer = new MutationObserver(() => {
+      if (!M160.ready) return;
+      window.clearTimeout(observer._t);
+      observer._t = window.setTimeout(() => enhanceActiveRoom().catch(()=>{}), 40);
+    });
+    observer.observe(observeThread, { childList: true });
+  }
+
+  M160.ready = true;
+  ensureComposerTools();
+  console.log('[Messages v160] basic messaging features ready ✓');
 })();
