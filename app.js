@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-29-v154-legacy-cleanup'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-29-v155-group-fixes'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -11460,8 +11460,16 @@ document.addEventListener('click', (event) => {
       const { error } = await sb.from('message_requests').insert(rows);
       if (error) throw error;
 
+      // Refresh conversation list so invited users appear as pending
+      try {
+        await loadDbConversations();
+        dbRenderConversationList($('msg-search-input')?.value || '');
+      } catch (refreshErr) {
+        console.warn('[Messages] refresh after invite failed:', refreshErr);
+      }
+
       closeRandomUserMessageModal();
-      msgToast(`${rows.length} invite${rows.length === 1 ? '' : 's'} sent.`, '✓');
+      msgToast(`${rows.length} invite${rows.length === 1 ? '' : 's'} sent. Check your messages.`, '✓');
     } catch (e) {
       console.error('[Messages] send invites failed:', e);
       msgToast(e?.message || 'Could not send invites.', '⚠️');
@@ -11700,6 +11708,14 @@ document.addEventListener('click', (event) => {
     const description = String($('group-desc')?.value || '').trim();
     if (!name) { msgToast('Group name is required.', '⚠️'); return; }
     if (name.length > 60) { msgToast('Group name is too long.', '⚠️'); return; }
+    
+    // Validate: groups require at least 1 member to be added (minimum 2 total: creator + 1)
+    const selectedMembers = Array.from(messagesState.selectedMembers || [])
+      .filter(id => id && id !== String(S.userId));
+    if (!selectedMembers.length) {
+      msgToast('Add at least 1 member to create a group.', '⚠️');
+      return;
+    }
 
     const submit = $('btn-submit-create-group');
     try {
@@ -11945,6 +11961,10 @@ document.addEventListener('click', (event) => {
         dbRenderConversationList($('msg-search-input')?.value || '');
         if (action === 'archive' && String(messagesState.activeConvId) === String(roomId)) closeThread();
       } else if (action === 'delete') {
+        // Show confirmation before deleting
+        const convName = conv.name || conv.display_name || 'this conversation';
+        if (!confirm(`Delete "${convName}"? This cannot be undone.`)) return;
+
         const { error } = await sb
           .from('message_room_members')
           .delete()
@@ -11955,6 +11975,7 @@ document.addEventListener('click', (event) => {
         await loadDbConversations();
         dbRenderConversationList($('msg-search-input')?.value || '');
         if (String(messagesState.activeConvId) === String(roomId)) closeThread();
+        msgToast('🗑️ Conversation deleted', '✓');
       }
     } catch (e) {
       msgToast(e?.message || 'Could not update conversation.', '⚠️');
