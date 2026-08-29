@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-29-v160-basic-messaging'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-29-v161-message-sidebar-reactions-fix'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -11875,10 +11875,32 @@ document.addEventListener('click', (event) => {
     const q = String(searchQuery || '').trim().toLowerCase();
     const groups = (messagesState.groups || [])
       .filter(g => !g.archived && (!q || String(g.name || '').toLowerCase().includes(q)));
-    const contacts = (messagesState.conversations || [])
+    const existingContacts = (messagesState.conversations || [])
       .filter(c => !c.archived && (!q ||
         String(c.display_name || c.username || '').toLowerCase().includes(q) ||
         String(c.username || '').toLowerCase().includes(q)));
+
+    // Also show every contact the user is allowed to message, even when a
+    // conversation room has not been created yet. These rows become "Start
+    // chat" entries instead of requiring the user to search for them.
+    const existingContactIds = new Set(
+      (messagesState.conversations || [])
+        .map(c => String(c.userId || c.id || ''))
+        .filter(Boolean)
+    );
+    const availableContacts = (messagesState.eligibleContacts || [])
+      .filter(c => c?.id && String(c.id) !== String(S.userId))
+      .filter(c => !existingContactIds.has(String(c.id)))
+      .filter(c => !q ||
+        String(c.display_name || c.username || '').toLowerCase().includes(q) ||
+        String(c.username || '').toLowerCase().includes(q))
+      .map(c => ({
+        ...c,
+        id: String(c.id),
+        userId: String(c.id),
+        source: c.source || 'contact',
+        isStartChat: true
+      }));
 
     const sortFn = (a, b) => {
       const pinA = a.pinned ? 1 : 0;
@@ -11887,10 +11909,10 @@ document.addEventListener('click', (event) => {
       return new Date(b.lastAt || b.updatedAt || 0) - new Date(a.lastAt || a.updatedAt || 0);
     };
 
-    groups.sort(sortFn);
-    contacts.sort(sortFn);
+    existingContacts.sort(sortFn);
+    availableContacts.sort((a, b) => String(a.display_name || a.username || '').localeCompare(String(b.display_name || b.username || '')));
 
-    if (!groups.length && !contacts.length) {
+    if (!groups.length && !existingContacts.length && !availableContacts.length) {
       list.innerHTML = `<div class="messages-list-empty">
         <div class="empty-icon">${q ? '🔍' : '💬'}</div>
         <p>${q ? `No conversations found for "${escapeHtml(q)}"` : 'No conversations yet'}</p>
@@ -11905,7 +11927,7 @@ document.addEventListener('click', (event) => {
       list.appendChild(item);
     });
 
-    contacts.forEach(contact => {
+    existingContacts.forEach(contact => {
       const item = createContactConvItem({
         ...contact,
         id: contact.id,
@@ -11914,6 +11936,44 @@ document.addEventListener('click', (event) => {
         display_name: contact.display_name,
         avatar_url: contact.avatar_url,
         source: 'message'
+      });
+      list.appendChild(item);
+    });
+
+    availableContacts.forEach(contact => {
+      const item = document.createElement('div');
+      item.className = 'messages-conv-item messages-start-chat-item';
+      item.dataset.contactId = String(contact.id);
+      item.innerHTML = `
+        <div class="messages-conv-ava">
+          ${contact.avatar_url
+            ? `<img src="${sanitizeHTML(feedAvatarUrl(contact.avatar_url))}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" loading="lazy">`
+            : escapeHtml(feedAvatarLetter(contact.display_name || contact.username || 'U'))}
+        </div>
+        <div class="messages-conv-meta">
+          <div class="messages-conv-name-row">
+            <div class="messages-conv-name">${escapeHtml(contact.display_name || contact.username || 'User')}</div>
+            <div class="messages-conv-time">Contact</div>
+          </div>
+          <div class="messages-conv-preview">@${escapeHtml(contact.username || 'user')} · Start chat</div>
+        </div>`;
+      item.addEventListener('click', async () => {
+        try {
+          item.classList.add('loading');
+          const { data: roomId, error } = await sb.rpc('get_or_create_direct_room', {
+            p_user_id: String(contact.id)
+          });
+          if (error) throw error;
+          const id = String(roomId);
+          await loadDbConversations();
+          dbRenderConversationList($('msg-search-input')?.value || '');
+          await openDbConversation(id, 'direct');
+        } catch (err) {
+          console.warn('[Messages] start-chat room creation failed:', err?.message || err);
+          msgToast(err?.message || 'Could not start this conversation.', '⚠️');
+        } finally {
+          item.classList.remove('loading');
+        }
       });
       list.appendChild(item);
     });
@@ -12374,6 +12434,9 @@ document.addEventListener('click', (event) => {
   window.sendMessage = dbSendMessage;
   window.handleConvAction = dbHandleConvAction;
   window.renderConversationList = dbRenderConversationList;
+  // v160 media/actions live in a separate IIFE; expose the DB renderer so
+  // attachment/reaction updates can refresh the sidebar without ReferenceError.
+  window.dbRenderConversationList = dbRenderConversationList;
   window.openRandomUserMessageModal = openRandomUserMessageModal;
   window.closeRandomUserMessageModal = closeRandomUserMessageModal;
 
