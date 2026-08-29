@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v153 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v153" content="group-min1-rpc-rsm">
+<meta name="mortalive-build-v160" content="basic-messaging">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
@@ -8901,6 +8901,165 @@ body.vid-in-fs .fs-next-btn{
 }
 </style>
 
+
+<style id="mortalive-v160-basic-messaging">
+/* =========================================================
+   Messages v160 — use Mortalive site design system
+   No Search-tab styles are changed here.
+   ========================================================= */
+#pg-messages{
+  --msg-bg: var(--surface);
+  --msg-bg-2: rgba(255,255,255,.88);
+  --msg-bg-3: var(--surface-2);
+  --msg-bg-4: var(--surface-3);
+  --msg-text: var(--on-surface);
+  --msg-text-2: var(--on-surface-2);
+  --msg-text-3: var(--on-surface-3);
+  --msg-primary: var(--primary);
+  --msg-border: var(--border);
+  --msg-border-strong: var(--border-strong);
+  background: var(--surface);
+  color: var(--on-surface);
+}
+#pg-messages .messages-shell{background:var(--surface);}
+#pg-messages .messages-sidebar,
+#pg-messages .messages-main,
+#pg-messages .messages-thread-header,
+#pg-messages .messages-composer-wrap{background:var(--surface);}
+#pg-messages .messages-sidebar{border-right:1px solid var(--border);}
+#pg-messages .messages-search-input{
+  background:var(--surface-2);
+  color:var(--on-surface);
+  border:1px solid var(--border);
+}
+#pg-messages .messages-search-input:focus{border-color:var(--primary);}
+#pg-messages .messages-thread-messages{background:var(--surface);}
+#pg-messages .messages-composer-wrap{
+  border-top:1px solid var(--border);
+  background:rgba(255,255,255,.92);
+  backdrop-filter:blur(10px);
+}
+#pg-messages .messages-composer-input{
+  background:var(--surface);
+  color:var(--on-surface);
+  border:1px solid var(--border-strong);
+}
+#pg-messages .messages-composer-send{background:var(--primary);}
+#pg-messages .messages-composer-send:hover:not(:disabled){background:var(--primary-dark);}
+#pg-messages .msg-row.them .msg-bubble{
+  background:var(--surface-2);
+  color:var(--on-surface);
+  border:1px solid var(--border);
+}
+#pg-messages .msg-row.me .msg-bubble{
+  background:var(--primary-alpha);
+  color:var(--on-surface);
+  border:1px solid rgba(26,110,245,.18);
+}
+#pg-messages .msg-time{color:var(--on-surface-3);}
+
+/* Composer tools */
+#pg-messages .m160-composer-tools{display:flex;gap:5px;align-items:center;flex:0 0 auto;}
+#pg-messages .m160-tool-btn{
+  width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
+  color:var(--on-surface-2);background:var(--surface-2);border:1px solid var(--border);
+  font-size:17px;transition:background .14s,color .14s,border-color .14s;
+}
+#pg-messages .m160-tool-btn:hover{color:var(--primary);border-color:rgba(26,110,245,.25);background:var(--primary-alpha);}
+#pg-messages .m160-reply-bar{
+  display:none;align-items:center;justify-content:space-between;gap:10px;
+  margin:0 0 8px;padding:8px 10px;border-left:3px solid var(--primary);
+  background:var(--primary-alpha);border-radius:10px;color:var(--on-surface-2);
+  font-size:12px;
+}
+#pg-messages .m160-reply-bar strong{display:block;color:var(--primary);font-size:11px;margin-bottom:2px;}
+#pg-messages .m160-reply-bar span{display:block;max-width:80ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#pg-messages .m160-reply-bar button{width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.05);color:var(--on-surface-2);}
+#pg-messages .m160-attachment-preview{
+  display:none;align-items:center;gap:7px;margin:0 0 8px;padding:7px 10px;border-radius:10px;
+  background:var(--surface-2);border:1px solid var(--border);font-size:12px;
+}
+#pg-messages .m160-attachment-name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:48ch;}
+#pg-messages .m160-attachment-size{color:var(--on-surface-3);}
+#pg-messages .m160-attachment-preview button{margin-left:auto;width:26px;height:26px;border-radius:50%;color:var(--on-surface-2);}
+#pg-messages .m160-emoji-picker{
+  position:absolute;left:16px;bottom:72px;z-index:40;
+  display:grid;grid-template-columns:repeat(6,36px);gap:4px;padding:8px;
+  border:1px solid var(--border);background:rgba(255,255,255,.98);backdrop-filter:blur(16px);
+  border-radius:14px;box-shadow:var(--elev-3);
+}
+#pg-messages .m160-emoji{width:36px;height:36px;border-radius:9px;font-size:19px;}
+#pg-messages .m160-emoji:hover{background:var(--primary-alpha);}
+
+/* Message actions + media */
+#pg-messages .m160-message-row{position:relative;}
+#pg-messages .m160-message-actions{display:flex;gap:4px;opacity:0;transition:opacity .14s;margin-top:3px;}
+#pg-messages .msg-row:hover .m160-message-actions,
+#pg-messages .m160-message-actions:focus-within{opacity:1;}
+#pg-messages .m160-mini-action{
+  width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+  background:var(--surface-2);border:1px solid var(--border);color:var(--on-surface-3);font-size:13px;
+}
+#pg-messages .m160-mini-action:hover{background:var(--primary-alpha);color:var(--primary);}
+#pg-messages .m160-message-menu{
+  position:absolute;right:0;bottom:30px;z-index:60;min-width:190px;padding:5px;
+  background:rgba(255,255,255,.98);border:1px solid var(--border);border-radius:12px;box-shadow:var(--elev-3);
+}
+#pg-messages .msg-row.me .m160-message-menu{right:0;}
+#pg-messages .m160-message-menu button{
+  display:block;width:100%;padding:9px 11px;text-align:left;border-radius:8px;
+  color:var(--on-surface-2);font-size:12.5px;
+}
+#pg-messages .m160-message-menu button:hover{background:var(--surface-2);color:var(--primary);}
+#pg-messages .m160-message-content{display:flex;flex-direction:column;gap:6px;}
+#pg-messages .m160-reply-quote{
+  padding:6px 8px;border-left:3px solid var(--primary);background:rgba(26,110,245,.06);
+  border-radius:7px;font-size:11px;color:var(--on-surface-3);
+}
+#pg-messages .m160-forwarded-label{font-size:10.5px;color:var(--on-surface-3);font-weight:700;}
+#pg-messages .m160-edited{font-size:9.5px;color:var(--on-surface-3);font-style:italic;}
+#pg-messages .m160-deleted{font-style:italic;color:var(--on-surface-3);}
+#pg-messages .m160-media-wrap{overflow:hidden;border-radius:10px;border:1px solid var(--border);background:var(--surface-3);max-width:min(360px,70vw);}
+#pg-messages .m160-media-image{display:block;max-width:100%;max-height:360px;object-fit:cover;}
+#pg-messages .m160-media-video{display:block;width:100%;max-height:360px;}
+#pg-messages .m160-reactions{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;}
+#pg-messages .m160-reaction-chip{
+  padding:3px 7px;border-radius:999px;background:var(--surface);border:1px solid var(--border);
+  color:var(--on-surface-2);font-size:11px;
+}
+#pg-messages .m160-reaction-chip.mine{background:var(--primary-alpha);border-color:rgba(26,110,245,.25);color:var(--primary);}
+#pg-messages .m160-reaction-picker{
+  position:absolute;left:0;bottom:28px;z-index:55;display:flex;gap:3px;padding:6px;
+  background:rgba(255,255,255,.98);border:1px solid var(--border);border-radius:12px;box-shadow:var(--elev-3);
+}
+#pg-messages .m160-reaction-picker button{width:30px;height:30px;border-radius:8px;font-size:17px;}
+#pg-messages .m160-reaction-picker button:hover{background:var(--primary-alpha);}
+#pg-messages .m160-forward-backdrop{
+  position:fixed;inset:0;z-index:3000;display:flex;align-items:center;justify-content:center;
+  padding:18px;background:rgba(8,14,28,.38);backdrop-filter:blur(10px);
+}
+#pg-messages .m160-forward-dialog{
+  width:min(460px,100%);max-height:78vh;display:flex;flex-direction:column;
+  background:var(--surface);border:1px solid var(--border);border-radius:20px;box-shadow:var(--elev-4);overflow:hidden;
+}
+#pg-messages .m160-forward-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);font-size:15px;}
+#pg-messages .m160-forward-head button{width:30px;height:30px;border-radius:50%;color:var(--on-surface-2);}
+#pg-messages .m160-forward-list{padding:10px;overflow:auto;}
+#pg-messages .m160-forward-item{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;cursor:pointer;color:var(--on-surface);}
+#pg-messages .m160-forward-item:hover{background:var(--surface-2);}
+#pg-messages .m160-forward-item input{accent-color:var(--primary);}
+#pg-messages .m160-forward-actions{display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--border);}
+#pg-messages .m160-forward-actions button{flex:1;padding:10px;border-radius:10px;font-weight:800;}
+#pg-messages .m160-forward-actions button:first-child{background:var(--surface-2);color:var(--on-surface-2);}
+#pg-messages .m160-forward-actions button:last-child{background:var(--primary);color:#fff;}
+@media(max-width:720px){
+  #pg-messages .m160-emoji-picker{grid-template-columns:repeat(6,32px);left:8px;bottom:68px;}
+  #pg-messages .m160-emoji{width:32px;height:32px;}
+  #pg-messages .m160-message-actions{opacity:1;}
+  #pg-messages .m160-media-wrap{max-width:84vw;}
+}
+</style>
+
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -9783,6 +9942,9 @@ body.vid-in-fs .fs-next-btn{
         <input type="text" class="messages-search-input" id="msg-search-input" placeholder="Search conversations…">
       </div>
 
+      <!-- Incoming message/group requests -->
+      <div id="msg-request-center" aria-live="polite"></div>
+
       <!-- Conversation list -->
       <div class="messages-conv-list" id="msg-conv-list">
         <div class="messages-list-empty">
@@ -9800,8 +9962,10 @@ body.vid-in-fs .fs-next-btn{
       <div class="messages-thread-empty" id="msg-thread-empty">
         <div class="empty-illustration">💬</div>
         <h2>Your messages</h2>
-        <p>Select a conversation, find any Mortalive username, or start a group chat.</p>
-        <button class="messages-cta-btn" id="btn-empty-new-group">Create a group</button>
+        <p>Keep your conversations in one place. Start a direct chat, create a group, or review incoming requests.</p>
+        <div class="messages-empty-actions">
+          <button class="messages-cta-btn" id="btn-empty-new-group">Create a group</button>
+        </div>
       </div>
 
       <!-- Active conversation -->
@@ -10324,7 +10488,7 @@ body.vid-in-fs .fs-next-btn{
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260829-v156-smart-group-create"></script>
+<script src="app.js?v=20260829-v160-basic-messaging"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
