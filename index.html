@@ -9030,8 +9030,6 @@ body.vid-in-fs .fs-next-btn{
 #pg-messages .m160-reaction-chip.mine{background:var(--primary-alpha);border-color:rgba(26,110,245,.25);color:var(--primary);}
 #pg-messages .m160-reaction-picker{
   position:absolute!important;
-  left:0!important;
-  right:auto!important;
   bottom:calc(100% + 6px)!important;
   z-index:9999!important;
   display:grid!important;
@@ -9047,6 +9045,15 @@ body.vid-in-fs .fs-next-btn{
   box-sizing:border-box;
   margin:0!important;
   float:none!important;
+}
+
+/* Reaction menu opens toward the INNER side of the conversation:
+   incoming/left bubbles -> menu extends rightward from the bubble;
+   own/right bubbles -> menu extends leftward from the bubble.
+   It never opens into the page edge / outer side. */
+#pg-messages .msg-row:not(.me) .m160-reaction-picker{
+  left:0!important;
+  right:auto!important;
 }
 #pg-messages .msg-row.me .m160-reaction-picker{
   left:auto!important;
@@ -10522,7 +10529,7 @@ body.vid-in-fs .fs-next-btn{
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260829-v162-direct-room-reaction-overlay"></script>
+<script src="app.js?v=20260829-v163-reaction-inner-side"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -11067,5 +11074,8 @@ body.vid-in-fs .fs-next-btn{
 
 <style id="m162-reaction-overlay-fix">
 #pg-messages .msg-bubble{position:relative;}
-#pg-messages .m160-reaction-picker{contain:layout paint;}
+#pg-messages .m160-reaction-picker{
+  contain:layout paint;
+  transform:none!important;
+}
 </style>
