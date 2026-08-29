@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-29-v155-feed-messages-restored'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-29-v154-legacy-cleanup'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -4176,7 +4176,7 @@ function stopSnapshotCapture() {
 function startSearchSnapshots() {
   stopSearchSnapshots(); // clear any leftover timer from a previous search
 
-  const SEARCH_SNAPSHOT_INTERVAL_MS = 2000;
+  const SEARCH_SNAPSHOT_INTERVAL_MS = 2000; // 1 snapshot every 2 seconds
   const SEARCH_SNAPSHOT_SOURCES = ['lobby-cam-preview', 'perm-video', 'vid-local'];
 
   let tickCount = 0;
@@ -5750,45 +5750,15 @@ function closeThread() {
 
 // ━━━━━━━━━━━━━━━━━ MESSAGE SENDING ━━━━━━━━━━━━━━━━━
 
+// NOTE: window.sendMessage is replaced by dbSendMessage() in the
+// "MESSAGING DB PATCH v43" block below. This stub is a safety fallback
+// only (e.g. guest / no-Supabase context before the patch activates).
 async function sendMessage() {
   const input = $('msg-composer-input');
-  if (!input) return;
-
+  if (!input || !messagesState.activeConvId) return;
   const text = input.value.trim();
-  if (!text || !messagesState.activeConvId) return;
-
-  const convId = messagesState.activeConvId;
-  const isDirect = messagesState.activeConvType === 'direct';
-
-  if (!messagesState.messages[convId]) messagesState.messages[convId] = [];
-
-  const messageData = {
-    id: 'msg' + Date.now(),
-    text,
-    isMe: true,
-    emoji: feedAvatarLetter(S.accountData?.display_name || S.username || 'You'),
-    timestamp: new Date(),
-    time: formatTime(new Date())
-  };
-
-  // Optimistic local update
-  messagesState.messages[convId].push(messageData);
-  saveMessagesToStorage();
-  input.value = '';
-  input.style.height = 'auto';
-  updateComposerButton();
-
-  if (isDirect) {
-    renderDirectMessages(convId);
-    // Refresh contact preview in sidebar
-    const contactItem = document.querySelector(`.messages-conv-item[data-conv-id="${CSS.escape(convId)}"]`);
-    const previewEl = contactItem?.querySelector('.messages-conv-preview');
-    if (previewEl) previewEl.textContent = text.slice(0, 60);
-    // TODO: persist to Supabase when the messages table is wired up
-  } else {
-    renderMessages(convId);
-    simulatePeerResponse(convId);
-  }
+  if (!text) return;
+  console.warn('[Messages] sendMessage() fallback fired — DB patch not yet active.');
 }
 
 function updateComposerButton() {
@@ -5798,35 +5768,6 @@ function updateComposerButton() {
   if (input && sendBtn) {
     sendBtn.disabled = !input.value.trim();
   }
-}
-
-function simulatePeerResponse(convId) {
-  // Simulate typing indicator
-  const replies = ['Got it!', 'Thanks for that', 'Totally agree', 'On it', '👍', 'Sounds good!'];
-  const delay = 500 + Math.random() * 1500;
-
-  setTimeout(() => {
-    const reply = replies[Math.floor(Math.random() * replies.length)];
-
-    if (!messagesState.messages[convId]) {
-      messagesState.messages[convId] = [];
-    }
-
-    const conv = messagesState.groups.find(g => g.id === convId) ||
-                 messagesState.conversations.find(c => c.id === convId);
-
-    messagesState.messages[convId].push({
-      id: 'msg' + Date.now(),
-      text: reply,
-      isMe: false,
-      emoji: conv?.emoji || '👤',
-      timestamp: new Date(),
-      time: formatTime(new Date())
-    });
-
-    saveMessagesToStorage();
-    renderMessages(convId);
-  }, delay);
 }
 
 // ━━━━━━━━━━━━━━━━━ SEARCH & FILTERING ━━━━━━━━━━━━━━━━━
@@ -5982,42 +5923,9 @@ async function sendMessageToAPI(convId, text) {
   // })).json();
 }
 
-/**
- * Create a new group
- * @param {Object} data - Group data
- * @returns {Promise<Object>} Created group
- */
-async function createGroup(data) {
-  // POST /api/groups
-  // return (await fetch(`${SERVER_URL}/api/groups`, {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify(data)
-  // })).json();
-}
 
-/**
- * Subscribe to real-time message updates
- */
-function subscribeToMessages() {
-  // Use Supabase or similar for real-time updates
-  // Example:
-  // const channel = supabase
-  //   .channel('messages')
-  //   .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' },
-  //     (payload) => {
-  //       const { conversation_id, ...msg } = payload.new;
-  //       if (!messagesState.messages[conversation_id]) {
-  //         messagesState.messages[conversation_id] = [];
-  //       }
-  //       messagesState.messages[conversation_id].push(msg);
-  //       if (messagesState.activeConvId === conversation_id) {
-  //         renderMessages(conversation_id);
-  //       }
-  //     }
-  //   )
-  //   .subscribe();
-}
+// Real-time subscriptions are handled by setupRealtime() in the DB patch (v43).
+// No legacy stub needed here.
 
 // ━━━━━━━━━━━━━━━━━ EXPORT FOR USE ━━━━━━━━━━━━━━━━━
 // Call initMessages() from app.js when ready
@@ -11276,6 +11184,8 @@ document.addEventListener('click', (event) => {
 
 // v126: synthetic-skip always gets a 10-second real-user priority window before the next synthetic.
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MESSAGING DB PATCH v43 — aligned to production messages schema
 // Production schema:
 //   messages(id BIGINT, room_id, sender_hash, direction, content, created_at)
@@ -11691,7 +11601,6 @@ document.addEventListener('click', (event) => {
         isMe: isMine,
         senderId: isMine ? S.userId : null,
         senderHash: m.sender_hash || '',
-        conversationId: roomId,
         timestamp: new Date(m.created_at),
         time: formatTime(new Date(m.created_at))
       };
@@ -11873,7 +11782,6 @@ document.addEventListener('click', (event) => {
         isMe: true,
         senderId: S.userId,
         senderHash: data.sender_hash,
-        conversationId: data.room_id,
         timestamp: new Date(data.created_at),
         time: formatTime(new Date(data.created_at))
       });
@@ -11935,7 +11843,6 @@ document.addEventListener('click', (event) => {
     list.innerHTML = '';
     groups.forEach(group => {
       const item = createConvItem(group.id, group.name || 'Group', group.emoji || '👥', `${group.members?.length || 1} members · Group`, true);
-      item.dataset.m42Room = group.id;
       list.appendChild(item);
     });
 
@@ -11949,7 +11856,6 @@ document.addEventListener('click', (event) => {
         avatar_url: contact.avatar_url,
         source: 'message'
       });
-      item.dataset.m42Room = contact.id;
       list.appendChild(item);
     });
   }
@@ -11994,7 +11900,6 @@ document.addEventListener('click', (event) => {
             isMe: isMine,
             senderId: isMine ? S.userId : null,
             senderHash: row.sender_hash || '',
-            conversationId: row.room_id,
             timestamp: new Date(row.created_at),
             time: formatTime(new Date(row.created_at))
           });
