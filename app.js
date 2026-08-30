@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-30-v168-detached-online-status-drop'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-30-v169-feed-nav-status-island'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -15755,12 +15755,15 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
       el.classList.toggle('active', el.dataset.diPage === pageId)
     );
 
-    /* Nav links vs search slot */
+    /* Nav links + search slot.
+       Feed keeps the navigation tabs on desktop; the search occupies the
+       expandable middle area alongside them instead of replacing the nav.
+       Mobile hides nav via CSS and uses the bottom tab bar. */
     const navEl  = document.getElementById('di2-nav');
     const slotEl = document.getElementById('di2-search-slot');
     const isFeed = (pageId === 'pg-feed');
 
-    if (navEl)  navEl.style.display  = isFeed ? 'none' : '';
+    if (navEl)  navEl.style.display  = '';
     if (slotEl) slotEl.classList.toggle('active', isFeed);
 
     if (isFeed) bridgeSearch();
