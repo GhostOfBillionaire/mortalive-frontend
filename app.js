@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-30-v176-feed-search-clean'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-30-v177-feed-search-state-stable'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -14804,8 +14804,9 @@ document.addEventListener('click', (event) => {
 
     const sync = () => {
       const onFeed = feed.classList.contains('active');
-      wrap.style.display = onFeed ? '' : 'none';
-      if (!onFeed) closeResults();
+      const keepSearch = !!window.__mortaliveFeedSearchModeActive?.();
+      wrap.style.display = (onFeed || keepSearch) ? '' : 'none';
+      if (!onFeed && !keepSearch) closeResults();
     };
 
     sync();
@@ -15569,10 +15570,11 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
   /* ══════════════════════════════════════════════════════════
      3.  STATE
   ══════════════════════════════════════════════════════════ */
-  let _section     = null;
-  let _isHovering  = false;
-  let _searchFocus = false;
-  let _searchMoved = false;
+  let _section       = null;
+  let _isHovering    = false;
+  let _searchFocus   = false;
+  let _searchMoved   = false;
+  let _feedSearchMode = false;
   let _unread      = 0;
   let _toastTimer  = null;
 
@@ -15716,8 +15718,16 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
 
     if (isFeed) {
       bridgeSearch();
-    } else if (typeof window.__mortaliveExitFeedSearchMode === 'function') {
-      window.__mortaliveExitFeedSearchMode();
+    }
+
+    /* Do not auto-exit Feed search mode during section transitions.
+       The user explicitly closes it with Back/outside click. */
+    if (_feedSearchMode) {
+      const activePill = document.getElementById('di2-pill');
+      if (activePill) {
+        activePill.classList.add('feed-search-mode', 'search-on', 'is-sticky-open');
+        applyWidth(activePill, 'focused');
+      }
     }
 
     /* Live dot colour */
@@ -15747,6 +15757,7 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
     const slot = document.getElementById('di2-search-slot');
     if (!pill || !slot) return;
 
+    _feedSearchMode = true;
     pill.classList.add('feed-search-mode', 'search-on', 'is-sticky-open');
     const left = pill.querySelector('.di2-left');
     left?.setAttribute('aria-hidden', 'true');
@@ -15801,6 +15812,7 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
   function exitFeedSearchMode() {
     const pill = document.getElementById('di2-pill');
     if (!pill) return;
+    _feedSearchMode = false;
     pill.classList.remove('feed-search-mode', 'search-on', 'is-sticky-open');
     pill.querySelector('.di2-left')?.removeAttribute('aria-hidden');
     pill.querySelector('.di2-nav')?.removeAttribute('aria-hidden');
@@ -15813,6 +15825,7 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
   }
 
   window.__mortaliveExitFeedSearchMode = exitFeedSearchMode;
+  window.__mortaliveFeedSearchModeActive = () => _feedSearchMode;
 
   function bridgeSearch() {
     if (_searchMoved) return;
@@ -15841,10 +15854,13 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
         enterFeedSearchMode();
       });
       inp.addEventListener('blur', () => {
-        // Keep the dedicated Feed search mode open; only Back or an explicit
-        // click outside the search closes it.
+        // Blur is NOT a dismissal action. Keep the Feed search island exactly
+        // where the user left it. Only Back or an explicit outside click exits.
         _searchFocus = true;
-        enterFeedSearchMode();
+        const pill = document.getElementById('di2-pill');
+        if (pill && _feedSearchMode) {
+          pill.classList.add('feed-search-mode', 'search-on', 'is-sticky-open');
+        }
       });
     }
 
