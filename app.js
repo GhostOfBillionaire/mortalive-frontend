@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-30-v178-feed-search-clean-final'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-30-v179-dynamic-island-search-audited'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -15476,6 +15476,8 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
     root.setAttribute('aria-label', 'Mortalive navigation');
     root.innerHTML = `
       <div class="di2-pill" id="di2-pill">
+        <button class="di2-sm-back" id="di2-sm-back" type="button" aria-label="Exit search">←</button>
+
 
         <!-- ── LEFT: always visible ── -->
         <div class="di2-left">
@@ -15520,6 +15522,7 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
         </div>
 
         <!-- Unread count badge -->
+        <button class="di2-sm-go" id="di2-sm-go" type="button" aria-label="Search">⌕</button>
         <span class="di2-badge" id="di2-badge" aria-hidden="true"></span>
       </div>
 
@@ -15558,13 +15561,13 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
   /* ══════════════════════════════════════════════════════════
      3.  STATE
   ══════════════════════════════════════════════════════════ */
-  let _section        = null;
-  let _isHovering     = false;
-  let _searchFocus    = false;
-  let _searchMoved    = false;
-  let _feedSearchMode = false;
-  let _unread         = 0;
-  let _toastTimer     = null;
+  let _section = null;
+  let _isHovering = false;
+  let _searchFocus = false;
+  let _searchMoved = false;
+  let _searchMode = false;
+  let _unread = 0;
+  let _toastTimer = null;
 
   /* ══════════════════════════════════════════════════════════
      4.  SECTION-SPECIFIC CTAs
@@ -15642,8 +15645,13 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
   window.addEventListener('resize', () => {
     const pill = document.getElementById('di2-pill');
     if (!pill) return;
-    const state = _feedSearchMode ? 'focused' : (_isHovering ? 'hover' : 'rest');
-    applyWidth(pill, state);
+    if (_searchMode) {
+      pill.style.width = (isMobile()
+        ? Math.min(320, window.innerWidth - 20)
+        : Math.min(420, window.innerWidth - 32)) + 'px';
+    } else {
+      applyWidth(pill, _isHovering ? 'hover' : 'rest');
+    }
   });
 
   /* ══════════════════════════════════════════════════════════
@@ -15703,15 +15711,19 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
 
     if (navEl)  navEl.style.display  = '';
     if (slotEl) slotEl.classList.toggle('active', isFeed);
-
     if (isFeed) {
       bridgeSearch();
-      if (_feedSearchMode) {
+      if (_searchMode) {
         const activePill = document.getElementById('di2-pill');
-        if (activePill) applyWidth(activePill, 'focused');
+        if (activePill) {
+          activePill.classList.add('is-search-mode', 'search-on');
+          activePill.style.width = (isMobile()
+            ? Math.min(320, window.innerWidth - 20)
+            : Math.min(420, window.innerWidth - 32)) + 'px';
+        }
       }
-    } else {
-      exitFeedSearchMode();
+    } else if (_searchMode) {
+      exitSearchMode();
     }
 
     /* Live dot colour */
@@ -15731,72 +15743,53 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
      into our island's search slot for the Feed page.
      The v165 MutationObserver still fires & controls visibility.
   ══════════════════════════════════════════════════════════ */
-  function enterFeedSearchMode() {
-    if (_section !== 'pg-feed') return;
-    const pill = document.getElementById('di2-pill');
-    const slot = document.getElementById('di2-search-slot');
-    if (!pill || !slot) return;
 
-    _feedSearchMode = true;
+  function enterSearchMode() {
+    if (_section !== 'pg-feed' || _searchMode) return;
+
+    _searchMode = true;
     _searchFocus = true;
     _isHovering = false;
-    pill.classList.add('feed-search-mode');
-    applyWidth(pill, 'focused');
 
-    if (!document.getElementById('di2-feed-search-back')) {
-      const back = document.createElement('button');
-      back.id = 'di2-feed-search-back';
-      back.type = 'button';
-      back.className = 'di2-feed-search-back';
-      back.setAttribute('aria-label', 'Back to Feed');
-      back.textContent = '←';
-      back.addEventListener('mousedown', e => e.preventDefault());
-      back.addEventListener('click', e => {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        exitFeedSearchMode();
-      });
-      slot.parentNode.insertBefore(back, slot);
-    }
+    const pill = document.getElementById('di2-pill');
+    if (!pill) return;
 
-    if (!document.getElementById('di2-feed-search-submit')) {
-      const submit = document.createElement('button');
-      submit.id = 'di2-feed-search-submit';
-      submit.type = 'button';
-      submit.className = 'di2-feed-search-submit';
-      submit.setAttribute('aria-label', 'Search');
-      submit.textContent = '⌕';
-      submit.addEventListener('mousedown', e => e.preventDefault());
-      submit.addEventListener('click', e => {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        const inp = document.getElementById('di-input');
-        if (!inp) return;
-        _query = inp.value.trim();
-        updatePillState();
-        if (_query) renderSearchResults(_query);
-        else renderHistory();
-        inp.focus();
-      });
-      slot.appendChild(submit);
+    pill.classList.remove('is-hovering');
+    pill.classList.add('is-search-mode', 'search-on');
+
+    const width = isMobile()
+      ? Math.min(320, window.innerWidth - 20)
+      : Math.min(420, window.innerWidth - 32);
+    pill.style.width = width + 'px';
+
+    const input = document.getElementById('di-input');
+    if (input) {
+      input.setAttribute('inputmode', 'search');
+      input.setAttribute('enterkeyhint', 'search');
+      if (!input.value) input.placeholder = 'Search users, posts, #tags…';
     }
   }
 
-  function exitFeedSearchMode() {
-    const pill = document.getElementById('di2-pill');
-    _feedSearchMode = false;
+  function exitSearchMode() {
+    if (!_searchMode) return;
+
+    _searchMode = false;
     _searchFocus = false;
     _isHovering = false;
-    if (!pill) return;
-    pill.classList.remove('feed-search-mode');
-    applyWidth(pill, 'rest');
-  }
 
-  window.__mortaliveEnterFeedSearchMode = enterFeedSearchMode;
-  window.__mortaliveExitFeedSearchMode = exitFeedSearchMode;
+    const pill = document.getElementById('di2-pill');
+    if (pill) {
+      pill.classList.remove('is-search-mode', 'search-on');
+      applyWidth(pill, 'rest');
+    }
+
+    document.getElementById('di-clear')?.click();
+    document.getElementById('di-input')?.blur();
+  }
 
   function bridgeSearch() {
     if (_searchMoved) return;
+
     const wrap = document.getElementById('di-search-wrap');
     const slot = document.getElementById('di2-search-slot');
     if (!wrap || !slot) return;
@@ -15812,19 +15805,20 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
     wrap.style.display = '';
     wrap.style.flex = '1';
 
-    const inp = document.getElementById('di-input');
-    if (inp && !inp.dataset.di2FeedSearchBound) {
-      inp.dataset.di2FeedSearchBound = '1';
-      inp.addEventListener('focus', () => enterFeedSearchMode());
-      inp.addEventListener('click', () => enterFeedSearchMode());
-      inp.addEventListener('blur', () => {
-        /* Blur never closes the dedicated Feed search mode. */
-        if (_feedSearchMode) document.getElementById('di2-pill')?.classList.add('feed-search-mode');
+    const input = document.getElementById('di-input');
+    if (input && !input.dataset.di2FeedSearchBound) {
+      input.dataset.di2FeedSearchBound = '1';
+
+      input.addEventListener('focus', () => enterSearchMode());
+      input.addEventListener('click', () => enterSearchMode());
+
+      input.addEventListener('blur', () => {
+        // Never collapse search from blur. The user controls exit.
       });
     }
 
     _searchMoved = true;
-    console.log('[DI v178] Feed search ready; dormant until explicit click ✓');
+    console.log('[DI v179] Feed search bridged ✓');
   }
 
   /* ══════════════════════════════════════════════════════════
@@ -15917,7 +15911,7 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
     pill.addEventListener('mouseleave', () => {
       _isHovering = false;
       pill.classList.remove('is-hovering');
-      if (!_searchFocus) applyWidth(pill, 'rest');
+      if (!_searchMode) applyWidth(pill, 'rest');
     });
 
     /* Touch: tap expands briefly then collapses */
@@ -16016,6 +16010,33 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
       e.stopPropagation();
       document.getElementById('app-topbar-score-pill')?.click();
     });
+    document.getElementById('di2-sm-back')?.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      exitSearchMode();
+    });
+
+    document.getElementById('di2-sm-go')?.addEventListener('mousedown', e => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const input = document.getElementById('di-input');
+      if (!input) return;
+      if (input.value.trim()) {
+        input.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', bubbles: true, cancelable: true
+        }));
+      } else {
+        input.focus();
+      }
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && _searchMode) {
+        e.preventDefault();
+        exitSearchMode();
+      }
+    });
+
 
     /* Expose hooks for app.js/external usage */
     window.diToast    = toast;
