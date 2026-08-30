@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-30-v170-online-counter-inside-main-island'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-30-v171-landing-search-sticky'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -14848,7 +14848,7 @@ document.addEventListener('click', (event) => {
 
     /* ── Input events ── */
     input.addEventListener('focus', () => {
-      pill?.classList.add('is-focused');
+      pill?.classList.add('is-focused', 'is-sticky-open');
       if (_query.length === 0) renderHistory();
       else openResults();
     });
@@ -14897,8 +14897,9 @@ document.addEventListener('click', (event) => {
 
     /* ── Click outside to close ── */
     document.addEventListener('click', e => {
-      if (!$('di-search-wrap')?.contains(e.target)) {
-        pill?.classList.remove('is-focused');
+      const wrap = $('di-search-wrap');
+      if (wrap && !wrap.contains(e.target)) {
+        pill?.classList.remove('is-focused', 'is-sticky-open');
         closeResults();
       }
     }, true);
@@ -15750,11 +15751,11 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
         }
       });
       inp.addEventListener('blur', () => {
-        _searchFocus = false;
+        _searchFocus = true;
         const pill = document.getElementById('di2-pill');
         if (pill) {
-          pill.classList.remove('search-on');
-          applyWidth(pill, _isHovering ? 'hover' : 'rest');
+          pill.classList.add('search-on', 'is-sticky-open');
+          applyWidth(pill, 'focused');
         }
       });
     }
