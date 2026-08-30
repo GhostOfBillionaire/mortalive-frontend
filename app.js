@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-30-v179-dynamic-island-search-audited'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-30-v180-mobile-bottom-search'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -13367,6 +13367,33 @@ document.addEventListener('click', (event) => {
         }
       }
     }, true); // ← capture phase
+
+    document.getElementById('di2-tab-srch')?.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation(); openMobileSearch();
+    });
+    document.getElementById('di2-bot-back')?.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation(); closeMobileSearch();
+    });
+    document.getElementById('di2-bot-go')?.addEventListener('mousedown', e => {
+      e.preventDefault(); e.stopPropagation(); submitMobileSearch();
+    });
+    document.getElementById('di2-bot-go')?.addEventListener('touchend', e => {
+      e.preventDefault(); e.stopPropagation(); submitMobileSearch();
+    }, {passive:false});
+
+    const mobInp=document.getElementById('di2-mob-inp');
+    if (mobInp) {
+      mobInp.addEventListener('input', () => {
+        const di=document.getElementById('di-input');
+        if (!di) return;
+        di.value=mobInp.value;
+        di.dispatchEvent(new Event('input',{bubbles:true}));
+      });
+      mobInp.addEventListener('keydown', e => {
+        if (e.key==='Enter') { e.preventDefault(); submitMobileSearch(); }
+        else if (e.key==='Escape') { e.preventDefault(); closeMobileSearch(); }
+      });
+    }
   }
 
   /* ─────────────────────────────────────────────────────────
@@ -15464,6 +15491,57 @@ body.di2-msg .di2-tab-lbl        { color: #4d6480; }
 body.di2-msg .di2-tab.active .di2-tab-lbl { color: #5aa4ff; }
 body.di2-msg .di2-tab.active::after       { background: #5aa4ff; }
 body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
+
+@media (max-width: 640px) {
+  #di2-search-slot, #di2-search-slot.active { display:none !important; }
+}
+#di2-mob-results {
+  display:none; position:fixed;
+  bottom:calc(60px + env(safe-area-inset-bottom,4px));
+  left:8px; right:8px; z-index:9997; max-height:55vh; overflow-y:auto;
+  border-radius:16px; box-shadow:0 8px 32px rgba(0,0,0,.14);
+}
+#di2-mob-results.open { display:block; }
+#di2-mob-results #di-results {
+  position:static !important; opacity:1 !important; transform:none !important;
+  border-radius:0 !important; max-height:none !important; box-shadow:none !important;
+}
+@media (min-width:641px) { #di2-mob-results { display:none !important; } }
+
+#di2-bot-tabs { display:flex; flex:1; width:100%; align-items:stretch; }
+#di2-bot-srch { display:none; flex:1; align-items:center; gap:0; padding:6px; }
+#di2-bot.search-open #di2-bot-tabs { display:none; }
+#di2-bot.search-open #di2-bot-srch { display:flex; }
+
+.di2-bot-back {
+  width:38px;height:38px;border-radius:50%;border:0;background:none;cursor:pointer;
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-size:20px;color:var(--on-surface-2);
+}
+body.di2-msg .di2-bot-back { color:#6b8aad; }
+#di2-mob-inp-wrap {
+  flex:1;min-width:0;display:flex;align-items:center;background:rgba(0,0,0,.06);
+  border-radius:12px;padding:0 10px;height:38px;gap:8px;margin:0 6px;
+}
+#di2-mob-inp-wrap:focus-within { background:rgba(0,0,0,.09); }
+body.di2-msg #di2-mob-inp-wrap { background:rgba(255,255,255,.09); }
+.di2-mob-ico { width:14px;height:14px;color:var(--on-surface-3);flex-shrink:0; }
+#di2-mob-inp {
+  flex:1;min-width:0;border:0;background:transparent;outline:none;font-size:15px;
+  font-weight:500;color:var(--on-surface);font-family:inherit;
+}
+#di2-mob-inp::placeholder { color:var(--on-surface-3);font-weight:400; }
+body.di2-msg #di2-mob-inp { color:#e8edf5; }
+body.di2-msg #di2-mob-inp::placeholder { color:#4d6480; }
+.di2-bot-go {
+  width:36px;height:36px;border-radius:50%;border:0;background:var(--primary);
+  color:#fff;cursor:pointer;flex-shrink:0;display:flex;align-items:center;
+  justify-content:center;box-shadow:0 2px 8px rgba(26,110,245,.28);
+}
+body.di2-msg .di2-bot-go { background:#2b7fff; }
+@media (min-width:641px) {
+  #di2-bot-tabs { display:flex; } #di2-bot-srch { display:none !important; }
+}
 `;
 
   /* ══════════════════════════════════════════════════════════
@@ -15537,25 +15615,26 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
     nav.id = 'di2-bot';
     nav.setAttribute('aria-label', 'Main navigation');
     nav.innerHTML = `
-      <button class="di2-tab" data-di-page="pg-lobby"    type="button" aria-label="Talk">
-        <span class="di2-tab-ico">🗣️</span>
-        <span class="di2-tab-lbl">Talk</span>
-      </button>
-      <button class="di2-tab" data-di-page="pg-feed"     type="button" aria-label="Feed">
-        <span class="di2-tab-ico">📰</span>
-        <span class="di2-tab-lbl">Feed</span>
-      </button>
-      <button class="di2-tab" data-di-page="pg-messages" type="button" aria-label="Messages">
-        <span class="di2-tab-ico">💬</span>
-        <span class="di2-tab-lbl">Messages</span>
-        <span class="di2-tab-dot" id="di2-tab-dot"></span>
-      </button>
-      <button class="di2-tab" data-di-page="pg-profile"  type="button" aria-label="Profile">
-        <span class="di2-tab-ico">👤</span>
-        <span class="di2-tab-lbl">Profile</span>
-      </button>
-    `;
+      <div id="di2-bot-tabs">
+        <button class="di2-tab" data-di-page="pg-lobby" type="button" aria-label="Talk"><span class="di2-tab-ico">🗣️</span><span class="di2-tab-lbl">Talk</span></button>
+        <button class="di2-tab" data-di-page="pg-feed" type="button" aria-label="Feed"><span class="di2-tab-ico">📰</span><span class="di2-tab-lbl">Feed</span></button>
+        <button class="di2-tab" id="di2-tab-srch" type="button" aria-label="Search"><span class="di2-tab-ico">🔍</span><span class="di2-tab-lbl">Search</span></button>
+        <button class="di2-tab" data-di-page="pg-messages" type="button" aria-label="Messages"><span class="di2-tab-ico">💬</span><span class="di2-tab-lbl">Messages</span><span class="di2-tab-dot" id="di2-tab-dot"></span></button>
+        <button class="di2-tab" data-di-page="pg-profile" type="button" aria-label="Profile"><span class="di2-tab-ico">👤</span><span class="di2-tab-lbl">Profile</span></button>
+      </div>
+      <div id="di2-bot-srch" aria-hidden="true">
+        <button class="di2-bot-back" id="di2-bot-back" type="button" aria-label="Cancel">←</button>
+        <div id="di2-mob-inp-wrap">
+          <svg class="di2-mob-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><line x1="13" y1="13" x2="18" y2="18"/></svg>
+          <input id="di2-mob-inp" type="search" placeholder="Search users, posts, #tags…" inputmode="search" enterkeyhint="search" autocomplete="off" autocorrect="off" spellcheck="false">
+        </div>
+        <button class="di2-bot-go" id="di2-bot-go" type="button" aria-label="Search"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><line x1="13" y1="13" x2="18" y2="18"/></svg></button>
+      </div>`;
     document.body.appendChild(nav);
+    const host=document.createElement('div');
+    host.id='di2-mob-results';
+    host.setAttribute('aria-live','polite');
+    document.body.appendChild(host);
   }
 
   /* ══════════════════════════════════════════════════════════
@@ -15568,6 +15647,7 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
   let _searchMode = false;
   let _unread = 0;
   let _toastTimer = null;
+  let _mobSearchOpen = false;
 
   /* ══════════════════════════════════════════════════════════
      4.  SECTION-SPECIFIC CTAs
@@ -15660,6 +15740,7 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
   function setSection(pageId) {
     if (_section === pageId) return;
     _section = pageId;
+    if (_mobSearchOpen && pageId !== 'pg-feed') closeMobileSearch();
 
     const cfg = SECTIONS[pageId];
     if (!cfg) return;
@@ -15732,7 +15813,11 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
 
     /* Set pill width for this section's rest state */
     const pill = document.getElementById('di2-pill');
-    if (pill) applyWidth(pill, _isHovering ? 'hover' : 'rest');
+    if (pill) {
+      if (_searchMode) {
+        pill.style.width=(isMobile()?Math.min(320,window.innerWidth-20):Math.min(420,window.innerWidth-32))+'px';
+      } else applyWidth(pill, _isHovering ? 'hover' : 'rest');
+    }
 
     updateStatus();
   }
@@ -15743,6 +15828,45 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
      into our island's search slot for the Feed page.
      The v165 MutationObserver still fires & controls visibility.
   ══════════════════════════════════════════════════════════ */
+
+  function openMobileSearch() {
+    if (_mobSearchOpen) return;
+    _mobSearchOpen = true;
+    if (_section !== 'pg-feed') navigate('pg-feed');
+    const bot=document.getElementById('di2-bot');
+    const srch=document.getElementById('di2-bot-srch');
+    const host=document.getElementById('di2-mob-results');
+    bot?.classList.add('search-open');
+    srch?.removeAttribute('aria-hidden');
+    const diRes=document.getElementById('di-results');
+    if (diRes && host && !host.contains(diRes)) host.appendChild(diRes);
+    setTimeout(()=>document.getElementById('di2-mob-inp')?.focus(),80);
+  }
+
+  function closeMobileSearch() {
+    if (!_mobSearchOpen) return;
+    _mobSearchOpen=false;
+    document.getElementById('di2-bot')?.classList.remove('search-open');
+    document.getElementById('di2-bot-srch')?.setAttribute('aria-hidden','true');
+    document.getElementById('di2-mob-results')?.classList.remove('open');
+    const diRes=document.getElementById('di-results');
+    const diWrap=document.getElementById('di-search-wrap');
+    if (diRes && diWrap && !diWrap.contains(diRes)) diWrap.appendChild(diRes);
+    const mob=document.getElementById('di2-mob-inp');
+    if (mob) { mob.value=''; mob.blur(); }
+    const di=document.getElementById('di-input');
+    if (di) { di.value=''; di.dispatchEvent(new Event('input',{bubbles:true})); di.blur(); }
+  }
+
+  function submitMobileSearch() {
+    const mob=document.getElementById('di2-mob-inp');
+    const di=document.getElementById('di-input');
+    if (!mob || !di || !mob.value.trim()) return;
+    di.value=mob.value.trim();
+    di.dispatchEvent(new Event('input',{bubbles:true}));
+    di.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+    document.getElementById('di2-mob-results')?.classList.add('open');
+  }
 
   function enterSearchMode() {
     if (_section !== 'pg-feed' || _searchMode) return;
