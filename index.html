@@ -11187,7 +11187,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260830-v180-mobile-bottom-search"></script>
+<script src="app.js?v=20260830-v181-mobile-desktop-search-fix"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -11965,5 +11965,34 @@ body:has(#pg-land.active)::before{
   }
   #di2 .di2-sm-back,#di2 .di2-sm-go{
     width:30px;height:30px;
+  }
+}
+
+/* v181: Feed desktop search must remain visible in the Dynamic Island. */
+@media (min-width: 641px) {
+  body.di2-feed #di2-search-slot.active {
+    display:flex !important;
+    visibility:visible !important;
+    opacity:1 !important;
+  }
+  body.di2-feed #di2-search-slot.active #di-search-wrap {
+    display:flex !important;
+    visibility:visible !important;
+    opacity:1 !important;
+    flex:1 1 auto !important;
+    min-width:180px !important;
+    width:auto !important;
+  }
+  body.di2-feed #di2-search-slot.active #di-input {
+    display:block !important;
+    visibility:visible !important;
+    opacity:1 !important;
+    width:100% !important;
+    min-width:120px !important;
+  }
+  body.di2-feed #di2-search-slot.active .dynamic-island-search,
+  body.di2-feed #di2-search-slot.active .dynamic-island-search-wrap {
+    visibility:visible !important;
+    opacity:1 !important;
   }
 }
