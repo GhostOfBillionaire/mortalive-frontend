@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-30-v167-dynamic-island-desktop-expand'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-30-v168-detached-online-status-drop'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -15235,6 +15235,64 @@ body.di2-live.mortalive-app-topbar-visible #di2 { display: flex; }
   overflow: hidden; text-overflow: ellipsis;
 }
 
+/* ══ Detached online-status drop ═════════════════════════ */
+#di2-status-drop{
+  position:fixed;
+  left:0;
+  top:0;
+  z-index:9998;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  min-width:112px;
+  height:36px;
+  padding:0 12px;
+  border-radius:18px;
+  opacity:0;
+  pointer-events:none;
+  transform:translateY(-50%) translateX(-8px) scale(.96);
+  transform-origin:left center;
+  background:rgba(255,255,255,.88);
+  backdrop-filter:blur(24px) saturate(180%);
+  -webkit-backdrop-filter:blur(24px) saturate(180%);
+  border:1px solid rgba(0,0,0,.09);
+  box-shadow:0 4px 14px rgba(0,0,0,.08),0 12px 30px rgba(0,0,0,.08),inset 0 1px 0 rgba(255,255,255,.82);
+  transition:opacity .22s ease,transform .38s cubic-bezier(.34,1.56,.64,1),background .24s ease,border-color .24s ease;
+  box-sizing:border-box;
+}
+#di2-status-drop.visible{
+  opacity:1;
+  transform:translateY(-50%) translateX(0) scale(1);
+}
+.di2-status-drop-dot{
+  width:8px;height:8px;flex:0 0 8px;border-radius:50%;
+  background:var(--success);
+  box-shadow:0 0 0 4px rgba(22,163,74,.12);
+}
+.di2-status-drop-dot.unread{
+  background:#3b82f6;
+  box-shadow:0 0 0 4px rgba(59,130,246,.12);
+}
+.di2-status-drop-text{
+  font-size:11.5px;
+  font-weight:700;
+  line-height:1;
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+body.di2-msg #di2-status-drop{
+  background:rgba(9,16,26,.90);
+  border-color:rgba(255,255,255,.11);
+  color:#dce7f4;
+  box-shadow:0 4px 14px rgba(0,0,0,.30),0 12px 34px rgba(0,0,0,.26),inset 0 1px 0 rgba(255,255,255,.05);
+}
+@media(max-width:640px){
+  #di2-status-drop{display:none!important;}
+}
+@media(prefers-reduced-motion:reduce){
+  #di2-status-drop{transition:none;}
+}
+
 /* ══ Unread badge ═════════════════════════════════════════ */
 .di2-badge {
   position: absolute;
@@ -15510,10 +15568,9 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
           </div>
         </div>
 
-        <!-- ── RIGHT: always visible ── -->
-        <div class="di2-right">
+        <!-- ── RIGHT: compact live indicator ── -->
+        <div class="di2-right" aria-hidden="true">
           <span class="di2-live-dot" id="di2-dot"></span>
-          <span class="di2-status"   id="di2-st">Live</span>
         </div>
 
         <!-- Unread count badge -->
@@ -15524,6 +15581,15 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
       <div id="di2-toast" role="status" aria-live="polite" aria-atomic="true"></div>
     `;
     document.body.appendChild(root);
+
+    const statusDrop = document.createElement('div');
+    statusDrop.id = 'di2-status-drop';
+    statusDrop.setAttribute('aria-live', 'polite');
+    statusDrop.innerHTML = `
+      <span class="di2-status-drop-dot" id="di2-status-drop-dot"></span>
+      <span class="di2-status-drop-text" id="di2-st">Live</span>
+    `;
+    document.body.appendChild(statusDrop);
   }
 
   function buildBottomNav() {
@@ -15765,15 +15831,40 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
   ══════════════════════════════════════════════════════════ */
   function syncStatus() {
     const el = document.getElementById('di2-st');
+    const drop = document.getElementById('di2-status-drop');
+    const dropDot = document.getElementById('di2-status-drop-dot');
     if (!el) return;
 
+    let label = 'Live';
     if (_section === 'pg-messages' && _unread > 0) {
-      el.textContent = `${_unread} unread`;
-      return;
+      label = `${_unread} unread`;
+    } else {
+      const src = document.getElementById('app-topbar-online-count');
+      const v = src?.textContent?.trim();
+      label = (v && v !== '—') ? `${v} online` : 'Live';
     }
-    const src = document.getElementById('app-topbar-online-count');
-    const v   = src?.textContent?.trim();
-    el.textContent = (v && v !== '—') ? `${v} online` : 'Live';
+
+    el.textContent = label;
+    dropDot?.classList.toggle('unread', _section === 'pg-messages' && _unread > 0);
+    positionStatusDrop();
+  }
+
+  function positionStatusDrop() {
+    const pill = document.getElementById('di2-pill');
+    const drop = document.getElementById('di2-status-drop');
+    if (!pill || !drop || window.innerWidth <= MOBILE_BP) return;
+
+    const rect = pill.getBoundingClientRect();
+    const dropWidth = drop.getBoundingClientRect().width || 112;
+    const gap = 10;
+
+    let left = rect.right + gap;
+    if (left + dropWidth > window.innerWidth - 10) {
+      left = Math.max(10, rect.left - dropWidth - gap);
+    }
+
+    drop.style.left = `${Math.round(left)}px`;
+    drop.style.top = `${Math.round(rect.top + rect.height / 2)}px`;
   }
 
   function syncScore() {
@@ -15842,12 +15933,17 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
       _isHovering = true;
       pill.classList.add('is-hovering');
       applyWidth(pill, 'hover');
+      requestAnimationFrame(() => {
+        positionStatusDrop();
+        document.getElementById('di2-status-drop')?.classList.add('visible');
+      });
     });
 
     pill.addEventListener('mouseleave', () => {
       _isHovering = false;
       pill.classList.remove('is-hovering');
       if (!_searchFocus) applyWidth(pill, 'rest');
+      document.getElementById('di2-status-drop')?.classList.remove('visible');
     });
 
     /* Touch: tap expands briefly then collapses */
@@ -15860,10 +15956,13 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
     }, { passive: true });
 
     pill.addEventListener('touchend', () => {
+      document.getElementById('di2-status-drop')?.classList.add('visible');
+      positionStatusDrop();
       _touchTimer = setTimeout(() => {
         _isHovering = false;
         pill.classList.remove('is-hovering');
         if (!_searchFocus) applyWidth(pill, 'rest');
+        document.getElementById('di2-status-drop')?.classList.remove('visible');
       }, 2400);
     }, { passive: true });
   }
@@ -15983,6 +16082,7 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
     observePages();
     observeTopbarVisibility();
     observeScroll();
+    window.addEventListener('resize', positionStatusDrop, { passive: true });
 
     /* Delayed observers (DOM might not have these elements yet) */
     setTimeout(() => { observeOnlineCount(); observeScore(); }, 700);
