@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-30-v166-dynamic-island-v2'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-30-v167-dynamic-island-desktop-expand'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -14965,9 +14965,10 @@ document.addEventListener('click', (event) => {
   // Width targets (px). Keep these sensible on every screen.
   const W = {
     rest:        260,  // collapsed — logo + section + status
-    hover:       540,  // expanded  — + nav + cta + score
-    feedRest:    320,  // Feed rest — includes mini search hint
-    feedFocused: 540,  // Feed search focused
+    hover:       720,  // expanded — nav + CTA + score + status, no cropping
+    feedRest:    340,  // Feed rest — includes mini search hint
+    feedHover:   760,  // Feed hover — enough room for search + nav/CTA/score
+    feedFocused: 760,  // Feed search focused
     mobileRest:  196,
     mobileHover: 330,
     mobileFeed:  240,
@@ -15607,17 +15608,39 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
 
   function targetWidth(state) {
     const m = isMobile();
-    if (_section === 'pg-feed') {
-      if (state === 'focused') return m ? Math.min(W.feedFocused, window.innerWidth - 28) : W.feedFocused;
-      return m ? W.mobileFeed : W.feedRest;
+
+    if (m) {
+      if (_section === 'pg-feed') {
+        if (state === 'focused') return Math.min(W.feedFocused, window.innerWidth - 28);
+        if (state === 'hover') return Math.min(W.mobileHover, window.innerWidth - 20);
+        return Math.min(W.mobileFeed, window.innerWidth - 20);
+      }
+      if (state === 'hover') return Math.min(W.mobileHover, window.innerWidth - 20);
+      return Math.min(W.mobileRest, window.innerWidth - 20);
     }
-    if (state === 'hover') return m ? W.mobileHover : W.hover;
-    return m ? W.mobileRest : W.rest;
+
+    // Desktop: allow the island to grow enough for every control.
+    // Clamp to the viewport so it never crops at either screen edge.
+    if (_section === 'pg-feed') {
+      if (state === 'focused') return Math.min(W.feedFocused, window.innerWidth - 32);
+      if (state === 'hover') return Math.min(W.feedHover, window.innerWidth - 32);
+      return Math.min(W.feedRest, window.innerWidth - 32);
+    }
+
+    if (state === 'hover') return Math.min(W.hover, window.innerWidth - 32);
+    return Math.min(W.rest, window.innerWidth - 32);
   }
 
   function applyWidth(pill, state) {
     pill.style.width = targetWidth(state) + 'px';
   }
+
+  window.addEventListener('resize', () => {
+    const pill = document.getElementById('di2-pill');
+    if (!pill) return;
+    const state = _searchFocus ? 'focused' : (_isHovering ? 'hover' : 'rest');
+    applyWidth(pill, state);
+  });
 
   /* ══════════════════════════════════════════════════════════
      6.  SECTION TRANSITION
