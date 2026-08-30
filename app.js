@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-30-v180-mobile-bottom-search'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-30-v181-mobile-desktop-search-fix'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -13369,7 +13369,9 @@ document.addEventListener('click', (event) => {
     }, true); // ← capture phase
 
     document.getElementById('di2-tab-srch')?.addEventListener('click', e => {
-      e.preventDefault(); e.stopPropagation(); openMobileSearch();
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      openMobileSearch();
     });
     document.getElementById('di2-bot-back')?.addEventListener('click', e => {
       e.preventDefault(); e.stopPropagation(); closeMobileSearch();
@@ -13383,6 +13385,15 @@ document.addEventListener('click', (event) => {
 
     const mobInp=document.getElementById('di2-mob-inp');
     if (mobInp) {
+      mobInp.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!_mobSearchOpen) openMobileSearch();
+        mobInp.focus();
+      });
+      mobInp.addEventListener('touchstart', e => {
+        e.stopPropagation();
+        if (!_mobSearchOpen) openMobileSearch();
+      }, {passive:true});
       mobInp.addEventListener('input', () => {
         const di=document.getElementById('di-input');
         if (!di) return;
@@ -15832,15 +15843,36 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   function openMobileSearch() {
     if (_mobSearchOpen) return;
     _mobSearchOpen = true;
-    if (_section !== 'pg-feed') navigate('pg-feed');
-    const bot=document.getElementById('di2-bot');
-    const srch=document.getElementById('di2-bot-srch');
-    const host=document.getElementById('di2-mob-results');
-    bot?.classList.add('search-open');
-    srch?.removeAttribute('aria-hidden');
-    const diRes=document.getElementById('di-results');
-    if (diRes && host && !host.contains(diRes)) host.appendChild(diRes);
-    setTimeout(()=>document.getElementById('di2-mob-inp')?.focus(),80);
+
+    const reveal = () => {
+      const bot  = document.getElementById('di2-bot');
+      const srch = document.getElementById('di2-bot-srch');
+      const host = document.getElementById('di2-mob-results');
+
+      bot?.classList.add('search-open');
+      if (srch) {
+        srch.removeAttribute('aria-hidden');
+        srch.style.display = 'flex';
+      }
+
+      const diRes = document.getElementById('di-results');
+      if (diRes && host && !host.contains(diRes)) host.appendChild(diRes);
+
+      const mob = document.getElementById('di2-mob-inp');
+      if (mob) {
+        mob.disabled = false;
+        mob.removeAttribute('aria-hidden');
+        mob.style.pointerEvents = 'auto';
+        requestAnimationFrame(() => mob.focus());
+      }
+    };
+
+    if (_section !== 'pg-feed') {
+      navigate('pg-feed');
+      setTimeout(reveal, 120);
+    } else {
+      reveal();
+    }
   }
 
   function closeMobileSearch() {
@@ -16128,6 +16160,20 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       e.preventDefault();
       navigate(btn.dataset.diPage);
     });
+
+
+    /* v181 defensive mobile Search-tab delegation: survives DOM replacement. */
+    if (!document.body.dataset.di2MobSearchDelegated) {
+      document.body.dataset.di2MobSearchDelegated = '1';
+      document.addEventListener('click', e => {
+        if (!isMobile()) return;
+        const searchTab = e.target.closest('#di2-tab-srch');
+        if (!searchTab) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        openMobileSearch();
+      }, true);
+    }
 
     /* Score click → open progress sheet (existing app.js handler) */
     document.getElementById('di2-score')?.addEventListener('click', e => {
