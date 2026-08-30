@@ -11187,7 +11187,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260830-v168-detached-online-status-drop"></script>
+<script src="app.js?v=20260830-v169-feed-nav-status-island"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -11748,5 +11748,50 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   }
   #pg-messages .msg-row.them .m160-message-actions{right:4px;}
   #pg-messages .msg-row.me .m160-message-actions{left:4px;}
+}
+</style>
+
+<style id="mortalive-v169-feed-search-cleanup">
+/* v169: Feed Dynamic Island uses the text search only; category chips are
+   intentionally removed because the search UI already communicates context. */
+#pg-feed .di-filter-chips,
+#app-topbar .di-filter-chips,
+#di2-search-slot .di-filter-chips,
+#di-search-wrap .di-filter-chips{
+  display:none !important;
+}
+</style>
+
+<style id="mortalive-v169-dynamic-island-feed-nav">
+@media (min-width:641px){
+  #di2 .di2-mid-inner{
+    min-width:0;
+    overflow:visible;
+  }
+  #di2 .di2-nav{
+    flex:0 0 auto;
+  }
+  #di2 #di2-search-slot{
+    flex:1 1 250px;
+    min-width:180px;
+    max-width:320px;
+  }
+  #di2 #di2-search-slot .dynamic-island-search-wrap{
+    max-width:none !important;
+    width:100%;
+  }
+}
+</style>
+
+<style id="mortalive-v169-status-island">
+@media (min-width:641px){
+  #di2-status-drop{
+    min-width:96px;
+    height:32px;
+    padding:0 11px;
+    border-radius:16px;
+    font-size:11px;
+    box-shadow:0 5px 18px rgba(0,0,0,.10), 0 10px 28px rgba(0,0,0,.07);
+  }
 }
 </style>
