@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-30-v177-feed-search-state-stable'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-30-v178-feed-search-clean-final'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -14804,9 +14804,8 @@ document.addEventListener('click', (event) => {
 
     const sync = () => {
       const onFeed = feed.classList.contains('active');
-      const keepSearch = !!window.__mortaliveFeedSearchModeActive?.();
-      wrap.style.display = (onFeed || keepSearch) ? '' : 'none';
-      if (!onFeed && !keepSearch) closeResults();
+      wrap.style.display = onFeed ? '' : 'none';
+      if (!onFeed) closeResults();
     };
 
     sync();
@@ -14865,17 +14864,9 @@ document.addEventListener('click', (event) => {
         case 'ArrowDown': e.preventDefault(); moveSelection(+1); break;
         case 'ArrowUp':   e.preventDefault(); moveSelection(-1); break;
         case 'Enter':
-          e.preventDefault();
           if (_selectedIdx >= 0 && _resultItems[_selectedIdx]) {
+            e.preventDefault();
             selectRow(_resultItems[_selectedIdx]);
-          } else {
-            _query = input.value.trim();
-            updatePillState();
-            if (_query.length > 0) {
-              renderSearchResults(_query);
-            } else {
-              renderHistory();
-            }
           }
           break;
         case 'Escape':
@@ -14907,14 +14898,11 @@ document.addEventListener('click', (event) => {
     /* ── Click outside to close ── */
     document.addEventListener('click', e => {
       const wrap = $('di-search-wrap');
-      if (wrap && !wrap.contains(e.target)) {
+      const island = document.getElementById('di2-pill');
+      if (wrap && !wrap.contains(e.target) && !island?.contains(e.target)) {
         pill?.classList.remove('is-focused');
         closeResults();
-        if (typeof window.__mortaliveExitFeedSearchMode === 'function') {
-          window.__mortaliveExitFeedSearchMode();
-        } else {
-          pill?.classList.remove('is-sticky-open', 'feed-search-mode', 'search-on');
-        }
+        window.__mortaliveExitFeedSearchMode?.();
       }
     }, true);
 
@@ -15570,13 +15558,13 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
   /* ══════════════════════════════════════════════════════════
      3.  STATE
   ══════════════════════════════════════════════════════════ */
-  let _section       = null;
-  let _isHovering    = false;
-  let _searchFocus   = false;
-  let _searchMoved   = false;
+  let _section        = null;
+  let _isHovering     = false;
+  let _searchFocus    = false;
+  let _searchMoved    = false;
   let _feedSearchMode = false;
-  let _unread      = 0;
-  let _toastTimer  = null;
+  let _unread         = 0;
+  let _toastTimer     = null;
 
   /* ══════════════════════════════════════════════════════════
      4.  SECTION-SPECIFIC CTAs
@@ -15654,7 +15642,7 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
   window.addEventListener('resize', () => {
     const pill = document.getElementById('di2-pill');
     if (!pill) return;
-    const state = _searchFocus ? 'focused' : (_isHovering ? 'hover' : 'rest');
+    const state = _feedSearchMode ? 'focused' : (_isHovering ? 'hover' : 'rest');
     applyWidth(pill, state);
   });
 
@@ -15718,16 +15706,12 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
 
     if (isFeed) {
       bridgeSearch();
-    }
-
-    /* Do not auto-exit Feed search mode during section transitions.
-       The user explicitly closes it with Back/outside click. */
-    if (_feedSearchMode) {
-      const activePill = document.getElementById('di2-pill');
-      if (activePill) {
-        activePill.classList.add('feed-search-mode', 'search-on', 'is-sticky-open');
-        applyWidth(activePill, 'focused');
+      if (_feedSearchMode) {
+        const activePill = document.getElementById('di2-pill');
+        if (activePill) applyWidth(activePill, 'focused');
       }
+    } else {
+      exitFeedSearchMode();
     }
 
     /* Live dot colour */
@@ -15750,29 +15734,23 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
   function enterFeedSearchMode() {
     if (_section !== 'pg-feed') return;
     const pill = document.getElementById('di2-pill');
-    const nav = document.getElementById('di2-nav');
-    const cta = document.getElementById('di2-cta');
-    const score = document.getElementById('di2-score');
-    const right = pill?.querySelector('.di2-right');
     const slot = document.getElementById('di2-search-slot');
     if (!pill || !slot) return;
 
     _feedSearchMode = true;
-    pill.classList.add('feed-search-mode', 'search-on', 'is-sticky-open');
-    const left = pill.querySelector('.di2-left');
-    left?.setAttribute('aria-hidden', 'true');
-    nav?.setAttribute('aria-hidden', 'true');
-    cta?.setAttribute('aria-hidden', 'true');
-    score?.setAttribute('aria-hidden', 'true');
-    right?.setAttribute('aria-hidden', 'true');
+    _searchFocus = true;
+    _isHovering = false;
+    pill.classList.add('feed-search-mode');
+    applyWidth(pill, 'focused');
 
     if (!document.getElementById('di2-feed-search-back')) {
       const back = document.createElement('button');
       back.id = 'di2-feed-search-back';
       back.type = 'button';
       back.className = 'di2-feed-search-back';
-      back.setAttribute('aria-label', 'Back to Feed navigation');
+      back.setAttribute('aria-label', 'Back to Feed');
       back.textContent = '←';
+      back.addEventListener('mousedown', e => e.preventDefault());
       back.addEventListener('click', e => {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -15788,44 +15766,34 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
       submit.className = 'di2-feed-search-submit';
       submit.setAttribute('aria-label', 'Search');
       submit.textContent = '⌕';
+      submit.addEventListener('mousedown', e => e.preventDefault());
       submit.addEventListener('click', e => {
         e.preventDefault();
-        e.stopPropagation();
+        e.stopImmediatePropagation();
         const inp = document.getElementById('di-input');
         if (!inp) return;
-        inp.value = inp.value.trim();
-        _query = inp.value;
+        _query = inp.value.trim();
         updatePillState();
-        if (_query.length > 0) {
-          renderSearchResults(_query);
-        } else {
-          renderHistory();
-        }
+        if (_query) renderSearchResults(_query);
+        else renderHistory();
         inp.focus();
       });
       slot.appendChild(submit);
     }
-
-    applyWidth(pill, 'focused');
   }
 
   function exitFeedSearchMode() {
     const pill = document.getElementById('di2-pill');
-    if (!pill) return;
     _feedSearchMode = false;
-    pill.classList.remove('feed-search-mode', 'search-on', 'is-sticky-open');
-    pill.querySelector('.di2-left')?.removeAttribute('aria-hidden');
-    pill.querySelector('.di2-nav')?.removeAttribute('aria-hidden');
-    pill.querySelector('.di2-cta')?.removeAttribute('aria-hidden');
-    pill.querySelector('.di2-score')?.removeAttribute('aria-hidden');
-    pill.querySelector('.di2-right')?.removeAttribute('aria-hidden');
     _searchFocus = false;
     _isHovering = false;
+    if (!pill) return;
+    pill.classList.remove('feed-search-mode');
     applyWidth(pill, 'rest');
   }
 
+  window.__mortaliveEnterFeedSearchMode = enterFeedSearchMode;
   window.__mortaliveExitFeedSearchMode = exitFeedSearchMode;
-  window.__mortaliveFeedSearchModeActive = () => _feedSearchMode;
 
   function bridgeSearch() {
     if (_searchMoved) return;
@@ -15833,39 +15801,30 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
     const slot = document.getElementById('di2-search-slot');
     if (!wrap || !slot) return;
 
-    /* Leave an invisible placeholder so v165's parent-node lookups don't break */
-    const ghost = document.createElement('div');
-    ghost.id = 'di2-ghost-search';
-    ghost.style.cssText = 'display:none!important;position:absolute;pointer-events:none;';
-    wrap.parentNode.insertBefore(ghost, wrap);
+    if (!document.getElementById('di2-ghost-search')) {
+      const ghost = document.createElement('div');
+      ghost.id = 'di2-ghost-search';
+      ghost.style.cssText = 'display:none!important;position:absolute;pointer-events:none;';
+      wrap.parentNode.insertBefore(ghost, wrap);
+    }
 
     slot.appendChild(wrap);
-
-    /* Override the v165 module's "only visible on feed" style;
-       our slot visibility now handles that */
     wrap.style.display = '';
-    wrap.style.flex    = '1';
+    wrap.style.flex = '1';
 
-    /* Wire focus/blur on the search input to expand/collapse the island */
     const inp = document.getElementById('di-input');
-    if (inp) {
-      inp.addEventListener('focus', () => {
-        _searchFocus = true;
-        enterFeedSearchMode();
-      });
+    if (inp && !inp.dataset.di2FeedSearchBound) {
+      inp.dataset.di2FeedSearchBound = '1';
+      inp.addEventListener('focus', () => enterFeedSearchMode());
+      inp.addEventListener('click', () => enterFeedSearchMode());
       inp.addEventListener('blur', () => {
-        // Blur is NOT a dismissal action. Keep the Feed search island exactly
-        // where the user left it. Only Back or an explicit outside click exits.
-        _searchFocus = true;
-        const pill = document.getElementById('di2-pill');
-        if (pill && _feedSearchMode) {
-          pill.classList.add('feed-search-mode', 'search-on', 'is-sticky-open');
-        }
+        /* Blur never closes the dedicated Feed search mode. */
+        if (_feedSearchMode) document.getElementById('di2-pill')?.classList.add('feed-search-mode');
       });
     }
 
     _searchMoved = true;
-    console.log('[DI v2] Search bridged into island ✓');
+    console.log('[DI v178] Feed search ready; dormant until explicit click ✓');
   }
 
   /* ══════════════════════════════════════════════════════════
@@ -15951,6 +15910,8 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
       _isHovering = true;
       pill.classList.add('is-hovering');
       applyWidth(pill, 'hover');
+      requestAnimationFrame(() => {
+          });
     });
 
     pill.addEventListener('mouseleave', () => {
