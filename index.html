@@ -11187,7 +11187,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260830-v176-feed-search-clean"></script>
+<script src="app.js?v=20260830-v177-feed-search-state-stable"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -11972,5 +11972,29 @@ body:has(#pg-land.active)::before{
   #di2 .di2-pill.feed-search-mode .di2-feed-search-submit{
     flex-basis:30px;
     width:30px;
+  }
+}
+
+
+<style id="mortalive-v177-feed-search-state-stable">
+/* Feed search mode is an explicit state, not a focus/hover state. */
+#di2 .di2-pill.feed-search-mode{
+  width:440px !important;
+}
+#di2 .di2-pill.feed-search-mode .di2-left,
+#di2 .di2-pill.feed-search-mode .di2-nav,
+#di2 .di2-pill.feed-search-mode .di2-cta,
+#di2 .di2-pill.feed-search-mode .di2-score,
+#di2 .di2-pill.feed-search-mode .di2-right{
+  display:none !important;
+}
+#di2 .di2-pill.feed-search-mode #di2-search-slot,
+#di2 .di2-pill.feed-search-mode #di-search-wrap{
+  visibility:visible !important;
+  opacity:1 !important;
+}
+@media(max-width:640px){
+  #di2 .di2-pill.feed-search-mode{
+    width:min(320px,calc(100vw - 24px)) !important;
   }
 }
