@@ -11187,7 +11187,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260830-v173-landing-topbar-restored"></script>
+<script src="app.js?v=20260830-v174-landing-topbar-feed-search-stable"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -11821,3 +11821,27 @@ body:has(#pg-land.active)::before{
   pointer-events:auto !important;
 }
 </style>
+
+<style id="mortalive-v174-landing-topbar-feed-search-fix">
+/* Public landing header remains visible; authenticated header can still be
+   suppressed by Dynamic Island when it is active. */
+#pg-land .sakura-topbar{
+  opacity:1 !important;
+  pointer-events:auto !important;
+  visibility:visible !important;
+}
+
+/* Once Feed search is opened, moving the cursor/focus away must not blank it. */
+#di2 .di2-pill.is-sticky-open .di2-search-slot,
+#di2 .di2-pill.search-on .di2-search-slot,
+#di2 #di-search-wrap{
+  visibility:visible !important;
+}
+#di2 #di-search-wrap{
+  opacity:1 !important;
+}
+#di-results.visible{
+  visibility:visible !important;
+  opacity:1 !important;
+  pointer-events:auto !important;
+}
