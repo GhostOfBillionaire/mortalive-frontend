@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-30-v174-landing-topbar-feed-search-stable'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-30-v176-feed-search-clean'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -14864,9 +14864,17 @@ document.addEventListener('click', (event) => {
         case 'ArrowDown': e.preventDefault(); moveSelection(+1); break;
         case 'ArrowUp':   e.preventDefault(); moveSelection(-1); break;
         case 'Enter':
+          e.preventDefault();
           if (_selectedIdx >= 0 && _resultItems[_selectedIdx]) {
-            e.preventDefault();
             selectRow(_resultItems[_selectedIdx]);
+          } else {
+            _query = input.value.trim();
+            updatePillState();
+            if (_query.length > 0) {
+              renderSearchResults(_query);
+            } else {
+              renderHistory();
+            }
           }
           break;
         case 'Escape':
@@ -14899,8 +14907,13 @@ document.addEventListener('click', (event) => {
     document.addEventListener('click', e => {
       const wrap = $('di-search-wrap');
       if (wrap && !wrap.contains(e.target)) {
-        pill?.classList.remove('is-focused', 'is-sticky-open');
+        pill?.classList.remove('is-focused');
         closeResults();
+        if (typeof window.__mortaliveExitFeedSearchMode === 'function') {
+          window.__mortaliveExitFeedSearchMode();
+        } else {
+          pill?.classList.remove('is-sticky-open', 'feed-search-mode', 'search-on');
+        }
       }
     }, true);
 
@@ -15701,7 +15714,11 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
     if (navEl)  navEl.style.display  = '';
     if (slotEl) slotEl.classList.toggle('active', isFeed);
 
-    if (isFeed) bridgeSearch();
+    if (isFeed) {
+      bridgeSearch();
+    } else if (typeof window.__mortaliveExitFeedSearchMode === 'function') {
+      window.__mortaliveExitFeedSearchMode();
+    }
 
     /* Live dot colour */
     const dot = document.getElementById('di2-dot');
@@ -15720,6 +15737,83 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
      into our island's search slot for the Feed page.
      The v165 MutationObserver still fires & controls visibility.
   ══════════════════════════════════════════════════════════ */
+  function enterFeedSearchMode() {
+    if (_section !== 'pg-feed') return;
+    const pill = document.getElementById('di2-pill');
+    const nav = document.getElementById('di2-nav');
+    const cta = document.getElementById('di2-cta');
+    const score = document.getElementById('di2-score');
+    const right = pill?.querySelector('.di2-right');
+    const slot = document.getElementById('di2-search-slot');
+    if (!pill || !slot) return;
+
+    pill.classList.add('feed-search-mode', 'search-on', 'is-sticky-open');
+    const left = pill.querySelector('.di2-left');
+    left?.setAttribute('aria-hidden', 'true');
+    nav?.setAttribute('aria-hidden', 'true');
+    cta?.setAttribute('aria-hidden', 'true');
+    score?.setAttribute('aria-hidden', 'true');
+    right?.setAttribute('aria-hidden', 'true');
+
+    if (!document.getElementById('di2-feed-search-back')) {
+      const back = document.createElement('button');
+      back.id = 'di2-feed-search-back';
+      back.type = 'button';
+      back.className = 'di2-feed-search-back';
+      back.setAttribute('aria-label', 'Back to Feed navigation');
+      back.textContent = '←';
+      back.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        exitFeedSearchMode();
+      });
+      slot.parentNode.insertBefore(back, slot);
+    }
+
+    if (!document.getElementById('di2-feed-search-submit')) {
+      const submit = document.createElement('button');
+      submit.id = 'di2-feed-search-submit';
+      submit.type = 'button';
+      submit.className = 'di2-feed-search-submit';
+      submit.setAttribute('aria-label', 'Search');
+      submit.textContent = '⌕';
+      submit.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        const inp = document.getElementById('di-input');
+        if (!inp) return;
+        inp.value = inp.value.trim();
+        _query = inp.value;
+        updatePillState();
+        if (_query.length > 0) {
+          renderSearchResults(_query);
+        } else {
+          renderHistory();
+        }
+        inp.focus();
+      });
+      slot.appendChild(submit);
+    }
+
+    applyWidth(pill, 'focused');
+  }
+
+  function exitFeedSearchMode() {
+    const pill = document.getElementById('di2-pill');
+    if (!pill) return;
+    pill.classList.remove('feed-search-mode', 'search-on', 'is-sticky-open');
+    pill.querySelector('.di2-left')?.removeAttribute('aria-hidden');
+    pill.querySelector('.di2-nav')?.removeAttribute('aria-hidden');
+    pill.querySelector('.di2-cta')?.removeAttribute('aria-hidden');
+    pill.querySelector('.di2-score')?.removeAttribute('aria-hidden');
+    pill.querySelector('.di2-right')?.removeAttribute('aria-hidden');
+    _searchFocus = false;
+    _isHovering = false;
+    applyWidth(pill, 'rest');
+  }
+
+  window.__mortaliveExitFeedSearchMode = exitFeedSearchMode;
+
   function bridgeSearch() {
     if (_searchMoved) return;
     const wrap = document.getElementById('di-search-wrap');
@@ -15744,19 +15838,13 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
     if (inp) {
       inp.addEventListener('focus', () => {
         _searchFocus = true;
-        const pill = document.getElementById('di2-pill');
-        if (pill) {
-          pill.classList.add('search-on');
-          applyWidth(pill, 'focused');
-        }
+        enterFeedSearchMode();
       });
       inp.addEventListener('blur', () => {
+        // Keep the dedicated Feed search mode open; only Back or an explicit
+        // click outside the search closes it.
         _searchFocus = true;
-        const pill = document.getElementById('di2-pill');
-        if (pill) {
-          pill.classList.add('search-on', 'is-sticky-open');
-          applyWidth(pill, 'focused');
-        }
+        enterFeedSearchMode();
       });
     }
 
@@ -15847,8 +15935,6 @@ body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
       _isHovering = true;
       pill.classList.add('is-hovering');
       applyWidth(pill, 'hover');
-      requestAnimationFrame(() => {
-          });
     });
 
     pill.addEventListener('mouseleave', () => {
