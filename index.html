@@ -11187,7 +11187,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260830-v177-feed-search-state-stable"></script>
+<script src="app.js?v=20260830-v178-feed-search-clean-final"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -11846,140 +11846,10 @@ body:has(#pg-land.active)::before{
   pointer-events:auto !important;
 }
 
-<style id="mortalive-v175-feed-search-focus-mode">
-/* Feed-only search mode: compact island with Back + Search. */
-#di2 .di2-feed-search-back,
-#di2 .di2-feed-search-submit{
-  display:none;
-  flex:0 0 auto;
-  width:32px;
-  height:32px;
-  border:0;
-  border-radius:10px;
-  background:transparent;
-  color:var(--on-surface);
-  font-size:19px;
-  line-height:1;
-  cursor:pointer;
-  place-items:center;
-}
-#di2 .di2-feed-search-back:hover,
-#di2 .di2-feed-search-submit:hover{
-  background:var(--primary-alpha);
-}
+<style id="mortalive-v178-feed-search-clean-final">
 #di2 .di2-pill.feed-search-mode{
   width:440px !important;
-}
-#di2 .di2-pill.feed-search-mode .di2-nav,
-#di2 .di2-pill.feed-search-mode .di2-cta,
-#di2 .di2-pill.feed-search-mode .di2-score,
-#di2 .di2-pill.feed-search-mode .di2-right{
-  display:none !important;
-}
-#di2 .di2-pill.feed-search-mode .di2-feed-search-back,
-#di2 .di2-pill.feed-search-mode .di2-feed-search-submit{
-  display:grid;
-}
-#di2 .di2-pill.feed-search-mode #di2-search-slot{
-  display:flex !important;
-  flex:1 1 auto;
-  min-width:0;
-  width:auto;
-  align-items:center;
-}
-#di2 .di2-pill.feed-search-mode #di2-search-slot #di-search-wrap{
-  flex:1 1 auto !important;
-  min-width:0;
-  width:auto !important;
-}
-#di2 .di2-pill.feed-search-mode #di2-search-slot #di-input{
-  width:100% !important;
-  min-width:0 !important;
-}
-@media(max-width:640px){
-  #di2 .di2-pill.feed-search-mode{
-    width:min(320px,calc(100vw - 24px)) !important;
-  }
-  #di2 .di2-pill.feed-search-mode .di2-left{
-    padding-left:8px;
-    padding-right:6px;
-  }
-  #di2 .di2-pill.feed-search-mode .di2-logo,
-  #di2 .di2-pill.feed-search-mode .di2-label{
-    display:none !important;
-  }
-  #di2 .di2-pill.feed-search-mode #di2-search-slot{
-    flex:1 1 auto;
-  }
-  #di2 .di2-feed-search-back,
-  #di2 .di2-feed-search-submit{
-    width:30px;
-    height:30px;
-  }
-}
-</style>
-
-
-<style id="mortalive-v176-feed-search-clean-two-control-island">
-#di2 .di2-pill.feed-search-mode .di2-left{
-  display:none !important;
-}
-#di2 .di2-pill.feed-search-mode{
-  display:flex !important;
-  align-items:center;
   overflow:visible !important;
-  gap:0;
-}
-#di2 .di2-pill.feed-search-mode #di2-search-slot{
-  order:1;
-  flex:1 1 auto !important;
-  min-width:0 !important;
-}
-#di2 .di2-pill.feed-search-mode .di2-feed-search-back{
-  order:0;
-  display:grid !important;
-  flex:0 0 32px;
-}
-#di2 .di2-pill.feed-search-mode .di2-feed-search-submit{
-  order:2;
-  display:grid !important;
-  flex:0 0 32px;
-}
-#di2 .di2-pill.feed-search-mode #di2-search-slot #di-search-wrap{
-  display:flex !important;
-  flex:1 1 auto !important;
-  min-width:0 !important;
-  opacity:1 !important;
-  visibility:visible !important;
-}
-#di2 .di2-pill.feed-search-mode #di2-search-slot #di-input{
-  flex:1 1 auto !important;
-  min-width:0 !important;
-  visibility:visible !important;
-  opacity:1 !important;
-}
-/* Search results are positioned by the existing search module; do not clip them
-   inside the compact island. */
-#di2 .di2-pill.feed-search-mode #di-results{
-  max-width:min(420px,calc(100vw - 24px));
-}
-@media(max-width:640px){
-  #di2 .di2-pill.feed-search-mode{
-    width:min(320px,calc(100vw - 24px)) !important;
-    min-height:48px;
-  }
-  #di2 .di2-pill.feed-search-mode .di2-feed-search-back,
-  #di2 .di2-pill.feed-search-mode .di2-feed-search-submit{
-    flex-basis:30px;
-    width:30px;
-  }
-}
-
-
-<style id="mortalive-v177-feed-search-state-stable">
-/* Feed search mode is an explicit state, not a focus/hover state. */
-#di2 .di2-pill.feed-search-mode{
-  width:440px !important;
 }
 #di2 .di2-pill.feed-search-mode .di2-left,
 #di2 .di2-pill.feed-search-mode .di2-nav,
@@ -11989,12 +11859,42 @@ body:has(#pg-land.active)::before{
   display:none !important;
 }
 #di2 .di2-pill.feed-search-mode #di2-search-slot,
-#di2 .di2-pill.feed-search-mode #di-search-wrap{
-  visibility:visible !important;
+#di2 .di2-pill.feed-search-mode #di-search-wrap,
+#di2 .di2-pill.feed-search-mode #di-input{
+  display:flex !important;
+  flex:1 1 auto !important;
+  min-width:0 !important;
+  width:auto !important;
   opacity:1 !important;
+  visibility:visible !important;
+}
+#di2 .di2-feed-search-back,
+#di2 .di2-feed-search-submit{display:none;}
+#di2 .di2-pill.feed-search-mode .di2-feed-search-back,
+#di2 .di2-pill.feed-search-mode .di2-feed-search-submit{
+  display:grid !important;
+  place-items:center;
+  flex:0 0 32px;
+  width:32px;
+  height:32px;
+  border-radius:10px;
+  background:transparent;
+  color:var(--on-surface);
+  font-size:19px;
+  line-height:1;
+}
+#di2 .di2-pill.feed-search-mode .di2-feed-search-back:hover,
+#di2 .di2-pill.feed-search-mode .di2-feed-search-submit:hover{
+  background:var(--primary-alpha);
 }
 @media(max-width:640px){
   #di2 .di2-pill.feed-search-mode{
     width:min(320px,calc(100vw - 24px)) !important;
   }
+  #di2 .di2-pill.feed-search-mode .di2-feed-search-back,
+  #di2 .di2-pill.feed-search-mode .di2-feed-search-submit{
+    flex-basis:30px;
+    width:30px;
+  }
 }
+</style>
