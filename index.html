@@ -11187,7 +11187,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260830-v171-landing-search-sticky"></script>
+<script src="app.js?v=20260830-v171-landing-top-ambient-fix"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -11798,13 +11798,18 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 }
 </style>
 
-<style id="mortalive-v171-landing-no-ambient-and-sticky-search">
-/* Landing page: no ambient top grading layer. */
-#pg-land::after,
-#pg-land .mortalive-ambient-grade,
-#pg-land .ambient-grading{
-  display:none !important;
-  background:none !important;
+<style id="mortalive-v172-landing-top-ambient-fix">
+/* Landing: remove ONLY the top ambient grading band behind the topbar.
+   Preserve #pg-land::before (hero image) and #pg-land::after (image grading). */
+body:has(#pg-land.active)::before{
+  background:transparent !important;
+  opacity:0 !important;
+}
+
+/* Explicitly preserve the landing hero image's own dark grading layer. */
+#pg-land::after{
+  display:block !important;
+  opacity:1 !important;
 }
 
 /* Feed search stays open after focus leaves the input. */
