@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-29-v165-dynamic-island-search'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-30-v166-dynamic-island-v2'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -14916,6 +14916,1062 @@ document.addEventListener('click', (event) => {
     document.addEventListener('DOMContentLoaded', () => setTimeout(init, 400), { once: true });
   } else {
     setTimeout(init, 400);
+  }
+
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Mortalive Dynamic Island v2 — merged into main app.js (v166)
+   Source: dynamic-island-v2.js
+   ═══════════════════════════════════════════════════════════════════════ */
+/**
+ * dynamic-island-v2.js — Mortalive True Dynamic Island
+ * ────────────────────────────────────────────────────────
+ * Drop-in companion. No edits to index.html or app.js needed.
+ * Add ONE line before </body>:
+ *   <script src="dynamic-island-v2.js" defer></script>
+ *
+ * What this replaces / fixes
+ * ──────────────────────────
+ * ✦ REPLACES: static pill topbar (becomes invisible, spacer preserved)
+ * ✦ FIXES: mobile overlay — nav links hidden from pill; bottom tab bar added
+ * ✦ ADDS: true shape-morphing (spring width animation on hover)
+ * ✦ ADDS: context-aware content per section (CTA, search, nav)
+ * ✦ ADDS: real-time online count + score mirrors from existing DOM
+ * ✦ ADDS: Feed search bridged into the island (existing module kept)
+ * ✦ ADDS: dark theme auto-switch on Messages page
+ * ✦ ADDS: toast notifications for unread messages / events
+ *
+ * Compatibility: works alongside MortaliveDynamicSearch (v165).
+ * It moves the existing #di-search-wrap into the island on Feed.
+ */
+(function MortaliveDIv2() {
+  'use strict';
+
+  /* ══════════════════════════════════════════════════════════
+     0.  CONSTANTS
+  ══════════════════════════════════════════════════════════ */
+  const LOGO =
+    'https://res.cloudinary.com/yvjzeilj/image/upload/v1786110689/IMG_20260807_180515_ymdcdi.png';
+
+  const SECTIONS = {
+    'pg-lobby'   : { icon: '🗣️', label: 'Talk'     },
+    'pg-feed'    : { icon: '📰',  label: 'Feed'     },
+    'pg-messages': { icon: '💬',  label: 'Messages' },
+    'pg-profile' : { icon: '👤',  label: 'Profile'  },
+  };
+
+  // Width targets (px). Keep these sensible on every screen.
+  const W = {
+    rest:        260,  // collapsed — logo + section + status
+    hover:       540,  // expanded  — + nav + cta + score
+    feedRest:    320,  // Feed rest — includes mini search hint
+    feedFocused: 540,  // Feed search focused
+    mobileRest:  196,
+    mobileHover: 330,
+    mobileFeed:  240,
+  };
+
+  const MOBILE_BP = 640;
+
+  /* ══════════════════════════════════════════════════════════
+     1.  CSS
+  ══════════════════════════════════════════════════════════ */
+  const CSS = `
+
+/* ── Suppress OLD pill (spacer preserved, so page layout unchanged) ── */
+body.di2-live .sakura-topbar {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  touch-action: none !important;
+}
+
+/* ══ Island root ═══════════════════════════════════════════ */
+#di2 {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;     /* re-enabled on children */
+  /* entrance */
+  animation: di2-in 0.55s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+body.di2-live.mortalive-app-topbar-visible #di2 { display: flex; }
+
+@keyframes di2-in {
+  from { opacity:0; transform: translateX(-50%) translateY(-22px) scale(0.82); }
+  to   { opacity:1; transform: translateX(-50%) translateY(0)     scale(1);    }
+}
+
+/* ══ The morphing pill ═════════════════════════════════════ */
+.di2-pill {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  height: 48px;
+  border-radius: 24px;
+  overflow: hidden;
+  position: relative;
+
+  background: rgba(255,255,255,0.86);
+  backdrop-filter: blur(32px) saturate(190%);
+  -webkit-backdrop-filter: blur(32px) saturate(190%);
+  border: 1.5px solid rgba(0,0,0,0.09);
+  box-shadow:
+    0 2px 8px rgba(0,0,0,0.06),
+    0 8px 28px rgba(0,0,0,0.05),
+    inset 0 1px 0 rgba(255,255,255,0.85);
+
+  /* width transitions set by JS for spring feel */
+  transition:
+    width      0.46s cubic-bezier(0.34,1.56,0.64,1),
+    height     0.40s cubic-bezier(0.34,1.2,0.64,1),
+    background 0.26s ease,
+    border-color 0.26s ease,
+    box-shadow 0.32s ease,
+    transform  0.22s cubic-bezier(0.34,1.56,0.64,1);
+
+  cursor: default;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+}
+
+/* Hover lift – only when mouse actually on the pill */
+.di2-pill.is-hovering {
+  box-shadow:
+    0 4px 18px rgba(0,0,0,0.09),
+    0 14px 44px rgba(0,0,0,0.07),
+    inset 0 1px 0 rgba(255,255,255,0.92);
+  transform: translateY(-1.5px);
+}
+.di2-pill:active { transform: translateY(0) scale(0.985); transition-duration: 0.08s; }
+
+/* ══ Left block: always visible ════════════════════════════ */
+.di2-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 13px;
+  flex-shrink: 0;
+}
+.di2-logo {
+  width: 26px; height: 26px;
+  border-radius: 7px; object-fit: contain; flex-shrink: 0;
+  transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1);
+}
+.di2-pill.is-hovering .di2-logo { transform: scale(1.10) rotate(-3deg); }
+
+.di2-section-tag { display: flex; align-items: center; gap: 5px; }
+.di2-icon {
+  font-size: 15px; line-height: 1;
+  display: inline-block;
+  transition: transform 0.26s cubic-bezier(0.34,1.56,0.64,1), opacity 0.15s;
+}
+.di2-icon.swap {
+  transform: scale(0.4) rotate(-15deg);
+  opacity: 0;
+}
+.di2-label {
+  font-size: 13px; font-weight: 700;
+  color: var(--on-surface);
+  letter-spacing: -0.02em;
+  transition: opacity 0.15s;
+}
+.di2-label.swap { opacity: 0; }
+
+/* ══ Middle block: expand zone (hidden at rest, shown on hover) ══ */
+.di2-mid {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Items inside mid start invisible; pill width drives what's clipped */
+.di2-mid-inner {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(6px);
+  transition: opacity 0.22s ease 0.06s, transform 0.3s cubic-bezier(0.34,1.56,0.64,1) 0.04s;
+  pointer-events: none;
+}
+.di2-pill.is-hovering .di2-mid-inner,
+.di2-pill.is-expanded .di2-mid-inner {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+/* Separator */
+.di2-sep {
+  width: 1px; height: 18px;
+  background: rgba(0,0,0,0.09);
+  border-radius: 1px;
+  flex-shrink: 0;
+  margin: 0 6px;
+}
+
+/* ══ Nav links ════════════════════════════════════════════ */
+.di2-nav { display: flex; align-items: center; gap: 2px; }
+.di2-nav-btn {
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 12.5px; font-weight: 600;
+  color: var(--on-surface-2);
+  background: none; border: 0;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.di2-nav-btn:hover { background: rgba(0,0,0,0.055); color: var(--on-surface); }
+.di2-nav-btn.active { background: var(--primary-alpha); color: var(--primary); }
+
+/* ══ CTA button ═══════════════════════════════════════════ */
+.di2-cta {
+  display: none;   /* shown per-section by JS */
+  align-items: center; gap: 4px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px; font-weight: 700;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  color: #fff; border: 0; cursor: pointer;
+  box-shadow: 0 2px 9px rgba(26,110,245,0.28);
+  white-space: nowrap; flex-shrink: 0;
+  margin: 0 8px 0 4px;
+  transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.18s;
+}
+.di2-cta:hover { transform: scale(1.06); box-shadow: 0 3px 14px rgba(26,110,245,0.38); }
+.di2-cta:active { transform: scale(0.93); }
+.di2-cta.visible { display: inline-flex; }
+
+/* ══ Score tag ════════════════════════════════════════════ */
+.di2-score {
+  display: none;  /* shown when auth + hover */
+  align-items: center; gap: 4px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+  background: var(--primary-alpha);
+  color: var(--primary);
+  border: 1px solid rgba(26,110,245,0.18);
+  white-space: nowrap; cursor: pointer;
+  margin-right: 6px;
+  transition: background 0.12s;
+  flex-shrink: 0;
+}
+.di2-score:hover { background: rgba(26,110,245,0.18); }
+.di2-score.visible { display: inline-flex; }
+
+/* ══ Search slot (Feed only, in mid-inner) ════════════════ */
+#di2-search-slot {
+  display: none;
+  align-items: center;
+  flex: 1; min-width: 0;
+  padding: 0 4px;
+}
+#di2-search-slot.active { display: flex; }
+
+/* Override search wrap styles when inside island */
+#di2-search-slot .dynamic-island-search-wrap {
+  flex: 1 !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+#di2-search-slot .dynamic-island-search {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 0 8px !important;
+  transition: none !important;
+}
+#di2-search-slot .dynamic-island-search.is-focused {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* ══ Right block: always visible ══════════════════════════ */
+.di2-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 13px 0 8px;
+  flex-shrink: 0;
+}
+.di2-live-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--success); flex-shrink: 0;
+  animation: di2-pulse 2.4s ease-in-out infinite;
+}
+.di2-live-dot.msg { background: #3b82f6; animation-name: di2-pulse-b; }
+@keyframes di2-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(22,163,74,.40); }
+  50%      { box-shadow: 0 0 0 4px rgba(22,163,74,0); }
+}
+@keyframes di2-pulse-b {
+  0%,100% { box-shadow: 0 0 0 0 rgba(59,130,246,.40); }
+  50%      { box-shadow: 0 0 0 4px rgba(59,130,246,0); }
+}
+
+.di2-status {
+  font-size: 11.5px; font-weight: 600;
+  color: var(--on-surface-3);
+  white-space: nowrap;
+  max-width: 80px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ══ Unread badge ═════════════════════════════════════════ */
+.di2-badge {
+  position: absolute;
+  top: 1px; right: 2px;
+  min-width: 17px; height: 17px;
+  padding: 0 3px;
+  border-radius: 9px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px; font-weight: 800;
+  display: none;
+  align-items: center; justify-content: center;
+  border: 2.5px solid rgba(255,255,255,0.9);
+  animation: di2-badge-in 0.32s cubic-bezier(0.34,1.56,0.64,1);
+}
+.di2-badge.on { display: inline-flex; }
+@keyframes di2-badge-in { from { transform:scale(0); } to { transform:scale(1); } }
+
+/* ══ Toast notification strip ═════════════════════════════ */
+#di2-toast {
+  pointer-events: none;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border: 1.5px solid rgba(0,0,0,0.09);
+  border-radius: 14px;
+  padding: 8px 15px;
+  font-size: 12.5px; font-weight: 600;
+  color: var(--on-surface);
+  white-space: nowrap;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+  opacity: 0;
+  transform: translateY(-5px) scale(0.96);
+  transform-origin: top center;
+  transition: opacity 0.22s ease, transform 0.32s cubic-bezier(0.34,1.56,0.64,1);
+}
+#di2-toast.on {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* ══ DARK theme — Messages page ════════════════════════════ */
+body.di2-msg .di2-pill {
+  background: rgba(9,16,26,0.88);
+  border-color: rgba(255,255,255,0.12);
+  box-shadow:
+    0 2px 10px rgba(0,0,0,.32),
+    0 8px 32px rgba(0,0,0,.26),
+    inset 0 1px 0 rgba(255,255,255,0.05);
+}
+body.di2-msg .di2-pill.is-hovering {
+  box-shadow:
+    0 5px 22px rgba(0,0,0,.40),
+    0 14px 44px rgba(0,0,0,.34),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+}
+body.di2-msg .di2-logo { filter: brightness(0.92); }
+body.di2-msg .di2-label       { color: #e8edf5; }
+body.di2-msg .di2-sep         { background: rgba(255,255,255,0.12); }
+body.di2-msg .di2-nav-btn     { color: #6b8aad; }
+body.di2-msg .di2-nav-btn:hover   { background: rgba(255,255,255,0.07); color: #c8d8ec; }
+body.di2-msg .di2-nav-btn.active  { background: rgba(43,127,255,.20); color: #5aa4ff; }
+body.di2-msg .di2-status     { color: #4d6480; }
+body.di2-msg .di2-score {
+  background: rgba(43,127,255,.14); color: #5aa4ff;
+  border-color: rgba(43,127,255,.24);
+}
+body.di2-msg .di2-cta {
+  background: linear-gradient(135deg, #2b7fff 0%, #5b4ff5 100%);
+  box-shadow: 0 2px 9px rgba(43,127,255,.32);
+}
+body.di2-msg #di2-toast {
+  background: rgba(13,21,34,0.92);
+  border-color: rgba(255,255,255,0.10);
+  color: #e8edf5;
+}
+
+/* ══ Scrolled enhancement ══════════════════════════════════ */
+body.di2-scrolled .di2-pill {
+  box-shadow:
+    0 6px 24px rgba(0,0,0,0.12),
+    0 16px 48px rgba(0,0,0,0.08),
+    inset 0 1.5px 0 rgba(255,255,255,0.88);
+}
+body.di2-scrolled.di2-msg .di2-pill {
+  box-shadow:
+    0 6px 26px rgba(0,0,0,0.40),
+    0 16px 50px rgba(0,0,0,0.30),
+    inset 0 1.5px 0 rgba(255,255,255,0.06);
+}
+
+/* ══ Feed focus ring: pill border glows when search focused ═ */
+.di2-pill.search-on {
+  border-color: var(--primary) !important;
+  box-shadow:
+    0 0 0 3px rgba(26,110,245,.12),
+    0 8px 28px rgba(26,110,245,.16) !important;
+}
+body.di2-msg .di2-pill.search-on {
+  border-color: rgba(43,127,255,.55) !important;
+  box-shadow:
+    0 0 0 3px rgba(43,127,255,.15),
+    0 8px 28px rgba(0,0,0,.30) !important;
+}
+
+/* ══ MOBILE ≤ 640 px ═══════════════════════════════════════ */
+@media (max-width: 640px) {
+  #di2 { top: 10px; }
+
+  .di2-pill { height: 42px; border-radius: 21px; }
+  .di2-left { padding: 0 10px 0 11px; gap: 6px; }
+  .di2-logo { width: 24px; height: 24px; }
+
+  /* Hide section label on mobile — icon + status is enough */
+  .di2-label { display: none; }
+
+  /* No nav links in island on mobile — bottom bar handles nav */
+  .di2-nav { display: none !important; }
+
+  /* Only keep CTA in the mid area on mobile */
+  .di2-score { display: none !important; }
+
+  .di2-right { padding: 0 11px 0 6px; }
+  .di2-status { max-width: 64px; font-size: 10.5px; }
+
+  /* Shrink spacer to match smaller island */
+  body.di2-live .app-topbar-spacer { height: 62px !important; }
+
+  /* Give pages room for bottom nav */
+  body.di2-live.mortalive-app-topbar-visible #pg-lobby.active,
+  body.di2-live.mortalive-app-topbar-visible #pg-feed.active,
+  body.di2-live.mortalive-app-topbar-visible #pg-profile.active {
+    padding-top: 8px !important;
+    padding-bottom: 70px !important;
+  }
+  body.di2-live.mortalive-app-topbar-visible #pg-messages.active {
+    padding-top: 8px !important;
+    height: calc(100dvh - 62px - 64px) !important;
+  }
+  body.di2-live.mortalive-app-topbar-visible #pg-messages.active .messages-shell {
+    height: 100% !important;
+    border-radius: 12px 12px 0 0 !important;
+  }
+}
+
+/* ══ BOTTOM NAV BAR (mobile only) ═════════════════════════ */
+#di2-bot {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 9998;
+  min-height: 60px;
+  padding-bottom: env(safe-area-inset-bottom, 4px);
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border-top: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.06);
+  align-items: stretch;
+  justify-content: space-around;
+}
+
+/* Show only on mobile */
+@media (max-width: 640px) {
+  body.di2-live.mortalive-app-topbar-visible #di2-bot { display: flex; }
+}
+
+/* Messages dark bottom nav */
+body.di2-msg #di2-bot {
+  background: rgba(6,10,18,0.94);
+  border-color: rgba(255,255,255,0.08);
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.36);
+}
+
+.di2-tab {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 2px; flex: 1;
+  padding: 6px 4px 4px;
+  border-radius: 0; border: 0; background: none;
+  cursor: pointer; position: relative;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1);
+}
+.di2-tab:active { transform: scale(0.84); }
+
+.di2-tab-ico {
+  font-size: 22px; line-height: 1;
+  transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1);
+}
+.di2-tab.active .di2-tab-ico { transform: scale(1.18) translateY(-1px); }
+
+.di2-tab-lbl {
+  font-size: 9.5px; font-weight: 600;
+  color: var(--on-surface-3);
+  letter-spacing: 0.03em;
+  transition: color 0.14s;
+}
+.di2-tab.active .di2-tab-lbl { color: var(--primary); font-weight: 700; }
+
+/* Active underline dot */
+.di2-tab::after {
+  content: '';
+  position: absolute; bottom: 3px;
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--primary);
+  transform: scale(0); opacity: 0;
+  transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), opacity 0.2s;
+}
+.di2-tab.active::after { transform: scale(1); opacity: 1; }
+
+/* Unread dot on Messages tab */
+.di2-tab-dot {
+  position: absolute; top: 5px; right: calc(50% - 18px);
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--danger);
+  border: 2px solid rgba(255,255,255,0.92);
+  display: none;
+}
+.di2-tab-dot.on { display: block; }
+
+/* Dark tab labels */
+body.di2-msg .di2-tab-lbl        { color: #4d6480; }
+body.di2-msg .di2-tab.active .di2-tab-lbl { color: #5aa4ff; }
+body.di2-msg .di2-tab.active::after       { background: #5aa4ff; }
+body.di2-msg .di2-tab-dot { border-color: rgba(6,10,18,0.94); }
+`;
+
+  /* ══════════════════════════════════════════════════════════
+     2.  DOM BUILDERS
+  ══════════════════════════════════════════════════════════ */
+  function buildIsland() {
+    const root = document.createElement('div');
+    root.id = 'di2';
+    root.setAttribute('role', 'navigation');
+    root.setAttribute('aria-label', 'Mortalive navigation');
+    root.innerHTML = `
+      <div class="di2-pill" id="di2-pill">
+
+        <!-- ── LEFT: always visible ── -->
+        <div class="di2-left">
+          <img class="di2-logo" src="${LOGO}" alt="Mortalive" width="26" height="26" loading="lazy">
+          <div class="di2-section-tag">
+            <span class="di2-icon" id="di2-icon">🗣️</span>
+            <span class="di2-label" id="di2-label">Talk</span>
+          </div>
+        </div>
+
+        <!-- ── MID: expand zone, hidden at rest ── -->
+        <div class="di2-mid">
+          <div class="di2-mid-inner" id="di2-mid-inner">
+            <div class="di2-sep"></div>
+
+            <!-- Nav links (non-Feed sections) -->
+            <div class="di2-nav" id="di2-nav">
+              <button class="di2-nav-btn" data-di-page="pg-lobby"    type="button">Talk</button>
+              <button class="di2-nav-btn" data-di-page="pg-feed"     type="button">Feed</button>
+              <button class="di2-nav-btn" data-di-page="pg-messages" type="button">Messages</button>
+              <button class="di2-nav-btn" data-di-page="pg-profile"  type="button">Profile</button>
+            </div>
+
+            <!-- Search slot (Feed only: existing #di-search-wrap moves here) -->
+            <div id="di2-search-slot"></div>
+
+            <!-- CTA button -->
+            <button class="di2-cta" id="di2-cta" type="button" aria-label="Section action"></button>
+
+            <!-- Score -->
+            <div class="di2-score" id="di2-score"
+              title="crockroach Score — click to open progress">
+              🧲 <span id="di2-sv">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── RIGHT: always visible ── -->
+        <div class="di2-right">
+          <span class="di2-live-dot" id="di2-dot"></span>
+          <span class="di2-status"   id="di2-st">Live</span>
+        </div>
+
+        <!-- Unread count badge -->
+        <span class="di2-badge" id="di2-badge" aria-hidden="true"></span>
+      </div>
+
+      <!-- Toast notification -->
+      <div id="di2-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+    `;
+    document.body.appendChild(root);
+  }
+
+  function buildBottomNav() {
+    const nav = document.createElement('nav');
+    nav.id = 'di2-bot';
+    nav.setAttribute('aria-label', 'Main navigation');
+    nav.innerHTML = `
+      <button class="di2-tab" data-di-page="pg-lobby"    type="button" aria-label="Talk">
+        <span class="di2-tab-ico">🗣️</span>
+        <span class="di2-tab-lbl">Talk</span>
+      </button>
+      <button class="di2-tab" data-di-page="pg-feed"     type="button" aria-label="Feed">
+        <span class="di2-tab-ico">📰</span>
+        <span class="di2-tab-lbl">Feed</span>
+      </button>
+      <button class="di2-tab" data-di-page="pg-messages" type="button" aria-label="Messages">
+        <span class="di2-tab-ico">💬</span>
+        <span class="di2-tab-lbl">Messages</span>
+        <span class="di2-tab-dot" id="di2-tab-dot"></span>
+      </button>
+      <button class="di2-tab" data-di-page="pg-profile"  type="button" aria-label="Profile">
+        <span class="di2-tab-ico">👤</span>
+        <span class="di2-tab-lbl">Profile</span>
+      </button>
+    `;
+    document.body.appendChild(nav);
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     3.  STATE
+  ══════════════════════════════════════════════════════════ */
+  let _section     = null;
+  let _isHovering  = false;
+  let _searchFocus = false;
+  let _searchMoved = false;
+  let _unread      = 0;
+  let _toastTimer  = null;
+
+  /* ══════════════════════════════════════════════════════════
+     4.  SECTION-SPECIFIC CTAs
+  ══════════════════════════════════════════════════════════ */
+  const CTAS = {
+    'pg-lobby': {
+      icon: '⚡', text: 'Start Chat',
+      fn() {
+        document.querySelector(
+          '#pg-lobby .btn-primary, #pg-lobby [data-action="talk-now"], ' +
+          '#pg-lobby .setup-find, #pg-lobby .lobby-find-btn'
+        )?.click();
+      }
+    },
+    'pg-feed': {
+      icon: '✍️', text: 'Post',
+      fn() {
+        const btn = document.querySelector(
+          '#pg-feed [data-compose-kind="text"], ' +
+          '#pg-feed .post-compose-btn, #pg-feed .compose-trigger'
+        );
+        btn?.click();
+      }
+    },
+    'pg-messages': {
+      icon: '✉️', text: 'New',
+      fn() {
+        document.querySelector(
+          '#pg-messages .msg-new-btn, #pg-messages [data-messages-new]'
+        )?.click();
+      }
+    },
+    'pg-profile': {
+      icon: '✏️', text: 'Edit',
+      fn() { document.getElementById('btn-edit-profile')?.click(); }
+    },
+  };
+
+  /* ══════════════════════════════════════════════════════════
+     5.  WIDTH MANAGER
+     Width is set directly in JS so CSS `transition: width`
+     animates between concrete px values (auto can't transition).
+  ══════════════════════════════════════════════════════════ */
+  function isMobile() { return window.innerWidth <= MOBILE_BP; }
+
+  function targetWidth(state) {
+    const m = isMobile();
+    if (_section === 'pg-feed') {
+      if (state === 'focused') return m ? Math.min(W.feedFocused, window.innerWidth - 28) : W.feedFocused;
+      return m ? W.mobileFeed : W.feedRest;
+    }
+    if (state === 'hover') return m ? W.mobileHover : W.hover;
+    return m ? W.mobileRest : W.rest;
+  }
+
+  function applyWidth(pill, state) {
+    pill.style.width = targetWidth(state) + 'px';
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     6.  SECTION TRANSITION
+  ══════════════════════════════════════════════════════════ */
+  function setSection(pageId) {
+    if (_section === pageId) return;
+    _section = pageId;
+
+    const cfg = SECTIONS[pageId];
+    if (!cfg) return;
+
+    /* Body class for CSS hooks */
+    ['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile'].forEach(id =>
+      document.body.classList.remove('di2-' + id.replace('pg-', ''))
+    );
+    document.body.classList.add('di2-' + pageId.replace('pg-', ''));
+    document.body.classList.toggle('di2-msg', pageId === 'pg-messages');
+
+    /* Animate icon swap */
+    const iconEl  = document.getElementById('di2-icon');
+    const labelEl = document.getElementById('di2-label');
+    if (iconEl) {
+      iconEl.classList.add('swap');
+      setTimeout(() => { iconEl.textContent = cfg.icon; iconEl.classList.remove('swap'); }, 160);
+    }
+    if (labelEl) {
+      labelEl.classList.add('swap');
+      setTimeout(() => { labelEl.textContent = cfg.label; labelEl.classList.remove('swap'); }, 150);
+    }
+
+    /* Update CTA */
+    const ctaEl = document.getElementById('di2-cta');
+    const cta   = CTAS[pageId];
+    if (ctaEl) {
+      if (cta) {
+        ctaEl.innerHTML = `${cta.icon}&nbsp;${cta.text}`;
+        ctaEl.className = 'di2-cta visible';
+        ctaEl.onclick = cta.fn;
+      } else {
+        ctaEl.className = 'di2-cta';
+      }
+    }
+
+    /* Update nav + tab active state */
+    document.querySelectorAll('[data-di-page]').forEach(el =>
+      el.classList.toggle('active', el.dataset.diPage === pageId)
+    );
+
+    /* Nav links vs search slot */
+    const navEl  = document.getElementById('di2-nav');
+    const slotEl = document.getElementById('di2-search-slot');
+    const isFeed = (pageId === 'pg-feed');
+
+    if (navEl)  navEl.style.display  = isFeed ? 'none' : '';
+    if (slotEl) slotEl.classList.toggle('active', isFeed);
+
+    if (isFeed) bridgeSearch();
+
+    /* Live dot colour */
+    const dot = document.getElementById('di2-dot');
+    if (dot) dot.className = 'di2-live-dot' + (pageId === 'pg-messages' ? ' msg' : '');
+
+    /* Set pill width for this section's rest state */
+    const pill = document.getElementById('di2-pill');
+    if (pill) applyWidth(pill, _isHovering ? 'hover' : 'rest');
+
+    updateStatus();
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     7.  SEARCH BRIDGE
+     Moves the existing #di-search-wrap (owned by v165 module)
+     into our island's search slot for the Feed page.
+     The v165 MutationObserver still fires & controls visibility.
+  ══════════════════════════════════════════════════════════ */
+  function bridgeSearch() {
+    if (_searchMoved) return;
+    const wrap = document.getElementById('di-search-wrap');
+    const slot = document.getElementById('di2-search-slot');
+    if (!wrap || !slot) return;
+
+    /* Leave an invisible placeholder so v165's parent-node lookups don't break */
+    const ghost = document.createElement('div');
+    ghost.id = 'di2-ghost-search';
+    ghost.style.cssText = 'display:none!important;position:absolute;pointer-events:none;';
+    wrap.parentNode.insertBefore(ghost, wrap);
+
+    slot.appendChild(wrap);
+
+    /* Override the v165 module's "only visible on feed" style;
+       our slot visibility now handles that */
+    wrap.style.display = '';
+    wrap.style.flex    = '1';
+
+    /* Wire focus/blur on the search input to expand/collapse the island */
+    const inp = document.getElementById('di-input');
+    if (inp) {
+      inp.addEventListener('focus', () => {
+        _searchFocus = true;
+        const pill = document.getElementById('di2-pill');
+        if (pill) {
+          pill.classList.add('search-on');
+          applyWidth(pill, 'focused');
+        }
+      });
+      inp.addEventListener('blur', () => {
+        _searchFocus = false;
+        const pill = document.getElementById('di2-pill');
+        if (pill) {
+          pill.classList.remove('search-on');
+          applyWidth(pill, _isHovering ? 'hover' : 'rest');
+        }
+      });
+    }
+
+    _searchMoved = true;
+    console.log('[DI v2] Search bridged into island ✓');
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     8.  LIVE DATA SYNC
+  ══════════════════════════════════════════════════════════ */
+  function syncStatus() {
+    const el = document.getElementById('di2-st');
+    if (!el) return;
+
+    if (_section === 'pg-messages' && _unread > 0) {
+      el.textContent = `${_unread} unread`;
+      return;
+    }
+    const src = document.getElementById('app-topbar-online-count');
+    const v   = src?.textContent?.trim();
+    el.textContent = (v && v !== '—') ? `${v} online` : 'Live';
+  }
+
+  function syncScore() {
+    const scoreEl = document.getElementById('di2-score');
+    const valEl   = document.getElementById('di2-sv');
+    const src     = document.getElementById('app-topbar-score-val');
+    if (!scoreEl || !valEl || !src) return;
+    const v = src.textContent?.trim();
+    if (v && v !== '—') {
+      valEl.textContent = v;
+      scoreEl.classList.add('visible');
+    } else {
+      scoreEl.classList.remove('visible');
+    }
+  }
+
+  function updateStatus() { syncStatus(); syncScore(); }
+
+  /* ══════════════════════════════════════════════════════════
+     9.  UNREAD BADGES
+  ══════════════════════════════════════════════════════════ */
+  function setUnread(n) {
+    _unread = n;
+    const badge  = document.getElementById('di2-badge');
+    const tabDot = document.getElementById('di2-tab-dot');
+    const label  = n > 9 ? '9+' : (n > 0 ? String(n) : '');
+
+    if (badge)  { badge.textContent = label; badge.className = 'di2-badge' + (n > 0 ? ' on' : ''); }
+    if (tabDot) tabDot.className = 'di2-tab-dot' + (n > 0 ? ' on' : '');
+
+    if (n > 0 && _section !== 'pg-messages') {
+      toast(`📨 ${n} new message${n > 1 ? 's' : ''}`, 3200);
+    }
+    syncStatus();
+  }
+
+  /* ══════════════════════════════════════════════════════════
+    10.  TOAST
+  ══════════════════════════════════════════════════════════ */
+  function toast(text, ms = 3000) {
+    const el = document.getElementById('di2-toast');
+    if (!el) return;
+    clearTimeout(_toastTimer);
+    el.textContent = text;
+    el.classList.add('on');
+    _toastTimer = setTimeout(() => el.classList.remove('on'), ms);
+  }
+
+  /* ══════════════════════════════════════════════════════════
+    11.  NAVIGATION
+  ══════════════════════════════════════════════════════════ */
+  function navigate(pageId) {
+    if (typeof window.showPage === 'function') {
+      window.showPage(pageId);
+    } else {
+      document.querySelector(`[data-top-page="${pageId}"]`)?.click();
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════
+    12.  HOVER / MOUSE MORPHING
+  ══════════════════════════════════════════════════════════ */
+  function bindHover(pill) {
+    pill.addEventListener('mouseenter', () => {
+      if (_searchFocus) return;          // don't steal width from search
+      _isHovering = true;
+      pill.classList.add('is-hovering');
+      applyWidth(pill, 'hover');
+    });
+
+    pill.addEventListener('mouseleave', () => {
+      _isHovering = false;
+      pill.classList.remove('is-hovering');
+      if (!_searchFocus) applyWidth(pill, 'rest');
+    });
+
+    /* Touch: tap expands briefly then collapses */
+    let _touchTimer = null;
+    pill.addEventListener('touchstart', () => {
+      clearTimeout(_touchTimer);
+      _isHovering = true;
+      pill.classList.add('is-hovering');
+      applyWidth(pill, 'hover');
+    }, { passive: true });
+
+    pill.addEventListener('touchend', () => {
+      _touchTimer = setTimeout(() => {
+        _isHovering = false;
+        pill.classList.remove('is-hovering');
+        if (!_searchFocus) applyWidth(pill, 'rest');
+      }, 2400);
+    }, { passive: true });
+  }
+
+  /* ══════════════════════════════════════════════════════════
+    13.  OBSERVERS
+  ══════════════════════════════════════════════════════════ */
+  function observePages() {
+    const IDS = ['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile'];
+    const findActive = () => IDS.find(id => document.getElementById(id)?.classList.contains('active'));
+
+    /* Initial */
+    const init = findActive();
+    if (init) setSection(init);
+
+    /* Watch class changes on each page section */
+    const mo = new MutationObserver(() => {
+      const a = findActive();
+      if (a && a !== _section) setSection(a);
+    });
+    IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) mo.observe(el, { attributes: true, attributeFilter: ['class'] });
+    });
+
+    /* Auth state changes (login / logout) */
+    window.addEventListener('mortalive-auth-state', () => {
+      setTimeout(() => { updateStatus(); const a = findActive(); if (a) setSection(a); }, 200);
+    });
+  }
+
+  function observeOnlineCount() {
+    const el = document.getElementById('app-topbar-online-count');
+    if (!el) { setTimeout(observeOnlineCount, 900); return; }
+    new MutationObserver(syncStatus).observe(el, { childList: true, characterData: true, subtree: true });
+    syncStatus();
+  }
+
+  function observeScore() {
+    const el = document.getElementById('app-topbar-score-val');
+    if (!el) { setTimeout(observeScore, 900); return; }
+    new MutationObserver(syncScore).observe(el, { childList: true, characterData: true, subtree: true });
+    syncScore();
+  }
+
+  function observeTopbarVisibility() {
+    /* When the existing app shows/hides its topbar, mirror that to our island.
+       CSS handles the show/hide via mortalive-app-topbar-visible body class. */
+    new MutationObserver(() => {
+      const vis = document.body.classList.contains('mortalive-app-topbar-visible');
+      if (vis) updateStatus();
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  function observeScroll() {
+    let t = false;
+    window.addEventListener('scroll', () => {
+      if (t) return; t = true;
+      requestAnimationFrame(() => {
+        document.body.classList.toggle('di2-scrolled', window.scrollY > 14);
+        t = false;
+      });
+    }, { passive: true });
+  }
+
+  /* ══════════════════════════════════════════════════════════
+    14.  EVENT BINDING
+  ══════════════════════════════════════════════════════════ */
+  function bindEvents() {
+    /* Nav buttons (island nav + bottom tabs) via delegation on body */
+    document.addEventListener('click', e => {
+      const btn = e.target.closest('[data-di-page]');
+      if (!btn) return;
+      e.preventDefault();
+      navigate(btn.dataset.diPage);
+    });
+
+    /* Score click → open progress sheet (existing app.js handler) */
+    document.getElementById('di2-score')?.addEventListener('click', e => {
+      e.stopPropagation();
+      document.getElementById('app-topbar-score-pill')?.click();
+    });
+
+    /* Expose hooks for app.js/external usage */
+    window.diToast    = toast;
+    window.diUnread   = setUnread;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+    15.  INIT
+  ══════════════════════════════════════════════════════════ */
+  function init() {
+    /* CSS */
+    const style = document.createElement('style');
+    style.id = 'di2-css';
+    style.textContent = CSS;
+    document.head.appendChild(style);
+
+    /* DOM */
+    buildIsland();
+    buildBottomNav();
+
+    /* Signal that we're live — hides old topbar via CSS */
+    document.body.classList.add('di2-live');
+
+    /* Set initial pill width */
+    const pill = document.getElementById('di2-pill');
+    if (pill) {
+      applyWidth(pill, 'rest');
+      bindHover(pill);
+    }
+
+    /* Events */
+    bindEvents();
+
+    /* Observers */
+    observePages();
+    observeTopbarVisibility();
+    observeScroll();
+
+    /* Delayed observers (DOM might not have these elements yet) */
+    setTimeout(() => { observeOnlineCount(); observeScore(); }, 700);
+
+    console.log('[DI v2] True Dynamic Island ready ✓');
+  }
+
+  /* Boot — wait for DOM, then add a small settle delay */
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(init, 180), { once: true });
+  } else {
+    setTimeout(init, 180);
   }
 
 })();
