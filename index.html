@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v153 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v190" content="basic-messaging">
+<meta name="mortalive-build-v191" content="basic-messaging">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
@@ -10134,6 +10134,30 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 }
 
 </style>
+
+
+<style id="mortalive-v191-search-notifications-top-gap">
+@media (min-width: 641px) {
+  #pg-search.active,
+  #pg-notifications.active {
+    padding-top: 84px !important;
+  }
+
+  #pg-search.active .mortalive-search-page-shell,
+  #pg-notifications.active .notif-shell,
+  #pg-notifications.active .mortalive-notifications-shell {
+    margin-top: 0 !important;
+  }
+}
+
+@media (max-width: 640px) {
+  #pg-search.active,
+  #pg-notifications.active {
+    padding-top: 12px !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -11685,7 +11709,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260831-v190-notification-loader-recovery"></script>
+<script src="app.js?v=20260831-v191-search-notifications-top-gap"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
