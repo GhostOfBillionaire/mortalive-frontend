@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-31-v190-notification-loader-recovery'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-31-v192-mobile-search-notif-topisland-notif-recovery'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -16979,7 +16979,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     /** Call once after Supabase auth is confirmed. */
     init,
     /** Force-reload from DB. */
-    reload: () => loadNotifications(),
+    reload: loadNotifications,
     /** Insert a notification for another user (from hook points). */
     insert: insertNotification,
     /** Insert @mention notifications from post/comment text. */
