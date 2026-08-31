@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-31-v189-topisland-search-notifications'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-31-v190-notification-loader-recovery'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -987,6 +987,11 @@ function showPage(id, options = {}) {
     S.profileViewData = null;
     document.body.classList.remove('profile-viewing-public');
     renderNotificationsSection();
+    if (window.notifCenter && !S.isGuest && S.userId) {
+      window.notifCenter.reload().catch(err =>
+        console.warn('[notif] section reload:', err?.message || err)
+      );
+    }
   }
 
   if (id === 'pg-messages') {
@@ -16448,57 +16453,99 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   /* ══════════════════════════════════════════════════════════
      DATA — LOAD
   ══════════════════════════════════════════════════════════ */
-  async function loadNotifications () {
+  async function loadNotifications (options = {}) {
     const client  = sb();
     const session = S();
+    const forceAuthRefresh = options.forceAuthRefresh === true;
+
     if (!client || !session?.userId || session?.isGuest) {
       renderGuest();
-      return;
+      updateBadge(0);
+      return false;
     }
 
     st.loading = true;
     renderSkeleton();
 
     try {
+      /* The app already has a verified Supabase user. When requested, give
+         the auth client one chance to refresh/confirm that session before the
+         RLS-protected notifications query. */
+      if (forceAuthRefresh && client.auth?.getSession) {
+        await client.auth.getSession();
+      }
+
       const { data, error } = await client
         .from('notifications')
         .select('id, type, actor_id, entity_id, entity_type, message, read, created_at')
-        .eq('user_id', session.userId)
+        .eq('user_id', String(session.userId))
         .order('created_at', { ascending: false })
         .limit(PAGE_SIZE);
 
       if (error) throw error;
 
       const rows = Array.isArray(data) ? data : [];
-      const actorIds = [...new Set(rows.map(n => n.actor_id).filter(Boolean).map(String))];
+
+      /* Actor enrichment is optional. A broken/missing accounts lookup must
+         never turn a valid notification list into "Couldn't load". */
+      const actorIds = [...new Set(
+        rows.map(n => n.actor_id).filter(Boolean).map(String)
+      )];
+
       let actorMap = new Map();
 
       if (actorIds.length) {
-        const { data: actors, error: actorError } = await client
-          .from('accounts')
-          .select('id, username, display_name, avatar_url')
-          .in('id', actorIds);
+        try {
+          const { data: actors, error: actorError } = await client
+            .from('accounts')
+            .select('id, username, display_name, avatar_url')
+            .in('id', actorIds);
 
-        if (!actorError) {
-          actorMap = new Map((actors || []).map(a => [String(a.id), a]));
+          if (!actorError && Array.isArray(actors)) {
+            actorMap = new Map(
+              actors.map(a => [String(a.id), a])
+            );
+          }
+        } catch (actorErr) {
+          console.warn(`[${TAG}] actor enrichment skipped:`, actorErr?.message || actorErr);
         }
       }
 
       st.items = rows.map(n => ({
         ...n,
-        actor: n.actor_id ? (actorMap.get(String(n.actor_id)) || null) : null
+        actor: n.actor_id
+          ? (actorMap.get(String(n.actor_id)) || null)
+          : null
       }));
+
       st.unreadCount = st.items.filter(n => !n.read).length;
       updateBadge(st.unreadCount);
       render();
+      return true;
+
     } catch (err) {
       console.warn(`[${TAG}] load failed:`, err?.message || err);
-      renderError();
+
+      /* One recovery attempt for expired/stale Supabase auth. */
+      if (!forceAuthRefresh && client?.auth?.getSession) {
+        try {
+          const recovered = await client.auth.getSession();
+          if (recovered?.data?.session?.user?.id) {
+            S().userId = recovered.data.session.user.id;
+            return await loadNotifications({ forceAuthRefresh: true });
+          }
+        } catch (refreshErr) {
+          console.warn(`[${TAG}] auth recovery failed:`, refreshErr?.message || refreshErr);
+        }
+      }
+
+      renderError(err);
+      return false;
+
     } finally {
       st.loading = false;
     }
   }
-
 
   /* ══════════════════════════════════════════════════════════
      DATA — MARK READ
@@ -16768,16 +16815,34 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       </div>`).join('');
   }
 
-  function renderError () {
+  function renderError (err = null) {
     const list = $('notif-list');
     if (!list) return;
+
+    const raw = String(err?.message || '').trim();
+    const lower = raw.toLowerCase();
+
+    let title = "Couldn't load notifications";
+    let sub = 'Please try again.';
+    if (lower.includes('relation') && lower.includes('notifications')) {
+      sub = 'The notifications database table is not available yet.';
+    } else if (lower.includes('row-level security') || lower.includes('rls') || lower.includes('permission')) {
+      sub = 'Your notification database permissions need to be checked.';
+    } else if (lower.includes('jwt') || lower.includes('auth')) {
+      sub = 'Your sign-in session needs to be refreshed.';
+    }
+
     list.innerHTML = `
       <div class="ni-empty">
         <span style="font-size:36px">⚠️</span>
-        <p class="ni-empty-title">Couldn't load</p>
-        <p class="ni-empty-sub">
-          <button onclick="window.notifCenter.reload()" class="ni-retry-btn">Retry</button>
-        </p>
+        <p class="ni-empty-title">${esc(title)}</p>
+        <p class="ni-empty-sub">${esc(sub)}</p>
+        <button
+          type="button"
+          onclick="window.notifCenter?.reload?.()"
+          class="ni-retry-btn">
+          Retry
+        </button>
       </div>`;
   }
 
@@ -16914,7 +16979,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     /** Call once after Supabase auth is confirmed. */
     init,
     /** Force-reload from DB. */
-    reload: loadNotifications,
+    reload: () => loadNotifications(),
     /** Insert a notification for another user (from hook points). */
     insert: insertNotification,
     /** Insert @mention notifications from post/comment text. */
