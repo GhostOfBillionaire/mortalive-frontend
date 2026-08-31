@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v153 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v193" content="basic-messaging">
+<meta name="mortalive-build-v194" content="basic-messaging">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
@@ -10177,6 +10177,55 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 }
 </style>
 
+
+<style id="mortalive-v194-mobile-minimal-topisland">
+@media (max-width:640px){
+  body.di2-live.di2-search #di2,
+  body.di2-live.di2-notifications #di2{
+    display:flex !important;
+    top:10px !important;
+    left:50% !important;
+    z-index:9999 !important;
+  }
+
+  body.di2-live.di2-search #di2 .di2-pill,
+  body.di2-live.di2-notifications #di2 .di2-pill{
+    display:flex !important;
+    width:auto !important;
+    min-width:150px !important;
+    max-width:calc(100vw - 24px) !important;
+    height:42px !important;
+    border-radius:21px !important;
+    overflow:hidden !important;
+  }
+
+  body.di2-live.di2-search #di2 .di2-nav,
+  body.di2-live.di2-search #di2 .di2-cta,
+  body.di2-live.di2-search #di2 .di2-score,
+  body.di2-live.di2-search #di2 .di2-badge,
+  body.di2-live.di2-search #di2 .di2-sm-back,
+  body.di2-live.di2-search #di2 .di2-sm-go,
+  body.di2-live.di2-notifications #di2 .di2-nav,
+  body.di2-live.di2-notifications #di2 .di2-cta,
+  body.di2-live.di2-notifications #di2 .di2-score,
+  body.di2-live.di2-notifications #di2 .di2-badge,
+  body.di2-live.di2-notifications #di2 .di2-sm-back,
+  body.di2-live.di2-notifications #di2 .di2-sm-go{
+    display:none !important;
+  }
+
+  body.di2-live.di2-search #pg-search.active,
+  body.di2-live.di2-notifications #pg-notifications.active{
+    padding-top:70px !important;
+  }
+
+  body.di2-live.di2-search #di2 .di2-right,
+  body.di2-live.di2-notifications #di2 .di2-right{
+    display:flex !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -11728,7 +11777,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260831-v193-mobile-bottom-nav"></script>
+<script src="app.js?v=20260831-v194-mobile-minimal-topisland"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
