@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v153 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v183" content="basic-messaging">
+<meta name="mortalive-build-v185" content="basic-messaging">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
@@ -10689,6 +10689,23 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 </div>
 </section>
 
+
+<section id="pg-search" class="page mortalive-search-page">
+  <div class="mortalive-search-page-shell">
+    <div class="mortalive-search-page-card">
+      <div class="mortalive-search-page-title-row">
+        <div>
+          <div class="mortalive-search-page-kicker">Mortalive</div>
+          <h1>Search</h1>
+          <p>Find users, posts, and hashtags.</p>
+        </div>
+        <button type="button" class="mortalive-search-page-back" data-top-page="pg-feed" aria-label="Back to Feed">←</button>
+      </div>
+      <div id="mortalive-search-page-host"></div>
+    </div>
+  </div>
+</section>
+
 <section id="pg-messages" class="page">
   <div class="messages-shell">
     
@@ -11260,7 +11277,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260831-v183-css-text-fix"></script>
+<script src="app.js?v=20260830-v185-search-section-notifications"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -12069,3 +12086,67 @@ body:has(#pg-land.active)::before{
     opacity:1 !important;
   }
 }
+
+<style id="mortalive-v185-search-section-notifications">
+/* Search is a real page, not a persistent topbar input. */
+.mortalive-search-page{min-height:calc(100dvh - 96px);padding:28px 16px 110px;}
+.mortalive-search-page-shell{max-width:900px;margin:0 auto;}
+.mortalive-search-page-card{
+  background:rgba(255,255,255,.92);
+  border:1px solid var(--border);
+  border-radius:24px;
+  box-shadow:var(--elev-2);
+  padding:24px;
+}
+.mortalive-search-page-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px;}
+.mortalive-search-page-kicker{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--on-surface-3);font-weight:800;}
+.mortalive-search-page-card h1{font-size:28px;letter-spacing:-.03em;margin:3px 0 5px;}
+.mortalive-search-page-card p{font-size:13px;color:var(--on-surface-3);}
+.mortalive-search-page-back{
+  width:40px;height:40px;border-radius:50%;border:1px solid var(--border);
+  background:var(--surface);color:var(--on-surface);font-size:21px;display:grid;place-items:center;
+}
+#mortalive-search-page-host #di-search-wrap{
+  display:flex!important;visibility:visible!important;opacity:1!important;width:100%!important;max-width:none!important;
+}
+#mortalive-search-page-host #di-search-pill{width:100%!important;max-width:none!important;}
+#mortalive-search-page-host .di-filter-chips{display:none!important;}
+
+.di2-notify-btn{
+  position:relative;
+  display:grid;place-items:center;
+  min-width:34px;height:34px;padding:0 7px;
+  border-radius:999px;
+  font-size:16px;color:var(--on-surface-2);
+  cursor:pointer;
+}
+.di2-notify-btn:hover{background:var(--primary-alpha);color:var(--on-surface);}
+.di2-notify-dot{
+  position:absolute;right:5px;top:5px;width:7px;height:7px;border-radius:50%;
+  background:var(--danger);display:none;
+}
+.di2-notify-dot.on{display:block;}
+#di2-notification-panel{
+  position:fixed;top:70px;right:18px;z-index:10000;
+  width:min(360px,calc(100vw - 28px));
+  background:rgba(255,255,255,.96);backdrop-filter:blur(22px) saturate(150%);
+  border:1px solid var(--border);border-radius:20px;box-shadow:var(--elev-3);
+  opacity:0;visibility:hidden;transform:translateY(-8px) scale(.98);
+  transition:opacity .18s ease,transform .22s var(--ease-spring),visibility .18s;
+}
+#di2-notification-panel.open{opacity:1;visibility:visible;transform:translateY(0) scale(1);}
+.di2-notification-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);}
+.di2-notification-head button{width:30px;height:30px;border-radius:50%;font-size:20px;}
+.di2-notification-body{padding:18px 16px;color:var(--on-surface-3);font-size:13px;}
+.di2-notification-empty{padding:18px 8px;text-align:center;}
+.di2-pill.search-section .di2-mid-inner{opacity:1;transform:none;pointer-events:auto;}
+@media(max-width:640px){
+  .mortalive-search-page{padding:18px 12px 100px;}
+  .mortalive-search-page-card{padding:18px;border-radius:20px;}
+  .mortalive-search-page-title-row{margin-bottom:16px;}
+}
+
+<style id="mortalive-v185-hide-feed-island-search">
+body.di2-feed #di2-search-slot{display:none!important;}
+body.di2-feed #di2 .di2-search-nav-btn{display:inline-flex!important;}
+</style>
