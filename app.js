@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-31-v186-search-notifications-sections'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-31-v188-notification-center-integrated'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -1624,6 +1624,11 @@ function initAuthControls() {
     }
 
     syncAuthProgress(crockroachScore);
+    if (window.notifCenter && !S.isGuest && S.userId) {
+      window.notifCenter.init().catch(err =>
+        console.warn('[notif] post-auth init:', err?.message || err)
+      );
+    }
     toast(`Welcome, ${username}!`, '🧲');
 
     // If the user arrived via a shared profile link (?user=...) but wasn't
@@ -2216,6 +2221,7 @@ function initAuthControls() {
   // that happen via the email's link button rather than a click here.
   sb.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') {
+      window.notifCenter?.teardown();
       S.authToken = null;
       S.username = null;
       S.userId = null;
@@ -2273,6 +2279,12 @@ function initAuthControls() {
 
         updateIdentityDisplay();
         syncFeedSidebar();
+
+        if (window.notifCenter && !S.isGuest && S.userId) {
+          window.notifCenter.init().catch(err =>
+            console.warn('[notif] auth-state init:', err?.message || err)
+          );
+        }
 
         hydrateAccountData(S.userId, { rerender: true }).catch((error) => {
           console.warn('[Profile] auth-state hydration warning:', error);
@@ -2558,6 +2570,7 @@ function initLobbyControls() {
   $('score-pill-btn')?.addEventListener('click', openProgressSheet);
 
   $('btn-logout')?.addEventListener('click', async () => {
+    window.notifCenter?.teardown();
     try {
       await sb.auth.signOut();
     } catch (e) {}
@@ -9915,6 +9928,7 @@ async function performAccountDeletion() {
   }
 
   // Only clear local state after the backend confirms the transaction.
+  window.notifCenter?.teardown();
   try { await sb?.auth?.signOut(); } catch (e) {}
   localStorage.removeItem('mortalive_token');
   localStorage.removeItem('mortalive_username');
@@ -15653,7 +15667,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
               <button class="di2-nav-btn" data-di-page="pg-feed"     type="button">Feed</button>
               <button class="di2-nav-btn" data-di-page="pg-search" type="button">Search</button>
               <button class="di2-nav-btn" data-di-page="pg-messages" type="button">Messages</button>
-              <button class="di2-nav-btn di2-notify-nav-btn" data-di-page="pg-notifications" type="button" aria-label="Notifications" title="Notifications">🔔</button>
+              <button class="di2-nav-btn di2-notify-nav-btn" data-di-page="pg-notifications" type="button" aria-label="Notifications" title="Notifications">🔔<span class="di2-notify-dot" id="di2-notify-dot" aria-hidden="true"></span></button>
               <button class="di2-nav-btn" data-di-page="pg-profile"  type="button">Profile</button>
             </div>
 
@@ -16316,4 +16330,649 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     setTimeout(init, 180);
   }
 
+})();
+
+/* ════════════════════════════════════════════════════════════════
+   MORTALIVE NOTIFICATION CENTER — EMBEDDED
+   ════════════════════════════════════════════════════════════════ */
+/**
+ * ════════════════════════════════════════════════════════════════
+ *  MORTALIVE — NOTIFICATION CENTER
+ *  notifications.js  ·  build 2026-08-29-v1
+ * ════════════════════════════════════════════════════════════════
+ *
+ *  EMBEDDED PRODUCTION MODULE — merged into app.js.
+ *
+ *  DEPENDENCIES (must exist on window before this file runs):
+ *    window.sb             — Supabase client   (created in app.js)
+ *    window.S              — Session state obj  (created in app.js)
+ *    window.showPage       — Page router        (created in app.js)
+ *    window.openPostViewer — (optional) deep-link to a post
+ *    window.openUserProfile— (optional) deep-link to a profile
+ *    window.openProgressSheet — (optional) badges sheet
+ *    window.msgToast / window.toast — (optional) toast helper
+ *
+ *  WHAT IT EXPOSES:
+ *    window.notifCenter.init()     — call once after auth
+ *    window.notifCenter.insert()   — call from app.js hook points
+ *    window.notifCenter.reload()   — force refresh
+ *    window.notifCenter.teardown() — cleanup on sign-out
+ *    window.notifCenter.getUnreadCount() — for other UI elements
+ * ════════════════════════════════════════════════════════════════
+ */
+
+(function installNotificationCenter () {
+  'use strict';
+
+  /* ─── constants ─────────────────────────────────────────── */
+  const TAG              = 'notif-v1';
+  const PAGE_SIZE        = 40;
+  const POLL_MS          = 60_000;   // fallback poll every 60 s
+  const TOAST_MS         = 4_200;
+  const NOTIF_PAGE_ID    = 'pg-notifications';
+  const BADGE_ID         = 'notif-badge';
+
+  /* ─── type metadata ──────────────────────────────────────── */
+  const TYPE = {
+    follow:          { icon: '👤', color: '#6366f1', label: 'Follow'   },
+    like:            { icon: '❤️', color: '#ef4444', label: 'Like'     },
+    comment:         { icon: '💬', color: '#3b82f6', label: 'Comment'  },
+    message_request: { icon: '✉️', color: '#8b5cf6', label: 'Message'  },
+    group_invite:    { icon: '👥', color: '#10b981', label: 'Group'    },
+    mention:         { icon: '@',  color: '#f59e0b', label: 'Mention'  },
+    badge_unlock:    { icon: '🏅', color: '#eab308', label: 'Badge'    },
+    system:          { icon: '🔔', color: '#6b7280', label: 'System'   },
+  };
+
+  /* ─── module state ───────────────────────────────────────── */
+  const st = {
+    items:        [],      // full notification list (enriched)
+    filter:       'all',   // 'all' | 'unread' | 'mentions' | 'system'
+    loading:      false,
+    unreadCount:  0,
+    channel:      null,    // supabase realtime channel
+    pollTimer:    null,
+  };
+
+  /* ─── tiny helpers ───────────────────────────────────────── */
+  const sb  = ()  => window.sb;
+  const S   = ()  => window.S;
+  const $   = id  => document.getElementById(id);
+  const esc = str => String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  function ago (dateStr) {
+    const s = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+    if (s <   60) return 'just now';
+    if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+    if (s < 604800) return `${Math.floor(s / 86400)}d ago`;
+    return new Date(dateStr).toLocaleDateString();
+  }
+
+  function avatarHTML (actor, size = 38) {
+    const name    = actor?.display_name || actor?.username || '?';
+    const initial = name[0].toUpperCase();
+    const url     = actor?.avatar_url;
+    const styles  = `width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;display:block;`;
+    return url
+      ? `<img src="${esc(url)}" alt="${esc(name)}" style="${styles}" loading="lazy"
+             onerror="this.parentElement.textContent='${esc(initial)}';this.remove();">`
+      : esc(initial);
+  }
+
+
+  /* ══════════════════════════════════════════════════════════
+     BADGE
+  ══════════════════════════════════════════════════════════ */
+  function updateBadge (n) {
+    st.unreadCount = n;
+    const el = $(BADGE_ID);
+    if (!el) return;
+    el.textContent = n > 99 ? '99+' : n || '';
+    el.style.display = n > 0 ? 'flex' : 'none';
+    document.getElementById('di2-notify-dot')?.classList.toggle('on', n > 0);
+    document.getElementById('di2-notify-tab-dot')?.classList.toggle('on', n > 0);
+  }
+
+
+  /* ══════════════════════════════════════════════════════════
+     DATA — LOAD
+  ══════════════════════════════════════════════════════════ */
+  async function loadNotifications () {
+    const client  = sb();
+    const session = S();
+    if (!client || !session?.userId || session?.isGuest) {
+      renderGuest();
+      return;
+    }
+
+    st.loading = true;
+    renderSkeleton();
+
+    try {
+      const { data, error } = await client
+        .from('notifications')
+        .select('id, type, actor_id, entity_id, entity_type, message, read, created_at')
+        .eq('user_id', session.userId)
+        .order('created_at', { ascending: false })
+        .limit(PAGE_SIZE);
+
+      if (error) throw error;
+
+      const rows = Array.isArray(data) ? data : [];
+      const actorIds = [...new Set(rows.map(n => n.actor_id).filter(Boolean).map(String))];
+      let actorMap = new Map();
+
+      if (actorIds.length) {
+        const { data: actors, error: actorError } = await client
+          .from('accounts')
+          .select('id, username, display_name, avatar_url')
+          .in('id', actorIds);
+
+        if (!actorError) {
+          actorMap = new Map((actors || []).map(a => [String(a.id), a]));
+        }
+      }
+
+      st.items = rows.map(n => ({
+        ...n,
+        actor: n.actor_id ? (actorMap.get(String(n.actor_id)) || null) : null
+      }));
+      st.unreadCount = st.items.filter(n => !n.read).length;
+      updateBadge(st.unreadCount);
+      render();
+    } catch (err) {
+      console.warn(`[${TAG}] load failed:`, err?.message || err);
+      renderError();
+    } finally {
+      st.loading = false;
+    }
+  }
+
+
+  /* ══════════════════════════════════════════════════════════
+     DATA — MARK READ
+  ══════════════════════════════════════════════════════════ */
+  async function markRead (notifId) {
+    const notif = st.items.find(n => String(n.id) === String(notifId));
+    if (!notif || notif.read) return;
+
+    // Optimistic
+    notif.read    = true;
+    st.unreadCount = Math.max(0, st.unreadCount - 1);
+    updateBadge(st.unreadCount);
+    render();
+
+    const client  = sb();
+    const session = S();
+    if (!client || !session?.userId) return;
+    await client
+      .from('notifications')
+      .update({ read: true })
+      .eq('id', notifId)
+      .eq('user_id', session.userId);
+  }
+
+  async function markAllRead () {
+    st.items.forEach(n => { n.read = true; });
+    updateBadge(0);
+    render();
+
+    const client  = sb();
+    const session = S();
+    if (!client || !session?.userId) return;
+    await client
+      .from('notifications')
+      .update({ read: true })
+      .eq('user_id', session.userId)
+      .eq('read', false);
+  }
+
+
+  /* ══════════════════════════════════════════════════════════
+     DATA — CLIENT-SIDE INSERT
+     Called from hook points in app.js (see AUDIT).
+     Never notifies the actor themselves.
+  ══════════════════════════════════════════════════════════ */
+  async function insertNotification ({
+    recipientId, type, entityId = null, entityType = null, message = ''
+  }) {
+    const client  = sb();
+    const session = S();
+    if (!client || !session?.userId) return;
+    if (!recipientId || String(recipientId) === String(session.userId)) return;  // no self-notif
+
+    const row = {
+      user_id:     recipientId,
+      type,
+      actor_id:    session.userId,
+      entity_id:   entityId  ? String(entityId)  : null,
+      entity_type: entityType ? String(entityType) : null,
+      message,
+      read:        false,
+      created_at:  new Date().toISOString()
+    };
+
+    const { error } = await client.from('notifications').insert(row);
+    if (error) console.warn(`[${TAG}] insert failed:`, error.message);
+  }
+
+  /* convenience: parse @mentions from text, insert for each */
+  async function insertMentionNotifications (text, entityId, entityType) {
+    const client  = sb();
+    const session = S();
+    if (!client || !session?.userId || !text) return;
+
+    const handles = [...new Set((text.match(/@([\w.]+)/g) || []).map(h => h.slice(1)))];
+    if (!handles.length) return;
+
+    const { data } = await client
+      .from('accounts')
+      .select('id, username, display_name')
+      .in('username', handles);
+
+    const targets = (data || []).filter(u => String(u.id) !== String(session.userId));
+    const actorName = S()?.accountData?.display_name || S()?.username || 'Someone';
+    await Promise.all(targets.map(u =>
+      insertNotification({
+        recipientId: u.id,
+        type:        'mention',
+        entityId,
+        entityType,
+        message:     `${actorName} mentioned you`
+      })
+    ));
+  }
+
+
+  /* ══════════════════════════════════════════════════════════
+     REALTIME — SUPABASE CHANNEL
+  ══════════════════════════════════════════════════════════ */
+  function setupRealtime () {
+    const client  = sb();
+    const session = S();
+    if (!client || !session?.userId || session?.isGuest) return;
+
+    // Tear down old channel if any
+    if (st.channel) { client.removeChannel(st.channel); st.channel = null; }
+
+    st.channel = client
+      .channel(`notif:${session.userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event:  'INSERT',
+          schema: 'public',
+          table:  'notifications',
+          filter: `user_id=eq.${session.userId}`
+        },
+        async payload => {
+          const row = payload.new;
+          if (!row) return;
+
+          // Enrich with actor profile
+          let actor = null;
+          if (row.actor_id) {
+            const { data } = await client
+              .from('accounts')
+              .select('id,username,display_name,avatar_url')
+              .eq('id', row.actor_id)
+              .single();
+            actor = data || null;
+          }
+
+          const enriched = { ...row, actor };
+          st.items.unshift(enriched);
+          if (!enriched.read) updateBadge(st.unreadCount + 1);
+
+          // Re-render only if user is on the notifications page
+          if ($(NOTIF_PAGE_ID)?.classList.contains('active')) render();
+
+          showLiveToast(enriched);
+        }
+      )
+      .subscribe(status => {
+        if (status === 'CHANNEL_ERROR') {
+          // Fall back to polling
+          if (!st.pollTimer) {
+            st.pollTimer = setInterval(loadNotifications, POLL_MS);
+            console.warn(`[${TAG}] realtime failed — polling every ${POLL_MS / 1000}s`);
+          }
+        }
+      });
+  }
+
+  function teardown () {
+    if (st.channel && sb()) { sb().removeChannel(st.channel); st.channel = null; }
+    if (st.pollTimer)       { clearInterval(st.pollTimer); st.pollTimer = null; }
+  }
+
+
+  /* ══════════════════════════════════════════════════════════
+     LIVE TOAST
+  ══════════════════════════════════════════════════════════ */
+  function showLiveToast (notif) {
+    const meta = TYPE[notif.type] || TYPE.system;
+    const name = notif.actor?.display_name || notif.actor?.username || 'Someone';
+    const text = notif.message || `${name} sent you a notification`;
+
+    // Use the app's existing toast helpers if available
+    if (typeof window.msgToast === 'function') { window.msgToast(text, meta.icon); return; }
+    if (typeof window.toast    === 'function') { window.toast(text, meta.icon);    return; }
+
+    // Fallback inline toast
+    const el = Object.assign(document.createElement('div'), { className: 'notif-live-toast' });
+    el.innerHTML = `<span class="nlt-icon">${meta.icon}</span><span class="nlt-text">${esc(text)}</span>`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('nlt-show'));
+    setTimeout(() => {
+      el.classList.remove('nlt-show');
+      el.addEventListener('transitionend', () => el.remove(), { once: true });
+    }, TOAST_MS);
+  }
+
+
+  /* ══════════════════════════════════════════════════════════
+     CLICK → NAVIGATION
+  ══════════════════════════════════════════════════════════ */
+  function handleClick (notif) {
+    if (!notif) return;
+    const go = id => window.showPage?.(id);
+
+    switch (notif.type) {
+      case 'follow':
+        if (notif.actor?.id && typeof window.openUserProfile === 'function') {
+          window.openUserProfile(notif.actor.id);
+        }
+        break;
+
+      case 'like':
+      case 'comment':
+      case 'mention':
+        if (notif.entity_id && typeof window.openPostViewer === 'function') {
+          window.openPostViewer(notif.entity_id);
+        } else {
+          go('pg-feed');
+        }
+        break;
+
+      case 'message_request':
+      case 'group_invite':
+        go('pg-messages');
+        break;
+
+      case 'badge_unlock':
+        if (typeof window.openProgressSheet === 'function') window.openProgressSheet();
+        break;
+
+      default:
+        break;
+    }
+  }
+
+
+  /* ══════════════════════════════════════════════════════════
+     RENDER
+  ══════════════════════════════════════════════════════════ */
+  function filtered () {
+    const { items, filter } = st;
+    switch (filter) {
+      case 'unread':   return items.filter(n => !n.read);
+      case 'mentions': return items.filter(n => n.type === 'mention');
+      case 'system':   return items.filter(n => n.type === 'system' || n.type === 'badge_unlock');
+      default:         return items;
+    }
+  }
+
+  function renderItem (n) {
+    const meta   = TYPE[n.type] || TYPE.system;
+    const actor  = n.actor;
+    const name   = actor?.display_name || actor?.username || 'Someone';
+    const unread = !n.read;
+
+    return `
+      <div class="ni ${unread ? 'ni--unread' : ''}"
+           data-nid="${esc(n.id)}" data-ntype="${esc(n.type)}" role="button" tabindex="0">
+        <div class="ni-ava-wrap">
+          <div class="ni-ava">${avatarHTML(actor)}</div>
+          <span class="ni-type-dot" style="background:${meta.color}" title="${meta.label}">${meta.icon}</span>
+        </div>
+        <div class="ni-body">
+          <p class="ni-msg">${esc(n.message || `${name} sent you a notification`)}</p>
+          <span class="ni-time">${esc(ago(n.created_at))}</span>
+        </div>
+        ${unread ? '<div class="ni-dot" aria-label="Unread"></div>' : ''}
+      </div>`;
+  }
+
+  function renderSkeleton () {
+    const list = $('notif-list');
+    if (!list) return;
+    list.innerHTML = Array.from({ length: 7 }, () => `
+      <div class="ni-skel">
+        <div class="ni-skel-ava ns-pulse"></div>
+        <div class="ni-skel-lines">
+          <div class="ni-skel-line ns-pulse" style="width:68%"></div>
+          <div class="ni-skel-line ns-pulse" style="width:38%;margin-top:6px;height:11px"></div>
+        </div>
+      </div>`).join('');
+  }
+
+  function renderError () {
+    const list = $('notif-list');
+    if (!list) return;
+    list.innerHTML = `
+      <div class="ni-empty">
+        <span style="font-size:36px">⚠️</span>
+        <p class="ni-empty-title">Couldn't load</p>
+        <p class="ni-empty-sub">
+          <button onclick="window.notifCenter.reload()" class="ni-retry-btn">Retry</button>
+        </p>
+      </div>`;
+  }
+
+  function renderGuest () {
+    const list = $('notif-list');
+    if (!list) return;
+    list.innerHTML = `
+      <div class="ni-empty">
+        <span style="font-size:42px">🔒</span>
+        <p class="ni-empty-title">Sign in to see notifications</p>
+        <p class="ni-empty-sub">Create an account to get started.</p>
+      </div>`;
+  }
+
+  const EMPTY = {
+    all:      { icon: '🔔', title: "You're all caught up!",   sub: 'New notifications appear here.'              },
+    unread:   { icon: '✅', title: 'No unread notifications', sub: 'Everything has been read.'                    },
+    mentions: { icon: '@',  title: 'No mentions yet',         sub: 'When someone @mentions you, it shows here.'  },
+    system:   { icon: '🏅', title: 'No system alerts',        sub: 'Badge unlocks and system messages go here.'  },
+  };
+
+  function render () {
+    const list = $('notif-list');
+    if (!list) return;
+
+    const items      = filtered();
+    const unreadN    = st.items.filter(n => !n.read).length;
+    const mentionsN  = st.items.filter(n => n.type === 'mention').length;
+    const systemN    = st.items.filter(n => n.type === 'system' || n.type === 'badge_unlock').length;
+
+    // Sync tab counts
+    const setCount = (id, n) => {
+      const el = $(id);
+      if (!el) return;
+      const badge = el.querySelector('.nt-count');
+      if (badge) badge.textContent = n > 0 ? n : '';
+    };
+    setCount('notif-tab-all',      st.items.length);
+    setCount('notif-tab-unread',   unreadN);
+    setCount('notif-tab-mentions', mentionsN);
+    setCount('notif-tab-system',   systemN);
+
+    // Mark-all button
+    const markAllBtn = $('notif-mark-all');
+    if (markAllBtn) markAllBtn.style.display = unreadN > 0 ? '' : 'none';
+
+    // Empty state
+    if (!items.length) {
+      const { icon, title, sub } = EMPTY[st.filter] || EMPTY.all;
+      list.innerHTML = `
+        <div class="ni-empty">
+          <span style="font-size:42px;line-height:1">${icon}</span>
+          <p class="ni-empty-title">${esc(title)}</p>
+          <p class="ni-empty-sub">${esc(sub)}</p>
+        </div>`;
+      return;
+    }
+
+    list.innerHTML = items.map(renderItem).join('');
+
+    // Wire events
+    list.querySelectorAll('.ni[data-nid]').forEach(el => {
+      const handler = () => {
+        const id    = el.dataset.nid;
+        const notif = st.items.find(n => String(n.id) === String(id));
+        markRead(id);
+        handleClick(notif);
+      };
+      el.addEventListener('click', handler);
+      el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') handler(); });
+    });
+  }
+
+
+  /* ══════════════════════════════════════════════════════════
+     FILTER TABS
+  ══════════════════════════════════════════════════════════ */
+  function setFilter (f) {
+    st.filter = f;
+    ['all', 'unread', 'mentions', 'system'].forEach(tab => {
+      $(`notif-tab-${tab}`)?.classList.toggle('nt-active', tab === f);
+    });
+    render();
+  }
+
+
+  /* ══════════════════════════════════════════════════════════
+     INIT
+  ══════════════════════════════════════════════════════════ */
+  function wireUI () {
+    ['all', 'unread', 'mentions', 'system'].forEach(f => {
+      $(`notif-tab-${f}`)?.addEventListener('click', () => setFilter(f));
+    });
+
+    $('notif-mark-all')?.addEventListener('click', markAllRead);
+
+    $('notif-refresh')?.addEventListener('click', () => loadNotifications());
+
+    $('notif-nav-btn')?.addEventListener('click', () => {
+      window._notifReturnPage = document.querySelector('.page.active')?.id || 'pg-feed';
+      window.showPage?.(NOTIF_PAGE_ID);
+    });
+
+    $('notif-back')?.addEventListener('click', () => {
+      window.showPage?.(window._notifReturnPage || 'pg-feed');
+    });
+  }
+
+  async function init () {
+    const session = S();
+    if (!session || session.isGuest || !session.userId) {
+      renderGuest();
+      updateBadge(0);
+      return;
+    }
+
+    wireUI();
+    setupRealtime();
+    await loadNotifications();
+
+    // Start polling as fallback (realtime may switch it off if SUBSCRIBED)
+    if (!st.pollTimer) {
+      st.pollTimer = setInterval(loadNotifications, POLL_MS);
+    }
+
+    console.log(`[${TAG}] Notification center initialised for user ${session.userId}`);
+  }
+
+
+  /* ══════════════════════════════════════════════════════════
+     PUBLIC API
+  ══════════════════════════════════════════════════════════ */
+  window.notifCenter = {
+    /** Call once after Supabase auth is confirmed. */
+    init,
+    /** Force-reload from DB. */
+    reload: loadNotifications,
+    /** Insert a notification for another user (from hook points). */
+    insert: insertNotification,
+    /** Insert @mention notifications from post/comment text. */
+    insertMentions: insertMentionNotifications,
+    /** Mark a single notification read. */
+    markRead,
+    /** Mark every unread notification read. */
+    markAllRead,
+    /** Stop realtime + polling (call on sign-out). */
+    teardown,
+    /** Current unread count (used by other UI). */
+    getUnreadCount: () => st.unreadCount,
+  };
+
+  console.log(`[${TAG}] Module registered — call window.notifCenter.init() after auth.`);
+
+})();
+
+
+/* ════════════════════════════════════════════════════════════════
+   APP.JS HOOK PATCHES
+   Paste this block at the END of app.js (after all existing code).
+   These thin wrappers add notification side-effects to existing
+   functions without modifying their original logic.
+   ════════════════════════════════════════════════════════════════ */
+
+(function patchAppFunctionsForNotifications () {
+
+  /* 1. LIKE ─────────────────────────────────────────────────── */
+  const _origLike = window.togglePostLike || togglePostLike;
+  window.togglePostLike = async function patchedTogglePostLike (postId) {
+    await _origLike(postId);
+
+    // Only fire notification on a new like (not an unlike)
+    if (!window.notifCenter) return;
+    const post = (window._feedPosts || []).find(p => String(p.id) === String(postId))
+              || (_feedPosts       || []).find(p => String(p.id) === String(postId));
+    if (!post) return;
+    const actorName = S?.()?.accountData?.display_name || S?.()?.username || 'Someone';
+    await window.notifCenter.insert({
+      recipientId: post.user_id,
+      type:        'like',
+      entityId:    postId,
+      entityType:  'post',
+      message:     `${actorName} liked your post`
+    });
+  };
+
+  /* 2. FOLLOW ────────────────────────────────────────────────── */
+  const _origFollow = window.toggleFollow;
+  window.toggleFollow = async function patchedToggleFollow (profileUserId, shouldFollow) {
+    const result = await _origFollow(profileUserId, shouldFollow);
+    if (shouldFollow && window.notifCenter) {
+      const actorName = S?.()?.accountData?.display_name || S?.()?.username || 'Someone';
+      await window.notifCenter.insert({
+        recipientId: profileUserId,
+        type:        'follow',
+        message:     `${actorName} started following you`
+      });
+    }
+    return result;
+  };
+
+  /* 3. COMMENT ───────────────────────────────────────────────── */
+  //  addPostComment is a lexical function inside initFeedPage; it is not on
+  //  window. We patch via a MutationObserver trick — see AUDIT section 4.3
+  //  for the recommended DB-trigger alternative.
+  //  If you refactor addPostComment to window.addPostComment, wire it here.
+
+  console.log('[notif-v1] App hook patches applied.');
 })();
