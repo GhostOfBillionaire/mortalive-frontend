@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v153 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v186" content="basic-messaging">
+<meta name="mortalive-build-v188" content="basic-messaging">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
@@ -9787,6 +9787,353 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 }
 
 </style>
+<style id="notif-css">
+
+/* ── Page layout ─────────────────────────────────────────── */
+#pg-notifications.active {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  min-height: 100dvh;
+  padding: 0;
+}
+
+.notif-shell {
+  width: min(680px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+.notif-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 20;
+}
+
+.notif-back-btn {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--on-surface);
+  cursor: pointer;
+  display: grid; place-items: center;
+  flex-shrink: 0;
+  transition: background var(--dur-fast);
+}
+.notif-back-btn:hover { background: var(--surface-3); }
+
+.notif-title {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -.04em;
+  color: var(--on-surface);
+  flex: 1;
+  margin: 0;
+}
+
+.notif-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.notif-icon-btn {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--on-surface-2);
+  cursor: pointer;
+  display: grid; place-items: center;
+  transition: background var(--dur-fast);
+}
+.notif-icon-btn:hover { background: var(--surface-3); }
+
+.notif-mark-all-btn {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-alpha);
+  border: 1px solid rgba(26,110,245,.18);
+  border-radius: 999px;
+  padding: 5px 13px;
+  cursor: pointer;
+  transition: background var(--dur-fast), opacity var(--dur-fast);
+  white-space: nowrap;
+}
+.notif-mark-all-btn:hover { background: rgba(26,110,245,.2); }
+
+/* ── Filter tabs ─────────────────────────────────────────── */
+.notif-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.notif-tabs::-webkit-scrollbar { display: none; }
+
+.nt {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--on-surface-3);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-bottom: 2.5px solid transparent;
+  transition: color var(--dur-fast), border-color var(--dur-fast);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.nt:hover { color: var(--on-surface); }
+.nt.nt-active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.nt-count {
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--surface-3);
+  border-radius: 999px;
+  padding: 1px 6px;
+  min-width: 18px;
+  text-align: center;
+  color: var(--on-surface-2);
+}
+.nt.nt-active .nt-count {
+  background: var(--primary-alpha);
+  color: var(--primary);
+}
+
+/* ── Notification list ───────────────────────────────────── */
+.notif-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+/* ── Single notification item ────────────────────────────── */
+.ni {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 18px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background var(--dur-fast);
+  position: relative;
+  outline: none;
+}
+.ni:last-child { border-bottom: none; }
+.ni:hover      { background: var(--surface-2); }
+.ni:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+.ni--unread { background: var(--surface-tint); }
+.ni--unread:hover { background: rgba(26,110,245,.10); }
+
+.ni-ava-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ni-ava {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 800;
+  color: var(--on-surface-2);
+  overflow: hidden;
+}
+
+.ni-type-dot {
+  position: absolute;
+  bottom: -2px; right: -2px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  font-size: 11px;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--surface);
+  line-height: 1;
+}
+
+.ni-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ni-msg {
+  margin: 0;
+  font-size: 14px;
+  color: var(--on-surface);
+  line-height: 1.45;
+  word-break: break-word;
+}
+.ni--unread .ni-msg { font-weight: 600; }
+
+.ni-time {
+  font-size: 12px;
+  color: var(--on-surface-3);
+  font-weight: 500;
+}
+
+.ni-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: 4px;
+}
+
+/* ── Skeleton loader ─────────────────────────────────────── */
+.ni-skel {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.ni-skel-ava {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ni-skel-lines { flex: 1; display: flex; flex-direction: column; gap: 0; padding-top: 4px; }
+.ni-skel-line  { height: 14px; border-radius: 6px; }
+
+@keyframes ns-shimmer {
+  0%   { opacity: .5; }
+  50%  { opacity: .9; }
+  100% { opacity: .5; }
+}
+.ns-pulse { background: var(--surface-3); animation: ns-shimmer 1.4s ease-in-out infinite; }
+
+/* ── Empty state ─────────────────────────────────────────── */
+.ni-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 80px 24px 40px;
+  text-align: center;
+}
+.ni-empty-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--on-surface);
+}
+.ni-empty-sub {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--on-surface-3);
+  line-height: 1.6;
+}
+.ni-retry-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+/* ── Live toast (fallback if app toast unavailable) ──────── */
+.notif-live-toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--on-surface);
+  color: var(--surface);
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: var(--elev-3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .22s ease, transform .22s ease;
+  max-width: min(360px, calc(100vw - 32px));
+  z-index: 9999;
+}
+.notif-live-toast.nlt-show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.nlt-icon { font-size: 17px; flex-shrink: 0; }
+.nlt-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Feed sidebar nav bell (notification link) ───────────── */
+.snav-notif-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-surface-2);
+  cursor: pointer;
+  transition: background var(--dur-fast), color var(--dur-fast);
+  position: relative;
+  user-select: none;
+}
+.snav-notif-link:hover { background: var(--surface-2); color: var(--on-surface); }
+.snav-notif-link .snav-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
+
+/* The badge on the nav bell */
+#notif-badge {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 0 5px;
+  margin-left: auto;
+  line-height: 1;
+}
+
+/* ── Mobile tweaks ───────────────────────────────────────── */
+@media (max-width: 639px) {
+  .notif-header { padding: 13px 14px 10px; }
+  .notif-tabs   { padding: 0 14px; }
+  .ni           { padding: 12px 14px; }
+  .ni-skel      { padding: 12px 14px; }
+  .notif-mark-all-btn { display: none; } /* use swipe in mobile, keep clean */
+}
+
+</style>
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -10520,6 +10867,11 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <div class="snav-link" data-filter="mine">
 <span class="snav-icon">👤</span> My posts
           </div>
+<div class="snav-notif-link" id="notif-nav-btn" role="button" tabindex="0"
+     title="Notifications" aria-label="Notifications">
+  <span class="snav-icon">🔔</span> Notifications
+  <span id="notif-badge" aria-live="polite" aria-label="Unread notifications"></span>
+</div>
 </nav>
 </div>
 <!-- Start chatting CTA -->
@@ -10691,21 +11043,60 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 
 
 
-<section id="pg-notifications" class="page mortalive-notifications-page">
-  <div class="mortalive-notifications-shell">
-    <div class="mortalive-notifications-card">
-      <div class="mortalive-search-page-title-row">
-        <div>
-          <div class="mortalive-search-page-kicker">Mortalive</div>
-          <h1>Notifications</h1>
-          <p>Your recent activity and alerts.</p>
-        </div>
-        <button type="button" class="mortalive-search-page-back" data-top-page="pg-feed" aria-label="Back to Feed">←</button>
+<section id="pg-notifications" class="page" aria-label="Notifications">
+  <div class="notif-shell">
+
+    <!-- Header -->
+    <div class="notif-header">
+      <button class="notif-back-btn" id="notif-back" title="Back" aria-label="Go back">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </button>
+
+      <h1 class="notif-title">Notifications</h1>
+
+      <div class="notif-header-actions">
+        <button class="notif-icon-btn" id="notif-refresh" title="Refresh" aria-label="Refresh notifications">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/>
+            <polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+        </button>
+        <button class="notif-mark-all-btn" id="notif-mark-all" style="display:none"
+                aria-label="Mark all notifications as read">
+          Mark all read
+        </button>
       </div>
-      <div id="mortalive-notifications-list"></div>
     </div>
-  </div>
+
+    <!-- Filter Tabs -->
+    <div class="notif-tabs" role="tablist" aria-label="Filter notifications">
+      <button class="nt nt-active" id="notif-tab-all" role="tab" aria-selected="true">
+        All <span class="nt-count" aria-hidden="true"></span>
+      </button>
+      <button class="nt" id="notif-tab-unread" role="tab" aria-selected="false">
+        Unread <span class="nt-count" aria-hidden="true"></span>
+      </button>
+      <button class="nt" id="notif-tab-mentions" role="tab" aria-selected="false">
+        Mentions <span class="nt-count" aria-hidden="true"></span>
+      </button>
+      <button class="nt" id="notif-tab-system" role="tab" aria-selected="false">
+        System <span class="nt-count" aria-hidden="true"></span>
+      </button>
+    </div>
+
+    <!-- Notification List -->
+    <div class="notif-list" id="notif-list" role="feed" aria-label="Notification feed">
+      <!-- Populated dynamically by notifications.js -->
+    </div>
+
+  </div><!-- /notif-shell -->
 </section>
+
 
 <section id="pg-search" class="page mortalive-search-page">
   <div class="mortalive-search-page-shell">
@@ -11294,7 +11685,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260831-v186-search-notifications-sections"></script>
+<script src="app.js?v=20260831-v188-notification-center-integrated"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -11832,10 +12223,6 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   });
 })();
 </script>
-</body>
-<!-- Random audit marker: silver-pine-92614 -->
-</html>
-<!-- V122: Talk audit final reconciled; profile gallery grouped by date. -->
 
 <style id="m162-reaction-overlay-fix">
 #pg-messages .msg-bubble{position:relative;}
@@ -11889,7 +12276,6 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   }
 }
 </style>
-
 
 <style id="mortalive-v170-main-island-online-counter">
 /* Online count belongs to the main island; no separate status island. */
@@ -11952,6 +12338,7 @@ body:has(#pg-land.active)::before{
   opacity:1 !important;
   pointer-events:auto !important;
 }
+</style>
 
 <style id="mortalive-v178-feed-search-clean-final">
 #di2 .di2-pill.feed-search-mode{
@@ -12103,6 +12490,7 @@ body:has(#pg-land.active)::before{
     opacity:1 !important;
   }
 }
+</style>
 
 <style id="mortalive-v185-search-section-notifications">
 /* Search is a real page, not a persistent topbar input. */
@@ -12162,6 +12550,7 @@ body:has(#pg-land.active)::before{
   .mortalive-search-page-card{padding:18px;border-radius:20px;}
   .mortalive-search-page-title-row{margin-bottom:16px;}
 }
+</style>
 
 <style id="mortalive-v186-navigation-layout">
 @media(min-width:641px){
@@ -12199,6 +12588,7 @@ body:has(#pg-land.active)::before{
     font-size:9px;
   }
 }
+</style>
 
 <style id="mortalive-v186-search-notification-pages">
 .mortalive-search-page,
@@ -12223,3 +12613,20 @@ body:has(#pg-land.active)::before{
   .mortalive-search-page,.mortalive-notifications-page{padding:18px 12px 100px;}
   .mortalive-notifications-card{padding:20px 16px;border-radius:20px;}
 }
+</style>
+
+<style id="mortalive-v188-notification-nav-dots">
+.di2-notify-nav-btn{position:relative;}
+.di2-notify-dot{
+  display:none;position:absolute;right:5px;top:4px;width:6px;height:6px;
+  border-radius:50%;background:#ef4444;box-shadow:0 0 0 2px rgba(255,255,255,.86);
+}
+.di2-notify-dot.on{display:block;}
+#di2-notify-tab-dot{
+  display:none;width:7px;height:7px;border-radius:50%;
+  background:#ef4444;margin-left:-8px;margin-top:-14px;
+}
+#di2-notify-tab-dot.on{display:block;}
+</style>
+</body>
+</html>
