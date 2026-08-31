@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-30-v185-search-section-notifications'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-31-v186-search-notifications-sections'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -867,9 +867,25 @@ const TALK_PAGE_IDS = new Set([
   'pg-chat',
   'pg-feed',
   'pg-search',
+  'pg-notifications',
   'pg-messages',
   'pg-profile'
 ]);
+
+
+function renderNotificationsSection() {
+  const host = document.getElementById('mortalive-notifications-list');
+  if (!host) return;
+
+  host.innerHTML = `
+    <div class="mortalive-notification-empty">
+      <div class="mortalive-notification-empty-icon">🔔</div>
+      <div class="mortalive-notification-empty-title">Notifications</div>
+      <div class="mortalive-notification-empty-sub">
+        You're all caught up.
+      </div>
+    </div>`;
+}
 
 function showPage(id, options = {}) {
   // Guests may view OTHER users' public profiles (read-only).
@@ -879,7 +895,7 @@ function showPage(id, options = {}) {
     id === 'pg-profile' &&
     options.profileUserId;
 
-  if (S.isGuest && ['pg-feed', 'pg-search', 'pg-messages', 'pg-profile'].includes(id) && !isGuestPublicProfile) {
+  if (S.isGuest && ['pg-feed', 'pg-search', 'pg-notifications', 'pg-messages', 'pg-profile'].includes(id) && !isGuestPublicProfile) {
     toast('Sign in to access this page', '🔒');
     id = 'pg-auth';
     setTimeout(() => { $('tab-login')?.click(); }, 0);
@@ -963,6 +979,14 @@ function showPage(id, options = {}) {
     if (wrap) wrap.style.display = '';
     const input = document.getElementById('di-input');
     setTimeout(() => input?.focus(), 0);
+  }
+
+
+  if (id === 'pg-notifications') {
+    S.profileViewUserId = null;
+    S.profileViewData = null;
+    document.body.classList.remove('profile-viewing-public');
+    renderNotificationsSection();
   }
 
   if (id === 'pg-messages') {
@@ -13408,9 +13432,7 @@ document.addEventListener('click', (event) => {
     }, true); // ← capture phase
 
     document.getElementById('di2-tab-srch')?.addEventListener('click', e => {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      openMobileSearch();
+      /* Search is now a real section; generic Dynamic Island navigation owns it. */
     });
     document.getElementById('di2-bot-back')?.addEventListener('click', e => {
       e.preventDefault(); e.stopPropagation(); closeMobileSearch();
@@ -14880,9 +14902,11 @@ document.addEventListener('click', (event) => {
     if (!wrap || !feed) return;
 
     const sync = () => {
+      const searchPage = document.getElementById('pg-search');
       const onFeed = feed.classList.contains('active');
-      wrap.style.display = onFeed ? '' : 'none';
-      if (!onFeed) closeResults();
+      const onSearch = searchPage?.classList.contains('active');
+      wrap.style.display = (onFeed || onSearch) ? '' : 'none';
+      if (!onFeed && !onSearch) closeResults();
     };
 
     sync();
@@ -15037,9 +15061,10 @@ document.addEventListener('click', (event) => {
 
   const SECTIONS = {
     'pg-lobby'   : { icon: '🗣️', label: 'Talk'     },
-    'pg-feed'    : { icon: '📰',  label: 'Feed'     },
-    'pg-search'  : { icon: '🔎',  label: 'Search'   },
-    'pg-messages': { icon: '💬',  label: 'Messages' },
+    'pg-feed'    : { icon: '📰',  label: 'Feed'         },
+    'pg-search'  : { icon: '🔎',  label: 'Search'       },
+    'pg-notifications': { icon: '🔔', label: 'Notifications' },
+    'pg-messages': { icon: '💬',  label: 'Messages'     },
     'pg-profile' : { icon: '👤',  label: 'Profile'  },
   };
 
@@ -15626,10 +15651,10 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
             <div class="di2-nav" id="di2-nav">
               <button class="di2-nav-btn" data-di-page="pg-lobby"    type="button">Talk</button>
               <button class="di2-nav-btn" data-di-page="pg-feed"     type="button">Feed</button>
-              <button class="di2-nav-btn di2-search-nav-btn" data-di-page="pg-search" type="button">Search</button>
+              <button class="di2-nav-btn" data-di-page="pg-search" type="button">Search</button>
               <button class="di2-nav-btn" data-di-page="pg-messages" type="button">Messages</button>
+              <button class="di2-nav-btn di2-notify-nav-btn" data-di-page="pg-notifications" type="button" aria-label="Notifications" title="Notifications">🔔</button>
               <button class="di2-nav-btn" data-di-page="pg-profile"  type="button">Profile</button>
-              <button class="di2-notify-btn" id="di2-notify-btn" type="button" aria-label="Notifications" title="Notifications">🔔<span class="di2-notify-dot" id="di2-notify-dot"></span></button>
             </div>
 
             <!-- Search slot (Feed only: existing #di-search-wrap moves here) -->
@@ -15673,6 +15698,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
         <button class="di2-tab" data-di-page="pg-feed" type="button" aria-label="Feed"><span class="di2-tab-ico">📰</span><span class="di2-tab-lbl">Feed</span></button>
         <button class="di2-tab" id="di2-tab-srch" type="button" data-di-page="pg-search" aria-label="Search"><span class="di2-tab-ico">🔍</span><span class="di2-tab-lbl">Search</span></button>
         <button class="di2-tab" data-di-page="pg-messages" type="button" aria-label="Messages"><span class="di2-tab-ico">💬</span><span class="di2-tab-lbl">Messages</span><span class="di2-tab-dot" id="di2-tab-dot"></span></button>
+        <button class="di2-tab" data-di-page="pg-notifications" type="button" aria-label="Notifications"><span class="di2-tab-ico">🔔</span><span class="di2-tab-lbl">Alerts</span><span class="di2-tab-dot" id="di2-notify-tab-dot"></span></button>
         <button class="di2-tab" data-di-page="pg-profile" type="button" aria-label="Profile"><span class="di2-tab-ico">👤</span><span class="di2-tab-lbl">Profile</span></button>
       </div>
       <div id="di2-bot-srch" aria-hidden="true">
@@ -15799,7 +15825,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     if (!cfg) return;
 
     /* Body class for CSS hooks */
-    ['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile'].forEach(id =>
+    ['pg-lobby', 'pg-feed', 'pg-search', 'pg-notifications', 'pg-messages', 'pg-profile'].forEach(id =>
       document.body.classList.remove('di2-' + id.replace('pg-', ''))
     );
     document.body.classList.add('di2-' + pageId.replace('pg-', ''));
@@ -15882,23 +15908,14 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   ══════════════════════════════════════════════════════════ */
 
   function openMobileSearch() {
-    if (_section === 'pg-search') {
-      document.getElementById('di-input')?.focus();
-      return;
-    }
-
-    const reveal = () => {
+    navigate('pg-search');
+    setTimeout(() => {
       const wrap = document.getElementById('di-search-wrap');
       const host = document.getElementById('mortalive-search-page-host');
       if (wrap && host && !host.contains(wrap)) host.appendChild(wrap);
       if (wrap) wrap.style.display = '';
-
-      const input = document.getElementById('di-input');
-      requestAnimationFrame(() => input?.focus());
-    };
-
-    navigate('pg-search');
-    setTimeout(reveal, 80);
+      document.getElementById('di-input')?.focus();
+    }, 60);
   }
 
   function closeMobileSearch() {
@@ -16217,11 +16234,6 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
 
     /* Score click → open progress sheet (existing app.js handler) */
 
-    document.getElementById('di2-notify-btn')?.addEventListener('click', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      openNotificationPanel();
-    });
     document.getElementById('di2-score')?.addEventListener('click', e => {
       e.stopPropagation();
       document.getElementById('app-topbar-score-pill')?.click();
