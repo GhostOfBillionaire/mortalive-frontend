@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-31-v192-mobile-search-notif-topisland-notif-recovery'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-31-v193-mobile-bottom-nav'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -15497,7 +15497,9 @@ body.di2-msg .di2-pill.search-on {
   /* Give pages room for bottom nav */
   body.di2-live.mortalive-app-topbar-visible #pg-lobby.active,
   body.di2-live.mortalive-app-topbar-visible #pg-feed.active,
-  body.di2-live.mortalive-app-topbar-visible #pg-profile.active {
+  body.di2-live.mortalive-app-topbar-visible #pg-profile.active,
+  body.di2-live #pg-search.active,
+  body.di2-live #pg-notifications.active {
     padding-top: 8px !important;
     padding-bottom: 70px !important;
   }
@@ -15530,7 +15532,7 @@ body.di2-msg .di2-pill.search-on {
 
 /* Show only on mobile */
 @media (max-width: 640px) {
-  body.di2-live.mortalive-app-topbar-visible #di2-bot { display: flex; }
+  body.di2-live #di2-bot { display: flex !important; }
 }
 
 /* Messages dark bottom nav */
