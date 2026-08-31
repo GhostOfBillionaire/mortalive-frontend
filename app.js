@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-30-v181-mobile-desktop-search-fix'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-31-v183-css-text-fix'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -16172,6 +16172,20 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
         e.preventDefault();
         e.stopImmediatePropagation();
         openMobileSearch();
+      }, true);
+    }
+
+
+    /* v182: mobile search Back must win over global navigation/click handlers. */
+    if (!document.body.dataset.di2MobBackDelegated) {
+      document.body.dataset.di2MobBackDelegated = '1';
+      document.addEventListener('click', e => {
+        if (!isMobile()) return;
+        const back = e.target.closest('#di2-bot-back');
+        if (!back) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        closeMobileSearch();
       }, true);
     }
 
