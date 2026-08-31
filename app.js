@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-31-v188-notification-center-integrated'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-31-v189-topisland-search-notifications'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -15125,6 +15125,12 @@ body.di2-live .app-topbar-wrap .sakura-topbar {
   animation: di2-in 0.55s cubic-bezier(0.34,1.56,0.64,1) both;
 }
 body.di2-live.mortalive-app-topbar-visible #di2 { display: flex; }
+@media (min-width: 641px) {
+  body.di2-live.di2-search #di2,
+  body.di2-live.di2-notifications #di2 {
+    display: flex;
+  }
+}
 
 @keyframes di2-in {
   from { opacity:0; transform: translateX(-50%) translateY(-22px) scale(0.82); }
@@ -15671,9 +15677,6 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
               <button class="di2-nav-btn" data-di-page="pg-profile"  type="button">Profile</button>
             </div>
 
-            <!-- Search slot (Feed only: existing #di-search-wrap moves here) -->
-            <div id="di2-search-slot"></div>
-
             <!-- CTA button -->
             <button class="di2-cta" id="di2-cta" type="button" aria-label="Section action"></button>
 
@@ -16149,7 +16152,14 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     13.  OBSERVERS
   ══════════════════════════════════════════════════════════ */
   function observePages() {
-    const IDS = ['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile'];
+    const IDS = [
+      'pg-lobby',
+      'pg-feed',
+      'pg-search',
+      'pg-notifications',
+      'pg-messages',
+      'pg-profile'
+    ];
     const findActive = () => IDS.find(id => document.getElementById(id)?.classList.contains('active'));
 
     /* Initial */
