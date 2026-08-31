@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-31-v183-css-text-fix'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-08-30-v185-search-section-notifications'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -866,6 +866,7 @@ const TALK_PAGE_IDS = new Set([
   'pg-match',
   'pg-chat',
   'pg-feed',
+  'pg-search',
   'pg-messages',
   'pg-profile'
 ]);
@@ -878,7 +879,7 @@ function showPage(id, options = {}) {
     id === 'pg-profile' &&
     options.profileUserId;
 
-  if (S.isGuest && ['pg-feed', 'pg-messages', 'pg-profile'].includes(id) && !isGuestPublicProfile) {
+  if (S.isGuest && ['pg-feed', 'pg-search', 'pg-messages', 'pg-profile'].includes(id) && !isGuestPublicProfile) {
     toast('Sign in to access this page', '🔒');
     id = 'pg-auth';
     setTimeout(() => { $('tab-login')?.click(); }, 0);
@@ -946,6 +947,22 @@ function showPage(id, options = {}) {
       syncFeedSidebar();
       fetchFeedPage(true);
     }
+  }
+
+
+  if (id === 'pg-search') {
+    S.profileViewUserId = null;
+    S.profileViewData = null;
+    document.body.classList.remove('profile-viewing-public');
+
+    const host = document.getElementById('mortalive-search-page-host');
+    const wrap = document.getElementById('di-search-wrap');
+    if (host && wrap && !host.contains(wrap)) {
+      host.appendChild(wrap);
+    }
+    if (wrap) wrap.style.display = '';
+    const input = document.getElementById('di-input');
+    setTimeout(() => input?.focus(), 0);
   }
 
   if (id === 'pg-messages') {
@@ -13325,6 +13342,28 @@ document.addEventListener('click', (event) => {
      GLOBAL EVENT LISTENERS  (capture phase — run first)
   ───────────────────────────────────────────────────────── */
 
+
+  function openNotificationPanel() {
+    let panel = document.getElementById('di2-notification-panel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'di2-notification-panel';
+      panel.setAttribute('role','dialog');
+      panel.setAttribute('aria-label','Notifications');
+      panel.innerHTML = `
+        <div class="di2-notification-head">
+          <strong>Notifications</strong>
+          <button type="button" id="di2-notification-close" aria-label="Close notifications">×</button>
+        </div>
+        <div class="di2-notification-body" id="di2-notification-body">
+          <div class="di2-notification-empty">You're all caught up.</div>
+        </div>`;
+      document.body.appendChild(panel);
+      panel.querySelector('#di2-notification-close')?.addEventListener('click',()=>panel.classList.remove('open'));
+    }
+    panel.classList.toggle('open');
+  }
+
   function bindEvents() {
     if (document.body.dataset.mfeEvBound) return;
     document.body.dataset.mfeEvBound = '1';
@@ -14999,6 +15038,7 @@ document.addEventListener('click', (event) => {
   const SECTIONS = {
     'pg-lobby'   : { icon: '🗣️', label: 'Talk'     },
     'pg-feed'    : { icon: '📰',  label: 'Feed'     },
+    'pg-search'  : { icon: '🔎',  label: 'Search'   },
     'pg-messages': { icon: '💬',  label: 'Messages' },
     'pg-profile' : { icon: '👤',  label: 'Profile'  },
   };
@@ -15586,8 +15626,10 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
             <div class="di2-nav" id="di2-nav">
               <button class="di2-nav-btn" data-di-page="pg-lobby"    type="button">Talk</button>
               <button class="di2-nav-btn" data-di-page="pg-feed"     type="button">Feed</button>
+              <button class="di2-nav-btn di2-search-nav-btn" data-di-page="pg-search" type="button">Search</button>
               <button class="di2-nav-btn" data-di-page="pg-messages" type="button">Messages</button>
               <button class="di2-nav-btn" data-di-page="pg-profile"  type="button">Profile</button>
+              <button class="di2-notify-btn" id="di2-notify-btn" type="button" aria-label="Notifications" title="Notifications">🔔<span class="di2-notify-dot" id="di2-notify-dot"></span></button>
             </div>
 
             <!-- Search slot (Feed only: existing #di-search-wrap moves here) -->
@@ -15629,7 +15671,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       <div id="di2-bot-tabs">
         <button class="di2-tab" data-di-page="pg-lobby" type="button" aria-label="Talk"><span class="di2-tab-ico">🗣️</span><span class="di2-tab-lbl">Talk</span></button>
         <button class="di2-tab" data-di-page="pg-feed" type="button" aria-label="Feed"><span class="di2-tab-ico">📰</span><span class="di2-tab-lbl">Feed</span></button>
-        <button class="di2-tab" id="di2-tab-srch" type="button" aria-label="Search"><span class="di2-tab-ico">🔍</span><span class="di2-tab-lbl">Search</span></button>
+        <button class="di2-tab" id="di2-tab-srch" type="button" data-di-page="pg-search" aria-label="Search"><span class="di2-tab-ico">🔍</span><span class="di2-tab-lbl">Search</span></button>
         <button class="di2-tab" data-di-page="pg-messages" type="button" aria-label="Messages"><span class="di2-tab-ico">💬</span><span class="di2-tab-lbl">Messages</span><span class="di2-tab-dot" id="di2-tab-dot"></span></button>
         <button class="di2-tab" data-di-page="pg-profile" type="button" aria-label="Profile"><span class="di2-tab-ico">👤</span><span class="di2-tab-lbl">Profile</span></button>
       </div>
@@ -15799,23 +15841,22 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
        Mobile hides nav via CSS and uses the bottom tab bar. */
     const navEl  = document.getElementById('di2-nav');
     const slotEl = document.getElementById('di2-search-slot');
-    const isFeed = (pageId === 'pg-feed');
+    const isSearch = (pageId === 'pg-search');
 
-    if (navEl)  navEl.style.display  = '';
-    if (slotEl) slotEl.classList.toggle('active', isFeed);
-    if (isFeed) {
-      bridgeSearch();
-      if (_searchMode) {
-        const activePill = document.getElementById('di2-pill');
-        if (activePill) {
-          activePill.classList.add('is-search-mode', 'search-on');
-          activePill.style.width = (isMobile()
-            ? Math.min(320, window.innerWidth - 20)
-            : Math.min(420, window.innerWidth - 32)) + 'px';
-        }
+    if (navEl) navEl.style.display = '';
+    if (slotEl) {
+      slotEl.classList.remove('active');
+      slotEl.style.display = 'none';
+    }
+
+    if (isSearch) {
+      const activePill = document.getElementById('di2-pill');
+      if (activePill) {
+        activePill.classList.add('search-section');
       }
-    } else if (_searchMode) {
-      exitSearchMode();
+    } else {
+      document.getElementById('di2-pill')?.classList.remove('search-section');
+      if (_searchMode) exitSearchMode();
     }
 
     /* Live dot colour */
@@ -15841,44 +15882,29 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   ══════════════════════════════════════════════════════════ */
 
   function openMobileSearch() {
-    if (_mobSearchOpen) return;
-    _mobSearchOpen = true;
+    if (_section === 'pg-search') {
+      document.getElementById('di-input')?.focus();
+      return;
+    }
 
     const reveal = () => {
-      const bot  = document.getElementById('di2-bot');
-      const srch = document.getElementById('di2-bot-srch');
-      const host = document.getElementById('di2-mob-results');
+      const wrap = document.getElementById('di-search-wrap');
+      const host = document.getElementById('mortalive-search-page-host');
+      if (wrap && host && !host.contains(wrap)) host.appendChild(wrap);
+      if (wrap) wrap.style.display = '';
 
-      bot?.classList.add('search-open');
-      if (srch) {
-        srch.removeAttribute('aria-hidden');
-        srch.style.display = 'flex';
-      }
-
-      const diRes = document.getElementById('di-results');
-      if (diRes && host && !host.contains(diRes)) host.appendChild(diRes);
-
-      const mob = document.getElementById('di2-mob-inp');
-      if (mob) {
-        mob.disabled = false;
-        mob.removeAttribute('aria-hidden');
-        mob.style.pointerEvents = 'auto';
-        requestAnimationFrame(() => mob.focus());
-      }
+      const input = document.getElementById('di-input');
+      requestAnimationFrame(() => input?.focus());
     };
 
-    if (_section !== 'pg-feed') {
-      navigate('pg-feed');
-      setTimeout(reveal, 120);
-    } else {
-      reveal();
-    }
+    navigate('pg-search');
+    setTimeout(reveal, 80);
   }
 
   function closeMobileSearch() {
-    if (!_mobSearchOpen) return;
+    if (_section !== 'pg-search') return;
+    navigate('pg-feed');
     _mobSearchOpen=false;
-    document.getElementById('di2-bot')?.classList.remove('search-open');
     document.getElementById('di2-bot-srch')?.setAttribute('aria-hidden','true');
     document.getElementById('di2-mob-results')?.classList.remove('open');
     const diRes=document.getElementById('di-results');
@@ -16190,6 +16216,12 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     }
 
     /* Score click → open progress sheet (existing app.js handler) */
+
+    document.getElementById('di2-notify-btn')?.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      openNotificationPanel();
+    });
     document.getElementById('di2-score')?.addEventListener('click', e => {
       e.stopPropagation();
       document.getElementById('app-topbar-score-pill')?.click();
