@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v153 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v191" content="basic-messaging">
+<meta name="mortalive-build-v192" content="basic-messaging">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
@@ -10158,6 +10158,36 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 }
 </style>
 
+
+
+<style id="mortalive-v192-mobile-search-notif-topisland">
+@media (max-width: 640px) {
+  body.di2-live.di2-search #di2,
+  body.di2-live.di2-notifications #di2 {
+    display: flex !important;
+  }
+
+  /* Keep the dedicated sections below the fixed top island. */
+  body.di2-live.di2-search #pg-search.active,
+  body.di2-live.di2-notifications #pg-notifications.active {
+    padding-top: 70px !important;
+  }
+
+  /* Compact mobile top island; nav links stay hidden as intended. */
+  body.di2-live.di2-search #di2 .di2-pill,
+  body.di2-live.di2-notifications #di2 .di2-pill {
+    height: 42px !important;
+    border-radius: 21px !important;
+    width: auto !important;
+  }
+
+  body.di2-live.di2-search #di2 .di2-right,
+  body.di2-live.di2-notifications #di2 .di2-right {
+    display: flex !important;
+  }
+}
+</style>
+
 </head>
 <body>
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -11709,7 +11739,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260831-v191-search-notifications-top-gap"></script>
+<script src="app.js?v=20260831-v192-mobile-search-notif-topisland"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
