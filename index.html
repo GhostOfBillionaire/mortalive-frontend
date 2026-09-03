@@ -8,11 +8,6 @@
 <meta name="mortalive-build-v194" content="basic-messaging">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive: Human conversation, restored</title>
-
-  <!-- Favicon / app icon: use the canonical Mortalive logo asset -->
-  <link rel="icon" type="image/png" href="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png">
-  <link rel="shortcut icon" type="image/png" href="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png">
-  <link rel="apple-touch-icon" href="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png">
   <!-- Social/share preview metadata -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Mortalive">
@@ -111,6 +106,45 @@ img { display: block; max-width: 100%; }
 /* ── Page system ────────────────────────────────────── */
 .page { display: none; min-height: 100dvh; width: 100%; flex-direction: column; }
 .page.active { display: flex; }
+
+/* ── Utility classes (replaces repeated inline style= attributes) ──────────
+   Each class corresponds to a pattern that appeared 2+ times as a verbatim
+   inline style across the body. Centralised here so a single edit propagates
+   everywhere. Adding !important only where the existing component-layer rules
+   specifically used it to beat specificity — documented inline.             */
+
+/* Layout helpers */
+.u-flex-center   { display:flex; justify-content:center; }
+.u-flex-col      { display:flex; flex-direction:column; gap:6px; }
+.u-flex-1        { flex:1; }
+.u-mt-8          { margin-top:8px; }
+.u-mb-16         { margin-bottom:16px; }
+
+/* display:none — JS uses el.style.display = 'block'/'flex' to re-show,
+   so these must NOT be !important or JS cannot override them.             */
+.u-hidden        { display:none; }
+
+/* Icon/action button variant: auto-width, minimal height */
+.btn-auto        { width:auto; min-height:auto; }
+.btn-auto-sm     { width:auto; min-height:auto; padding:10px 20px; }
+
+/* Uppercase label over a stat number */
+.u-stat-label    { font-size:11px; opacity:.65; text-transform:uppercase; letter-spacing:.10em; }
+
+/* Large stat number */
+.u-stat-value    { font-size:28px; font-weight:800; line-height:1.1; margin-top:6px; }
+
+/* Glass stat tile (dark bg) */
+.u-glass-tile    { padding:14px 16px; border-radius:16px; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.10); }
+
+/* Dark hero stat item — previously forced with color:!important on inline style */
+.u-hero-stat     { color:#fff; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.2); }
+
+/* Error notice state — replaces 5 identical style= strings on .notice elements */
+.notice-error    { color:#b42318; background:#fef2f2; border-color:#fecaca; }
+
+/* Small muted caption */
+.u-caption       { font-size:12.5px; color:var(--on-surface-3); line-height:1.6; }
 
 #pg-land.active  { flex-direction: column; align-items: stretch; }
 #pg-auth.active,
@@ -412,7 +446,20 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 }
 .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
 
+/* Danger — used by confirm dialogs and destructive actions */
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border: 0;
+  box-shadow: 0 4px 14px rgba(220,38,38,.28);
+}
+.btn-danger:hover { box-shadow: 0 6px 20px rgba(220,38,38,.36); }
+
 .btn-wide { width: 100%; }
+
+/* Confirm dialog sizing — uses the shared .overlay/.modal shell */
+.confirm-overlay { z-index: 2000; }
+.confirm-modal   { width: min(380px, 100%); text-align: center; }
 
 /* ── Flutter-style pill chip ────────────────────────── */
 .chip {
@@ -565,15 +612,16 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 .hero-stats {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: center;
+  animation: fadeInUp 0.55s var(--ease-spring) 0.15s both;
 }
 .stat-item {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 8px 14px;
+  padding: 8px 16px;
   border-radius: var(--r-full);
   background: rgba(255,255,255,.72);
   border: 1px solid var(--border);
@@ -581,14 +629,32 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
   font-size: 12.5px;
   font-weight: 600;
   color: var(--on-surface-2);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform var(--dur-fast), box-shadow var(--dur-fast);
+}
+.stat-item:hover { transform: translateY(-1px); box-shadow: var(--elev-2); }
+/* Dark-hero variant (u-hero-stat) */
+.u-hero-stat {
+  background: rgba(0,0,0,.45);
+  border-color: rgba(255,255,255,.2);
+  color: #fff;
 }
 .stat-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--success);
-  box-shadow: 0 0 0 3px rgba(22,163,74,.15);
+  box-shadow: 0 0 0 3px rgba(22,163,74,.18);
+  animation: pulse-dot 2.4s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(22,163,74,.18); }
+  50%       { box-shadow: 0 0 0 6px rgba(22,163,74,.08); }
+}
+@keyframes fadeInUp {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:none; }
 }
 
 /* ── Hero image card ────────────────────────────────── */
@@ -1181,6 +1247,19 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 .perm-copy { display: flex; flex-direction: column; justify-content: center; gap: 16px; }
 .perm-copy h2 { font-size: 24px; font-weight: 800; letter-spacing: -.04em; }
 .perm-copy p  { font-size: 14px; color: var(--on-surface-3); line-height: 1.7; }
+.perm-copy .perm-safety-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: var(--primary-alpha);
+  border: 1px solid rgba(26,110,245,.18);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--on-surface-2);
+}
+.perm-safety-notice-icon { font-size: 15px; flex: none; margin-top: 1px; }
 .permission-list { display: grid; gap: 10px; }
 .permission-item {
   display: flex;
@@ -1222,37 +1301,39 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
   color: var(--on-surface-3);
   flex-wrap: wrap;
 }
+/* Re-uses pulse-dot keyframe from hero stat-dot — consistent pulsing */
 .live-dot {
   width: 9px;
   height: 9px;
   border-radius: 50%;
   background: var(--success);
   box-shadow: 0 0 0 4px rgba(22,163,74,.14);
-  animation: pulse 2.4s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%,100% { box-shadow: 0 0 0 4px rgba(22,163,74,.14); }
-  50%      { box-shadow: 0 0 0 8px rgba(22,163,74,.06); }
+  animation: pulse-dot 2.4s ease-in-out infinite;
 }
 
+/* Camera preview strip */
 .cam-strip {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px;
+  padding: 12px 14px;
   border-radius: var(--r-md);
   border: 1px solid var(--border);
   background: var(--surface-2);
   margin-bottom: 16px;
+  transition: border-color var(--dur-fast);
 }
+.cam-strip:focus-within { border-color: var(--primary); }
 #lobby-cam-preview {
   width: 88px;
   height: 64px;
   object-fit: cover;
   border-radius: var(--r-sm);
-  background: #000;
+  background: #0d1117;
+  flex-shrink: 0;
 }
 
+/* Identity chip row */
 .identity-row {
   display: flex;
   align-items: center;
@@ -1266,27 +1347,31 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
   font-size: 13px;
   color: var(--on-surface-3);
   flex-wrap: wrap;
+  transition: border-color var(--dur-fast);
 }
+.identity-row:hover { border-color: var(--border-strong); }
 
+/* Mode toggle — segmented control */
 .mode-switch {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  padding: 6px;
+  gap: 5px;
+  padding: 5px;
   border-radius: var(--r-md);
   background: var(--surface-3);
   border: 1px solid var(--border);
   margin-bottom: 18px;
 }
 .mode-btn {
-  padding: 12px 14px;
-  border-radius: calc(var(--r-md) - 6px);
+  padding: 11px 14px;
+  border-radius: calc(var(--r-md) - 5px);
   font-size: 13.5px;
   font-weight: 700;
   color: var(--on-surface-3);
   background: transparent;
   transition: all var(--dur-fast) var(--ease-out);
 }
+.mode-btn:hover:not(.active) { color: var(--on-surface-2); background: rgba(0,0,0,.04); }
 .mode-btn.active {
   background: #fff;
   color: var(--on-surface);
@@ -1303,39 +1388,55 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 
 /* ── Matching page ──────────────────────────────────── */
 .match-card {
-  width: min(420px, calc(100% - 24px));
-  padding: 32px 28px;
+  width: min(440px, calc(100% - 24px));
+  padding: 36px 28px;
   text-align: center;
 }
+/* Dual-ring spinner — outer ring steady, inner arc orbits */
 .spinner {
-  width: 80px;
-  height: 80px;
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
-  margin: 0 auto 22px;
-  border: 3px solid var(--surface-3);
+  margin: 0 auto 24px;
+  border: 3.5px solid var(--surface-3);
   border-top-color: var(--primary);
   border-right-color: var(--secondary);
-  animation: spin .9s linear infinite;
+  animation: spin .85s cubic-bezier(.5, .1, .5, .9) infinite,
+             matchBreath 3.2s ease-in-out infinite;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin        { to { transform: rotate(360deg); } }
+@keyframes matchBreath {
+  0%, 100% { transform: rotate(0deg)   scale(1);    }
+  50%       { transform: rotate(180deg) scale(1.04); }
+}
 .match-title {
   font-size: 22px;
   font-weight: 800;
   letter-spacing: -.04em;
   color: var(--on-surface);
+  animation: fadeInUp .35s var(--ease-spring) both;
 }
-.match-sub { margin-top: 8px; font-size: 14px; color: var(--on-surface-3); line-height: 1.65; }
+.match-sub {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--on-surface-3);
+  line-height: 1.65;
+  animation: fadeInUp .35s var(--ease-spring) .06s both;
+}
 .match-badge {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   margin-top: 18px;
-  padding: 9px 15px;
+  padding: 9px 16px;
   border-radius: var(--r-full);
   background: var(--surface-2);
   border: 1px solid var(--border);
   font-size: 12.5px;
+  font-weight: 600;
   color: var(--on-surface-3);
+  animation: fadeInUp .35s var(--ease-spring) .12s both;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
 }
 
 /* ── Chat page ──────────────────────────────────────── */
@@ -1380,31 +1481,48 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 .talk-peer-action.follow.talk-peer-following{background:var(--on-surface);border-color:var(--on-surface);}
 @media(max-width:720px){.talk-peer-actions{gap:5px}.talk-peer-action{min-height:28px;font-size:10.5px;padding:5px 9px}.chat-peer{align-items:flex-start}.chat-topbar .chat-peer>div:last-child{min-width:0;}}
 
-.top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.top-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
 .icon-btn {
-  height: 38px;
-  padding: 0 14px;
-  border-radius: 6px;
+  height: 36px;
+  padding: 0 13px;
+  border-radius: var(--r-full);        /* pill shape — matches match-badge and quality-bar */
   border: 1.5px solid var(--border-strong);
   background: #fff;
-  color: var(--on-surface-3);
+  color: var(--on-surface-2);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 700;
-  gap: 6px;
+  gap: 5px;
   white-space: nowrap;
   transition: all var(--dur-fast);
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
 }
-.icon-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-alpha); }
-.icon-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: rgba(220,38,38,.06); }
+.icon-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-alpha);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0,0,0,.10);
+}
+.icon-btn:active { transform: translateY(0); box-shadow: none; }
+.icon-btn.danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(220,38,38,.06);
+}
 
 .conn-badge {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 8px 12px;
+  padding: 7px 13px;
   border-radius: var(--r-full);
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -1531,6 +1649,29 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
   backdrop-filter: blur(10px);
 }
 .quality .qdot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+
+/* ── Safety-review indicator (v1 — shown whenever frame capture is live) ──
+   Two contexts share this class: in-flow on the matching screen, and
+   absolutely-positioned over the video feed during a call. */
+.safety-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--r-full);
+  background: rgba(13,17,23,.78);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+  margin-top: 12px;
+}
+.video-feeds .safety-indicator.video-overlay {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  margin-top: 0;
+}
 
 .video-controls {
   display: flex;
@@ -1706,8 +1847,9 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
   pointer-events: none;
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.44);
-  backdrop-filter: blur(12px);
+  background: rgba(0,0,0,.46);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   z-index: 100;
   padding: 18px;
   align-items: center;
@@ -1722,10 +1864,31 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
   box-shadow: var(--elev-4);
   padding: 28px;
   text-align: center;
+  animation: modalIn .24s var(--ease-spring) both;
 }
-.modal-ico { font-size: 38px; }
+@keyframes modalIn {
+  from { opacity:0; transform:translateY(16px) scale(.97); }
+  to   { opacity:1; transform:none; }
+}
+.modal-ico   { font-size: 38px; }
 .modal-title { font-size: 21px; font-weight: 800; letter-spacing: -.04em; margin-top: 8px; color: var(--on-surface); }
-.modal-sub { font-size: 13.5px; color: var(--on-surface-3); line-height: 1.65; margin: 10px 0 18px; }
+.modal-sub   { font-size: 13.5px; color: var(--on-surface-3); line-height: 1.65; margin: 10px 0 18px; }
+/* Cancel/close link at the bottom of simple modals */
+.modal-close {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--on-surface-3);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  transition: color var(--dur-fast), background var(--dur-fast);
+}
+.modal-close:hover { color: var(--on-surface); background: var(--surface-2); }
 .stars, .vibes { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .star, .vibe {
   border: 1.5px solid var(--border-strong);
@@ -1749,29 +1912,42 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 .toast-root {
   position: fixed;
   left: 50%;
-  bottom: 24px;
+  bottom: 28px;
   transform: translateX(-50%);
   z-index: 120;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;   /* newest toast appears at bottom, others stack up */
   gap: 8px;
   align-items: center;
   pointer-events: none;
 }
 .toast {
-  background: rgba(13,17,23,.92);
+  background: rgba(13,17,23,.94);
   color: #fff;
   border-radius: var(--r-full);
-  padding: 11px 18px;
+  padding: 10px 20px;
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,.12);
-  box-shadow: var(--elev-3);
-  animation: toastIn .18s var(--ease-out);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow: 0 8px 28px rgba(0,0,0,.28), 0 1px 4px rgba(0,0,0,.12);
+  animation: toastIn .22s var(--ease-spring) both;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
-@keyframes toastIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+.toast.leaving {
+  animation: toastOut .18s ease-in forwards;
+}
+@keyframes toastIn {
+  from { opacity:0; transform:translateY(12px) scale(.96); }
+  to   { opacity:1; transform:none; }
+}
+@keyframes toastOut {
+  to   { opacity:0; transform:translateY(6px) scale(.97); }
+}
 
 /* ── Responsive ─────────────────────────────────────── */
 @media (max-width: 980px) {
@@ -1986,6 +2162,18 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
   white-space: nowrap;
 }
 
+/* Landing hero text overrides — sits on a dark photo background.
+   Using .landing-hero as ancestor (specificity 0,0,2,0) beats .hero-sub
+   (0,0,1,0) without !important. Previously two inline style=!important. */
+.landing-hero .hero-sub {
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0,0,0,.5);
+}
+.landing-hero .hero-sub #online-n-hero,
+.landing-hero .hero-stats #online-n-hero {
+  color: #fff;
+}
+
 .hero-sub{
   margin-top: -2px;
 }
@@ -2027,6 +2215,24 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 .consent-text .consent-lead{
   font-weight: 800;
   color: var(--on-surface);
+}
+
+/* Hero sits on a dark photo background, so its two consent rows need light
+   text. Scoped via the .landing-cta ancestor (specificity 0,0,2,0) so it
+   reliably beats the plain .consent-text rule above on source order alone —
+   no !important needed. Previously this was three inline style="...!important"
+   overrides per row; see audit notes. */
+.landing-cta .consent-text,
+.landing-cta .consent-text a {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,.6);
+}
+.landing-cta .consent-text .consent-lead {
+  color: #fff;
+}
+.landing-cta .consent-text a {
+  color: #5bc0be;
+  text-shadow: none;
 }
 
 /* ── Checkbox group (signup terms) ─────────────────── */
@@ -2258,10 +2464,6 @@ body.reveal-ready .scroll-reveal.in-view{
     font-size: 12px;
   }
 }
-/* ===== Video/fullscreen spacing patch — superseded by v10 below ===== */
-
-/* portrait fullscreen handled by v10 orientation:portrait block below */
-
 /* ===== Video layout fix v10 — orientation-aware, all 4 issues ===== */
 
 /* --- LANDSCAPE DESKTOP: left-column video panel, two square tiles stacked ---
@@ -3490,8 +3692,8 @@ body.vid-in-fs #fs-controls{
 </style>
 
 <style id="mortalive-profile-modal-fixes">
-/* Existing app.js uses .active for edit/profile overlays. */
-.overlay.active { display:flex; pointer-events:auto; }
+/* .overlay.open and .overlay.active are now consolidated in the main
+   stylesheet — removed duplicate here to keep the cascade clean. */
 #edit-modal { z-index: 1000; }
 #progress-overlay { z-index: 980 !important; pointer-events:none; }
 body.mortalive-progress-open { overflow:hidden; }
@@ -3952,21 +4154,28 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
   border-radius:var(--r-lg);
   box-shadow:var(--elev-1);
   overflow:hidden;
-  transition:box-shadow var(--dur-mid) var(--ease-out), transform var(--dur-mid) var(--ease-out);
+  transition:box-shadow var(--dur-mid) var(--ease-out),
+             transform  var(--dur-mid) var(--ease-out),
+             border-color var(--dur-mid);
   margin-bottom:12px;
+  will-change: transform; /* compositor hint — avoids repaints on hover */
 }
-#pg-feed .post-card:hover{ box-shadow:var(--elev-2); }
+#pg-feed .post-card:hover{
+  box-shadow:var(--elev-2);
+  transform:translateY(-1px);
+  border-color:var(--border-strong);
+}
 
 #pg-feed .post-header{
   display:flex; align-items:flex-start; gap:12px;
   padding:18px 18px 0;
 }
 #pg-feed .post-avatar{
-  width:40px; height:40px; border-radius:50%; flex-shrink:0;
+  width:42px; height:42px; border-radius:50%; flex-shrink:0;
   background:linear-gradient(135deg, var(--primary), var(--secondary));
   display:grid; place-items:center; font-size:18px;
-  border:2px solid rgba(255,255,255,.8);
-  box-shadow:0 0 0 1.5px var(--primary-alpha);
+  border:2px solid rgba(255,255,255,.9);
+  box-shadow:0 0 0 2px var(--primary-alpha);
 }
 #pg-feed .post-meta{ flex:1; min-width:0; }
 #pg-feed .post-author{ font-size:14px; font-weight:700; display:flex; align-items:center; gap:6px; }
@@ -3977,7 +4186,7 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
   background:var(--primary-alpha); color:var(--primary);
   border:1px solid rgba(26,110,245,.16);
 }
-#pg-feed .post-badge.gold{ background:rgba(251,191,36,.14); color:#b45309; border-color:rgba(251,191,36,.28); }
+#pg-feed .post-badge.gold  { background:rgba(251,191,36,.14); color:#b45309; border-color:rgba(251,191,36,.28); }
 #pg-feed .post-badge.silver{ background:rgba(156,163,175,.14); color:#4b5563; border-color:rgba(156,163,175,.28); }
 #pg-feed .post-time{
   font-size:12px; color:var(--on-surface-3);
@@ -3991,12 +4200,12 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
 }
 
 #pg-feed .post-more-btn{
-  width:34px; height:34px; border-radius:var(--r-sm);
+  width:32px; height:32px; border-radius:var(--r-sm);
   display:grid; place-items:center; flex-shrink:0;
   color:var(--on-surface-3); font-size:18px;
   transition:all var(--dur-fast);
 }
-#pg-feed .post-more-btn:hover{ background:var(--surface-2); color:var(--on-surface); }
+#pg-feed .post-more-btn:hover{ background:var(--surface-2); color:var(--on-surface); border-radius:50%; }
 
 /* Post body */
 #pg-feed .post-body{ padding:14px 18px; }
@@ -4072,30 +4281,39 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
 
 /* ── Post actions (like/comment/share/report) ───────────── */
 #pg-feed .post-actions{
-  display:flex; align-items:center; gap:2px;
-  padding:10px 14px 14px;
+  display:flex; align-items:center; gap:1px;
+  padding:8px 12px 12px;
   border-top:1px solid var(--border);
 }
 #pg-feed .action-btn{
-  display:flex; align-items:center; gap:6px;
-  padding:8px 12px; border-radius:var(--r-sm);
+  display:flex; align-items:center; gap:5px;
+  padding:7px 11px; border-radius:var(--r-full);
   font-size:13px; font-weight:600;
   color:var(--on-surface-3);
   transition:all var(--dur-fast) var(--ease-out);
   position:relative;
 }
 #pg-feed .action-btn:hover{ background:var(--surface-2); color:var(--on-surface); }
-#pg-feed .action-btn .action-icon{ font-size:16px; line-height:1; transition:transform var(--dur-fast) var(--ease-spring); }
-#pg-feed .action-btn:hover .action-icon{ transform:scale(1.15); }
+#pg-feed .action-btn .action-icon{ font-size:17px; line-height:1; transition:transform var(--dur-fast) var(--ease-spring); }
+#pg-feed .action-btn:hover .action-icon{ transform:scale(1.18); }
 
-/* Like button — YouTube-style private likes */
+/* Like button — heart-pop on toggle */
 #pg-feed .action-btn.like-btn{ color:var(--on-surface-3); }
 #pg-feed .action-btn.like-btn:hover{ background:rgba(220,38,38,.06); color:var(--danger); }
 #pg-feed .action-btn.like-btn.liked{
   color:var(--danger);
   background:rgba(220,38,38,.08);
 }
-#pg-feed .action-btn.like-btn.liked .action-icon{ transform:scale(1.2); }
+#pg-feed .action-btn.like-btn.liked .action-icon{
+  transform:scale(1.22);
+  animation:heartPop .32s var(--ease-spring) both;
+}
+@keyframes heartPop {
+  0%   { transform:scale(1);    }
+  40%  { transform:scale(1.45); }
+  70%  { transform:scale(0.95); }
+  100% { transform:scale(1.22); }
+}
 
 /* Like count animation */
 #pg-feed .like-count{
@@ -4118,10 +4336,11 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
 /* Share button */
 #pg-feed .action-btn.share-btn:hover{ background:rgba(6,182,212,.10); color:var(--accent); }
 
-/* Report — sits at end, muted */
+/* Report — sits at end, progressively visible */
 #pg-feed .action-btn.report-btn{
   margin-left:auto;
-  color:transparent; /* invisible until hovered */
+  color:transparent;
+  transition:color var(--dur-fast), background var(--dur-fast);
 }
 #pg-feed .post-card:hover .action-btn.report-btn{ color:var(--on-surface-3); }
 #pg-feed .action-btn.report-btn:hover{ background:var(--danger-alpha); color:var(--danger); }
@@ -4333,15 +4552,20 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
 #pg-feed .modal-close:hover{ background:var(--surface-3); }
 
 /* ── Report modal ───────────────────────────────────────── */
-#pg-feed .report-option{
+/* Shared by the feed's post-report modal and the in-call stranger-report
+   modal (#report-stranger-overlay) — previously scoped to #pg-feed only,
+   which forced the in-call modal to either duplicate this block or ship
+   unstyled. One definition, reused everywhere a report list appears. */
+.report-option{
   display:flex; align-items:center; gap:12px;
   padding:12px 15px; border-radius:var(--r-md);
   border:1px solid var(--border); background:var(--surface-2);
   margin-bottom:8px; cursor:pointer;
   transition:all var(--dur-fast);
   font-size:13.5px; font-weight:600;
+  text-align:left;
 }
-#pg-feed .report-option:hover{ background:var(--danger-alpha); border-color:rgba(220,38,38,.2); color:var(--danger); }
+.report-option:hover{ background:var(--danger-alpha); border-color:rgba(220,38,38,.2); color:var(--danger); }
 
 /* ── More options popover ───────────────────────────────── */
 #pg-feed .popover{
@@ -10254,7 +10478,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 </div>
 
 <!-- ════════════ SHARED AUTHENTICATED TOPBAR ════════════ -->
-<div class="wrap app-topbar-wrap" id="app-topbar-wrap" style="display:none;">
+<div class="wrap app-topbar-wrap u-hidden" id="app-topbar-wrap" >
   <nav class="sakura-topbar" id="app-topbar" aria-label="Mortalive navigation">
     <a class="sakura-brand" href="index.html" id="app-topbar-brand" aria-label="Mortalive Talk">
       <img class="topbar-logo"
@@ -10274,7 +10498,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
     </div>
 
 <!-- ── Dynamic Island Search Bar ─────────────────────── -->
-    <div class="dynamic-island-search-wrap" id="di-search-wrap" style="display:none;" role="search" aria-label="Search Mortalive">
+    <div class="dynamic-island-search-wrap u-hidden" id="di-search-wrap"  role="search" aria-label="Search Mortalive">
 
       <!-- The pill -->
       <div class="dynamic-island-search" id="di-search-pill">
@@ -10360,19 +10584,19 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
       <em><span class="title-line">2026's best in conversing and</span><span class="title-line">Natural social connection webapp</span></em>
     </h1>
 
-    <p class="hero-sub" style="color:#fff !important; text-shadow: 0 1px 4px rgba(0,0,0,0.5);">
+    <p class="hero-sub">
       Connect with strangers worldwide in seconds.
       Private by default, fast by design, always in your control.
     </p>
 
     <!-- Stats row -->
     <div class="hero-stats">
-      <div class="stat-item" style="color:#fff !important; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.2);">
+      <div class="stat-item u-hero-stat">
         <span class="stat-dot"></span>
-        <span id="online-n-hero" style="color:#fff !important;">—</span> online now
+        <span id="online-n-hero">—</span> online now
       </div>
-      <div class="stat-item" style="color:#fff !important; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.2);">✔ Your identity stays private</div>
-      <div class="stat-item" style="color:#fff !important; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.2);">⚡ Matches in under 10 s</div>
+      <div class="stat-item u-hero-stat">✔ Your identity stays private</div>
+      <div class="stat-item u-hero-stat">⚡ Matches in under 10 s</div>
     </div>
 
     <!-- CTA -->
@@ -10380,13 +10604,20 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
       <button type="button" class="btn btn-primary landing-continue" id="btn-enter" disabled aria-disabled="true">
         Continue
       </button>
+      <label class="consent-toggle" for="landing-age-consent">
+        <input id="landing-age-consent" type="checkbox" aria-label="Confirm you are 18 years of age or older">
+        <span class="consent-box" aria-hidden="true"></span>
+        <span class="consent-text">
+          <span class="consent-lead">I am 18 years of age or older.</span>
+        </span>
+      </label>
       <label class="consent-toggle" for="landing-consent">
         <input id="landing-consent" type="checkbox" aria-label="Agree to terms and privacy policy">
         <span class="consent-box" aria-hidden="true"></span>
-        <span class="consent-text" style="color:#fff !important; text-shadow: 0 1px 3px rgba(0,0,0,0.6);">
-          <span class="consent-lead" style="color:#fff !important;">By continuing</span> you agree to Mortalive's
-          <a href="terms.html" style="color:#5bc0be !important;">terms</a> and
-          <a href="privacy.html" style="color:#5bc0be !important;">privacy</a> policy.
+        <span class="consent-text">
+          <span class="consent-lead">By continuing</span> you agree to Mortalive's
+          <a href="terms.html">terms</a> and
+          <a href="privacy.html">privacy</a> policy.
         </span>
       </label>
     </div>
@@ -10567,9 +10798,9 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 
 <!-- ═══════════════════ AUTH ═══════════════════════ -->
 <section id="pg-auth" class="page">
-  <div class="wrap" style="display:flex;justify-content:center;">
+  <div class="wrap u-flex-center">
     <div class="card auth-card">
-      <div style="margin-bottom:16px;">
+      <div class="u-mb-16">
         <button class="icon-btn setup-back" type="button" data-target="pg-land">← Back</button>
       </div>
       <div class="auth-card-inner">
@@ -10580,7 +10811,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
         </div>
 
         <!-- GUEST PANEL — Separate from login/signup -->
-        <div id="auth-guest-form" class="auth-guest-panel" style="display:none;">
+        <div id="auth-guest-form" class="auth-guest-panel u-hidden">
           <h2>Quick Access</h2>
           <p>Continue as a guest for instant access. No account needed, no data saved.</p>
           <div class="field">
@@ -10609,16 +10840,16 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
               <button type="button" class="pw-toggle-btn" id="btn-login-pw-toggle" tabindex="-1" aria-label="Show password">👁️</button>
             </div>
           </div>
-          <div id="login-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
-          <button class="btn btn-primary btn-wide" id="btn-login" style="margin-top:8px;">Sign in →</button>
-          <button class="btn btn-ghost btn-wide" id="btn-forgot" type="button" style="margin-top:8px;">Forgot password?</button>
+          <div id="login-error" class="notice notice-error u-hidden"></div>
+          <button class="btn btn-primary btn-wide u-mt-8" id="btn-login" >Sign in →</button>
+          <button class="btn btn-ghost btn-wide u-mt-8" id="btn-forgot" type="button" >Forgot password?</button>
         </div>
 
-        <div id="auth-signup-form" style="display:none;">
+        <div id="auth-signup-form" class="u-hidden">
           <div class="field">
             <label for="signup-username">Username</label>
             <input id="signup-username" type="text" autocomplete="username" placeholder="3–24 chars: letters, numbers, _" maxlength="24">
-            <div id="signup-username-status" class="username-status" style="display:none;"></div>
+            <div id="signup-username-status" class="username-status u-hidden"></div>
           </div>
           <div class="field">
             <label for="signup-fullname">Full name</label>
@@ -10641,24 +10872,24 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
               I agree to Mortalive's <a href="terms.html" target="_blank" rel="noreferrer">Terms of Service</a> and <a href="privacy.html" target="_blank" rel="noreferrer">Privacy Policy</a>
             </span>
           </label>
-          <div id="signup-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
-          <button class="btn btn-primary btn-wide" id="btn-signup" style="margin-top:8px;">Create account →</button>
+          <div id="signup-error" class="notice notice-error u-hidden"></div>
+          <button class="btn btn-primary btn-wide u-mt-8" id="btn-signup" >Create account →</button>
           <p class="auth-note" style="margin-top:10px;">We'll email you a confirmation link — click it, then come back and log in.</p>
         </div>
 
         <!-- Forgot password: step 1 — request a code -->
-        <div id="auth-forgot-form" style="display:none;">
+        <div id="auth-forgot-form" class="u-hidden">
           <div class="field">
             <label for="forgot-email">Email</label>
             <input id="forgot-email" type="email" autocomplete="email" placeholder="you@example.com">
           </div>
-          <div id="forgot-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
-          <button class="btn btn-primary btn-wide" id="btn-forgot-send" style="margin-top:8px;">Send code →</button>
-          <button class="btn btn-ghost btn-wide" id="btn-forgot-back" type="button" style="margin-top:8px;">← Back to login</button>
+          <div id="forgot-error" class="notice notice-error u-hidden"></div>
+          <button class="btn btn-primary btn-wide u-mt-8" id="btn-forgot-send" >Send code →</button>
+          <button class="btn btn-ghost btn-wide u-mt-8" id="btn-forgot-back" type="button" >← Back to login</button>
         </div>
 
         <!-- Forgot password: step 2 — enter the emailed code -->
-        <div id="auth-otp-form" style="display:none;">
+        <div id="auth-otp-form" class="u-hidden">
           <div class="field">
             <label for="otp-code">Enter the 6-digit code</label>
             <input id="otp-code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6"
@@ -10668,8 +10899,8 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
               <span id="otp-email-display" style="color:var(--on-surface-3);"></span>
             </div>
           </div>
-          <div id="otp-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
-          <button class="btn btn-primary btn-wide" id="btn-otp-verify" style="margin-top:8px;">Verify code →</button>
+          <div id="otp-error" class="notice notice-error u-hidden"></div>
+          <button class="btn btn-primary btn-wide u-mt-8" id="btn-otp-verify" >Verify code →</button>
           <div style="display:flex;gap:8px;margin-top:8px;">
             <button class="btn btn-ghost" id="btn-otp-resend" type="button" style="flex:1;">Resend code</button>
             <button class="btn btn-ghost" id="btn-otp-back" type="button" style="flex:1;">← Different email</button>
@@ -10677,7 +10908,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
         </div>
 
         <!-- Forgot password: step 3 — set a new password -->
-        <div id="auth-reset-form" style="display:none;">
+        <div id="auth-reset-form" class="u-hidden">
           <div class="field">
             <label for="reset-password">New password</label>
             <div class="password-input-wrap">
@@ -10685,8 +10916,8 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
               <button type="button" class="pw-toggle-btn" id="btn-reset-pw-toggle" tabindex="-1" aria-label="Show password">👁️</button>
             </div>
           </div>
-          <div id="reset-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;"></div>
-          <button class="btn btn-primary btn-wide" id="btn-reset-submit" style="margin-top:8px;">Set new password →</button>
+          <div id="reset-error" class="notice notice-error u-hidden"></div>
+          <button class="btn btn-primary btn-wide u-mt-8" id="btn-reset-submit" >Set new password →</button>
         </div>
       </div>
     </div>
@@ -10695,9 +10926,9 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 
 <!-- ═══════════════════ PERMISSION ════════════════════ -->
 <section id="pg-perm" class="page">
-  <div class="wrap" style="display:flex;justify-content:center;">
+  <div class="wrap u-flex-center">
     <div class="card perm-card">
-      <div style="margin-bottom:16px;">
+      <div class="u-mb-16">
         <button class="icon-btn setup-back" type="button" data-target="pg-auth">← Back</button>
       </div>
       <div class="perm-inner">
@@ -10718,6 +10949,10 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
           <div>
             <h2>Camera &amp; microphone</h2>
             <p>Video chat needs your camera and mic. You can always skip and use text chat — no permissions needed.</p>
+            <p class="perm-safety-notice">
+              <span class="perm-safety-notice-icon" aria-hidden="true">🛡️</span>
+              <span>For everyone's safety, Mortalive periodically captures still frames from both sides of a video chat and reviews them for policy violations (e.g. exposed content, harassment). Frames are captured only while your camera is active — never in text-only chat — and stop the moment you leave the call or matching screen.</span>
+            </p>
           </div>
           <div class="permission-list">
             <div class="permission-item">
@@ -10743,9 +10978,9 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 
 <!-- ═══════════════════ LOBBY ══════════════════════ -->
 <section id="pg-lobby" class="page">
-  <div class="wrap" style="display:flex;justify-content:center;">
+  <div class="wrap u-flex-center">
     <div class="card lobby-card">
-      <div style="margin-bottom:16px;">
+      <div class="u-mb-16">
         <button class="icon-btn setup-back" type="button" data-target="pg-land">← Back</button>
       </div>
       <div class="lobby-head">
@@ -10769,7 +11004,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
       </div>
 
       <!-- Camera preview strip (shown when cam granted) -->
-      <div class="cam-strip" id="cam-strip" style="display:none;">
+      <div class="cam-strip u-hidden" id="cam-strip" >
         <video id="lobby-cam-preview" autoplay playsinline muted></video>
         <div>
           <div style="font-size:13.5px;font-weight:700;">Camera preview</div>
@@ -10808,7 +11043,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
       </div>
 
       <div class="start-row">
-        <button class="btn btn-ghost" id="score-pill-btn" type="button" style="display:none;">Open status sheet</button>
+        <button class="btn btn-ghost u-hidden" id="score-pill-btn" type="button" >Open status sheet</button>
       </div>
     </div>
   </div>
@@ -10816,10 +11051,10 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 
 <!-- ═══════════════════ MATCHING ═══════════════════ -->
 <section id="pg-match" class="page">
-  <div class="wrap" style="display:flex;justify-content:center;">
+  <div class="wrap u-flex-center">
     <div class="card match-card">
-      <div style="margin-bottom:16px;">
-        <button class="icon-btn setup-back" type="button" data-target="pg-lobby" style="width:auto;min-height:auto;">← Back</button>
+      <div class="u-mb-16">
+        <button class="icon-btn setup-back btn-auto" type="button" data-target="pg-lobby">← Back</button>
       </div>
       <div class="spinner" aria-hidden="true"></div>
       <h2 class="match-title" id="match-title">Finding your match</h2>
@@ -10830,8 +11065,11 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
         <span class="dot" id="conn-dot"></span>
         <span id="conn-text">Searching…</span>
       </div>
+      <div class="safety-indicator u-hidden" id="match-safety-indicator"  role="status">
+        <span aria-hidden="true">🛡️</span> Safety review active
+      </div>
       <div style="margin-top:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-        <button class="btn btn-ghost" id="btn-cancel" style="width:auto;min-height:auto;padding:10px 20px;">Cancel</button>
+        <button class="btn btn-ghost btn-auto-sm" id="btn-cancel" >Cancel</button>
         <button class="btn btn-tonal" id="btn-try-demo" style="display:none;width:auto;min-height:auto;padding:10px 20px;">Try demo chat</button>
       </div>
     </div>
@@ -10849,20 +11087,21 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
         <div>
           <div class="peer-name" id="peer-name"><span class="peer-duration" id="talk-duration">00:00</span><span class="peer-name-text">Stranger</span></div>
           <div class="peer-sub" id="peer-score">Random chat · connected</div>
-          <div class="talk-peer-actions" id="talk-peer-actions" style="display:none;">
+          <div class="talk-peer-actions u-hidden" id="talk-peer-actions" >
             <button class="talk-peer-action follow" id="btn-follow-peer" type="button">+ Follow</button>
           </div>
         </div>
       </div>
       <div class="top-actions">
-        <button class="icon-btn setup-back" type="button" data-target="pg-lobby" style="width:auto;min-height:auto;">← Back</button>
+        <button class="icon-btn setup-back btn-auto" type="button" data-target="pg-lobby">← Back</button>
         <div class="conn-badge">
           <span class="conn-dot" id="call-dot"></span>
           <span id="call-text">connecting</span>
         </div>
-        <button class="icon-btn" id="btn-rate-top" style="width:auto;min-height:auto;">⭐ Rate</button>
-        <button class="icon-btn" id="btn-skip" style="width:auto;min-height:auto;">⏭ Next</button>
-        <button class="icon-btn danger" id="btn-end" style="width:auto;min-height:auto;">✕ Leave</button>
+        <button class="icon-btn btn-auto" id="btn-rate-top">⭐ Rate</button>
+        <button class="icon-btn danger btn-auto" id="btn-report">🚩 Report</button>
+        <button class="icon-btn btn-auto" id="btn-skip">⏭ Next</button>
+        <button class="icon-btn danger btn-auto" id="btn-end">✕ Leave</button>
       </div>
     </div>
 
@@ -10885,6 +11124,9 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
           <div class="quality" id="quality-bar">
             <span class="qdot" id="qual-dot"></span>
             <span id="qual-text">HD</span>
+          </div>
+          <div class="safety-indicator video-overlay u-hidden" id="chat-safety-indicator"  role="status">
+            <span aria-hidden="true">🛡️</span> Safety review active
           </div>
         </div>
         <div class="video-controls">
@@ -10984,7 +11226,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <!-- ── CENTRE FEED ─────────────────── -->
 <main class="feed-centre">
 <!-- Context banner (shown when coming from a chat) -->
-<div class="feed-banner" id="context-banner" style="display:none;">
+<div class="feed-banner u-hidden" id="context-banner" >
 <span class="banner-icon">💬</span>
 <span><strong>Just ended a chat?</strong> Share what was on your mind — it only takes a second.</span>
 <button class="feed-banner-close" id="banner-close">×</button>
@@ -11040,12 +11282,12 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-qna" type="button" data-compose-kind="qna">Q&A</button>
 </div>
-<button class="compose-tool photo-compose-btn" id="btn-feed-photo" type="button" title="Add photo" aria-hidden="true" tabindex="-1" style="display:none">📷 Photo</button>
+<button class="compose-tool photo-compose-btn u-hidden" id="btn-feed-photo" type="button" title="Add photo" aria-hidden="true" tabindex="-1" >📷 Photo</button>
 <input id="feed-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
 <span id="feed-photo-name" class="compose-photo-name" aria-live="polite"></span>
 <div id="feed-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
 <span style="flex:1;"></span>
-<span id="compose-hashtag-status" class="compose-hashtag-status" aria-live="polite" style="display:none;"></span><span id="char-count" style="font-size:12px;color:var(--on-surface-3);">500</span>
+<span id="compose-hashtag-status" class="compose-hashtag-status u-hidden" aria-live="polite" ></span><span id="char-count" style="font-size:12px;color:var(--on-surface-3);">500</span>
 <button class="compose-submit" disabled="" id="compose-submit">Post</button>
 </div>
 </div>
@@ -11081,7 +11323,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <div class="skeleton skel-line" style="width:70%;"></div>
 </div>
 </div>
-<button class="load-more-btn" id="load-more-btn" style="display:none;">
+<button class="load-more-btn u-hidden" id="load-more-btn" >
 <span>↓</span> Load more posts
       </button>
 </main>
@@ -11118,7 +11360,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <div class="share-option" id="share-dm">
 <span class="share-icon">💬</span> Send in a DM
     </div>
-<div class="share-option" id="share-native" style="display:none;">
+<div class="share-option u-hidden" id="share-native" >
 <span class="share-icon">📤</span> Share via…
     </div>
 <button class="modal-close" id="share-modal-close">Cancel</button>
@@ -11163,7 +11405,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
           </svg>
         </button>
-        <button class="notif-mark-all-btn" id="notif-mark-all" style="display:none"
+        <button class="notif-mark-all-btn u-hidden" id="notif-mark-all" 
                 aria-label="Mark all notifications as read">
           Mark all read
         </button>
@@ -11432,7 +11674,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
           <div class="profile-subline-modern" id="profile-subline-display">Member</div>
         </div>
         <div class="profile-follow-slot">
-          <button class="profile-action-primary" id="btn-follow-user" type="button" style="display:none;">Follow</button>
+          <button class="profile-action-primary u-hidden" id="btn-follow-user" type="button" >Follow</button>
         </div>
       </div>
 
@@ -11449,15 +11691,15 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 
       <!-- Instagram-style inline details (replaces About section) -->
       <div class="profile-info-row" id="profile-info-row">
-        <div class="profile-info-item" id="profile-info-details-row" style="display:none">
+        <div class="profile-info-item u-hidden" id="profile-info-details-row" >
           <span class="profile-info-icon">📌</span>
           <span class="profile-info-value" id="profile-info-details-val">—</span>
         </div>
-        <div class="profile-info-item" id="profile-info-interests-row" style="display:none">
+        <div class="profile-info-item u-hidden" id="profile-info-interests-row" >
           <span class="profile-info-icon">✨</span>
           <div class="profile-info-chips" id="profile-info-interests-val"></div>
         </div>
-        <div class="profile-info-item" id="profile-info-links-row" style="display:none">
+        <div class="profile-info-item u-hidden" id="profile-info-links-row" >
           <span class="profile-info-icon">🔗</span>
           <div style="display:flex;flex-direction:column;gap:4px;" id="profile-info-links-val"></div>
         </div>
@@ -11482,7 +11724,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
       </div>
 
       <!-- Hidden compat elements (used by app.js internals) -->
-      <div style="display:none" aria-hidden="true">
+      <div class="u-hidden" aria-hidden="true">
         <div id="profile-details-label-display">Details</div>
         <div id="profile-details-display">—</div>
         <div id="profile-website-container"><a id="profile-website-display" href="#" target="_blank">—</a></div>
@@ -11523,8 +11765,8 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
               <div id="profile-poll-options-list" class="profile-poll-options-list"></div>
             </div>
             <div class="profile-post-composer-actions">
-              <span id="profile-hashtag-status" class="compose-hashtag-status" aria-live="polite" style="display:none;"></span><span class="profile-post-char-count" id="profile-post-char-count">0 / 500</span>
-              <button class="profile-post-photo-btn photo-compose-btn" id="btn-profile-photo-upload" type="button" style="display:none">📷 Add photo</button>
+              <span id="profile-hashtag-status" class="compose-hashtag-status u-hidden" aria-live="polite" ></span><span class="profile-post-char-count" id="profile-post-char-count">0 / 500</span>
+              <button class="profile-post-photo-btn photo-compose-btn u-hidden" id="btn-profile-photo-upload" type="button" >📷 Add photo</button>
               <input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
               <span class="profile-photo-name" id="profile-photo-name" aria-live="polite"></span>
               <div id="profile-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
@@ -11558,7 +11800,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
       <section class="profile-stats-panel profile-tab-panel" id="profile-stats-panel" data-profile-panel="stats"></section>
 
       <!-- All legacy compat IDs kept hidden — app.js references them internally -->
-      <div style="display:none" aria-hidden="true">
+      <div class="u-hidden" aria-hidden="true">
         <div id="profile-about-details">—</div>
         <div id="profile-about-interests">—</div>
         <div id="profile-about-links">—</div>
@@ -11617,11 +11859,11 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
       <div class="field"><label for="edit-display-name">Display name</label><input id="edit-display-name" type="text" placeholder="How others see you" maxlength="30" autocomplete="off"></div>
       <div class="field"><label for="edit-bio">Bio</label><textarea id="edit-bio" placeholder="A little about yourself..." maxlength="500" style="min-height:80px"></textarea></div>
       <div class="field"><label for="edit-details">Details</label><input id="edit-details" type="text" placeholder="Job title, niche, etc." maxlength="60"></div>
-      <div class="field" id="edit-website-container" style="display:none"><label for="edit-website">Website</label><input id="edit-website" type="url" placeholder="https://..."></div>
+      <div class="field u-hidden" id="edit-website-container" ><label for="edit-website">Website</label><input id="edit-website" type="url" placeholder="https://..."></div>
       <div class="field"><label>Interests (max 3)</label><div id="edit-interests-container" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px"></div></div>
       <div class="field"><label>Links & Portfolio (<span id="edit-link-count">0</span>/5)</label><div id="edit-links-container" style="display:flex;flex-direction:column;gap:10px;margin-bottom:8px"></div><button type="button" class="btn btn-ghost" id="btn-edit-add-link" onclick="window.addEditLink()" style="padding:8px;font-size:12px">+ Add Link</button></div>
       <!-- Password moved to Account Center (dropdown → Account Center) -->
-      <input id="edit-new-password" type="password" autocomplete="new-password" style="display:none" aria-hidden="true">
+      <input id="edit-new-password" type="password" autocomplete="new-password" class="u-hidden" aria-hidden="true">
       <div id="edit-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;padding:10px;font-size:12px"></div>
     </div>
     <div style="padding:14px 22px 20px;border-top:1px solid var(--border);display:flex;gap:10px;flex-shrink:0"><button class="btn btn-ghost" id="btn-edit-cancel" style="flex:1">Cancel</button><button class="btn btn-primary" id="btn-edit-save" style="flex:1">Save Changes</button></div>
@@ -11658,8 +11900,23 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   </div>
 </div>
 
+<!-- Report stranger (in-call) -->
+<div class="overlay" id="report-stranger-overlay" role="dialog" aria-modal="true" aria-labelledby="report-stranger-title">
+  <div class="modal">
+    <div class="modal-ico">🚩</div>
+    <div class="modal-title" id="report-stranger-title">Report this chat</div>
+    <div class="modal-sub">Choose a reason. This ends the chat immediately and sends your last few safety-review frames to our moderators — no further conversation needed.</div>
+    <div class="report-option" data-reason="nudity">🔞 Nudity or sexual content</div>
+    <div class="report-option" data-reason="minor">🚨 I believe this person is a minor</div>
+    <div class="report-option" data-reason="harassment">😠 Harassment or threats</div>
+    <div class="report-option" data-reason="spam">🚫 Spam or scam</div>
+    <div class="report-option" data-reason="other">… Other</div>
+    <button class="modal-close" id="report-stranger-close">Cancel</button>
+  </div>
+</div>
+
 <!-- Progress identity sheet (dynamically inserted by app.js) -->
-<div class="overlay" id="progress-overlay" style="display:none;">
+<div class="overlay u-hidden" id="progress-overlay" >
   <div class="modal" style="width:min(760px,100%);text-align:left;background:rgba(13,17,23,.92);border:1px solid rgba(255,255,255,.12);color:#fff;">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px;">
       <div>
@@ -11671,29 +11928,29 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
               style="width:40px;height:40px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;font-size:20px;cursor:pointer;">×</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
-      <div style="padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);">
-        <div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.10em;">crockroach Score</div>
-        <div id="progress-score" style="font-size:28px;font-weight:800;line-height:1.1;margin-top:6px;">0</div>
+      <div class="u-glass-tile">
+        <div class="u-stat-label">crockroach Score</div>
+        <div id="progress-score" class="u-stat-value">0</div>
       </div>
-      <div style="padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);">
-        <div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.10em;">Weekly rank</div>
-        <div id="progress-rank" style="font-size:28px;font-weight:800;line-height:1.1;margin-top:6px;">#—</div>
+      <div class="u-glass-tile">
+        <div class="u-stat-label">Weekly rank</div>
+        <div id="progress-rank" class="u-stat-value">#—</div>
       </div>
-      <div style="padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);">
-        <div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.10em;">Completions</div>
-        <div id="progress-completions" style="font-size:28px;font-weight:800;line-height:1.1;margin-top:6px;">0</div>
+      <div class="u-glass-tile">
+        <div class="u-stat-label">Completions</div>
+        <div id="progress-completions" class="u-stat-value">0</div>
       </div>
-      <div style="padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);">
-        <div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.10em;">Top percentile</div>
-        <div id="progress-percentile" style="font-size:28px;font-weight:800;line-height:1.1;margin-top:6px;">Top —%</div>
+      <div class="u-glass-tile">
+        <div class="u-stat-label">Top percentile</div>
+        <div id="progress-percentile" class="u-stat-value">Top —%</div>
       </div>
     </div>
     <div style="margin-top:10px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);">
-      <div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.10em;">Streak</div>
+      <div class="u-stat-label">Streak</div>
       <div id="progress-streak" style="font-size:20px;font-weight:800;margin-top:6px;">0 days</div>
     </div>
     <div style="margin-top:10px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);">
-      <div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.10em;">Badges</div>
+      <div class="u-stat-label">Badges</div>
       <div id="progress-badges" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;"></div>
     </div>
     <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
@@ -11706,9 +11963,9 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
         Refresh stats
       </button>
     </div>
-    <div id="progress-frame"  style="display:none;"></div>
-    <div id="progress-quote"  style="display:none;"></div>
-    <div id="progress-pinned" style="display:none;"></div>
+    <div id="progress-frame"  class="u-hidden"></div>
+    <div id="progress-quote"  class="u-hidden"></div>
+    <div id="progress-pinned" class="u-hidden"></div>
   </div>
 </div>
 
@@ -12527,11 +12784,24 @@ body:has(#pg-land.active)::before{
 #di2 .di2-sm-back{
   width:36px;height:36px;border-radius:50%;margin-left:6px;
   background:transparent;color:var(--on-surface-2);font-size:20px;line-height:1;
+  transition:background 0.14s;
 }
+#di2 .di2-sm-back:hover{background:rgba(0,0,0,0.06);}
 #di2 .di2-sm-go{
   width:32px;height:32px;border-radius:50%;margin-right:8px;
   background:var(--primary);color:#fff;font-size:18px;line-height:1;
   box-shadow:0 2px 8px rgba(26,110,245,.32);
+  transition:transform 0.14s;
+}
+#di2 .di2-sm-go:hover{transform:scale(1.06);}
+#di2 .di2-sm-back:focus-visible,
+#di2 .di2-sm-go:focus-visible{
+  outline:2px solid var(--primary);
+  outline-offset:2px;
+}
+body.di2-msg #di2 .di2-sm-back:focus-visible,
+body.di2-msg #di2 .di2-sm-go:focus-visible{
+  outline-color:#5aa4ff;
 }
 #di2 .di2-pill.is-search-mode .di2-sm-back,
 #di2 .di2-pill.is-search-mode .di2-sm-go{
@@ -12623,11 +12893,10 @@ body:has(#pg-land.active)::before{
   cursor:pointer;
 }
 .di2-notify-btn:hover{background:var(--primary-alpha);color:var(--on-surface);}
-.di2-notify-dot{
-  position:absolute;right:5px;top:5px;width:7px;height:7px;border-radius:50%;
-  background:var(--danger);display:none;
-}
-.di2-notify-dot.on{display:block;}
+/* .di2-notify-dot styling lives in the v188 block near the end of this
+   file — that rule loads later at identical specificity and was silently
+   winning over a duplicate that used to sit here, making this copy dead
+   code. Removed rather than left to rot further. */
 #di2-notification-panel{
   position:fixed;top:70px;right:18px;z-index:10000;
   width:min(360px,calc(100vw - 28px));
@@ -12716,17 +12985,15 @@ body:has(#pg-land.active)::before{
 .di2-notify-nav-btn{position:relative;}
 .di2-notify-dot{
   display:none;position:absolute;right:5px;top:4px;width:6px;height:6px;
-  border-radius:50%;background:#ef4444;box-shadow:0 0 0 2px rgba(255,255,255,.86);
+  border-radius:50%;background:var(--danger);box-shadow:0 0 0 2px rgba(255,255,255,.86);
 }
 .di2-notify-dot.on{display:block;}
 #di2-notify-tab-dot{
   display:none;width:7px;height:7px;border-radius:50%;
-  background:#ef4444;margin-left:-8px;margin-top:-14px;
+  background:var(--danger);margin-left:-8px;margin-top:-14px;
 }
 #di2-notify-tab-dot.on{display:block;}
 </style>
-</body>
-</html>
 
 <style id="mortalive-v189-topisland-search-notifications">
 @media (min-width:641px){
@@ -12736,3 +13003,23 @@ body:has(#pg-land.active)::before{
   }
 }
 </style>
+
+<style id="mortalive-v190-dynamic-island-a11y">
+/* ── Dynamic Island: focus-visible rings for elements defined in this
+   file (di2-sm-back/di2-sm-go/di2-tab share app.js's rules; the ones
+   below — notify button, search-page back — only exist here). ── */
+.di2-notify-btn:focus-visible,
+.mortalive-search-page-back:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+/* Reduced motion: the notification panel and badge-pop entries below
+   are the only animated elements this file adds to the island beyond
+   what app.js's own reduced-motion block already covers. */
+@media (prefers-reduced-motion: reduce) {
+  #di2-notification-panel { transition-duration: 0.001ms !important; }
+}
+</style>
+</body>
+</html>
