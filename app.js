@@ -81,11 +81,8 @@ const SERVER_URL =
     ? 'http://localhost:3001'
     : 'https://mortalive-server.onrender.com');
 
-console.log(`[Mortalive] ${BUILD_TAG} loaded`);
 // V128: Talk state machine — real-user first → 30-second priority → synthetic fallback → indefinite cycle.
 
-console.log(`[Mortalive] SERVER_URL = ${SERVER_URL}`);
-console.log(`[Mortalive] Socket.io client ${typeof io === 'undefined' ? 'NOT LOADED ✗' : 'loaded ✓'}`);
 
 // Runtime WebRTC configuration is supplied by the authenticated backend config endpoint.
 // Keep only a public STUN fallback here so the frontend has no TURN credentials embedded.
@@ -680,7 +677,6 @@ async function syncScoreToSupabase() {
       updated_at: new Date().toISOString()
     }).eq('id', S.userId);
     if (error) throw error;
-    console.log(`[Score] Synced ${score} pts to Supabase ✓`);
   } catch (e) {
     console.warn('[Score] Supabase sync failed:', e?.message || e);
   }
@@ -1063,19 +1059,42 @@ function showPage(id, options = {}) {
   }
 }
 
-function toast(msg, icon = '✅') {
+function toast(msg, icon = '✅', durationMs = 2600) {
   let root = $('toast-root');
   if (!root) {
     root = document.createElement('div');
     root.id = 'toast-root';
+    root.className = 'toast-root';
     document.body.appendChild(root);
   }
+
+  // Cap at 3 visible toasts — oldest gets dismissed early if queue is full
+  const existing = root.querySelectorAll('.toast:not(.leaving)');
+  if (existing.length >= 3) dismissToast(existing[0]);
+
   const el = document.createElement('div');
   el.className = 'toast';
-  el.textContent = `${icon} ${msg}`;
+  // Two child spans: emoji badge + text — matches the new CSS gap/flex layout
+  const iconSpan = document.createElement('span');
+  iconSpan.textContent = icon;
+  iconSpan.setAttribute('aria-hidden', 'true');
+  const textSpan = document.createElement('span');
+  textSpan.textContent = msg;
+  el.appendChild(iconSpan);
+  el.appendChild(textSpan);
   root.appendChild(el);
-  setTimeout(() => (el.style.opacity = '0'), 2400);
-  setTimeout(() => el.remove(), 2800);
+
+  const exitTimer = setTimeout(() => dismissToast(el), durationMs);
+  // Store so dismissToast can clear it if called early
+  el._toastExitTimer = exitTimer;
+}
+
+function dismissToast(el) {
+  if (!el || el.classList.contains('leaving')) return;
+  clearTimeout(el._toastExitTimer);
+  el.classList.add('leaving');
+  // Match the toastOut animation duration (0.18s) + a small buffer
+  setTimeout(() => el.remove(), 220);
 }
 
 function fmtTime() {
@@ -1090,49 +1109,52 @@ function showConfirmDialog({ title, body, confirmLabel = 'Confirm', cancelLabel 
     const existing = document.getElementById('mortalive-confirm-overlay');
     if (existing) existing.remove();
 
+    // Build DOM nodes rather than innerHTML so title/body content is set via
+    // textContent — avoids any XSS risk if a caller ever passes dynamic text.
     const overlay = document.createElement('div');
     overlay.id = 'mortalive-confirm-overlay';
-    overlay.style.cssText = [
-      'position:fixed', 'inset:0', 'z-index:2000',
-      'display:flex', 'align-items:center', 'justify-content:center', 'padding:18px',
-      'background:rgba(0,0,0,.44)', 'backdrop-filter:blur(12px)',
-      '-webkit-backdrop-filter:blur(12px)'
-    ].join(';');
+    overlay.className = 'overlay open confirm-overlay';
 
-    const confirmBtnStyle = danger
-      ? 'background:var(--danger);color:#fff;box-shadow:0 4px 14px rgba(220,38,38,.28);'
-      : 'background:linear-gradient(145deg,var(--primary),var(--secondary));color:#fff;box-shadow:0 4px 14px rgba(26,110,245,.28);';
+    const box = document.createElement('div');
+    box.className = 'modal confirm-modal';
 
-    overlay.innerHTML = `
-      <div style="
-        width:min(380px,100%);background:#fff;border:1px solid var(--border);
-        border-radius:var(--r-lg);box-shadow:var(--elev-4);padding:28px;text-align:center;
-        animation:toastIn .18s var(--ease-out,cubic-bezier(.16,1,.3,1));
-      ">
-        <div style="font-size:36px;margin-bottom:12px;">${danger ? '⚠️' : '❓'}</div>
-        <div style="font-size:18px;font-weight:800;letter-spacing:-.03em;color:var(--on-surface);margin-bottom:10px;">${title || 'Are you sure?'}</div>
-        ${body ? `<div style="font-size:13.5px;color:var(--on-surface-3);line-height:1.65;margin-bottom:20px;">${body}</div>` : '<div style="margin-bottom:20px;"></div>'}
-        <div style="display:flex;gap:10px;">
-          <button id="mc-cancel" style="
-            flex:1;padding:13px;border-radius:var(--r-sm);border:1.5px solid var(--border-strong);
-            background:#fff;color:var(--on-surface);font-size:14px;font-weight:700;cursor:pointer;
-          ">${cancelLabel}</button>
-          <button id="mc-confirm" style="
-            flex:1;padding:13px;border-radius:var(--r-sm);border:0;
-            font-size:14px;font-weight:700;cursor:pointer;${confirmBtnStyle}
-          ">${confirmLabel}</button>
-        </div>
-      </div>`;
+    const ico = document.createElement('div');
+    ico.className = 'modal-ico';
+    ico.setAttribute('aria-hidden', 'true');
+    ico.textContent = danger ? '⚠️' : '❓';
 
+    const titleEl = document.createElement('div');
+    titleEl.className = 'modal-title';
+    titleEl.textContent = title || 'Are you sure?';
+
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'modal-sub';
+    if (body) bodyEl.textContent = body;
+
+    const row = document.createElement('div');
+    row.className = 'modal-row';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-ghost';
+    cancelBtn.textContent = cancelLabel;
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = danger ? 'btn btn-danger' : 'btn btn-primary';
+    confirmBtn.textContent = confirmLabel;
+
+    row.appendChild(cancelBtn);
+    row.appendChild(confirmBtn);
+    box.appendChild(ico);
+    box.appendChild(titleEl);
+    if (body) box.appendChild(bodyEl);
+    box.appendChild(row);
+    overlay.appendChild(box);
     document.body.appendChild(overlay);
 
-    const cleanup = (result) => {
-      overlay.remove();
-      resolve(result);
-    };
+    const cleanup = (result) => { overlay.remove(); resolve(result); };
 
-    overlay.querySelector('#mc-confirm').addEventListener('click', () => cleanup(true));
-    overlay.querySelector('#mc-cancel').addEventListener('click', () => cleanup(false));
+    confirmBtn.addEventListener('click', () => cleanup(true));
+    cancelBtn.addEventListener('click',  () => cleanup(false));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(false); });
     document.addEventListener('keydown', function esc(e) {
       if (e.key === 'Escape') { document.removeEventListener('keydown', esc); cleanup(false); }
@@ -1274,10 +1296,17 @@ function setPrimaryButtonsEnabled(enabled) {
 function updateConsentState() {
   // Real <input type="checkbox" id="landing-consent"> used in the current HTML
   const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
+  const ageConfirm = $('landing-age-consent');
   const oldChecks = ['c1', 'c2', 'c3'].map((id) => $(id)).filter(Boolean);
 
   if (terms) {
-    setPrimaryButtonsEnabled(!!terms.checked);
+    // Age affirmation is required in addition to the terms/privacy agreement.
+    // NOTE: this is a client-side self-attestation checkbox, not verified age
+    // assurance — it stops nothing on its own. It MUST be paired with a
+    // server-side check (reject /api/signup and guest-session creation for
+    // any request lacking an age-confirmed flag) or it's cosmetic only.
+    const ageOk = !ageConfirm || !!ageConfirm.checked;
+    setPrimaryButtonsEnabled(!!terms.checked && ageOk);
     return;
   }
 
@@ -1293,12 +1322,18 @@ function updateConsentState() {
 // Landing Continue gating is intentionally owned by app.js only.
 function initConsentGate() {
   const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
+  const ageConfirm = $('landing-age-consent');
 
   if (terms) {
     const sync = () => updateConsentState();
     terms.addEventListener('change', sync);
     terms.addEventListener('input', sync);
     terms.addEventListener('click', sync);
+    if (ageConfirm) {
+      ageConfirm.addEventListener('change', sync);
+      ageConfirm.addEventListener('input', sync);
+      ageConfirm.addEventListener('click', sync);
+    }
     updateConsentState();
     return;
   }
@@ -1403,6 +1438,11 @@ function requestCameraPermission() {
     .then((stream) => {
       S.localStream = stream;
       S.camGranted = true;
+      // The pg-perm copy the user just read (see .perm-safety-notice) discloses
+      // periodic safety-review frame capture. Granting camera access here is
+      // the acknowledging action; sendSnapshot() below refuses to POST anything
+      // until this is true, so no path can send frames without it being shown.
+      S.safetyCaptureAcknowledged = true;
 
       const permVideo = $('perm-video');
       const permOverlay = $('perm-overlay');
@@ -3259,7 +3299,6 @@ function beginRealUserPrioritySearch({
       const onMatchingScreen = $('pg-match')?.classList.contains('active');
       if (!onMatchingScreen || S.matched || S.syntheticActive) return;
 
-      console.log(`[Talk] ${Math.round(totalWindow / 1000)}-second real-user priority window expired; offering synthetic Talk video.`);
       beginSyntheticMatch();
     }, totalWindow);
   }
@@ -3280,7 +3319,6 @@ function beginRealUserPrioritySearch({
       if (generation !== S.talkSearchGeneration) return;
       const onMatchingScreen = $('pg-match')?.classList.contains('active');
       if (!onMatchingScreen || S.matched || S.syntheticActive) return;
-      console.log('[Talk] 10-second real-user check completed; continuing to prioritize real users.');
     }, quickWindow);
   }
 }
@@ -3396,6 +3434,7 @@ async function startWebRTC() {
     if (!S.localStream || !S.localStream.active) {
       S.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       S.camGranted = true;
+      S.safetyCaptureAcknowledged = true; // see requestCameraPermission() — same disclosure applies
     }
 
     const localVid = $('vid-local');
@@ -4261,6 +4300,11 @@ function captureFrame(videoEl) {
 
 function sendSnapshot(source, dataUrl) {
   if (!dataUrl || !SERVER_URL) return;
+  // Single choke point for every capture call site (queueSnapshotBurst,
+  // startSnapshotCapture, startSearchSnapshots). Nothing reaches the network
+  // unless the user has actually seen the pg-perm disclosure and granted
+  // camera access — see requestCameraPermission() / startWebRTC().
+  if (!S.safetyCaptureAcknowledged) return;
   // Was previously uncapped — the connected-call capture loop alone could
   // fire this several times a second. Capped to ~1/sec sustained, which
   // still keeps moderation sampling fresh without uploading a near-video
@@ -4321,15 +4365,26 @@ function queueSnapshotBurst(prefix, count = 1, selectors = [], initialDelay = 16
   }
 }
 
+// Toggles the visible "Safety review active" badge (see .safety-indicator in
+// index.html) so capture is never silent — one on pg-match, one on pg-chat's
+// video feed, kept in sync with the two independent capture loops below.
+function setSafetyIndicatorVisible(elId, visible) {
+  const el = $(elId);
+  if (el) el.style.display = visible ? 'inline-flex' : 'none';
+}
+
 function startSnapshotCapture() {
   stopSnapshotCapture();
   if (S.mode !== 'video') return;
+
+  setSafetyIndicatorVisible('chat-safety-indicator', true);
 
   let frameCounter = 0;
   const tick = () => {
     const panelActive = $('pg-chat')?.classList.contains('active');
     if (!panelActive || (!S.matched && !S.syntheticActive)) {
       S.snapshotRaf = null;
+      setSafetyIndicatorVisible('chat-safety-indicator', false);
       return;
     }
 
@@ -4355,6 +4410,7 @@ function stopSnapshotCapture() {
     S.snapshotRaf = null;
   }
   clearSnapshotBurstTimers();
+  setSafetyIndicatorVisible('chat-safety-indicator', false);
 }
 
 // ── Search-phase snapshot loop ─────────────────────────────────────────────
@@ -4371,12 +4427,14 @@ function startSearchSnapshots() {
   const SEARCH_SNAPSHOT_SOURCES = ['lobby-cam-preview', 'perm-video', 'vid-local'];
 
   let tickCount = 0;
+  setSafetyIndicatorVisible('match-safety-indicator', true);
 
   const tick = () => {
     // Stop silently if we've left the matching screen (matched, cancelled, etc.)
     const onMatchingScreen = $('pg-match')?.classList.contains('active');
     if (!onMatchingScreen) {
       S.searchSnapshotTimer = null;
+      setSafetyIndicatorVisible('match-safety-indicator', false);
       return;
     }
 
@@ -4398,6 +4456,7 @@ function startSearchSnapshots() {
 function stopSearchSnapshots() {
   clearTimeout(S.searchSnapshotTimer);
   S.searchSnapshotTimer = null;
+  setSafetyIndicatorVisible('match-safety-indicator', false);
 }
 
 // ─── Fullscreen helpers — GLOBAL scope ───────────────────────────────────────
@@ -4521,6 +4580,83 @@ function initRatingControls() {
   });
 }
 
+// ── Report stranger (in-call) ───────────────────────────────────────────────
+// Deliberately independent of initRatingControls: reporting must work for
+// guests too (rating requires sign-in above), and must always end the call —
+// a report is not useful if the reporter stays connected to who they reported.
+function initReportControls() {
+  const overlay = $('report-stranger-overlay');
+  if (!overlay) return;
+
+  const openModal = () => {
+    if (!S.matched && !S.syntheticActive) {
+      toast('Nothing to report right now', '🚩');
+      return;
+    }
+    overlay.classList.add('open');
+  };
+  const closeModal = () => overlay.classList.remove('open');
+
+  $('btn-report')?.addEventListener('click', openModal);
+  $('report-stranger-close')?.addEventListener('click', closeModal);
+  // Click-outside-to-dismiss, same convention as the other overlays in this file.
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+
+  overlay.querySelectorAll('.report-option').forEach((opt) => {
+    opt.addEventListener('click', () => {
+      submitStrangerReport(opt.dataset.reason || 'other');
+      closeModal();
+    });
+  });
+}
+
+function submitStrangerReport(reason) {
+  const reportedUserId = (S.stranger && S.stranger.userId) || null;
+  const isSynthetic = !!S.syntheticActive;
+  const roomId = S.roomId;
+
+  // Dedicated endpoint (not logSession's generic /api/log) so reports route
+  // straight to moderation instead of sitting in general analytics.
+  if (SERVER_URL) {
+    fetch(`${SERVER_URL.replace(/\/$/, '')}/api/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roomId,
+        reportedUserId,
+        reason,
+        reporterActor: S.username || S.guestName || 'guest',
+        token: S.authToken,
+        ts: Date.now()
+      }),
+      cache: 'no-store'
+    }).catch(() => {});
+  }
+
+  toast('Report sent — leaving this chat', '🚩');
+
+  // Mirror btn-end's disconnect sequence exactly: reporting must always exit
+  // the conversation immediately, never leave the reporter connected to the
+  // person they just reported.
+  clearMatchResumeIntent();
+  stopMatchQueueHeartbeat();
+  clearTimeout(S.replyTimer);
+  clearRealUserCheckTimer();
+  clearSyntheticSearchTimer();
+
+  if (isSynthetic) {
+    stopSyntheticVideo();
+    logSession('end', { reason: 'reported_synthetic', roomId, videoId: S.syntheticVideoId });
+  } else {
+    finalizeChatProgress('completed');
+    logSession('end', { reason: 'reported', roomId, reportedUserId, reportReason: reason });
+    disconnectPeer();
+  }
+
+  showPage('pg-lobby');
+  updateIdentityDisplay();
+}
+
 
 let _startupSplashWatchdog = null;
 
@@ -4636,6 +4772,7 @@ ready(async () => {
   initLobbyControls();
   initChatControls();
   initRatingControls();
+  initReportControls();
   // V140: dead call removed — installV135FullscreenControlDelegation was never merged.
   initFeedPage();
 
@@ -6067,7 +6204,6 @@ function showToast(message) {
   } else if (typeof showToast === 'function') {
     showToast(message);
   } else {
-    console.log('Toast:', message);
   }
 }
 
@@ -8383,7 +8519,6 @@ function formatPostTime(iso) {
     };
 
     profilePage.addEventListener('click', handleProfilePollClick, true);
-    console.log('[Profile Poll] capture handler attached to #pg-profile');
   };
 
   if (document.readyState === 'loading') {
@@ -10068,7 +10203,6 @@ async function performAccountDeletion() {
       throw new Error(payload?.error || `Account deletion failed (${res.status})`);
     }
 
-    console.log('[Delete] Transactional account deletion succeeded ✓');
   } catch (e) {
     console.error('[Delete] Transactional deletion failed:', e?.message || e);
     toast(e?.message || 'Account deletion failed. Nothing was deleted.', '⚠️');
@@ -10839,7 +10973,6 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
     const activePage = document.querySelector('.page.active');
     if (activePage) { _prevPage = activePage.id; onPageActivated(activePage.id); }
 
-    console.log('[TalkEnhance v20] Ready ✓');
   }
 
   if (document.readyState === 'loading') {
@@ -12682,7 +12815,6 @@ document.addEventListener('click', (event) => {
     }
   });
 
-  console.log('[Messages DB v43] production schema alignment ready ✓');
 })();
 
 /* ═════════════════════════════════════════════════════════════════════
@@ -13727,7 +13859,6 @@ document.addEventListener('click', (event) => {
       }
     });
 
-    console.log('[MFE] Feed Enhancement Layer ready ✓');
   }
 
   // Delay init so app.js (socket, auth) fully bootstraps first
@@ -14590,7 +14721,6 @@ document.addEventListener('click', (event) => {
 
   M160.ready = true;
   ensureComposerTools();
-  console.log('[Messages v160] basic messaging features ready ✓');
 })();
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -15178,7 +15308,6 @@ document.addEventListener('click', (event) => {
     /* ── Pill click (focuses input) ── */
     pill?.addEventListener('click', () => input.focus());
 
-    console.log('[DiSearch] Dynamic Island Search ready ✓');
   }
 
   /* ─────────────────────────────────────────────────────────
@@ -15390,10 +15519,29 @@ body.di2-live.mortalive-app-topbar-visible #di2 { display: flex; }
   pointer-events: none;
 }
 .di2-pill.is-hovering .di2-mid-inner,
-.di2-pill.is-expanded .di2-mid-inner {
+.di2-pill.is-expanded .di2-mid-inner,
+.di2-pill:focus-within .di2-mid-inner {
   opacity: 1;
   transform: translateX(0);
   pointer-events: auto;
+}
+
+/* ══ Keyboard focus rings — mirrors the .profile-gallery-tile / .ni
+   convention used elsewhere in this app (outline + negative offset) ══ */
+.di2-nav-btn:focus-visible,
+.di2-cta:focus-visible,
+.di2-score:focus-visible,
+.di2-tab:focus-visible,
+.di2-sm-back:focus-visible,
+.di2-sm-go:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+body.di2-msg .di2-nav-btn:focus-visible,
+body.di2-msg .di2-cta:focus-visible,
+body.di2-msg .di2-score:focus-visible,
+body.di2-msg .di2-tab:focus-visible {
+  outline-color: #5aa4ff;
 }
 
 /* Separator */
@@ -15464,23 +15612,27 @@ body.di2-live.mortalive-app-topbar-visible #di2 { display: flex; }
 }
 #di2-search-slot.active { display: flex; }
 
-/* Override search wrap styles when inside island */
+/* Override search wrap styles when inside island.
+   No !important needed — #di2-search-slot .dynamic-island-search is an
+   ID-anchored selector (specificity 1,0,1,0), which already beats the
+   v165 module's plain .dynamic-island-search rule (0,0,1,0) and its
+   .is-focused variant (0,0,2,0) on source specificity alone. */
 #di2-search-slot .dynamic-island-search-wrap {
-  flex: 1 !important;
-  max-width: none !important;
-  margin: 0 !important;
+  flex: 1;
+  max-width: none;
+  margin: 0;
 }
 #di2-search-slot .dynamic-island-search {
-  border: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  border-radius: 0 !important;
-  padding: 0 8px !important;
-  transition: none !important;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0 8px;
+  transition: none;
 }
 #di2-search-slot .dynamic-island-search.is-focused {
-  transform: none !important;
-  box-shadow: none !important;
+  transform: none;
+  box-shadow: none;
 }
 
 /* ══ Right block: always visible ══════════════════════════ */
@@ -15793,6 +15945,26 @@ body.di2-msg #di2-mob-inp::placeholder { color:#4d6480; }
 body.di2-msg .di2-bot-go { background:#2b7fff; }
 @media (min-width:641px) {
   #di2-bot-tabs { display:flex; } #di2-bot-srch { display:none !important; }
+}
+
+/* ══ Reduced motion ═══════════════════════════════════════════
+   This component leans heavily on spring transforms (entrance drop,
+   width morph, logo rotate, icon swap, tab pop, badge pop, two looping
+   pulse animations). Users who've asked the OS for less motion still get
+   every state change instantly — nothing here is purely decorative, so
+   we drop duration to near-zero rather than hiding functionality. */
+@media (prefers-reduced-motion: reduce) {
+  #di2 { animation: none; }
+  .di2-pill,
+  .di2-pill * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .di2-pill.is-hovering .di2-logo { transform: none; }
+  .di2-tab.active .di2-tab-ico { transform: none; }
+  .di2-live-dot { animation: none; box-shadow: 0 0 0 0 rgba(22,163,74,.40); }
+  .di2-live-dot.msg { box-shadow: 0 0 0 0 rgba(59,130,246,.40); }
 }
 `;
 
@@ -16190,7 +16362,6 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     }
 
     _searchMoved = true;
-    console.log('[DI v179] Feed search bridged ✓');
   }
 
   /* ══════════════════════════════════════════════════════════
@@ -16302,6 +16473,25 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
         if (!_searchFocus) applyWidth(pill, 'rest');
         }, 2400);
     }, { passive: true });
+
+    /* Keyboard: Tab into any control inside the pill must expand it first —
+       otherwise focused nav buttons are opacity:0 and width-clipped by
+       .di2-mid's overflow:hidden, invisible to sighted keyboard users.
+       focusin/focusout bubble, so one pair of listeners on the pill covers
+       every button inside it. focusout checks relatedTarget so moving focus
+       between two buttons inside the pill doesn't collapse it mid-tab. */
+    pill.addEventListener('focusin', () => {
+      if (_searchFocus) return;
+      _isHovering = true;
+      pill.classList.add('is-hovering');
+      applyWidth(pill, 'hover');
+    });
+    pill.addEventListener('focusout', (e) => {
+      if (pill.contains(e.relatedTarget)) return; // focus moved to a sibling control — stay open
+      _isHovering = false;
+      pill.classList.remove('is-hovering');
+      if (!_searchMode) applyWidth(pill, 'rest');
+    });
   }
 
   /* ══════════════════════════════════════════════════════════
@@ -16486,7 +16676,6 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     /* Delayed observers (DOM might not have these elements yet) */
     setTimeout(() => { observeOnlineCount(); observeScore(); }, 700);
 
-    console.log('[DI v2] True Dynamic Island ready ✓');
   }
 
   /* Boot — wait for DOM, then add a small settle delay */
@@ -17119,7 +17308,6 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       st.pollTimer = setInterval(loadNotifications, POLL_MS);
     }
 
-    console.log(`[${TAG}] Notification center initialised for user ${session.userId}`);
   }
 
 
@@ -17145,7 +17333,6 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     getUnreadCount: () => st.unreadCount,
   };
 
-  console.log(`[${TAG}] Module registered — call window.notifCenter.init() after auth.`);
 
 })();
 
@@ -17200,5 +17387,4 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   //  for the recommended DB-trigger alternative.
   //  If you refactor addPostComment to window.addPostComment, wire it here.
 
-  console.log('[notif-v1] App hook patches applied.');
 })();
