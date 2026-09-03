@@ -10391,7 +10391,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 
 <style id="mortalive-v193-mobile-bottom-nav">
 @media (max-width:640px){
-  body.di2-live #di2-bot{
+  body.di2-live.di2-authenticated #di2-bot{
     display:flex !important;
     visibility:visible !important;
     opacity:1 !important;
@@ -10604,14 +10604,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
       <button type="button" class="btn btn-primary landing-continue" id="btn-enter" disabled aria-disabled="true">
         Continue
       </button>
-      <label class="consent-toggle" for="landing-age-consent">
-        <input id="landing-age-consent" type="checkbox" aria-label="Confirm you are 18 years of age or older">
-        <span class="consent-box" aria-hidden="true"></span>
-        <span class="consent-text">
-          <span class="consent-lead">I am 18 years of age or older.</span>
-        </span>
-      </label>
-      <label class="consent-toggle" for="landing-consent">
+<label class="consent-toggle" for="landing-consent">
         <input id="landing-consent" type="checkbox" aria-label="Agree to terms and privacy policy">
         <span class="consent-box" aria-hidden="true"></span>
         <span class="consent-text">
