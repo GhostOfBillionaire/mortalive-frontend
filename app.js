@@ -1294,19 +1294,12 @@ function setPrimaryButtonsEnabled(enabled) {
 }
 
 function updateConsentState() {
-  // Real <input type="checkbox" id="landing-consent"> used in the current HTML
+  // The landing page uses a single consent checkbox for the Terms and Privacy agreement.
   const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
-  const ageConfirm = $('landing-age-consent');
   const oldChecks = ['c1', 'c2', 'c3'].map((id) => $(id)).filter(Boolean);
 
   if (terms) {
-    // Age affirmation is required in addition to the terms/privacy agreement.
-    // NOTE: this is a client-side self-attestation checkbox, not verified age
-    // assurance — it stops nothing on its own. It MUST be paired with a
-    // server-side check (reject /api/signup and guest-session creation for
-    // any request lacking an age-confirmed flag) or it's cosmetic only.
-    const ageOk = !ageConfirm || !!ageConfirm.checked;
-    setPrimaryButtonsEnabled(!!terms.checked && ageOk);
+    setPrimaryButtonsEnabled(!!terms.checked);
     return;
   }
 
@@ -1322,18 +1315,12 @@ function updateConsentState() {
 // Landing Continue gating is intentionally owned by app.js only.
 function initConsentGate() {
   const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
-  const ageConfirm = $('landing-age-consent');
 
   if (terms) {
     const sync = () => updateConsentState();
     terms.addEventListener('change', sync);
     terms.addEventListener('input', sync);
     terms.addEventListener('click', sync);
-    if (ageConfirm) {
-      ageConfirm.addEventListener('change', sync);
-      ageConfirm.addEventListener('input', sync);
-      ageConfirm.addEventListener('click', sync);
-    }
     updateConsentState();
     return;
   }
@@ -15833,7 +15820,7 @@ body.di2-msg .di2-pill.search-on {
 
 /* Show only on mobile */
 @media (max-width: 640px) {
-  body.di2-live #di2-bot { display: flex !important; }
+  body.di2-live.di2-authenticated #di2-bot { display: flex !important; }
 }
 
 /* Messages dark bottom nav */
@@ -16524,7 +16511,8 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
 
     /* Auth state changes (login / logout) */
     window.addEventListener('mortalive-auth-state', () => {
-      setTimeout(() => { updateStatus(); const a = findActive(); if (a) setSection(a); }, 200);
+      syncBottomNavAuthVisibility();
+      setTimeout(() => { syncBottomNavAuthVisibility(); updateStatus(); const a = findActive(); if (a) setSection(a); }, 200);
     });
   }
 
@@ -16644,6 +16632,17 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   /* ══════════════════════════════════════════════════════════
     15.  INIT
   ══════════════════════════════════════════════════════════ */
+  function syncBottomNavAuthVisibility() {
+    // Bottom navigation is an authenticated-app control. Guests may still
+    // use the landing/auth/lobby Talk flow, but they must never see the
+    // authenticated mobile downbar. Keep the body class authoritative so
+    // all mobile visibility rules share one auth gate.
+    const authenticated = !S.isGuest && !!S.userId;
+    document.body.classList.toggle('di2-authenticated', authenticated);
+    const nav = document.getElementById('di2-bot');
+    if (nav) nav.setAttribute('aria-hidden', authenticated ? 'false' : 'true');
+  }
+
   function init() {
     /* CSS */
     const style = document.createElement('style');
@@ -16654,6 +16653,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     /* DOM */
     buildIsland();
     buildBottomNav();
+    syncBottomNavAuthVisibility();
 
     /* Signal that we're live — hides old topbar via CSS */
     document.body.classList.add('di2-live');
