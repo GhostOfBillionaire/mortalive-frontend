@@ -11,6 +11,70 @@ const BUILD_TAG = 'mortalive-build-2026-08-31-v194-mobile-minimal-topisland'; //
 // Shared typed numeric coercion for hot progress/engagement/follow paths.
 const toNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
 
+// ─────────────────────────────────────────────────────────────────────────
+// Security audit v48 — client-side rate limiting.
+//
+// Every place this file talks to the backend (REST fetch() calls and
+// socket.io emits) is throttled with a small sliding-window limiter below.
+//
+// IMPORTANT — read before relying on this: this only limits what runs
+// inside a well-behaved copy of this page. Anyone can call SERVER_URL's
+// REST/socket endpoints directly (curl, devtools, a modified client) and
+// skip this file entirely, so none of this is a substitute for real,
+// server-side rate limiting. Its job is narrower: stop this client from
+// accidentally flooding itself (stuck loops, held-down keys, rapid
+// clicks, reconnect storms) and give people fast, friendly feedback
+// ("slow down a bit") instead of silently hammering the network. Treat
+// every limit below as advisory — the backend at SERVER_URL must enforce
+// the authoritative limits.
+// ─────────────────────────────────────────────────────────────────────────
+const _rateLimitWindows = new Map();
+
+// Returns true and records a hit if `key` is still within (max hits per
+// windowMs); returns false without recording anything once the caller is
+// over budget, so the caller can decide to drop/queue/toast.
+function isRateLimited(key, max, windowMs) {
+  const now = Date.now();
+  let hits = _rateLimitWindows.get(key);
+  if (!hits) { hits = []; _rateLimitWindows.set(key, hits); }
+  while (hits.length && now - hits[0] > windowMs) hits.shift();
+  if (hits.length >= max) return true;
+  hits.push(now);
+  return false;
+}
+
+// Per-action budgets. Chat/typing/queue are tuned to what a real person
+// can trigger by hand; 'signal' (WebRTC offer/answer/ICE candidates) is
+// deliberately generous because a single legitimate call setup can fire
+// many ICE candidates in a fast burst — this is only meant to catch a
+// runaway loop, not normal call negotiation.
+const RATE_LIMITS = {
+  chat:              { max: 6,  windowMs: 10000 },  // outgoing chat + quick-reply taps
+  typing:             { max: 12, windowMs: 10000 },
+  queue:              { max: 1,  windowMs: 1500  },  // join/re-announce to matchmaking
+  leaveQueue:         { max: 4,  windowMs: 5000  },  // 'leave' / 'cancel-queue'
+  signal:             { max: 80, windowMs: 5000  },  // offer/answer/ICE candidates combined
+  log:                { max: 15, windowMs: 10000 },  // /api/log
+  snapshot:           { max: 2,  windowMs: 2000  },  // /api/snapshot (moderation frames)
+  presence:           { max: 1,  windowMs: 3000  },  // /api/presence
+  syntheticVideos:    { max: 6,  windowMs: 10000 },  // /api/synthetic-videos
+  deleteAccount:      { max: 3,  windowMs: 60000 }   // /api/delete-account
+};
+
+// Shared helper for socket emits: checks the limiter, emits if allowed,
+// and returns whether it actually sent. `notify` shows a small toast the
+// first time a given key gets throttled so it's not a silent no-op.
+function emitLimited(event, payload, limitKey = event, notify = false) {
+  const cfg = RATE_LIMITS[limitKey];
+  if (cfg && isRateLimited(limitKey, cfg.max, cfg.windowMs)) {
+    if (notify) toast('Slow down a little — try again in a moment.', '⏳');
+    return false;
+  }
+  if (!S.socket || !S.socket.connected) return false;
+  S.socket.emit(event, payload);
+  return true;
+}
+
 const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
   (location.hostname === 'localhost'
@@ -1122,6 +1186,7 @@ function samplePresenceNumber(previous = PRESENCE_MODEL.center) {
 async function fetchPresenceSource() {
   try {
     if (!SERVER_URL) return null;
+    if (isRateLimited('presence', RATE_LIMITS.presence.max, RATE_LIMITS.presence.windowMs)) return null;
     const res = await fetch(`${SERVER_URL}/api/presence`, { cache: 'no-store' });
     if (!res.ok) return null;
     const payload = await res.json();
@@ -1435,6 +1500,40 @@ function requestCameraPermission() {
 // Secret values (service-role/admin/TURN credentials) remain server-side.
 let sb = window.sb || null;
 let _publicConfigPromise = null;
+
+// ── Runtime ICE/TURN configuration ─────────────────────────────────────────
+// Security/audit follow-up: the backend exposes ICE_SERVERS_JSON through a
+// separate no-store endpoint so TURN credentials never enter the cacheable
+// /api/public-config response. Keep the existing STUN list as a safe fallback
+// if the endpoint is unavailable or returns malformed data.
+async function loadRuntimeIceServers() {
+  try {
+    if (!SERVER_URL) return;
+    const res = await fetch(`${SERVER_URL.replace(/\/$/, '')}/api/ice-servers`, {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'omit',
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!res.ok) throw new Error(`ICE server request failed (${res.status})`);
+    const payload = await res.json();
+    if (!Array.isArray(payload?.iceServers)) throw new Error('ICE server response is malformed.');
+
+    const iceServers = payload.iceServers.filter((server) => {
+      return server && typeof server === 'object' &&
+        (typeof server.urls === 'string' || Array.isArray(server.urls));
+    });
+
+    if (iceServers.length) {
+      ICE_CONFIG = { iceServers };
+      console.log(`[Mortalive] Loaded ${iceServers.length} runtime ICE server entr${iceServers.length === 1 ? 'y' : 'ies'} ✓`);
+    } else {
+      console.warn('[Mortalive] /api/ice-servers returned no usable entries; keeping STUN fallback.');
+    }
+  } catch (error) {
+    console.warn('[Mortalive] Runtime ICE/TURN config unavailable; keeping STUN fallback:', error?.message || error);
+  }
+}
 
 async function loadPublicRuntimeConfig() {
   if (_publicConfigPromise) return _publicConfigPromise;
@@ -2897,7 +2996,9 @@ function initSocket() {
   }
 
   if (S.socket && S.socket.connected) {
-    S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
+    if (!isRateLimited('queue', RATE_LIMITS.queue.max, RATE_LIMITS.queue.windowMs)) {
+      S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
+    }
     return;
   }
 
@@ -2918,13 +3019,14 @@ function initSocket() {
     // lobby would silently throw the user back into search.
     const onMatchingScreen = $('pg-match')?.classList.contains('active');
     if (S.matched || !onMatchingScreen) return;
+    if (isRateLimited('queue', RATE_LIMITS.queue.max, RATE_LIMITS.queue.windowMs)) return;
     S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
   });
 
   S.socket.on('matched', async (data) => {
     if (S.syntheticActive) {
       console.warn('[Talk] Ignoring real-user match while synthetic playback is active.');
-      try { S.socket?.emit('leave', { roomId: data.roomId }); } catch (_) {}
+      try { if (!isRateLimited('leaveQueue', RATE_LIMITS.leaveQueue.max, RATE_LIMITS.leaveQueue.windowMs)) S.socket?.emit('leave', { roomId: data.roomId }); } catch (_) {}
       return;
     }
     clearMatchResumeIntent();
@@ -2966,7 +3068,9 @@ function initSocket() {
         S.pendingCandidates = [];
         const answer = await S.pc.createAnswer();
         await S.pc.setLocalDescription(answer);
-        S.socket.emit('signal', { roomId: S.roomId, type: answer.type, sdp: answer.sdp });
+        if (!isRateLimited('signal', RATE_LIMITS.signal.max, RATE_LIMITS.signal.windowMs)) {
+          S.socket.emit('signal', { roomId: S.roomId, type: answer.type, sdp: answer.sdp });
+        }
       } else if (data.type === 'answer') {
         await S.pc.setRemoteDescription(new RTCSessionDescription(data));
         for (const c of S.pendingCandidates) {
@@ -3070,12 +3174,14 @@ function startMatchQueueHeartbeat() {
     }
     if (S.socket?.connected) {
       try {
-        S.socket.emit('queue', {
-          mode: S.mode === 'video' ? 'video' : 'text',
-          pref: S.interest,
-          token: S.authToken,
-          guestName: S.guestName
-        });
+        if (!isRateLimited('queue', RATE_LIMITS.queue.max, RATE_LIMITS.queue.windowMs)) {
+          S.socket.emit('queue', {
+            mode: S.mode === 'video' ? 'video' : 'text',
+            pref: S.interest,
+            token: S.authToken,
+            guestName: S.guestName
+          });
+        }
       } catch (_) {}
     }
   }, 5000);
@@ -3114,7 +3220,7 @@ function startRealUserCheckTimer(checkDurationMs = 30 * 1000, onTimeout = null) 
       return;
     }
     if (S.socket?.connected) {
-      try { S.socket.emit('queue', { mode: S.mode === 'video' ? 'video' : 'text', pref: S.interest, token: S.authToken, guestName: S.guestName }); } catch (_) {}
+      try { if (!isRateLimited('queue', RATE_LIMITS.queue.max, RATE_LIMITS.queue.windowMs)) S.socket.emit('queue', { mode: S.mode === 'video' ? 'video' : 'text', pref: S.interest, token: S.authToken, guestName: S.guestName }); } catch (_) {}
       startMatchQueueHeartbeat();
     }
   }, duration);
@@ -3226,12 +3332,14 @@ function startMatching() {
   // Re-announce the exact active mode. Never hard-code text during video Talk.
   if (S.socket?.connected && !S.matched) {
     try {
-      S.socket.emit('queue', {
-        mode: requestedMode,
-        pref: S.interest,
-        token: S.authToken,
-        guestName: S.guestName
-      });
+      if (!isRateLimited('queue', RATE_LIMITS.queue.max, RATE_LIMITS.queue.windowMs)) {
+        S.socket.emit('queue', {
+          mode: requestedMode,
+          pref: S.interest,
+          token: S.authToken,
+          guestName: S.guestName
+        });
+      }
     } catch (_) {}
   }
 
@@ -3250,7 +3358,7 @@ function startMatching() {
 
 function removeFromQueueSafely() {
   if (S.socket && S.socket.connected) {
-    try { S.socket.emit('leave', { roomId: S.roomId }); } catch (e) {}
+    try { if (!isRateLimited('leaveQueue', RATE_LIMITS.leaveQueue.max, RATE_LIMITS.leaveQueue.windowMs)) S.socket.emit('leave', { roomId: S.roomId }); } catch (e) {}
   }
 }
 
@@ -3332,12 +3440,14 @@ async function startWebRTC() {
 
     S.pc.onicecandidate = ({ candidate }) => {
       if (candidate && S.socket && S.socket.connected) {
-        S.socket.emit('signal', {
-          roomId: S.roomId,
-          candidate: candidate.candidate,
-          sdpMid: candidate.sdpMid,
-          sdpMLineIndex: candidate.sdpMLineIndex
-        });
+        if (!isRateLimited('signal', RATE_LIMITS.signal.max, RATE_LIMITS.signal.windowMs)) {
+          S.socket.emit('signal', {
+            roomId: S.roomId,
+            candidate: candidate.candidate,
+            sdpMid: candidate.sdpMid,
+            sdpMLineIndex: candidate.sdpMLineIndex
+          });
+        }
       }
     };
 
@@ -3357,7 +3467,9 @@ async function startWebRTC() {
     if (S.isInitiator) {
       const offer = await S.pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: true });
       await S.pc.setLocalDescription(offer);
-      if (S.socket) S.socket.emit('signal', { roomId: S.roomId, type: offer.type, sdp: offer.sdp });
+      if (S.socket && !isRateLimited('signal', RATE_LIMITS.signal.max, RATE_LIMITS.signal.windowMs)) {
+        S.socket.emit('signal', { roomId: S.roomId, type: offer.type, sdp: offer.sdp });
+      }
     }
   } catch (err) {
     console.error('[WebRTC]', err);
@@ -3415,6 +3527,9 @@ function monitorQuality() {
 
 async function fetchSyntheticVideoBatch(limit = 1, excludeIds = []) {
   try {
+    if (isRateLimited('syntheticVideos', RATE_LIMITS.syntheticVideos.max, RATE_LIMITS.syntheticVideos.windowMs)) {
+      return [];
+    }
     const params = new URLSearchParams({ limit: String(Math.min(20, Math.max(1, Number(limit) || 1))) });
     const exclusions = Array.from(new Set((Array.isArray(excludeIds) ? excludeIds : []).map(String))).slice(-40);
     if (exclusions.length) params.set('exclude', exclusions.join(','));
@@ -3471,7 +3586,7 @@ async function beginSyntheticMatch() {
   // queue before playback so a newly arriving person cannot be paired into
   // this synthetic session in the background.
   if (S.socket?.connected) {
-    try { S.socket.emit('cancel-queue'); } catch (_) {}
+    try { if (!isRateLimited('leaveQueue', RATE_LIMITS.leaveQueue.max, RATE_LIMITS.leaveQueue.windowMs)) S.socket.emit('cancel-queue'); } catch (_) {}
   }
 
   // Fetch a new batch of up to 6 when the current one is exhausted.
@@ -3995,6 +4110,14 @@ function sendMsg() {
   const text = inp.value.trim();
   if (!text) return;
 
+  // Rate-limited: bail before clearing/showing/logging so a busy budget
+  // never eats a message the peer never actually received. Draft stays
+  // in the box so nothing typed is lost.
+  if (isRateLimited('chat', RATE_LIMITS.chat.max, RATE_LIMITS.chat.windowMs)) {
+    toast('Sending too fast — give it a second.', '⏳');
+    return;
+  }
+
   inp.value = '';
   // V138: Clear typing when message is sent
   clearTimeout(S.typingIndicatorTimerId);
@@ -4011,6 +4134,7 @@ function sendMsg() {
 // V138: Typing indicator functions
 function emitTypingStatus(isTyping) {
   if (S.socket && S.socket.connected && S.roomId) {
+    if (isRateLimited('typing', RATE_LIMITS.typing.max, RATE_LIMITS.typing.windowMs)) return;
     S.socket.emit('typing', { roomId: S.roomId, isTyping });
   }
 }
@@ -4052,7 +4176,9 @@ function disconnectPeer() {
 
   if (S.socket) {
     try {
-      S.socket.emit('leave', { roomId: S.roomId });
+      if (!isRateLimited('leaveQueue', RATE_LIMITS.leaveQueue.max, RATE_LIMITS.leaveQueue.windowMs)) {
+        S.socket.emit('leave', { roomId: S.roomId });
+      }
     } catch (e) {}
   }
 
@@ -4092,6 +4218,7 @@ function disconnectPeer() {
 }
 
 function logSession(event, data) {
+  if (isRateLimited('log', RATE_LIMITS.log.max, RATE_LIMITS.log.windowMs)) return;
   fetch(`${SERVER_URL}/api/log`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -4134,6 +4261,11 @@ function captureFrame(videoEl) {
 
 function sendSnapshot(source, dataUrl) {
   if (!dataUrl || !SERVER_URL) return;
+  // Was previously uncapped — the connected-call capture loop alone could
+  // fire this several times a second. Capped to ~1/sec sustained, which
+  // still keeps moderation sampling fresh without uploading a near-video
+  // stream of frames for every call.
+  if (isRateLimited('snapshot', RATE_LIMITS.snapshot.max, RATE_LIMITS.snapshot.windowMs)) return;
 
   const snapshotRoomId =
     S.roomId ||
@@ -4477,6 +4609,11 @@ ready(async () => {
     toast('Some account features are temporarily unavailable. Please try again shortly.', '⚠️');
   }
 
+  // Fetch TURN/STUN runtime configuration before any Talk session can create
+  // its RTCPeerConnection. Failure is non-fatal: the built-in public STUN
+  // fallback remains available so existing WebRTC behavior is preserved.
+  await loadRuntimeIceServers();
+
   stabilizeProfileScrollAxes();
   // Hard maximum: the branded splash can never remain on screen longer than
   // 4.5 seconds, even if Supabase/Auth routing hangs unexpectedly. The normal
@@ -4665,7 +4802,9 @@ ready(async () => {
     if (!onMatchingScreen || S.matched) return;
 
     if (S.socket.connected) {
-      S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
+      if (!isRateLimited('queue', RATE_LIMITS.queue.max, RATE_LIMITS.queue.windowMs)) {
+        S.socket.emit('queue', { mode: S.mode, pref: S.interest, token: S.authToken, guestName: S.guestName });
+      }
     } else {
       S.socket.connect();
       // The 'connect' handler above will re-emit 'queue' once it lands.
@@ -9907,6 +10046,10 @@ async function performAccountDeletion() {
     toast('Your session has expired. Please sign in again.', '🔒');
     return;
   }
+  if (isRateLimited('deleteAccount', RATE_LIMITS.deleteAccount.max, RATE_LIMITS.deleteAccount.windowMs)) {
+    toast('Please wait a moment before trying again.', '⏳');
+    return;
+  }
 
   // Account deletion is intentionally a single server-side transaction.
   // The browser no longer performs partial row deletes before Auth deletion.
@@ -10519,6 +10662,12 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
       const btn = e.target.closest('.chat-rx-btn');
       if (!btn) return;
       const emoji = btn.textContent.trim();
+
+      // Shares the 'chat' rate-limit budget with the main message box.
+      if (isRateLimited('chat', RATE_LIMITS.chat.max, RATE_LIMITS.chat.windowMs)) {
+        toast('Sending too fast — give it a second.', '⏳');
+        return;
+      }
 
       /* Floating animation from button position */
       const rect = btn.getBoundingClientRect();
