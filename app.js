@@ -960,6 +960,18 @@ function showPage(id, options = {}) {
     id = 'pg-auth';
     setTimeout(() => { $('tab-login')?.click(); }, 0);
   }
+
+  // ── Bug fix: authenticated users must never land on the auth form ──────
+  // The permission page's back button, the lobby's back button, and various
+  // logout-redirect paths all used to target pg-auth. If a session is alive,
+  // intercept: send them to the landing page instead (or pg-lobby if they've
+  // already been past landing). pg-land is always safe — it shows a "you're
+  // already in" state when a session is detected.
+  const isAuthenticated = !S.isGuest && !!S.authToken;
+  if (id === 'pg-auth' && isAuthenticated) {
+    id = 'pg-land';
+  }
+
   if (!TALK_PAGE_IDS.has(id)) {
     console.warn('[Mortalive] Blocked navigation to non-Talk page:', id);
     return;
@@ -971,12 +983,38 @@ function showPage(id, options = {}) {
   window.dispatchEvent(new CustomEvent('mortalive-auth-state'));
   if (id !== 'pg-profile') closeProgressSheet();
 
+  // ── Body class flags for mobile bottom nav visibility (Bug fix) ─────────
+  // v193 CSS uses body.di2-on-landing / body.di2-on-auth to hide the nav on
+  // non-app pages. Using class flags avoids :has(#id) selectors whose ID
+  // specificity (1,x,x) would outrank the authenticated show rule (0,2,x).
+  document.body.classList.toggle('di2-on-landing', id === 'pg-land');
+  document.body.classList.toggle('di2-on-auth',    id === 'pg-auth');
+
   if (id === 'pg-lobby') {
     const backBtn = $('pg-lobby')?.querySelector('.setup-back');
     if (backBtn) {
-      backBtn.style.display = (!S.isGuest && !!S.authToken) ? 'none' : '';
+      // Authenticated users don't need a back button — they're already home.
+      // Hide it entirely so there's no path back to the auth form.
+      backBtn.style.display = isAuthenticated ? 'none' : '';
     }
     if (typeof refreshLobbyStats === 'function') refreshLobbyStats();
+  }
+
+  if (id === 'pg-perm') {
+    // Permission page back button: guests go back to auth form to choose login
+    // or continue as guest; logged-in users go back to the lobby.
+    const permBackBtn = $('pg-perm')?.querySelector('.setup-back');
+    if (permBackBtn) {
+      permBackBtn.dataset.target = isAuthenticated ? 'pg-lobby' : 'pg-auth';
+    }
+  }
+
+  if (id === 'pg-match') {
+    // Match/search page back button: same logic as perm.
+    const matchBackBtn = $('pg-match')?.querySelector('.setup-back');
+    if (matchBackBtn) {
+      matchBackBtn.dataset.target = isAuthenticated ? 'pg-lobby' : 'pg-auth';
+    }
   }
 
   if (id === 'pg-profile') {
