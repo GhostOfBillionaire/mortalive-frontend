@@ -1638,6 +1638,54 @@ async function lookupUserByUsername(username) {
   }
 }
 
+// Auth tab hardening: keep the three-way auth switch functional even if a later
+// startup feature throws before initAuthControls() completes. This is intentionally
+// independent of the full auth controller and removes the same u-hidden/display
+// conflict that previously made Guest and Sign up appear blank.
+function initAuthTabFallback() {
+  if (document.documentElement.dataset.mortaliveAuthTabFallback === '1') return;
+  document.documentElement.dataset.mortaliveAuthTabFallback = '1';
+
+  const sync = (which) => {
+    const forms = {
+      guest: $('auth-guest-form'),
+      login: $('auth-login-form'),
+      signup: $('auth-signup-form')
+    };
+    const tabs = {
+      guest: $('tab-guest'),
+      login: $('tab-login'),
+      signup: $('tab-signup')
+    };
+
+    Object.entries(forms).forEach(([key, form]) => {
+      if (!form) return;
+      const visible = key === which;
+      form.classList.toggle('u-hidden', !visible);
+      form.style.display = visible ? '' : 'none';
+    });
+
+    Object.entries(tabs).forEach(([key, tab]) => {
+      if (tab) tab.classList.toggle('active', key === which);
+    });
+  };
+
+  document.addEventListener('click', (event) => {
+    const tab = event.target.closest?.('#tab-guest, #tab-login, #tab-signup');
+    if (!tab) return;
+    const which = tab.id === 'tab-guest' ? 'guest' : tab.id === 'tab-signup' ? 'signup' : 'login';
+    sync(which);
+  }, true);
+
+  // Preserve the established Login-first presentation; only normalize the
+  // current state if an auth form was already selected before this fallback ran.
+  const activeTab = document.querySelector('#tab-guest.active, #tab-login.active, #tab-signup.active');
+  if (activeTab) {
+    const which = activeTab.id === 'tab-guest' ? 'guest' : activeTab.id === 'tab-signup' ? 'signup' : 'login';
+    sync(which);
+  }
+}
+
 function initAuthControls() {
   const tabGuest  = $('tab-guest');
   const tabLogin  = $('tab-login');
@@ -4759,6 +4807,7 @@ ready(async () => {
   startOnlineCounter();
   initConsentGate();
   initLandingActions();
+  initAuthTabFallback();
   initAuthControls();
   initSetupBackButtons();
   initPermissionControls();
