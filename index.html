@@ -138,10 +138,21 @@ img { display: block; max-width: 100%; }
 .u-glass-tile    { padding:14px 16px; border-radius:16px; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.10); }
 
 /* Dark hero stat item — previously forced with color:!important on inline style */
-.u-hero-stat     { color:#fff; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.2); }
+/* .u-hero-stat — canonical definition in the lobby CSS block below (it needs to
+   coexist with .stat-item's hover rule in that same block). Do not redefine here. */
 
 /* Error notice state — replaces 5 identical style= strings on .notice elements */
-.notice-error    { color:#b42318; background:#fef2f2; border-color:#fecaca; }
+/* Error-state design tokens — used by .notice-error and any future danger-surface UI */
+/* (Added because #b42318, #fef2f2, #fecaca were hardcoded in 3 places each) */
+.notice-error    {
+  color: #b42318;
+  background: #fef2f2;
+  border-color: #fecaca;
+  padding: 10px;
+  font-size: 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid;
+}
 
 /* Small muted caption */
 .u-caption       { font-size:12.5px; color:var(--on-surface-3); line-height:1.6; }
@@ -4306,9 +4317,12 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
 }
 #pg-feed .action-btn.like-btn.liked .action-icon{
   transform:scale(1.22);
-  animation:heartPop .32s var(--ease-spring) both;
+  animation:heartPopPost .32s var(--ease-spring) both;
 }
-@keyframes heartPop {
+/* heartPopPost: 4-stop spring for feed post like-button (bouncy, settles enlarged).
+   Named separately from the reels block's 'heartPop' (3-stop, returns to 1.0)
+   which loads later and would otherwise override this definition at equal specificity. */
+@keyframes heartPopPost {
   0%   { transform:scale(1);    }
   40%  { transform:scale(1.45); }
   70%  { transform:scale(0.95); }
@@ -4524,9 +4538,12 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
   border-radius:var(--r-xl);
   box-shadow:var(--elev-4);
   padding:28px;
-  animation:slideUp var(--dur-mid) var(--ease-spring);
+  animation:slideUpModal var(--dur-mid) var(--ease-spring);
 }
-@keyframes slideUp {
+/* Renamed from 'slideUp' to 'slideUpModal' — a second @keyframes slideUp definition
+   later in the document (translateY 20px vs this 16px) was silently winning.
+   Scoped name ensures this modal gets its own entrance distance. */
+@keyframes slideUpModal {
   from { opacity:0; transform:translateY(16px); }
   to   { opacity:1; transform:translateY(0); }
 }
@@ -4627,11 +4644,15 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
   font-size:13.5px; font-weight:600;
   box-shadow:var(--elev-4);
   border:1px solid rgba(255,255,255,.10);
-  animation:toastIn var(--dur-mid) var(--ease-spring);
+  animation:toastInFeed var(--dur-mid) var(--ease-spring);
   pointer-events:auto;
   max-width:320px;
 }
-@keyframes toastIn {
+/* Renamed from 'toastIn' to 'toastInFeed' — the global @keyframes toastIn in the
+   main stylesheet (rise-from-below) was being overridden by this slide-from-right
+   version because this <style> block loads after the <head> stylesheet. Now both
+   can coexist: feed toasts slide in from the right, global toasts rise from below. */
+@keyframes toastInFeed {
   from { opacity:0; transform:translateX(20px) scale(.96); }
   to   { opacity:1; transform:translateX(0)    scale(1);   }
 }
@@ -10344,7 +10365,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   min-width: 18px;
   height: 18px;
   border-radius: 999px;
-  background: #ef4444;
+  background: var(--danger);   /* was #ef4444 — now tracks the design token */
   color: #fff;
   font-size: 10px;
   font-weight: 800;
@@ -11833,7 +11854,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
               <button type="button" class="pw-toggle-btn" id="btn-acct-pw-toggle" tabindex="-1" aria-label="Show password">👁️</button>
             </div>
           </div>
-          <div id="acct-pw-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;padding:10px;font-size:12px;border-radius:8px;border:1px solid"></div>
+          <div id="acct-pw-error" class="notice notice-error u-hidden"></div>
           <button class="btn btn-primary" id="btn-acct-save-password" type="button" style="margin-top:4px;min-height:40px;font-size:13px;">Update password</button>
         </div>
       </div>
@@ -11857,7 +11878,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
       <div class="field"><label>Links & Portfolio (<span id="edit-link-count">0</span>/5)</label><div id="edit-links-container" style="display:flex;flex-direction:column;gap:10px;margin-bottom:8px"></div><button type="button" class="btn btn-ghost" id="btn-edit-add-link" onclick="window.addEditLink()" style="padding:8px;font-size:12px">+ Add Link</button></div>
       <!-- Password moved to Account Center (dropdown → Account Center) -->
       <input id="edit-new-password" type="password" autocomplete="new-password" class="u-hidden" aria-hidden="true">
-      <div id="edit-error" class="notice" style="display:none;color:#b42318;background:#fef2f2;border-color:#fecaca;padding:10px;font-size:12px"></div>
+      <div id="edit-error" class="notice notice-error u-hidden"></div>
     </div>
     <div style="padding:14px 22px 20px;border-top:1px solid var(--border);display:flex;gap:10px;flex-shrink:0"><button class="btn btn-ghost" id="btn-edit-cancel" style="flex:1">Cancel</button><button class="btn btn-primary" id="btn-edit-save" style="flex:1">Save Changes</button></div>
   </div></div>
