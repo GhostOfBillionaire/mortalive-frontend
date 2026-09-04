@@ -1675,6 +1675,13 @@ function initAuthTabFallback() {
     if (!tab) return;
     const which = tab.id === 'tab-guest' ? 'guest' : tab.id === 'tab-signup' ? 'signup' : 'login';
     sync(which);
+    window.setTimeout(() => {
+      const active = document.querySelector('#tab-guest.active, #tab-login.active, #tab-signup.active');
+      const activeWhich = active
+        ? (active.id === 'tab-guest' ? 'guest' : active.id === 'tab-signup' ? 'signup' : 'login')
+        : which;
+      sync(activeWhich);
+    }, 0);
   }, true);
 
   // Preserve the established Login-first presentation; only normalize the
@@ -10998,9 +11005,11 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
     if ($('pg-lobby')?.classList.contains('active')) refreshLobbyStats();
   }, 9000);
 
-  /* ── Auth state hook (app.js fires this after login/logout) ────────────── */
+  /* ── Auth state hook (app.js fires this after login/logout/navigation) ─── */
   window.addEventListener('mortalive-auth-state', () => {
+    syncBottomNavAuthVisibility();
     setTimeout(() => {
+      syncBottomNavAuthVisibility();
       refreshLobbyStats();
       refreshLiveBar();
       if ($('pg-profile')?.classList.contains('active')) renderProfileTalkStats();
@@ -16708,6 +16717,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     /* DOM */
     buildIsland();
     buildBottomNav();
+    syncBottomNavAuthVisibility();
     syncBottomNavAuthVisibility();
 
     /* Signal that we're live — hides old topbar via CSS */
