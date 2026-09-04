@@ -1665,21 +1665,27 @@ function initAuthControls() {
   // exact same sign-in a second time.
   let _suppressAutoSignedIn = false;
 
+  function setAuthFormVisible(form, visible) {
+    if (!form) return;
+    form.classList.toggle('u-hidden', !visible);
+    form.style.display = visible ? '' : 'none';
+  }
+
   function hideForgotFlow() {
     clearInterval(_resendCooldownTimer);
     _otpContext = null;
     _pendingResetUser = null;
     _pendingSignupPassword = null;
-    if (forgotForm) forgotForm.style.display = 'none';
-    if (otpForm)    otpForm.style.display    = 'none';
-    if (resetForm)  resetForm.style.display  = 'none';
+    setAuthFormVisible(forgotForm, false);
+    setAuthFormVisible(otpForm, false);
+    setAuthFormVisible(resetForm, false);
   }
 
   function showAuthTab(which) {
     hideForgotFlow();
-    if (guestForm)  guestForm.style.display  = which === 'guest'  ? '' : 'none';
-    if (loginForm)  loginForm.style.display  = which === 'login'  ? '' : 'none';
-    if (signupForm) signupForm.style.display = which === 'signup' ? '' : 'none';
+    setAuthFormVisible(guestForm, which === 'guest');
+    setAuthFormVisible(loginForm, which === 'login');
+    setAuthFormVisible(signupForm, which === 'signup');
     tabGuest?.classList.toggle('active',  which === 'guest');
     tabLogin?.classList.toggle('active',  which === 'login');
     tabSignup?.classList.toggle('active', which === 'signup');
@@ -2009,8 +2015,8 @@ function initAuthControls() {
 
   // ── Forgot password: show the "request a code" step ──
   $('btn-forgot')?.addEventListener('click', () => {
-    if (loginForm) loginForm.style.display = 'none';
-    if (forgotForm) forgotForm.style.display = '';
+    setAuthFormVisible(loginForm, false);
+    setAuthFormVisible(forgotForm, true);
     setError('forgot-error', null);
     const forgotEmail = $('forgot-email');
     const loginEmail  = $('login-email');
@@ -2054,12 +2060,12 @@ function initAuthControls() {
   });
 
   function showOtpStep(email) {
-    if (guestForm)  guestForm.style.display  = 'none';
-    if (loginForm)  loginForm.style.display  = 'none';
-    if (signupForm) signupForm.style.display = 'none';
-    if (forgotForm) forgotForm.style.display = 'none';
-    if (otpForm)    otpForm.style.display    = '';
-    if (resetForm)  resetForm.style.display  = 'none';
+    setAuthFormVisible(guestForm, false);
+    setAuthFormVisible(loginForm, false);
+    setAuthFormVisible(signupForm, false);
+    setAuthFormVisible(forgotForm, false);
+    setAuthFormVisible(otpForm, true);
+    setAuthFormVisible(resetForm, false);
     const display = $('otp-email-display');
     if (display) display.textContent = `Code sent to ${email}`;
     setError('otp-error', null);
@@ -2154,8 +2160,8 @@ function initAuthControls() {
       // pick a new password instead of logging straight in.
       clearInterval(_resendCooldownTimer);
       _pendingResetUser = { user, session };
-      if (otpForm)   otpForm.style.display   = 'none';
-      if (resetForm) resetForm.style.display = '';
+      setAuthFormVisible(otpForm, false);
+      setAuthFormVisible(resetForm, true);
       setError('reset-error', null);
       const pw = $('reset-password');
       if (pw) { pw.value = ''; pw.focus(); }
@@ -2205,13 +2211,13 @@ function initAuthControls() {
     _otpContext = null;
     _pendingResetUser = null;
     _pendingSignupPassword = null;
-    if (otpForm) otpForm.style.display = 'none';
+    setAuthFormVisible(otpForm, false);
     if (source === 'login') {
-      if (loginForm) loginForm.style.display = '';
+      setAuthFormVisible(loginForm, true);
     } else if (mode === 'signup') {
-      if (signupForm) signupForm.style.display = '';
+      setAuthFormVisible(signupForm, true);
     } else {
-      if (forgotForm) forgotForm.style.display = '';
+      setAuthFormVisible(forgotForm, true);
     }
   });
 
