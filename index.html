@@ -10468,11 +10468,29 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   users on those pages. Class-based flags stay at (0,1,x) specificity.
 */
 @media (max-width:640px){
-  /* Hide on landing and auth pages regardless of login state */
+  /* Default: the mobile app nav is hidden unless runtime explicitly marks
+     the authenticated app navigation as visible. */
+  body.di2-app-nav-hidden #di2-bot {
+    display:none !important;
+    visibility:hidden !important;
+    opacity:0 !important;
+    pointer-events:none !important;
+  }
+  body.di2-app-nav-visible #di2-bot {
+    display:flex !important;
+    visibility:visible !important;
+    opacity:1 !important;
+    pointer-events:auto !important;
+  }
+
+  /* Landing/auth remain hard-hidden even if a stale auth-visible class
+     survives a fast navigation transition. */
   body.di2-on-landing #di2-bot,
   body.di2-on-auth    #di2-bot {
     display:none !important;
     visibility:hidden !important;
+    opacity:0 !important;
+    pointer-events:none !important;
   }
 
   /* Tab strip always visible when the nav bar itself is visible */
