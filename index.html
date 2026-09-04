@@ -10442,23 +10442,40 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 
 
 <style id="mortalive-v193-mobile-bottom-nav">
+/*
+  MOBILE BOTTOM NAV VISIBILITY
+  ─────────────────────────────────────────────────────────────────────────
+  Base rule (in app.js CSS injected to <head>):
+    @media (max-width:640px) {
+      body.di2-live.di2-authenticated #di2-bot { display:flex !important; }
+    }
+  That is the ONLY rule that shows the nav. Everything below is a hide-only
+  layer that suppresses it on specific non-app pages.
+
+  We do NOT set a blanket body.di2-live hide here because:
+   (a) the base rule already defaults #di2-bot to display:none
+   (b) adding a blanket hide with lower specificity than the authenticated
+       rule would be safe in theory but caused a cascade fight in practice
+       because the page-specific :has() rules carry ID specificity (1,x,x)
+       which beats the class-only authenticated rule (0,2,x) — so an
+       authenticated user on pg-land would correctly see it hidden but the
+       blanket hide would also block the re-show on app pages.
+
+  LANDING + AUTH pages: use body.di2-on-landing and body.di2-on-auth
+  classes — set by JS in showPage() — instead of :has() selectors.
+  Reason: :has() with an ID argument gives specificity (1,1,0) which
+  outranks (0,2,2) authenticated rule, causing it to win even for logged-in
+  users on those pages. Class-based flags stay at (0,1,x) specificity.
+*/
 @media (max-width:640px){
-  body.di2-live #di2-bot{
+  /* Hide on landing and auth pages regardless of login state */
+  body.di2-on-landing #di2-bot,
+  body.di2-on-auth    #di2-bot {
     display:none !important;
     visibility:hidden !important;
-    opacity:0 !important;
   }
-  body:has(#pg-land.active) #di2-bot,
-  body:has(#pg-auth.active) #di2-bot{
-    display:none !important;
-    visibility:hidden !important;
-    opacity:0 !important;
-  }
-  body.di2-live.di2-authenticated #di2-bot{
-    display:flex !important;
-    visibility:visible !important;
-    opacity:1 !important;
-  }
+
+  /* Tab strip always visible when the nav bar itself is visible */
   body.di2-live #di2-bot-tabs{
     display:flex !important;
   }
@@ -10519,7 +10536,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 </style>
 
 </head>
-<body>
+<body class="di2-on-landing">
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
 <div id="mortalive-startup-splash" aria-label="Loading Mortalive" role="status" aria-live="polite">
   <div class="startup-splash-inner">
