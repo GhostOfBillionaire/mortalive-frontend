@@ -1068,7 +1068,38 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
   flex-wrap: wrap;
 }
 
-/* ── Auth page ──────────────────────────────────────── */
+/* ── Auth tab/form visibility contract ─────────────────
+   The selected auth tab is the final visual source of truth. This prevents
+   a stale inline display or u-hidden class from leaving Login visible while
+   Guest/Sign-up is selected. JS still manages the same state for behavior. */
+.auth-tabs:has(#tab-guest.active) ~ #auth-guest-form {
+  display: block !important;
+  visibility: visible !important;
+}
+.auth-tabs:has(#tab-guest.active) ~ #auth-login-form,
+.auth-tabs:has(#tab-guest.active) ~ #auth-signup-form {
+  display: none !important;
+  visibility: hidden !important;
+}
+.auth-tabs:has(#tab-login.active) ~ #auth-guest-form,
+.auth-tabs:has(#tab-login.active) ~ #auth-signup-form {
+  display: none !important;
+  visibility: hidden !important;
+}
+.auth-tabs:has(#tab-login.active) ~ #auth-login-form {
+  display: block !important;
+  visibility: visible !important;
+}
+.auth-tabs:has(#tab-signup.active) ~ #auth-guest-form,
+.auth-tabs:has(#tab-signup.active) ~ #auth-login-form {
+  display: none !important;
+  visibility: hidden !important;
+}
+.auth-tabs:has(#tab-signup.active) ~ #auth-signup-form {
+  display: block !important;
+  visibility: visible !important;
+}
+
 .auth-card {
   width: min(520px, calc(100% - 24px));
   padding: 28px;
@@ -10412,6 +10443,17 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 
 <style id="mortalive-v193-mobile-bottom-nav">
 @media (max-width:640px){
+  body.di2-live #di2-bot{
+    display:none !important;
+    visibility:hidden !important;
+    opacity:0 !important;
+  }
+  body:has(#pg-land.active) #di2-bot,
+  body:has(#pg-auth.active) #di2-bot{
+    display:none !important;
+    visibility:hidden !important;
+    opacity:0 !important;
+  }
   body.di2-live.di2-authenticated #di2-bot{
     display:flex !important;
     visibility:visible !important;
