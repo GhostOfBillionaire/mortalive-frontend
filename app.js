@@ -2478,6 +2478,7 @@ function initAuthControls() {
       _commentCache = new Map();
       _feedEngagement = new Map();
       _commentLoading = new Set();
+      window.dispatchEvent(new CustomEvent('mortalive-auth-state'));
       return;
     }
 
@@ -16739,21 +16740,32 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   ══════════════════════════════════════════════════════════ */
   function syncBottomNavAuthVisibility() {
     // Authoritative mobile downbar visibility.
-    // Do NOT rely on stylesheet cascade alone: several historical UI layers
-    // intentionally hide #di2-bot.  Apply an inline !important state here so
-    // the final auth/page decision cannot be defeated by an older CSS rule.
-    const authenticated = !S.isGuest && !!S.userId && !!S.authToken;
+    // Authentication can hydrate asynchronously, so do not trust the
+    // in-memory S.* values alone during the first paint. Fall back to the
+    // persisted auth token/user id, then reconcile with Supabase below.
+    const storedToken = (() => {
+      try { return localStorage.getItem('mortalive_token') || ''; } catch (_) { return ''; }
+    })();
+    const storedUserId = (() => {
+      try { return localStorage.getItem('mortalive_user_id') || ''; } catch (_) { return ''; }
+    })();
+
+    const authenticated =
+      (!S.isGuest && !!S.authToken && !!S.userId) ||
+      (!S.isGuest && !!S.authToken) ||
+      (!!storedToken && (!!S.userId || !!storedUserId));
+
     const activePage = document.querySelector('.page.active');
     const activePageId = activePage?.id || '';
+
     const onRestrictedPage =
       activePageId === 'pg-land' ||
       activePageId === 'pg-auth' ||
       document.body.classList.contains('di2-on-landing') ||
       document.body.classList.contains('di2-on-auth');
 
-    // If authentication is valid, show the bar on every app page.  Only the
-    // landing/auth screens are excluded.  This also avoids depending on a
-    // particular page class being present during fast SPA transitions.
+    // Show for authenticated users everywhere in the app; hide only on
+    // landing/auth screens and for guests/unresolved sessions.
     const shouldShow = authenticated && !onRestrictedPage;
 
     document.body.classList.toggle('di2-authenticated', authenticated);
@@ -16770,8 +16782,32 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       nav.style.setProperty('opacity', shouldShow ? '1' : '0', 'important');
       nav.style.setProperty('pointer-events', shouldShow ? 'auto' : 'none', 'important');
     }
-  }
 
+    // Reconcile asynchronously with the real Supabase session when available.
+    // This closes the startup race where localStorage/S.* has not yet caught up.
+    if (window.sb?.auth?.getSession && !syncBottomNavAuthVisibility._sessionProbe) {
+      syncBottomNavAuthVisibility._sessionProbe = true;
+      Promise.resolve(window.sb.auth.getSession())
+        .then(({ data }) => {
+          const session = data?.session;
+          if (session?.access_token && session?.user?.id) {
+            S.authToken = session.access_token;
+            S.userId = session.user.id;
+            S.isGuest = false;
+            try {
+              localStorage.setItem('mortalive_token', session.access_token);
+              localStorage.setItem('mortalive_user_id', session.user.id);
+            } catch (_) {}
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          syncBottomNavAuthVisibility._sessionProbe = false;
+          window.setTimeout(() => syncBottomNavAuthVisibility(), 0);
+        });
+    }
+  }
+  syncBottomNavAuthVisibility._sessionProbe = false;
   function init() {
     /* CSS */
     const style = document.createElement('style');
