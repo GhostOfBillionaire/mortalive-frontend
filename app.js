@@ -16739,10 +16739,9 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     15.  INIT
   ══════════════════════════════════════════════════════════ */
   function syncBottomNavAuthVisibility() {
-    // Authoritative mobile downbar visibility.
-    // Authentication can hydrate asynchronously, so do not trust the
-    // in-memory S.* values alone during the first paint. Fall back to the
-    // persisted auth token/user id, then reconcile with Supabase below.
+    // Single source of truth:
+    //   authenticated session + an actual app page = show the mobile downbar
+    //   landing/auth/guest = hide it.
     const storedToken = (() => {
       try { return localStorage.getItem('mortalive_token') || ''; } catch (_) { return ''; }
     })();
@@ -16750,23 +16749,26 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       try { return localStorage.getItem('mortalive_user_id') || ''; } catch (_) { return ''; }
     })();
 
+    const hasLiveSupabaseSession = !!(
+      window.sb?.auth &&
+      typeof window.sb.auth.getSession === 'function' &&
+      window.sb.currentSession?.access_token
+    );
+
     const authenticated =
-      (!S.isGuest && !!S.authToken && !!S.userId) ||
-      (!S.isGuest && !!S.authToken) ||
-      (!!storedToken && (!!S.userId || !!storedUserId));
+      (!S.isGuest && (!!S.authToken || !!storedToken)) ||
+      (!!storedToken && (!!S.userId || !!storedUserId)) ||
+      hasLiveSupabaseSession;
 
     const activePage = document.querySelector('.page.active');
     const activePageId = activePage?.id || '';
 
-    const onRestrictedPage =
+    const restricted =
       activePageId === 'pg-land' ||
       activePageId === 'pg-auth' ||
-      document.body.classList.contains('di2-on-landing') ||
-      document.body.classList.contains('di2-on-auth');
+      !activePageId;
 
-    // Show for authenticated users everywhere in the app; hide only on
-    // landing/auth screens and for guests/unresolved sessions.
-    const shouldShow = authenticated && !onRestrictedPage;
+    const shouldShow = authenticated && !restricted;
 
     document.body.classList.toggle('di2-authenticated', authenticated);
     document.body.classList.toggle('di2-app-nav-visible', shouldShow);
@@ -16777,14 +16779,16 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       nav.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
       nav.dataset.authenticated = authenticated ? '1' : '0';
       nav.dataset.navVisible = shouldShow ? '1' : '0';
+
+      // Directly control the actual element so the final state does not
+      // depend on the order of the many historical Dynamic Island style blocks.
       nav.style.setProperty('display', shouldShow ? 'flex' : 'none', 'important');
       nav.style.setProperty('visibility', shouldShow ? 'visible' : 'hidden', 'important');
       nav.style.setProperty('opacity', shouldShow ? '1' : '0', 'important');
       nav.style.setProperty('pointer-events', shouldShow ? 'auto' : 'none', 'important');
     }
 
-    // Reconcile asynchronously with the real Supabase session when available.
-    // This closes the startup race where localStorage/S.* has not yet caught up.
+    // Reconcile with the real Supabase session after startup/auth hydration.
     if (window.sb?.auth?.getSession && !syncBottomNavAuthVisibility._sessionProbe) {
       syncBottomNavAuthVisibility._sessionProbe = true;
       Promise.resolve(window.sb.auth.getSession())
@@ -16808,6 +16812,30 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     }
   }
   syncBottomNavAuthVisibility._sessionProbe = false;
+  syncBottomNavAuthVisibility._sessionProbe = false;
+  let _bottomNavObserver = null;
+  function installBottomNavVisibilityObserver() {
+    if (_bottomNavObserver || !document.body) return;
+    _bottomNavObserver = new MutationObserver(() => {
+      window.requestAnimationFrame(() => syncBottomNavAuthVisibility());
+    });
+    _bottomNavObserver.observe(document.body, {
+      subtree: true,
+      childList: false,
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    window.addEventListener('pageshow', () => syncBottomNavAuthVisibility(), { passive: true });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) syncBottomNavAuthVisibility();
+    });
+    window.addEventListener('storage', (event) => {
+      if (event.key === 'mortalive_token' || event.key === 'mortalive_user_id') {
+        syncBottomNavAuthVisibility();
+      }
+    });
+  }
+
   function init() {
     /* CSS */
     const style = document.createElement('style');
@@ -16818,6 +16846,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     /* DOM */
     buildIsland();
     buildBottomNav();
+    installBottomNavVisibilityObserver();
     syncBottomNavAuthVisibility();
     syncBottomNavAuthVisibility();
 
@@ -17528,7 +17557,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     const post = (window._feedPosts || []).find(p => String(p.id) === String(postId))
               || (_feedPosts       || []).find(p => String(p.id) === String(postId));
     if (!post) return;
-    const actorName = S?.()?.accountData?.display_name || S?.()?.username || 'Someone';
+    const actorName = S?.accountData?.display_name || S?.username || 'Someone';
     await window.notifCenter.insert({
       recipientId: post.user_id,
       type:        'like',
@@ -17543,7 +17572,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   window.toggleFollow = async function patchedToggleFollow (profileUserId, shouldFollow) {
     const result = await _origFollow(profileUserId, shouldFollow);
     if (shouldFollow && window.notifCenter) {
-      const actorName = S?.()?.accountData?.display_name || S?.()?.username || 'Someone';
+      const actorName = S?.accountData?.display_name || S?.username || 'Someone';
       await window.notifCenter.insert({
         recipientId: profileUserId,
         type:        'follow',
