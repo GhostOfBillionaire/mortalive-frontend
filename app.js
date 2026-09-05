@@ -989,6 +989,9 @@ function showPage(id, options = {}) {
   // specificity (1,x,x) would outrank the authenticated show rule (0,2,x).
   document.body.classList.toggle('di2-on-landing', id === 'pg-land');
   document.body.classList.toggle('di2-on-auth',    id === 'pg-auth');
+  if (typeof syncBottomNavAuthVisibility === 'function') {
+    syncBottomNavAuthVisibility();
+  }
   // Keep the Dynamic Island mobile downbar synchronized with the newly
   // activated page before any delayed auth-state handlers run.
   window.dispatchEvent(new CustomEvent('mortalive-auth-state'));
@@ -16127,32 +16130,64 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   }
 
   function buildBottomNav() {
-    const nav = document.createElement('nav');
-    nav.id = 'di2-bot';
-    nav.setAttribute('aria-label', 'Main navigation');
-    nav.innerHTML = `
-      <div id="di2-bot-tabs">
-        <button class="di2-tab" data-di-page="pg-lobby" type="button" aria-label="Talk"><span class="di2-tab-ico">🗣️</span><span class="di2-tab-lbl">Talk</span></button>
-        <button class="di2-tab" data-di-page="pg-feed" type="button" aria-label="Feed"><span class="di2-tab-ico">📰</span><span class="di2-tab-lbl">Feed</span></button>
-        <button class="di2-tab" id="di2-tab-srch" type="button" data-di-page="pg-search" aria-label="Search"><span class="di2-tab-ico">🔍</span><span class="di2-tab-lbl">Search</span></button>
-        <button class="di2-tab" data-di-page="pg-messages" type="button" aria-label="Messages"><span class="di2-tab-ico">💬</span><span class="di2-tab-lbl">Messages</span><span class="di2-tab-dot" id="di2-tab-dot"></span></button>
-        <button class="di2-tab" data-di-page="pg-notifications" type="button" aria-label="Notifications"><span class="di2-tab-ico">🔔</span><span class="di2-tab-lbl">Alerts</span><span class="di2-tab-dot" id="di2-notify-tab-dot"></span></button>
-        <button class="di2-tab" data-di-page="pg-profile" type="button" aria-label="Profile"><span class="di2-tab-ico">👤</span><span class="di2-tab-lbl">Profile</span></button>
+  const nav = document.createElement('nav');
+  nav.id = 'di2-bot';
+  nav.setAttribute('aria-label', 'Main navigation');
+  nav.innerHTML = `
+    <!-- Normal tabs -->
+    <div id="di2-bot-tabs">
+      <button class="di2-tab" data-di-page="pg-lobby"    type="button" aria-label="Talk">
+        <span class="di2-tab-ico">🗣️</span>
+        <span class="di2-tab-lbl">Talk</span>
+      </button>
+      <button class="di2-tab" data-di-page="pg-feed" type="button" aria-label="Feed">
+        <span class="di2-tab-ico">📰</span>
+        <span class="di2-tab-lbl">Feed</span>
+      </button>
+      <button class="di2-tab" id="di2-tab-srch" type="button" aria-label="Search">
+        <span class="di2-tab-ico">🔍</span>
+        <span class="di2-tab-lbl">Search</span>
+      </button>
+      <button class="di2-tab" data-di-page="pg-messages" type="button" aria-label="Messages">
+        <span class="di2-tab-ico">💬</span>
+        <span class="di2-tab-lbl">Messages</span>
+        <span class="di2-tab-dot" id="di2-tab-dot"></span>
+      </button>
+      <button class="di2-tab" data-di-page="pg-profile" type="button" aria-label="Profile">
+        <span class="di2-tab-ico">👤</span>
+        <span class="di2-tab-lbl">Profile</span>
+      </button>
+    </div>
+
+    <!-- Search bar (shown when .search-open on #di2-bot) -->
+    <div id="di2-bot-srch" aria-hidden="true">
+      <button class="di2-bot-back" id="di2-bot-back" type="button" aria-label="Cancel">←</button>
+      <div id="di2-mob-inp-wrap">
+        <svg class="di2-mob-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8.5" cy="8.5" r="5.5"/><line x1="13" y1="13" x2="18" y2="18"/>
+        </svg>
+        <input id="di2-mob-inp" type="search"
+               placeholder="Search users, posts, #tags…"
+               inputmode="search" enterkeyhint="search"
+               autocomplete="off" autocorrect="off" spellcheck="false">
       </div>
-      <div id="di2-bot-srch" aria-hidden="true">
-        <button class="di2-bot-back" id="di2-bot-back" type="button" aria-label="Cancel">←</button>
-        <div id="di2-mob-inp-wrap">
-          <svg class="di2-mob-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><line x1="13" y1="13" x2="18" y2="18"/></svg>
-          <input id="di2-mob-inp" type="search" placeholder="Search users, posts, #tags…" inputmode="search" enterkeyhint="search" autocomplete="off" autocorrect="off" spellcheck="false">
-        </div>
-        <button class="di2-bot-go" id="di2-bot-go" type="button" aria-label="Search"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><line x1="13" y1="13" x2="18" y2="18"/></svg></button>
-      </div>`;
-    document.body.appendChild(nav);
-    const host=document.createElement('div');
-    host.id='di2-mob-results';
-    host.setAttribute('aria-live','polite');
-    document.body.appendChild(host);
-  }
+      <button class="di2-bot-go" id="di2-bot-go" type="button" aria-label="Search">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8.5" cy="8.5" r="5.5"/><line x1="13" y1="13" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+  `;
+  document.body.appendChild(nav);
+
+  /* Body-level results host — keeps #di-results outside backdrop-filter stacking */
+  const host = document.createElement('div');
+  host.id = 'di2-mob-results';
+  host.setAttribute('aria-live', 'polite');
+  document.body.appendChild(host);
+}
 
   /* ══════════════════════════════════════════════════════════
      3.  STATE
@@ -16739,35 +16774,14 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     15.  INIT
   ══════════════════════════════════════════════════════════ */
   function syncBottomNavAuthVisibility() {
-    // Single source of truth:
-    //   authenticated session + an actual app page = show the mobile downbar
-    //   landing/auth/guest = hide it.
-    const storedToken = (() => {
-      try { return localStorage.getItem('mortalive_token') || ''; } catch (_) { return ''; }
-    })();
-    const storedUserId = (() => {
-      try { return localStorage.getItem('mortalive_user_id') || ''; } catch (_) { return ''; }
-    })();
-
-    const hasLiveSupabaseSession = !!(
-      window.sb?.auth &&
-      typeof window.sb.auth.getSession === 'function' &&
-      window.sb.currentSession?.access_token
-    );
-
-    const authenticated =
-      (!S.isGuest && (!!S.authToken || !!storedToken)) ||
-      (!!storedToken && (!!S.userId || !!storedUserId)) ||
-      hasLiveSupabaseSession;
-
+    // Bottom nav is an authenticated-app control.
+    // Hide it only on landing/auth pages or for guests.
+    const authenticated = !S.isGuest && !!S.userId && !!S.authToken;
     const activePage = document.querySelector('.page.active');
     const activePageId = activePage?.id || '';
-
     const restricted =
       activePageId === 'pg-land' ||
-      activePageId === 'pg-auth' ||
-      !activePageId;
-
+      activePageId === 'pg-auth';
     const shouldShow = authenticated && !restricted;
 
     document.body.classList.toggle('di2-authenticated', authenticated);
@@ -16780,62 +16794,20 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       nav.dataset.authenticated = authenticated ? '1' : '0';
       nav.dataset.navVisible = shouldShow ? '1' : '0';
 
-      // Directly control the actual element so the final state does not
-      // depend on the order of the many historical Dynamic Island style blocks.
-      nav.style.setProperty('display', shouldShow ? 'flex' : 'none', 'important');
-      nav.style.setProperty('visibility', shouldShow ? 'visible' : 'hidden', 'important');
-      nav.style.setProperty('opacity', shouldShow ? '1' : '0', 'important');
-      nav.style.setProperty('pointer-events', shouldShow ? 'auto' : 'none', 'important');
-    }
-
-    // Reconcile with the real Supabase session after startup/auth hydration.
-    if (window.sb?.auth?.getSession && !syncBottomNavAuthVisibility._sessionProbe) {
-      syncBottomNavAuthVisibility._sessionProbe = true;
-      Promise.resolve(window.sb.auth.getSession())
-        .then(({ data }) => {
-          const session = data?.session;
-          if (session?.access_token && session?.user?.id) {
-            S.authToken = session.access_token;
-            S.userId = session.user.id;
-            S.isGuest = false;
-            try {
-              localStorage.setItem('mortalive_token', session.access_token);
-              localStorage.setItem('mortalive_user_id', session.user.id);
-            } catch (_) {}
-          }
-        })
-        .catch(() => {})
-        .finally(() => {
-          syncBottomNavAuthVisibility._sessionProbe = false;
-          window.setTimeout(() => syncBottomNavAuthVisibility(), 0);
-        });
-    }
-  }
-  syncBottomNavAuthVisibility._sessionProbe = false;
-  syncBottomNavAuthVisibility._sessionProbe = false;
-  let _bottomNavObserver = null;
-  function installBottomNavVisibilityObserver() {
-    if (_bottomNavObserver || !document.body) return;
-    _bottomNavObserver = new MutationObserver(() => {
-      window.requestAnimationFrame(() => syncBottomNavAuthVisibility());
-    });
-    _bottomNavObserver.observe(document.body, {
-      subtree: true,
-      childList: false,
-      attributes: true,
-      attributeFilter: ['class']
-    });
-    window.addEventListener('pageshow', () => syncBottomNavAuthVisibility(), { passive: true });
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) syncBottomNavAuthVisibility();
-    });
-    window.addEventListener('storage', (event) => {
-      if (event.key === 'mortalive_token' || event.key === 'mortalive_user_id') {
-        syncBottomNavAuthVisibility();
+      if (shouldShow) {
+        nav.style.removeProperty('display');
+        nav.style.removeProperty('visibility');
+        nav.style.removeProperty('opacity');
+        nav.style.removeProperty('pointer-events');
+      } else {
+        nav.style.setProperty('display', 'none', 'important');
+        nav.style.setProperty('visibility', 'hidden', 'important');
+        nav.style.setProperty('opacity', '0', 'important');
+        nav.style.setProperty('pointer-events', 'none', 'important');
       }
-    });
+    }
   }
-
+  syncBottomNavAuthVisibility._sessionProbe = false;
   function init() {
     /* CSS */
     const style = document.createElement('style');
@@ -16846,7 +16818,6 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     /* DOM */
     buildIsland();
     buildBottomNav();
-    installBottomNavVisibilityObserver();
     syncBottomNavAuthVisibility();
     syncBottomNavAuthVisibility();
 
