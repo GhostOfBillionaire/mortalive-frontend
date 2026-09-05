@@ -16738,18 +16738,23 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     15.  INIT
   ══════════════════════════════════════════════════════════ */
   function syncBottomNavAuthVisibility() {
-    // The mobile downbar belongs only to the authenticated app navigation.
-    // Compute one authoritative state from BOTH authentication and page.
-    // Landing/auth remain hidden; authenticated app pages may show it.
-    const authenticated = !S.isGuest && !!S.userId;
+    // Authoritative mobile downbar visibility.
+    // Do NOT rely on stylesheet cascade alone: several historical UI layers
+    // intentionally hide #di2-bot.  Apply an inline !important state here so
+    // the final auth/page decision cannot be defeated by an older CSS rule.
+    const authenticated = !S.isGuest && !!S.userId && !!S.authToken;
     const activePage = document.querySelector('.page.active');
     const activePageId = activePage?.id || '';
-    const restrictedPage =
+    const onRestrictedPage =
       activePageId === 'pg-land' ||
       activePageId === 'pg-auth' ||
-      activePageId === '';
+      document.body.classList.contains('di2-on-landing') ||
+      document.body.classList.contains('di2-on-auth');
 
-    const shouldShow = authenticated && !restrictedPage;
+    // If authentication is valid, show the bar on every app page.  Only the
+    // landing/auth screens are excluded.  This also avoids depending on a
+    // particular page class being present during fast SPA transitions.
+    const shouldShow = authenticated && !onRestrictedPage;
 
     document.body.classList.toggle('di2-authenticated', authenticated);
     document.body.classList.toggle('di2-app-nav-visible', shouldShow);
@@ -16760,6 +16765,10 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       nav.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
       nav.dataset.authenticated = authenticated ? '1' : '0';
       nav.dataset.navVisible = shouldShow ? '1' : '0';
+      nav.style.setProperty('display', shouldShow ? 'flex' : 'none', 'important');
+      nav.style.setProperty('visibility', shouldShow ? 'visible' : 'hidden', 'important');
+      nav.style.setProperty('opacity', shouldShow ? '1' : '0', 'important');
+      nav.style.setProperty('pointer-events', shouldShow ? 'auto' : 'none', 'important');
     }
   }
 
@@ -16779,6 +16788,11 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     /* Signal that we're live — hides old topbar via CSS */
     document.body.classList.add('di2-live');
     syncBottomNavAuthVisibility();
+    // Auth hydration can finish after Dynamic Island initialization.  Re-run
+    // once the browser has completed the current paint cycle as a final
+    // mobile-nav reconciliation point.
+    requestAnimationFrame(() => syncBottomNavAuthVisibility());
+    setTimeout(() => syncBottomNavAuthVisibility(), 0);
 
     /* Set initial pill width */
     const pill = document.getElementById('di2-pill');
