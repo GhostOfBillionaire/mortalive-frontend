@@ -7,18 +7,25 @@
 <meta charset="UTF-8">
 <meta name="mortalive-build-v194" content="basic-messaging">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Mortalive: Human conversation, restored</title>
+<meta name="description" content="Mortalive is a random video chat and social platform for meeting strangers, chatting with people worldwide, and making new connections — an Omegle alternative.">
+<link rel="canonical" href="https://mortalive.com/">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="icon" href="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png">
+<link rel="apple-touch-icon" href="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png">
+<meta name="theme-color" content="#ffffff">
+<meta name="keywords" content="random video chat, video chat with strangers, chat with strangers, Omegle alternative, random webcam chat, meet strangers online, オメグル 代替, ランダムビデオチャット, 見知らぬ人とビデオチャット, аналог Omegle, случайный видеочат, видеочат со случайными людьми">
+<title>Mortalive: Random Video Chat &amp; Omegle Alternative</title>
   <!-- Social/share preview metadata -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Mortalive">
-  <meta property="og:title" content="Mortalive — Natural social connection">
-  <meta property="og:description" content="Connect with strangers worldwide in seconds. Private by default, fast by design.">
+  <meta property="og:title" content="Mortalive — Random Video Chat &amp; Omegle Alternative">
+  <meta property="og:description" content="Random video chat and social connection with people worldwide. Meet strangers, talk, and make new connections — an Omegle alternative.">
   <meta property="og:url" content="https://mortalive.com/">
   <meta property="og:image" content="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png">
   <meta property="og:image:alt" content="Mortalive">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="Mortalive — Natural social connection">
-  <meta name="twitter:description" content="Connect with strangers worldwide in seconds. Private by default, fast by design.">
+  <meta name="twitter:title" content="Mortalive — Random Video Chat &amp; Omegle Alternative">
+  <meta name="twitter:description" content="Random video chat and social connection with people worldwide. Meet strangers, talk, and make new connections — an Omegle alternative.">
   <meta name="twitter:image" content="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -10468,29 +10475,11 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   users on those pages. Class-based flags stay at (0,1,x) specificity.
 */
 @media (max-width:640px){
-  /* Default: the mobile app nav is hidden unless runtime explicitly marks
-     the authenticated app navigation as visible. */
-  body.di2-app-nav-hidden #di2-bot {
-    display:none !important;
-    visibility:hidden !important;
-    opacity:0 !important;
-    pointer-events:none !important;
-  }
-  body.di2-app-nav-visible #di2-bot {
-    display:flex !important;
-    visibility:visible !important;
-    opacity:1 !important;
-    pointer-events:auto !important;
-  }
-
-  /* Landing/auth remain hard-hidden even if a stale auth-visible class
-     survives a fast navigation transition. */
+  /* Hide on landing and auth pages regardless of login state */
   body.di2-on-landing #di2-bot,
   body.di2-on-auth    #di2-bot {
     display:none !important;
     visibility:hidden !important;
-    opacity:0 !important;
-    pointer-events:none !important;
   }
 
   /* Tab strip always visible when the nav bar itself is visible */
@@ -10553,6 +10542,27 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 }
 </style>
 
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://mortalive.com/#website",
+      "url": "https://mortalive.com/",
+      "name": "Mortalive",
+      "alternateName": "Mortalive Random Video Chat"
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://mortalive.com/#organization",
+      "name": "Mortalive",
+      "url": "https://mortalive.com/",
+      "logo": "https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png"
+    }
+  ]
+}
+</script>
 </head>
 <body class="di2-on-landing">
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
