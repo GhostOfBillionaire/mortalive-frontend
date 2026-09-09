@@ -10949,7 +10949,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
         <div id="auth-signup-form" class="u-hidden">
           <div class="field">
             <label for="signup-username">Username</label>
-            <input id="signup-username" type="text" autocomplete="username" placeholder="3–24 chars: letters, numbers, _" maxlength="24">
+            <input id="signup-username" type="text" autocomplete="username" placeholder="3–24 chars: letters, numbers, _" maxlength="24" pattern="^[A-Za-z0-9._]{3,24}$" minlength="3" maxlength="24">
             <div id="signup-username-status" class="username-status u-hidden"></div>
           </div>
           <div class="field">
