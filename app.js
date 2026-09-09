@@ -2025,8 +2025,8 @@ function initAuthControls() {
       setUsernameStatus(null, '');
       return;
     }
-    if (!/^[a-zA-Z0-9_]{3,24}$/.test(val)) {
-      setUsernameStatus('bad', '3–24 characters: letters, numbers, underscore only.');
+    if (!/^[A-Za-z0-9._]{3,24}$/.test(val)) {
+      setUsernameStatus('bad', '3–24 characters: letters, numbers, periods, or underscores.');
       return;
     }
     _usernameCheckTimer = setTimeout(() => checkUsernameAvailability(val), 450);
@@ -2035,7 +2035,7 @@ function initAuthControls() {
   // enough that the debounce timer hasn't fired yet.
   usernameInput?.addEventListener('blur', () => {
     const val = usernameInput.value.trim();
-    if (/^[a-zA-Z0-9_]{3,24}$/.test(val) && _usernameCheck.username !== val) {
+    if (/^[A-Za-z0-9._]{3,24}$/.test(val) && _usernameCheck.username !== val) {
       clearTimeout(_usernameCheckTimer);
       checkUsernameAvailability(val);
     }
@@ -2052,8 +2052,8 @@ function initAuthControls() {
     const terms    = $('signup-terms');
     setError('signup-error', null);
 
-    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
-      setError('signup-error', 'Username must be 3–24 characters: letters, numbers, underscore only.');
+    if (!/^[A-Za-z0-9._]{3,24}$/.test(username)) {
+      setError('signup-error', 'Username must be 3–24 characters: letters, numbers, periods, or underscores.');
       return;
     }
     if (_usernameCheck.username === username && _usernameCheck.available === false) {
