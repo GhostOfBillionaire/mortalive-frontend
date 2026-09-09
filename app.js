@@ -2018,15 +2018,15 @@ function initAuthControls() {
 
   const usernameInput = $('signup-username');
   usernameInput?.addEventListener('input', () => {
-    const val = usernameInput.value.trim();
+    const val = usernameInput.value.trim().replace(/^@+/, '').toLowerCase();
     clearTimeout(_usernameCheckTimer);
     _usernameCheckToken++; // invalidate any in-flight check immediately
     if (!val) {
       setUsernameStatus(null, '');
       return;
     }
-    if (!/^[A-Za-z0-9._]{3,24}$/.test(val)) {
-      setUsernameStatus('bad', '3–24 characters: letters, numbers, periods, or underscores.');
+    if (!/^(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)$/.test(val)) {
+      setUsernameStatus('bad', '1–30 characters: letters, numbers, periods, or underscores. Periods cannot be first, last, or consecutive.');
       return;
     }
     _usernameCheckTimer = setTimeout(() => checkUsernameAvailability(val), 450);
@@ -2034,8 +2034,8 @@ function initAuthControls() {
   // Catches the case where someone types then tabs/clicks away fast
   // enough that the debounce timer hasn't fired yet.
   usernameInput?.addEventListener('blur', () => {
-    const val = usernameInput.value.trim();
-    if (/^[A-Za-z0-9._]{3,24}$/.test(val) && _usernameCheck.username !== val) {
+    const val = usernameInput.value.trim().replace(/^@+/, '').toLowerCase();
+    if (/^(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)$/.test(val) && _usernameCheck.username !== val) {
       clearTimeout(_usernameCheckTimer);
       checkUsernameAvailability(val);
     }
@@ -2045,15 +2045,15 @@ function initAuthControls() {
   // emailed code (instead of a confirmation link) before actually
   // creating the account with the password they chose. ──
   $('btn-signup')?.addEventListener('click', async () => {
-    const username = ($('signup-username')?.value || '').trim();
+    const username = ($('signup-username')?.value || '').trim().replace(/^@+/, '').toLowerCase();
     const fullName = ($('signup-fullname')?.value || '').trim();
     const email    = ($('signup-email')?.value    || '').trim();
     const password = $('signup-password')?.value  || '';
     const terms    = $('signup-terms');
     setError('signup-error', null);
 
-    if (!/^[A-Za-z0-9._]{3,24}$/.test(username)) {
-      setError('signup-error', 'Username must be 3–24 characters: letters, numbers, periods, or underscores.');
+    if (!/^(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)$/.test(username)) {
+      setError('signup-error', 'Username must be 1–30 characters: letters, numbers, periods, or underscores. Periods cannot be first, last, or consecutive.');
       return;
     }
     if (_usernameCheck.username === username && _usernameCheck.available === false) {
