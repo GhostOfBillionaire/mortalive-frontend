@@ -2028,8 +2028,8 @@ function initAuthControls() {
       setUsernameStatus(null, '');
       return;
     }
-    if (!/^(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)$/.test(val)) {
-      setUsernameStatus('bad', '1–30 characters: letters, numbers, periods, or underscores. Periods cannot be first, last, or consecutive.');
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(val)) {
+      setUsernameStatus('bad', '3–24 characters: letters, numbers, underscore only.');
       return;
     }
     _usernameCheckTimer = setTimeout(() => checkUsernameAvailability(val), 450);
@@ -2038,7 +2038,7 @@ function initAuthControls() {
   // enough that the debounce timer hasn't fired yet.
   usernameInput?.addEventListener('blur', () => {
     const val = usernameInput.value.trim();
-    if (/^(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)$/.test(val) && _usernameCheck.username !== val) {
+    if (/^[a-zA-Z0-9_]{3,24}$/.test(val) && _usernameCheck.username !== val) {
       clearTimeout(_usernameCheckTimer);
       checkUsernameAvailability(val);
     }
@@ -2055,8 +2055,8 @@ function initAuthControls() {
     const terms    = $('signup-terms');
     setError('signup-error', null);
 
-    if (!/^(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)$/.test(username)) {
-      setError('signup-error', 'Username must be 1–30 characters: letters, numbers, periods, or underscores. Periods cannot be first, last, or consecutive.');
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
+      setError('signup-error', 'Username must be 3–24 characters: letters, numbers, underscore only.');
       return;
     }
     if (_usernameCheck.username === username && _usernameCheck.available === false) {
@@ -5738,10 +5738,10 @@ function normalizeMemberInvitation(value) {
   if (!raw) return null;
   try {
     const u = new URL(raw, window.location.origin);
-    const m = u.pathname.match(/^\/@((?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.))\/?$/);
+    const m = u.pathname.match(/^\/@([A-Za-z0-9_]{3,24})\/?$/);
     if (m) return { username: m[1].toLowerCase(), url: `${u.origin}/@${encodeURIComponent(m[1])}` };
   } catch (_) {}
-  const m = raw.match(/^@?((?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.))$/);
+  const m = raw.match(/^@?([A-Za-z0-9_]{3,24})$/);
   if (m && raw.startsWith('@')) {
     const username = m[1].toLowerCase();
     return { username, url: `${window.location.origin}/@${encodeURIComponent(username)}` };
