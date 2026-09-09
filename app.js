@@ -5747,10 +5747,10 @@ function normalizeMemberInvitation(value) {
   if (!raw) return null;
   try {
     const u = new URL(raw, window.location.origin);
-    const m = u.pathname.match(/^\/@([A-Za-z0-9_]{3,24})\/?$/);
+    const m = u.pathname.match(/^\/@((?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.))\/?$/);
     if (m) return { username: m[1].toLowerCase(), url: `${u.origin}/@${encodeURIComponent(m[1])}` };
   } catch (_) {}
-  const m = raw.match(/^@?([A-Za-z0-9_]{3,24})$/);
+  const m = raw.match(/^@?((?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.))$/);
   if (m && raw.startsWith('@')) {
     const username = m[1].toLowerCase();
     return { username, url: `${window.location.origin}/@${encodeURIComponent(username)}` };
