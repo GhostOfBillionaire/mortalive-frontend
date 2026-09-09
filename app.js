@@ -989,6 +989,9 @@ function showPage(id, options = {}) {
   // specificity (1,x,x) would outrank the authenticated show rule (0,2,x).
   document.body.classList.toggle('di2-on-landing', id === 'pg-land');
   document.body.classList.toggle('di2-on-auth',    id === 'pg-auth');
+  if (typeof syncBottomNavAuthVisibility === 'function') {
+    syncBottomNavAuthVisibility();
+  }
   // Keep the Dynamic Island mobile downbar synchronized with the newly
   // activated page before any delayed auth-state handlers run.
   window.dispatchEvent(new CustomEvent('mortalive-auth-state'));
@@ -2018,7 +2021,7 @@ function initAuthControls() {
 
   const usernameInput = $('signup-username');
   usernameInput?.addEventListener('input', () => {
-    const val = usernameInput.value.trim().replace(/^@+/, '').toLowerCase();
+    const val = usernameInput.value.trim();
     clearTimeout(_usernameCheckTimer);
     _usernameCheckToken++; // invalidate any in-flight check immediately
     if (!val) {
@@ -2034,7 +2037,7 @@ function initAuthControls() {
   // Catches the case where someone types then tabs/clicks away fast
   // enough that the debounce timer hasn't fired yet.
   usernameInput?.addEventListener('blur', () => {
-    const val = usernameInput.value.trim().replace(/^@+/, '').toLowerCase();
+    const val = usernameInput.value.trim();
     if (/^(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)$/.test(val) && _usernameCheck.username !== val) {
       clearTimeout(_usernameCheckTimer);
       checkUsernameAvailability(val);
@@ -2045,7 +2048,7 @@ function initAuthControls() {
   // emailed code (instead of a confirmation link) before actually
   // creating the account with the password they chose. ──
   $('btn-signup')?.addEventListener('click', async () => {
-    const username = ($('signup-username')?.value || '').trim().replace(/^@+/, '').toLowerCase();
+    const username = ($('signup-username')?.value || '').trim();
     const fullName = ($('signup-fullname')?.value || '').trim();
     const email    = ($('signup-email')?.value    || '').trim();
     const password = $('signup-password')?.value  || '';
@@ -5224,21 +5227,9 @@ function syncFeedComposerTypeUI() {
     if (!allowed) clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
   }
   if (reelButton) {
-    // Reels stay locked until checkAndUnlockReels() has flipped
-    // _milestoneProgress.reelsUnlocked (see the milestone system further
-    // down); once unlocked, behaves the same way the photo tool button does.
-    const reelsUnlocked = !!_milestoneProgress?.reelsUnlocked;
-    const allowed = reelsUnlocked && kind === 'reel';
-    reelButton.style.display = allowed ? '' : 'none';
-    if (!allowed) clearComposePhotoPreview('feed-reel-input','btn-feed-reel','feed-reel-preview','feed-reel-name');
+    reelButton.style.display = 'none';
     reelButton.classList.toggle('active', kind === 'reel' && !!$('feed-reel-input')?.files?.[0]);
   }
-  document.querySelectorAll('#pg-feed [data-compose-kind="reel"]').forEach(btn => {
-    const reelsUnlocked = !!_milestoneProgress?.reelsUnlocked;
-    btn.classList.toggle('locked', !reelsUnlocked);
-    btn.disabled = !reelsUnlocked;
-    btn.title = reelsUnlocked ? '' : 'Unlock by completing your milestones';
-  });
   if (qnaModeRow) qnaModeRow.style.display = kind === 'qna' ? 'flex' : 'none';
   if (qnaToggle) {
     qnaToggle.textContent = _feedQnaChoicesEnabled ? 'Use open replies' : 'Add choices';
@@ -6989,8 +6980,8 @@ async function openFeedProfileOverlay(userId) {
     const avatarUrl = feedAvatarUrl(profile.avatar_url);
     const initial = feedAvatarLetter(name);
     const textPosts = posts.filter(post => !post.media_url);
-    const photoPosts = posts.filter(post => !!post.media_url && post.post_type !== 'reel' && detectMediaType(post.media_type, post.media_url) === 'image');
-    const reels = posts.filter(post => post.post_type === 'reel' && getPostMedia(post).length);
+    const photoPosts = posts.filter(post => !!post.media_url && post.post_type !== 'reel');
+    const reels = posts.filter(post => post.post_type === 'reel' && !!post.media_url);
     const detailsLabels = { professional: 'Job Title', creator: 'Content Niche', business: 'Company Name', private: 'Details', content: 'Content Niche', fun: 'Interests' };
     const detailLabel = detailsLabels[profile.account_type] || 'Details';
     const rawWebsite = String(profile.website || '').trim();
@@ -7051,7 +7042,7 @@ async function openFeedProfileOverlay(userId) {
       <div class="feed-profile-section" data-profile-panel="reels" style="display:none;">
         <div class="profile-reels-grid">${reels.length ? reels.map((post, i) => `
           <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open reel ${i + 1}">
-            <video class="reel-thumb-bg" src="${sanitizeHTML(getPostMedia(post)[0]?.url || '')}" muted playsinline preload="metadata"></video>
+            <video class="reel-thumb-bg" src="${sanitizeHTML(post.media_url)}" muted playsinline preload="metadata"></video>
             <span class="reel-thumb-play">▶</span>
           </button>`).join('') : '<div class="reels-empty-state"><div class="reels-empty-icon">🎬</div><div class="reels-empty-title">No reels yet</div></div>'}</div>
       </div>
@@ -7589,115 +7580,6 @@ function renderStructuredFeedPost(post) {
   </div>`;
 }
 
-// ── Normalized media model (post → media[]) ─────────────────────────────
-// Bridges today's single media_url/media_type Supabase columns to the
-// eventual archive-backed post/media relationship described in the media
-// storage handoff: a post can carry one or more media items, each with its
-// own type and url. Nothing else in the UI should read post.media_url
-// directly anymore — go through getPostMedia()/getMediaUrl() so that when
-// media starts arriving as post_meta.media[] (carousels, migrated posts) or
-// through a `/media/<media_id>` gateway, this is the only seam that changes.
-function detectMediaType(mediaType, url) {
-  if (typeof mediaType === 'string') {
-    if (mediaType.startsWith('video/')) return 'video';
-    if (mediaType.startsWith('image/')) return 'image';
-  }
-  if (typeof url === 'string' && /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url)) return 'video';
-  return 'image';
-}
-
-// Pure id-to-URL resolver — matches the frontend media contract exactly:
-// getMediaUrl(mediaId) -> /media/<mediaId>. This is the one seam that will
-// change again once the Worker gateway is live; nothing else should build
-// this path itself.
-function getMediaUrl(mediaId) {
-  if (!mediaId) return '';
-  return `/media/${mediaId}`;
-}
-
-// Normalizes any post row into an ordered media[] array: [{type, url, position}].
-// Handles today's single media_url/media_type shape (legacy/synthetic rows,
-// resolved directly since they were never assigned a media_id) AND a
-// post_meta.media[] array of {media_id, type, position} items (archive rows,
-// resolved through getMediaUrl()) so callers never need to know which one
-// they got.
-function getPostMedia(post) {
-  if (Array.isArray(post?.post_meta?.media) && post.post_meta.media.length) {
-    return post.post_meta.media
-      .map((m, i) => ({
-        type: m.type === 'video' ? 'video' : 'image',
-        url: getMediaUrl(m.media_id),
-        position: Number.isFinite(m.position) ? m.position : i
-      }))
-      .filter(m => m.url)
-      .sort((a, b) => a.position - b.position);
-  }
-  const url = feedAvatarUrl(post?.media_url || '');
-  if (!url) return [];
-  return [{ type: detectMediaType(post?.media_type, post?.media_url), url, position: 0 }];
-}
-
-// Media markup for a feed/profile post card: single image, single video, or
-// a carousel — decided purely from media[], never from post_type. Reels keep
-// their own dedicated card markup elsewhere (unchanged, working shorts UX).
-function feedMediaMarkup(post) {
-  const media = getPostMedia(post);
-  if (!media.length) return '';
-  if (media.length > 1) return feedCarouselMarkup(media, post);
-  const item = media[0];
-  if (item.type === 'video') {
-    return `<video class="feed-post-video" src="${sanitizeHTML(item.url)}" controls playsinline preload="metadata"></video>`;
-  }
-  const display = post?.author?.display_name || post?.author?.username || 'member';
-  return `<img class="feed-post-media js-photo-open" src="${sanitizeHTML(item.url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(item.url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">`;
-}
-
-// Ordered multi-media strip (mixed image/video, arrow + dot navigation).
-// Image slides keep .js-photo-open so tapping one opens the full post viewer,
-// same as a single image post; video slides get native controls instead —
-// clicking a playing video shouldn't be hijacked into opening the viewer.
-function feedCarouselMarkup(media, post) {
-  const slides = media.map((m, i) => {
-    if (m.type === 'video') {
-      return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><video src="${sanitizeHTML(m.url)}" controls playsinline preload="metadata"></video></div>`;
-    }
-    return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><img class="js-photo-open" src="${sanitizeHTML(m.url)}" alt="" loading="lazy" data-photo-url="${sanitizeHTML(m.url)}" data-profile-owner="${sanitizeHTML(post?.user_id || '')}"></div>`;
-  }).join('');
-  const arrows = media.length > 1 ? `
-    <button type="button" class="feed-carousel-arrow prev" data-carousel-dir="-1" aria-label="Previous">‹</button>
-    <button type="button" class="feed-carousel-arrow next" data-carousel-dir="1" aria-label="Next">›</button>` : '';
-  const dots = media.length > 1
-    ? `<div class="feed-carousel-dots">${media.map((_, i) => `<span class="feed-carousel-dot${i === 0 ? ' active' : ''}" data-dot-index="${i}"></span>`).join('')}</div>`
-    : '';
-  return `<div class="feed-carousel" data-carousel-post-id="${sanitizeHTML(post?.id || '')}">
-    <div class="feed-carousel-track">${slides}</div>${arrows}${dots}
-  </div>`;
-}
-
-// Delegated nav for carousel arrows/dots — bound once at module load, same
-// idempotent pattern used by the post-photo click router below.
-if (!document.documentElement.dataset.mortaliveCarouselBound) {
-  document.documentElement.dataset.mortaliveCarouselBound = '1';
-  document.addEventListener('click', (event) => {
-    const dirBtn = event.target.closest?.('[data-carousel-dir]');
-    const dotEl = event.target.closest?.('[data-dot-index]');
-    const carousel = (dirBtn || dotEl)?.closest?.('.feed-carousel');
-    if (!carousel) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const slides = Array.from(carousel.querySelectorAll('.feed-carousel-slide'));
-    const dots = Array.from(carousel.querySelectorAll('.feed-carousel-dot'));
-    const current = Math.max(0, slides.findIndex(s => s.classList.contains('active')));
-    let next = dirBtn ? current + Number(dirBtn.dataset.carouselDir) : Number(dotEl.dataset.dotIndex);
-    next = Math.max(0, Math.min(slides.length - 1, next));
-    slides.forEach((s, i) => {
-      s.classList.toggle('active', i === next);
-      if (i !== next) s.querySelector('video')?.pause();
-    });
-    dots.forEach((d, i) => d.classList.toggle('active', i === next));
-  }, true);
-}
-
 function renderFeedPosts() {
   const openIds = _getOpenCommentIds(); // save before replacing innerHTML
   const container = $('feed-posts');
@@ -7720,15 +7602,7 @@ function renderFeedPosts() {
     const display = author.display_name || username;
     const score = Number(author.crockroach_score) || 0;
     const mine = post.user_id === S.userId;
-    const postMedia = getPostMedia(post);
-    const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A'
-      : post?.post_meta?.kind === 'poll' ? 'Poll'
-      : post.post_type === 'text' ? 'Text'
-      : post.post_type === 'reel' ? 'Reel'
-      : postMedia.length > 1 ? 'Carousel'
-      : postMedia[0]?.type === 'video' ? 'Video'
-      : postMedia.length ? 'Photo'
-      : post.post_type || 'Post';
+    const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A' : post?.post_meta?.kind === 'poll' ? 'Poll' : post.post_type === 'text' ? 'Text' : post.post_type === 'reel' ? 'Reel' : post.post_type || 'Post';
     const badge = score >= 700 ? '<span class="post-badge gold">Gold</span>' : score >= 420 ? '<span class="post-badge silver">Silver</span>' : '';
     const avatarUrl = feedAvatarUrl(author.avatar_url);
     const avatarMarkup = avatarUrl
@@ -7745,10 +7619,10 @@ function renderFeedPosts() {
           </div>
           ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
         </div>
-        <div class="post-body">${post.post_type === 'reel' && postMedia.length
-          ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
-          : postMedia.length
-            ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>${feedMediaMarkup(post)}`
+        <div class="post-body">${post.post_type === 'reel' && post.media_url
+          ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video src="${sanitizeHTML(post.media_url)}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
+          : post.media_url
+            ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><img class="feed-post-media js-photo-open" src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">`
             : post?.post_meta?.kind ? renderStructuredFeedPost(post) : `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>`}</div>
         <div class="post-actions">
           <button class="action-btn like-btn ${engagement.liked ? 'liked' : ''}" type="button" data-feed-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${engagement.liked ? 'true' : 'false'}"><span class="action-icon">${engagement.liked ? '♥' : '♡'}</span><span class="like-count">${engagement.likes}</span></button>
@@ -7807,16 +7681,9 @@ function buildPostViewerAvatar(author, size = 40) {
 }
 
 function postViewerMediaMarkup(post) {
-  const media = getPostMedia(post);
-  if (!media.length) return '';
-  if (media.length > 1) {
-    return `<div class="mortalive-post-viewer-media-frame">${feedCarouselMarkup(media, post)}</div>`;
-  }
-  const item = media[0];
-  if (item.type === 'video') {
-    return `<div class="mortalive-post-viewer-media-frame"><video class="mortalive-post-viewer-media" src="${sanitizeHTML(item.url)}" controls playsinline preload="metadata"></video></div>`;
-  }
-  return `<div class="mortalive-post-viewer-media-frame"><img class="mortalive-post-viewer-media" src="${sanitizeHTML(item.url)}" alt="Post photo" loading="eager" decoding="async"></div>`;
+  const mediaUrl = feedAvatarUrl(post?.media_url);
+  if (!mediaUrl) return '';
+  return `<div class="mortalive-post-viewer-media-frame"><img class="mortalive-post-viewer-media" src="${mediaUrl}" alt="Post photo" loading="eager" decoding="async"></div>`;
 }
 
 function postViewerCommentRows(comments = []) {
@@ -7867,8 +7734,7 @@ function postViewerRender(post, comments = _commentCache.get(post?.id) || []) {
   const inputEl = modal.querySelector('.mortalive-post-viewer-input');
   const statusEl = modal.querySelector('.mortalive-post-viewer-status');
   const textHost = modal.querySelector('.mortalive-post-viewer-text-content');
-  const viewerMedia = getPostMedia(post);
-  const isTextPost = !viewerMedia.length;
+  const isTextPost = !post.media_url;
   modal.classList.toggle('text-mode', isTextPost);
 
   if (mediaHost) mediaHost.innerHTML = isTextPost ? '' : postViewerMediaMarkup(post);
@@ -7880,17 +7746,7 @@ function postViewerRender(post, comments = _commentCache.get(post?.id) || []) {
     captionEl.innerHTML = captionText ? `<div class="mortalive-post-viewer-caption-author">${sanitizeHTML(display)}</div><div class="mortalive-post-viewer-caption-text">${renderHashtagRichText(captionText)}</div>` : '';
     captionEl.style.display = isTextPost ? 'none' : (captionText ? '' : 'none');
   }
-  // Text/poll/Q&A posts (post_type 'text') and reels keep their exact prior
-  // label unchanged. Only the remaining case — a post that isn't text or a
-  // reel — now checks its actual media type instead of printing the raw
-  // post_type string, so an archive video/carousel post is labeled
-  // correctly instead of showing whatever post_type happens to be.
-  const viewerTypeLabel = post.post_type === 'text' ? 'Text'
-    : post.post_type === 'reel' ? post.post_type
-    : viewerMedia.length > 1 ? 'Carousel'
-    : viewerMedia[0]?.type === 'video' ? 'Video'
-    : post.post_type || '';
-  if (countEl) countEl.textContent = `${feedRelTime(post.created_at)}${viewerTypeLabel ? ` · ${viewerTypeLabel}` : ''}`;
+  if (countEl) countEl.textContent = `${feedRelTime(post.created_at)}${post.post_type ? ` · ${post.post_type === 'text' ? 'Text' : post.post_type}` : ''}`;
   if (likesEl) likesEl.textContent = `${likes.toLocaleString()} ${likes === 1 ? 'like' : 'likes'}`;
   if (commentsEl) commentsEl.innerHTML = postViewerCommentRows(comments);
 
@@ -7925,8 +7781,8 @@ async function openPostViewer(postOrId) {
   if (!post?.id) return;
   // Record one authenticated view for this user; never block the viewer on it.
   recordPostView(post.id);
-  if (post.post_type === 'reel' && getPostMedia(post).length) {
-    openReelViewer(post, reelCollectionForPost(post));
+  if (post.post_type === 'reel' && post.media_url) {
+    openReelViewer(post, collectAvailableReels());
     return;
   }
 
@@ -8097,125 +7953,6 @@ function renderFeedSidebars() {
         <div class="active-user-score">${Number(author.crockroach_score) || 0}</div>
       </div>`).join('') : '<div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">No active posters yet.</div>';
   }
-
-  refreshMilestoneCard().catch(() => {});
-}
-
-// ── Reels-unlock milestone system ───────────────────────────────────────
-// Progress toward unlocking reel/video posting: follow 20 people, upload 10
-// photos, complete your profile (avatar + bio), invite a friend. Backed by
-// get_milestone_progress()/check_and_unlock_reels() (see milestones.sql).
-// The unlock itself is persisted server-side (accounts.reels_unlocked_at) so
-// it's a one-time reward, never silently revoked by later activity.
-let _milestoneProgress = null;
-let _milestoneProgressPromise = null;
-
-function milestoneStepsFromProgress(p) {
-  return [
-    { label: `Follow ${p.followTarget} people`, done: p.followCount >= p.followTarget, count: `${Math.min(p.followCount, p.followTarget)}/${p.followTarget}` },
-    { label: `Upload ${p.imageTarget} photos`, done: p.imageCount >= p.imageTarget, count: `${Math.min(p.imageCount, p.imageTarget)}/${p.imageTarget}` },
-    { label: 'Complete your profile', done: p.profileComplete, count: p.profileComplete ? 'Done' : 'Add avatar + bio' },
-    { label: 'Invite a friend', done: p.referralCount >= p.referralTarget, count: `${Math.min(p.referralCount, p.referralTarget)}/${p.referralTarget}` }
-  ];
-}
-
-function mapMilestoneRow(row) {
-  if (!row) return null;
-  return {
-    followCount: toNum(row.follow_count),
-    followTarget: toNum(row.follow_target, 20) || 20,
-    imageCount: toNum(row.image_count),
-    imageTarget: toNum(row.image_target, 10) || 10,
-    profileComplete: !!row.profile_complete,
-    referralCount: toNum(row.referral_count),
-    referralTarget: toNum(row.referral_target, 1) || 1,
-    reelsUnlocked: !!row.reels_unlocked,
-    reelsUnlockedAt: row.reels_unlocked_at || null
-  };
-}
-
-async function fetchMilestoneProgress(force = false) {
-  if (S.isGuest || !S.userId || !sb) return null;
-  if (_milestoneProgress && !force) return _milestoneProgress;
-  if (_milestoneProgressPromise) return _milestoneProgressPromise;
-  _milestoneProgressPromise = (async () => {
-    try {
-      const { data, error } = await sb.rpc('get_milestone_progress');
-      if (error) throw error;
-      const row = Array.isArray(data) ? data[0] : data;
-      _milestoneProgress = mapMilestoneRow(row);
-      return _milestoneProgress;
-    } catch (e) {
-      console.warn('[Milestones] progress fetch failed:', e?.message || e);
-      return _milestoneProgress;
-    } finally {
-      _milestoneProgressPromise = null;
-    }
-  })();
-  return _milestoneProgressPromise;
-}
-
-// Re-checks the four conditions and, the first time they're all met, unlocks
-// reels server-side. Call this after any action that could complete a step
-// (follow, photo upload, profile save) and once on feed load. Cheap no-op
-// once already unlocked.
-async function checkAndUnlockReels() {
-  if (S.isGuest || !S.userId || !sb) return null;
-  if (_milestoneProgress?.reelsUnlocked) return _milestoneProgress;
-  try {
-    const { data, error } = await sb.rpc('check_and_unlock_reels');
-    if (error) throw error;
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row) return _milestoneProgress;
-    _milestoneProgress = {
-      ...(_milestoneProgress || {}),
-      reelsUnlocked: !!row.reels_unlocked,
-      reelsUnlockedAt: row.reels_unlocked_at || null
-    };
-    if (row.newly_unlocked) {
-      toast('Reels unlocked — you can post video now! 🎬', '🔓');
-    }
-    syncFeedComposerTypeUI();
-    renderMilestoneCard();
-    return _milestoneProgress;
-  } catch (e) {
-    console.warn('[Milestones] unlock check failed:', e?.message || e);
-    return _milestoneProgress;
-  }
-}
-
-function renderMilestoneCard() {
-  const host = $('feed-milestone-card');
-  const wrap = $('feed-milestone-wrap');
-  if (!host || !wrap) return;
-  const p = _milestoneProgress;
-  if (!p || p.reelsUnlocked) {
-    wrap.hidden = true;
-    return;
-  }
-  wrap.hidden = false;
-  const steps = milestoneStepsFromProgress(p);
-  const doneCount = steps.filter(s => s.done).length;
-  host.innerHTML = `
-    <div class="milestone-card-sub">${doneCount}/${steps.length} complete</div>
-    <div class="milestone-card-steps">${steps.map(s => `
-      <div class="milestone-step${s.done ? ' done' : ''}">
-        <span class="milestone-step-icon">${s.done ? '✓' : '○'}</span>
-        <span class="milestone-step-label">${sanitizeHTML(s.label)}</span>
-        <span class="milestone-step-count">${sanitizeHTML(s.count)}</span>
-      </div>`).join('')}</div>`;
-}
-
-async function refreshMilestoneCard() {
-  if (S.isGuest || !S.userId) {
-    const wrap = $('feed-milestone-wrap');
-    if (wrap) wrap.hidden = true;
-    return;
-  }
-  await fetchMilestoneProgress();
-  renderMilestoneCard();
-  syncFeedComposerTypeUI();
-  await checkAndUnlockReels();
 }
 
 function clearComposePhotoPreview(inputId, buttonId, previewId, nameId) {
@@ -8367,7 +8104,6 @@ async function submitFeedTextPost() {
     if ($('feed-reel-name')) $('feed-reel-name').textContent = '';
     await fetchFeedPage(true);
     hydrateTrendingHashtags().catch(() => {});
-    if (kind === 'photo') checkAndUnlockReels().catch(() => {});
     if (S.userId && !S.isGuest) {
       _profilePosts = [];
       _postsHydrationPromise = null;
@@ -8982,18 +8718,13 @@ function renderProfilePosts(posts = _profilePosts) {
   strip.innerHTML = combinedPosts.map((post) => {
     const content = renderHashtagRichText(post.content || '');
     const time = sanitizeHTML(formatPostTime(post.created_at));
-    const media = getPostMedia(post);
     const kind = post?.post_meta?.kind === 'qna'
       ? 'Q&A'
       : post?.post_meta?.kind === 'poll'
         ? 'Poll'
-        : media.length > 1
-          ? 'Carousel'
-          : media[0]?.type === 'video'
-            ? 'Video'
-            : media.length
-              ? 'Photo'
-              : 'Text';
+        : post.media_url
+          ? 'Photo'
+          : 'Text';
 
     const ownerName =
       post.author?.display_name ||
@@ -9007,15 +8738,11 @@ function renderProfilePosts(posts = _profilePosts) {
     const likedClass = eng.liked ? 'liked' : '';
     const likeIcon = eng.liked ? '♥' : '♡';
     const structured = post?.post_meta?.kind ? renderStructuredFeedPost(post) : '';
-    const photo = media.length > 1
-      ? feedCarouselMarkup(media, post)
-      : media.length === 1
-        ? (media[0].type === 'video'
-            ? `<video class="profile-post-media" src="${sanitizeHTML(media[0].url)}" controls playsinline preload="metadata" style="width:100%;max-height:560px;border-radius:14px;display:block;background:#000;margin-top:10px;"></video>`
-            : `<button type="button" class="profile-post-photo-wrap js-photo-open" data-photo-url="${sanitizeHTML(media[0].url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}" data-photo-caption="${sanitizeHTML(String(post.content || '').trim())}" style="display:block;width:100%;margin-top:10px;padding:0;border:0;background:transparent;text-align:left;cursor:pointer">
-                 <img class="profile-post-media" src="${sanitizeHTML(media[0].url)}" alt="Shared photo" loading="lazy" style="width:100%;max-height:560px;object-fit:cover;border-radius:14px;display:block">
-               </button>`)
-        : '';
+    const photo = post.media_url
+      ? `<button type="button" class="profile-post-photo-wrap js-photo-open" data-photo-url="${sanitizeHTML(post.media_url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}" data-photo-caption="${sanitizeHTML(String(post.content || '').trim())}" style="display:block;width:100%;margin-top:10px;padding:0;border:0;background:transparent;text-align:left;cursor:pointer">
+           <img class="profile-post-media" src="${sanitizeHTML(post.media_url)}" alt="Shared photo" loading="lazy" style="width:100%;max-height:560px;object-fit:cover;border-radius:14px;display:block">
+         </button>`
+      : '';
     const bodyContent = structured ? structured : `${content}${photo}`;
 
     return `
@@ -9107,7 +8834,7 @@ function renderProfileGallery(posts = _profilePosts) {
   if (!gallery) return;
 
   const photos = (posts || [])
-    .filter((p) => p?.media_url && p.post_type !== 'reel' && detectMediaType(p.media_type, p.media_url) === 'image')
+    .filter((p) => p?.media_url && p.post_type !== 'reel')
     .sort((a, b) => {
       const ta = new Date(a?.created_at || a?.ts || a?.uploaded_at || 0).getTime();
       const tb = new Date(b?.created_at || b?.ts || b?.uploaded_at || 0).getTime();
@@ -9165,7 +8892,7 @@ async function hydrateProfileGallery(userId = S.userId) {
   try {
     const { data, error } = await sb.rpc('gallery_photos', { p_user_id: userId, p_limit: 24 });
     if (error) throw error;
-    let photos = Array.isArray(data) ? data.filter(p => p.media_url && detectMediaType(p.media_type, p.media_url) === 'image') : [];
+    let photos = Array.isArray(data) ? data.filter(p => p.media_url) : [];
     if (!photos.length) { renderProfileGallery([]); return; }
 
     // The gallery RPC may return media metadata without the original caption.
@@ -9649,7 +9376,6 @@ async function changeProfilePhoto() {
     if (error) throw error;
     S.accountData = { ...(S.accountData || {}), avatar_url: media.url };
     applyProfileAvatar(media.url, S.username);
-    checkAndUnlockReels().catch(() => {});
     // Sync avatar across feed sidebar, compose box, and any other avatar surfaces
     ['sidebar-avatar', 'compose-avatar'].forEach(id => {
       const el = $(id);
@@ -10216,7 +9942,6 @@ async function toggleFollow(profileUserId, shouldFollow) {
     followers: Math.max(0, toNum(current.followers) + (shouldFollow ? 1 : -1))
   };
   _followCache.set(profileUserId, next);
-  if (shouldFollow) checkAndUnlockReels().catch(() => {});
   return next;
 }
 
@@ -10503,7 +10228,6 @@ function bindProfileEvents() {
       S.userLinks = validLinks;
 
       toast('Profile updated!', '✅');
-      checkAndUnlockReels().catch(() => {});
       toggleProfileEditMode();
       if ($('edit-new-password')) $('edit-new-password').value = '';
       initProfilePage();
@@ -11358,20 +11082,9 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
 
 // ── Profile/Reels enhancement layer (v27) ───────────────────────────────────
 function collectAvailableReels(source = _profilePosts) {
-  const pool = Array.isArray(source) ? source.filter(p => p?.post_type === 'reel' && getPostMedia(p).length) : [];
+  const pool = Array.isArray(source) ? source.filter(p => p?.post_type === 'reel' && p.media_url) : [];
   const byId = new Map(pool.map(p => [p.id, p]));
   return Array.from(byId.values());
-}
-
-// A reel opened from the main feed must swipe through the feed's own reels,
-// not the viewer's profile posts — this was previously hardcoded to
-// _profilePosts regardless of where the click came from. Pick the source
-// array the post actually came from instead of assuming one.
-function reelCollectionForPost(post) {
-  if (Array.isArray(_feedPosts) && _feedPosts.some(p => p.id === post?.id)) {
-    return collectAvailableReels(_feedPosts);
-  }
-  return collectAvailableReels(_profilePosts);
 }
 
 function renderProfileReels(posts = _profilePosts) {
@@ -11539,7 +11252,7 @@ function ensureReelViewer() {
     const loading = $('rv-loading');
     loading?.classList.add('show');
     video.pause();
-    video.src = getPostMedia(post)[0]?.url || '';
+    video.src = post.media_url;
     video.load();
     const author = getPostViewerAuthor(post);
     const avatar = $('rv-author-avatar');
@@ -11641,8 +11354,9 @@ function bindReelNavigationClicks() {
     event.preventDefault();
     const id = tile.dataset.reelPostId;
     const post = getPostByIdForViewer(id) || _profilePosts.find(p=>p.id===id);
-    if (post?.post_type === 'reel' && getPostMedia(post).length) {
-      openReelViewer(post, reelCollectionForPost(post));
+    if (post?.media_url && post.post_type === 'reel') {
+      const collection = document.body.classList.contains('profile-viewing-public') ? collectAvailableReels(_profilePosts) : collectAvailableReels(_profilePosts);
+      openReelViewer(post, collection);
     }
   });
 }
@@ -13925,7 +13639,9 @@ document.addEventListener('click', (event) => {
           <div class="post-text${String(post.content || '').trim().length > 160 ? '' : ' large'}">
             ${renderHashtags(String(post.content || '').trim())}
           </div>
-          ${feedMediaMarkup(post)}
+          ${post.media_url
+            ? `<img class="feed-post-media js-photo-open" src="${san(post.media_url)}" alt="Photo" loading="lazy" data-photo-url="${san(post.media_url)}">`
+            : ''}
         </div>
 
         <div class="post-actions">
@@ -16414,32 +16130,64 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   }
 
   function buildBottomNav() {
-    const nav = document.createElement('nav');
-    nav.id = 'di2-bot';
-    nav.setAttribute('aria-label', 'Main navigation');
-    nav.innerHTML = `
-      <div id="di2-bot-tabs">
-        <button class="di2-tab" data-di-page="pg-lobby" type="button" aria-label="Talk"><span class="di2-tab-ico">🗣️</span><span class="di2-tab-lbl">Talk</span></button>
-        <button class="di2-tab" data-di-page="pg-feed" type="button" aria-label="Feed"><span class="di2-tab-ico">📰</span><span class="di2-tab-lbl">Feed</span></button>
-        <button class="di2-tab" id="di2-tab-srch" type="button" data-di-page="pg-search" aria-label="Search"><span class="di2-tab-ico">🔍</span><span class="di2-tab-lbl">Search</span></button>
-        <button class="di2-tab" data-di-page="pg-messages" type="button" aria-label="Messages"><span class="di2-tab-ico">💬</span><span class="di2-tab-lbl">Messages</span><span class="di2-tab-dot" id="di2-tab-dot"></span></button>
-        <button class="di2-tab" data-di-page="pg-notifications" type="button" aria-label="Notifications"><span class="di2-tab-ico">🔔</span><span class="di2-tab-lbl">Alerts</span><span class="di2-tab-dot" id="di2-notify-tab-dot"></span></button>
-        <button class="di2-tab" data-di-page="pg-profile" type="button" aria-label="Profile"><span class="di2-tab-ico">👤</span><span class="di2-tab-lbl">Profile</span></button>
+  const nav = document.createElement('nav');
+  nav.id = 'di2-bot';
+  nav.setAttribute('aria-label', 'Main navigation');
+  nav.innerHTML = `
+    <!-- Normal tabs -->
+    <div id="di2-bot-tabs">
+      <button class="di2-tab" data-di-page="pg-lobby"    type="button" aria-label="Talk">
+        <span class="di2-tab-ico">🗣️</span>
+        <span class="di2-tab-lbl">Talk</span>
+      </button>
+      <button class="di2-tab" data-di-page="pg-feed" type="button" aria-label="Feed">
+        <span class="di2-tab-ico">📰</span>
+        <span class="di2-tab-lbl">Feed</span>
+      </button>
+      <button class="di2-tab" id="di2-tab-srch" type="button" aria-label="Search">
+        <span class="di2-tab-ico">🔍</span>
+        <span class="di2-tab-lbl">Search</span>
+      </button>
+      <button class="di2-tab" data-di-page="pg-messages" type="button" aria-label="Messages">
+        <span class="di2-tab-ico">💬</span>
+        <span class="di2-tab-lbl">Messages</span>
+        <span class="di2-tab-dot" id="di2-tab-dot"></span>
+      </button>
+      <button class="di2-tab" data-di-page="pg-profile" type="button" aria-label="Profile">
+        <span class="di2-tab-ico">👤</span>
+        <span class="di2-tab-lbl">Profile</span>
+      </button>
+    </div>
+
+    <!-- Search bar (shown when .search-open on #di2-bot) -->
+    <div id="di2-bot-srch" aria-hidden="true">
+      <button class="di2-bot-back" id="di2-bot-back" type="button" aria-label="Cancel">←</button>
+      <div id="di2-mob-inp-wrap">
+        <svg class="di2-mob-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8.5" cy="8.5" r="5.5"/><line x1="13" y1="13" x2="18" y2="18"/>
+        </svg>
+        <input id="di2-mob-inp" type="search"
+               placeholder="Search users, posts, #tags…"
+               inputmode="search" enterkeyhint="search"
+               autocomplete="off" autocorrect="off" spellcheck="false">
       </div>
-      <div id="di2-bot-srch" aria-hidden="true">
-        <button class="di2-bot-back" id="di2-bot-back" type="button" aria-label="Cancel">←</button>
-        <div id="di2-mob-inp-wrap">
-          <svg class="di2-mob-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><line x1="13" y1="13" x2="18" y2="18"/></svg>
-          <input id="di2-mob-inp" type="search" placeholder="Search users, posts, #tags…" inputmode="search" enterkeyhint="search" autocomplete="off" autocorrect="off" spellcheck="false">
-        </div>
-        <button class="di2-bot-go" id="di2-bot-go" type="button" aria-label="Search"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><line x1="13" y1="13" x2="18" y2="18"/></svg></button>
-      </div>`;
-    document.body.appendChild(nav);
-    const host=document.createElement('div');
-    host.id='di2-mob-results';
-    host.setAttribute('aria-live','polite');
-    document.body.appendChild(host);
-  }
+      <button class="di2-bot-go" id="di2-bot-go" type="button" aria-label="Search">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8.5" cy="8.5" r="5.5"/><line x1="13" y1="13" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+  `;
+  document.body.appendChild(nav);
+
+  /* Body-level results host — keeps #di-results outside backdrop-filter stacking */
+  const host = document.createElement('div');
+  host.id = 'di2-mob-results';
+  host.setAttribute('aria-live', 'polite');
+  document.body.appendChild(host);
+}
 
   /* ══════════════════════════════════════════════════════════
      3.  STATE
@@ -17026,35 +16774,14 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     15.  INIT
   ══════════════════════════════════════════════════════════ */
   function syncBottomNavAuthVisibility() {
-    // Single source of truth:
-    //   authenticated session + an actual app page = show the mobile downbar
-    //   landing/auth/guest = hide it.
-    const storedToken = (() => {
-      try { return localStorage.getItem('mortalive_token') || ''; } catch (_) { return ''; }
-    })();
-    const storedUserId = (() => {
-      try { return localStorage.getItem('mortalive_user_id') || ''; } catch (_) { return ''; }
-    })();
-
-    const hasLiveSupabaseSession = !!(
-      window.sb?.auth &&
-      typeof window.sb.auth.getSession === 'function' &&
-      window.sb.currentSession?.access_token
-    );
-
-    const authenticated =
-      (!S.isGuest && (!!S.authToken || !!storedToken)) ||
-      (!!storedToken && (!!S.userId || !!storedUserId)) ||
-      hasLiveSupabaseSession;
-
+    // Bottom nav is an authenticated-app control.
+    // Hide it only on landing/auth pages or for guests.
+    const authenticated = !S.isGuest && !!S.userId && !!S.authToken;
     const activePage = document.querySelector('.page.active');
     const activePageId = activePage?.id || '';
-
     const restricted =
       activePageId === 'pg-land' ||
-      activePageId === 'pg-auth' ||
-      !activePageId;
-
+      activePageId === 'pg-auth';
     const shouldShow = authenticated && !restricted;
 
     document.body.classList.toggle('di2-authenticated', authenticated);
@@ -17067,62 +16794,20 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       nav.dataset.authenticated = authenticated ? '1' : '0';
       nav.dataset.navVisible = shouldShow ? '1' : '0';
 
-      // Directly control the actual element so the final state does not
-      // depend on the order of the many historical Dynamic Island style blocks.
-      nav.style.setProperty('display', shouldShow ? 'flex' : 'none', 'important');
-      nav.style.setProperty('visibility', shouldShow ? 'visible' : 'hidden', 'important');
-      nav.style.setProperty('opacity', shouldShow ? '1' : '0', 'important');
-      nav.style.setProperty('pointer-events', shouldShow ? 'auto' : 'none', 'important');
-    }
-
-    // Reconcile with the real Supabase session after startup/auth hydration.
-    if (window.sb?.auth?.getSession && !syncBottomNavAuthVisibility._sessionProbe) {
-      syncBottomNavAuthVisibility._sessionProbe = true;
-      Promise.resolve(window.sb.auth.getSession())
-        .then(({ data }) => {
-          const session = data?.session;
-          if (session?.access_token && session?.user?.id) {
-            S.authToken = session.access_token;
-            S.userId = session.user.id;
-            S.isGuest = false;
-            try {
-              localStorage.setItem('mortalive_token', session.access_token);
-              localStorage.setItem('mortalive_user_id', session.user.id);
-            } catch (_) {}
-          }
-        })
-        .catch(() => {})
-        .finally(() => {
-          syncBottomNavAuthVisibility._sessionProbe = false;
-          window.setTimeout(() => syncBottomNavAuthVisibility(), 0);
-        });
-    }
-  }
-  syncBottomNavAuthVisibility._sessionProbe = false;
-  syncBottomNavAuthVisibility._sessionProbe = false;
-  let _bottomNavObserver = null;
-  function installBottomNavVisibilityObserver() {
-    if (_bottomNavObserver || !document.body) return;
-    _bottomNavObserver = new MutationObserver(() => {
-      window.requestAnimationFrame(() => syncBottomNavAuthVisibility());
-    });
-    _bottomNavObserver.observe(document.body, {
-      subtree: true,
-      childList: false,
-      attributes: true,
-      attributeFilter: ['class']
-    });
-    window.addEventListener('pageshow', () => syncBottomNavAuthVisibility(), { passive: true });
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) syncBottomNavAuthVisibility();
-    });
-    window.addEventListener('storage', (event) => {
-      if (event.key === 'mortalive_token' || event.key === 'mortalive_user_id') {
-        syncBottomNavAuthVisibility();
+      if (shouldShow) {
+        nav.style.removeProperty('display');
+        nav.style.removeProperty('visibility');
+        nav.style.removeProperty('opacity');
+        nav.style.removeProperty('pointer-events');
+      } else {
+        nav.style.setProperty('display', 'none', 'important');
+        nav.style.setProperty('visibility', 'hidden', 'important');
+        nav.style.setProperty('opacity', '0', 'important');
+        nav.style.setProperty('pointer-events', 'none', 'important');
       }
-    });
+    }
   }
-
+  syncBottomNavAuthVisibility._sessionProbe = false;
   function init() {
     /* CSS */
     const style = document.createElement('style');
@@ -17133,7 +16818,6 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     /* DOM */
     buildIsland();
     buildBottomNav();
-    installBottomNavVisibilityObserver();
     syncBottomNavAuthVisibility();
     syncBottomNavAuthVisibility();
 
