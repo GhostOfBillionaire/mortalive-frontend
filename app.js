@@ -15932,6 +15932,25 @@ body.di2-msg .di2-pill.search-on {
   body.di2-live.di2-authenticated #di2-bot { display: flex !important; }
 }
 
+/* Android/mobile fallback for browsers that expose a CSS viewport wider
+   than 640px. Touch capability keeps this out of normal desktop layouts. */
+@media (max-width: 900px) and (pointer: coarse) and (hover: none) {
+  body.di2-live.di2-authenticated.di2-app-nav-visible #di2-bot {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+  body.di2-on-landing #di2-bot,
+  body.di2-on-auth #di2-bot,
+  body.di2-app-nav-hidden #di2-bot {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+}
+
 /* Messages dark bottom nav */
 body.di2-msg #di2-bot {
   background: rgba(6,10,18,0.94);
@@ -16776,7 +16795,12 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   function syncBottomNavAuthVisibility() {
     // Bottom nav is an authenticated-app control.
     // Hide it only on landing/auth pages or for guests.
-    const authenticated = !S.isGuest && !!S.userId && !!S.authToken;
+    const storedToken = (() => { try { return localStorage.getItem('mortalive_token') || ''; } catch (_) { return ''; } })();
+    const storedUserId = (() => { try { return localStorage.getItem('mortalive_user_id') || ''; } catch (_) { return ''; } })();
+    const authenticated =
+      !S.isGuest &&
+      (!!S.authToken || !!storedToken) &&
+      (!!S.userId || !!storedUserId || !!S.authToken);
     const activePage = document.querySelector('.page.active');
     const activePageId = activePage?.id || '';
     const restricted =
