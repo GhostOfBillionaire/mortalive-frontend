@@ -7,25 +7,18 @@
 <meta charset="UTF-8">
 <meta name="mortalive-build-v194" content="basic-messaging">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="description" content="Mortalive is a random video chat and social platform for meeting strangers, chatting with people worldwide, and making new connections — an Omegle alternative.">
-<link rel="canonical" href="https://mortalive.com/">
-<meta name="robots" content="index, follow, max-image-preview:large">
-<link rel="icon" href="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png">
-<link rel="apple-touch-icon" href="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png">
-<meta name="theme-color" content="#ffffff">
-<meta name="keywords" content="random video chat, video chat with strangers, chat with strangers, Omegle alternative, random webcam chat, meet strangers online, オメグル 代替, ランダムビデオチャット, 見知らぬ人とビデオチャット, аналог Omegle, случайный видеочат, видеочат со случайными людьми">
-<title>Mortalive: Random Video Chat &amp; Omegle Alternative</title>
+<title>Mortalive: Human conversation, restored</title>
   <!-- Social/share preview metadata -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Mortalive">
-  <meta property="og:title" content="Mortalive — Random Video Chat &amp; Omegle Alternative">
-  <meta property="og:description" content="Random video chat and social connection with people worldwide. Meet strangers, talk, and make new connections — an Omegle alternative.">
+  <meta property="og:title" content="Mortalive — Natural social connection">
+  <meta property="og:description" content="Connect with strangers worldwide in seconds. Private by default, fast by design.">
   <meta property="og:url" content="https://mortalive.com/">
   <meta property="og:image" content="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png">
   <meta property="og:image:alt" content="Mortalive">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="Mortalive — Random Video Chat &amp; Omegle Alternative">
-  <meta name="twitter:description" content="Random video chat and social connection with people worldwide. Meet strangers, talk, and make new connections — an Omegle alternative.">
+  <meta name="twitter:title" content="Mortalive — Natural social connection">
+  <meta name="twitter:description" content="Connect with strangers worldwide in seconds. Private by default, fast by design.">
   <meta name="twitter:image" content="https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3900,6 +3893,18 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
 .profile-author-link,.post-author-link{color:inherit;text-decoration:none;cursor:pointer}
 .profile-author-link:hover,.post-author-link:hover{text-decoration:underline;text-underline-offset:2px}
 .feed-post-media{display:block;width:100%;max-height:520px;object-fit:cover;border-radius:14px;margin-top:12px;cursor:pointer}
+.feed-post-video{display:block;width:100%;max-height:520px;border-radius:14px;margin-top:12px;background:#000}
+.feed-carousel{position:relative;border-radius:14px;overflow:hidden;background:#000;margin-top:12px}
+.feed-carousel-track{position:relative}
+.feed-carousel-slide{display:none}
+.feed-carousel-slide.active{display:block}
+.feed-carousel-slide img,.feed-carousel-slide video{display:block;width:100%;max-height:520px;object-fit:contain;background:#000}
+.feed-carousel-arrow{position:absolute;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:50%;border:0;background:rgba(0,0,0,.45);color:#fff;font-size:17px;line-height:1;cursor:pointer;display:grid;place-items:center;z-index:2}
+.feed-carousel-arrow.prev{left:8px}
+.feed-carousel-arrow.next{right:8px}
+.feed-carousel-dots{position:absolute;bottom:8px;left:0;right:0;display:flex;justify-content:center;gap:5px;z-index:2}
+.feed-carousel-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.5)}
+.feed-carousel-dot.active{background:#fff}
 @media(max-width:840px){.profile-post-strip .profile-post-card{flex-basis:86%;width:86%;min-width:280px}}
 @media(max-width:560px){.profile-post-strip .profile-post-card{flex-basis:92%;width:92%;min-width:260px}.profile-photo-name,.compose-photo-name{max-width:100px}}
 /* old mobile rules now merged into redesign CSS block above */
@@ -7246,6 +7251,20 @@ JS Bugs (app.js)
 .feed-reel-card { height:min(560px,70vh); max-height:none; }
 .feed-reel-card video { width:100%; height:100%; object-fit:cover; }
 .feed-reel-play { position:absolute; inset:0; display:grid; place-items:center; font-size:38px; color:#fff; text-shadow:0 2px 12px rgba(0,0,0,.5); background:rgba(0,0,0,.12); pointer-events:none; }
+
+/* Reels-unlock milestone progress card (right sidebar) */
+.milestone-card-wrap[hidden] { display:none !important; }
+.milestone-card-sub { font-size:12px; font-weight:700; color:var(--on-surface-3); margin-bottom:10px; }
+.milestone-card-steps { display:flex; flex-direction:column; gap:9px; }
+.milestone-step { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--on-surface-2); }
+.milestone-step-icon { flex:0 0 auto; width:16px; height:16px; border-radius:50%; display:grid; place-items:center; font-size:10px; font-weight:800; background:var(--surface-2,rgba(0,0,0,.06)); color:var(--on-surface-3); }
+.milestone-step.done .milestone-step-icon { background:var(--success,#1a9e5c); color:#fff; }
+.milestone-step.done .milestone-step-label { color:var(--on-surface-2); text-decoration:line-through; text-decoration-color:var(--border-strong); opacity:.75; }
+.milestone-step-label { flex:1; }
+.milestone-step-count { flex:0 0 auto; font-size:11px; font-weight:700; color:var(--on-surface-3); }
+
+/* Locked compose-type button (e.g. Reel, once its input/button are wired) */
+.compose-type-btn.locked { opacity:.5; cursor:not-allowed; }
 .profile-reels-section { margin-top:12px; }
 .profile-stats-panel { margin-top:12px; }
 @media(max-width:640px){
@@ -10448,6 +10467,70 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 
 
 
+<style id="mortalive-v193-mobile-bottom-nav">
+/*
+  MOBILE BOTTOM NAV VISIBILITY
+  ─────────────────────────────────────────────────────────────────────────
+  Base rule (in app.js CSS injected to <head>):
+    @media (max-width:640px) {
+      body.di2-live.di2-authenticated #di2-bot { display:flex !important; }
+    }
+  That is the ONLY rule that shows the nav. Everything below is a hide-only
+  layer that suppresses it on specific non-app pages.
+
+  We do NOT set a blanket body.di2-live hide here because:
+   (a) the base rule already defaults #di2-bot to display:none
+   (b) adding a blanket hide with lower specificity than the authenticated
+       rule would be safe in theory but caused a cascade fight in practice
+       because the page-specific :has() rules carry ID specificity (1,x,x)
+       which beats the class-only authenticated rule (0,2,x) — so an
+       authenticated user on pg-land would correctly see it hidden but the
+       blanket hide would also block the re-show on app pages.
+
+  LANDING + AUTH pages: use body.di2-on-landing and body.di2-on-auth
+  classes — set by JS in showPage() — instead of :has() selectors.
+  Reason: :has() with an ID argument gives specificity (1,1,0) which
+  outranks (0,2,2) authenticated rule, causing it to win even for logged-in
+  users on those pages. Class-based flags stay at (0,1,x) specificity.
+*/
+@media (max-width:640px){
+  /* Default: the mobile app nav is hidden unless runtime explicitly marks
+     the authenticated app navigation as visible. */
+  body.di2-app-nav-hidden #di2-bot {
+    display:none !important;
+    visibility:hidden !important;
+    opacity:0 !important;
+    pointer-events:none !important;
+  }
+  body.di2-app-nav-visible #di2-bot {
+    display:flex !important;
+    visibility:visible !important;
+    opacity:1 !important;
+    pointer-events:auto !important;
+  }
+
+  /* Landing/auth remain hard-hidden even if a stale auth-visible class
+     survives a fast navigation transition. */
+  body.di2-on-landing #di2-bot,
+  body.di2-on-auth    #di2-bot {
+    display:none !important;
+    visibility:hidden !important;
+    opacity:0 !important;
+    pointer-events:none !important;
+  }
+
+  /* Tab strip always visible when the nav bar itself is visible */
+  body.di2-live #di2-bot-tabs{
+    display:flex !important;
+  }
+  body.di2-live #di2-bot-tabs [data-di-page="pg-search"],
+  body.di2-live #di2-bot-tabs [data-di-page="pg-notifications"]{
+    display:flex !important;
+  }
+}
+</style>
+
+
 <style id="mortalive-v194-mobile-minimal-topisland">
 @media (max-width:640px){
   body.di2-live.di2-search #di2,
@@ -10496,27 +10579,6 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 }
 </style>
 
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "WebSite",
-      "@id": "https://mortalive.com/#website",
-      "url": "https://mortalive.com/",
-      "name": "Mortalive",
-      "alternateName": "Mortalive Random Video Chat"
-    },
-    {
-      "@type": "Organization",
-      "@id": "https://mortalive.com/#organization",
-      "name": "Mortalive",
-      "url": "https://mortalive.com/",
-      "logo": "https://res.cloudinary.com/yvjzeilj/image/upload/v1783920403/mortalive_logo.png"
-    }
-  ]
-}
-</script>
 </head>
 <body class="di2-on-landing">
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -11332,6 +11394,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-photo" type="button" data-compose-kind="photo">Photo</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
+  <button class="compose-type-btn locked" id="btn-type-reel" type="button" data-compose-kind="reel" disabled title="Unlock by completing your milestones">🔒 Reel</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-poll" type="button" data-compose-kind="poll">Poll</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
@@ -11341,6 +11404,9 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <input id="feed-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
 <span id="feed-photo-name" class="compose-photo-name" aria-live="polite"></span>
 <div id="feed-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
+<button class="compose-tool reel-compose-btn u-hidden" id="btn-feed-reel" type="button" title="Add reel" aria-hidden="true" tabindex="-1">🎬 Reel</button>
+<input id="feed-reel-input" type="file" accept="video/mp4,video/webm,video/quicktime" hidden>
+<span id="feed-reel-name" class="compose-photo-name" aria-live="polite"></span>
 <span style="flex:1;"></span>
 <span id="compose-hashtag-status" class="compose-hashtag-status u-hidden" aria-live="polite" ></span><span id="char-count" style="font-size:12px;color:var(--on-surface-3);">500</span>
 <button class="compose-submit" disabled="" id="compose-submit">Post</button>
@@ -11384,6 +11450,12 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 </main>
 <!-- ── RIGHT SIDEBAR ───────────────── -->
 <aside class="feed-right">
+<!-- Reels-unlock milestone progress (hidden once unlocked or for guests) -->
+<div class="right-card milestone-card-wrap" id="feed-milestone-wrap" hidden>
+        <div class="right-card-title">🔓 Unlock video posting</div>
+        <div id="feed-milestone-card"><div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">Loading your progress…</div></div>
+      </div>
+
 <!-- Trending polls -->
 <div class="right-card">
         <div class="right-card-title">🕐 Recent public posts</div>
