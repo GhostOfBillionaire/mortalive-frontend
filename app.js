@@ -15932,25 +15932,6 @@ body.di2-msg .di2-pill.search-on {
   body.di2-live.di2-authenticated #di2-bot { display: flex !important; }
 }
 
-/* Android/mobile fallback for browsers that expose a CSS viewport wider
-   than 640px. Touch capability keeps this out of normal desktop layouts. */
-@media (max-width: 900px) and (pointer: coarse) and (hover: none) {
-  body.di2-live.di2-authenticated.di2-app-nav-visible #di2-bot {
-    display: flex !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-  }
-  body.di2-on-landing #di2-bot,
-  body.di2-on-auth #di2-bot,
-  body.di2-app-nav-hidden #di2-bot {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-  }
-}
-
 /* Messages dark bottom nav */
 body.di2-msg #di2-bot {
   background: rgba(6,10,18,0.94);
@@ -16797,15 +16778,13 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     // Hide it only on landing/auth pages or for guests.
     const storedToken = (() => { try { return localStorage.getItem('mortalive_token') || ''; } catch (_) { return ''; } })();
     const storedUserId = (() => { try { return localStorage.getItem('mortalive_user_id') || ''; } catch (_) { return ''; } })();
-    const authenticated =
-      !S.isGuest &&
-      (!!S.authToken || !!storedToken) &&
-      (!!S.userId || !!storedUserId || !!S.authToken);
+    const authenticated = !S.isGuest && (!!S.userId || !!storedUserId) && (!!S.authToken || !!storedToken);
     const activePage = document.querySelector('.page.active');
     const activePageId = activePage?.id || '';
     const restricted =
       activePageId === 'pg-land' ||
-      activePageId === 'pg-auth';
+      activePageId === 'pg-auth' ||
+      !activePageId;
     const shouldShow = authenticated && !restricted;
 
     document.body.classList.toggle('di2-authenticated', authenticated);
@@ -16819,16 +16798,31 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       nav.dataset.navVisible = shouldShow ? '1' : '0';
 
       if (shouldShow) {
-        nav.style.removeProperty('display');
-        nav.style.removeProperty('visibility');
-        nav.style.removeProperty('opacity');
-        nav.style.removeProperty('pointer-events');
+        nav.style.setProperty('display', 'flex', 'important');
+        nav.style.setProperty('visibility', 'visible', 'important');
+        nav.style.setProperty('opacity', '1', 'important');
+        nav.style.setProperty('pointer-events', 'auto', 'important');
       } else {
         nav.style.setProperty('display', 'none', 'important');
         nav.style.setProperty('visibility', 'hidden', 'important');
         nav.style.setProperty('opacity', '0', 'important');
         nav.style.setProperty('pointer-events', 'none', 'important');
       }
+    }
+    if (window.sb?.auth?.getSession && !syncBottomNavAuthVisibility._sessionProbe) {
+      syncBottomNavAuthVisibility._sessionProbe = true;
+      Promise.resolve(window.sb.auth.getSession()).then(({ data }) => {
+        const session = data?.session;
+        if (session?.access_token && session?.user?.id) {
+          S.authToken = session.access_token;
+          S.userId = session.user.id;
+          S.isGuest = false;
+          try { localStorage.setItem('mortalive_token', session.access_token); localStorage.setItem('mortalive_user_id', session.user.id); } catch (_) {}
+        }
+      }).catch(() => {}).finally(() => {
+        syncBottomNavAuthVisibility._sessionProbe = false;
+        window.setTimeout(() => syncBottomNavAuthVisibility(), 0);
+      });
     }
   }
   syncBottomNavAuthVisibility._sessionProbe = false;
