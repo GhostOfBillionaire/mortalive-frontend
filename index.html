@@ -10493,6 +10493,24 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 }
 </style>
 
+<style id="mortalive-v195-android-mobile-bottom-nav-fallback">
+@media (max-width:900px) and (pointer:coarse) and (hover:none){
+  body.di2-live.di2-authenticated.di2-app-nav-visible #di2-bot{
+    display:flex !important;
+    visibility:visible !important;
+    opacity:1 !important;
+    pointer-events:auto !important;
+  }
+  body.di2-on-landing #di2-bot,
+  body.di2-on-auth #di2-bot,
+  body.di2-app-nav-hidden #di2-bot{
+    display:none !important;
+    visibility:hidden !important;
+    opacity:0 !important;
+    pointer-events:none !important;
+  }
+</style>
+
 
 <style id="mortalive-v194-mobile-minimal-topisland">
 @media (max-width:640px){
