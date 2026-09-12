@@ -15913,11 +15913,14 @@ body.di2-msg .di2-pill.search-on {
 /* ══ BOTTOM NAV BAR (mobile only) ═════════════════════════ */
 #di2-bot {
   display: none;
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  z-index: 9998;
+  position: fixed !important;
+  bottom: var(--di2-browser-bottom-offset, 0px) !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  z-index: 2147483647 !important;
   min-height: 60px;
-  padding-bottom: env(safe-area-inset-bottom, 4px);
+  padding-bottom: max(env(safe-area-inset-bottom, 4px), var(--di2-safe-bottom, 4px));
   background: rgba(255,255,255,0.92);
   backdrop-filter: blur(28px) saturate(180%);
   -webkit-backdrop-filter: blur(28px) saturate(180%);
@@ -15930,6 +15933,8 @@ body.di2-msg .di2-pill.search-on {
 /* Show only on mobile */
 @media (max-width: 640px) {
   body.di2-live.di2-authenticated #di2-bot { display: flex !important; }
+  body.di2-live.di2-app-nav-visible #di2-bot { display: flex !important; }
+  body.di2-live.di2-app-nav-hidden #di2-bot { display: none !important; }
 }
 
 /* Messages dark bottom nav */
@@ -16776,15 +16781,21 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   function syncBottomNavAuthVisibility() {
     // Bottom nav is an authenticated-app control.
     // Hide it only on landing/auth pages or for guests.
-    const storedToken = (() => { try { return localStorage.getItem('mortalive_token') || ''; } catch (_) { return ''; } })();
-    const storedUserId = (() => { try { return localStorage.getItem('mortalive_user_id') || ''; } catch (_) { return ''; } })();
-    const authenticated = !S.isGuest && (!!S.userId || !!storedUserId) && (!!S.authToken || !!storedToken);
+    const storedToken = (() => {
+      try { return localStorage.getItem('mortalive_token') || ''; } catch (_) { return ''; }
+    })();
+    const storedUserId = (() => {
+      try { return localStorage.getItem('mortalive_user_id') || ''; } catch (_) { return ''; }
+    })();
+    const authenticated =
+      !S.isGuest &&
+      !!(S.userId || storedUserId) &&
+      !!(S.authToken || storedToken);
     const activePage = document.querySelector('.page.active');
     const activePageId = activePage?.id || '';
     const restricted =
       activePageId === 'pg-land' ||
-      activePageId === 'pg-auth' ||
-      !activePageId;
+      activePageId === 'pg-auth';
     const shouldShow = authenticated && !restricted;
 
     document.body.classList.toggle('di2-authenticated', authenticated);
@@ -16802,6 +16813,11 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
         nav.style.setProperty('visibility', 'visible', 'important');
         nav.style.setProperty('opacity', '1', 'important');
         nav.style.setProperty('pointer-events', 'auto', 'important');
+        nav.style.setProperty('position', 'fixed', 'important');
+        nav.style.setProperty('left', '0', 'important');
+        nav.style.setProperty('right', '0', 'important');
+        nav.style.setProperty('width', '100%', 'important');
+        nav.style.setProperty('z-index', '2147483647', 'important');
       } else {
         nav.style.setProperty('display', 'none', 'important');
         nav.style.setProperty('visibility', 'hidden', 'important');
@@ -16809,23 +16825,64 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
         nav.style.setProperty('pointer-events', 'none', 'important');
       }
     }
-    if (window.sb?.auth?.getSession && !syncBottomNavAuthVisibility._sessionProbe) {
-      syncBottomNavAuthVisibility._sessionProbe = true;
-      Promise.resolve(window.sb.auth.getSession()).then(({ data }) => {
-        const session = data?.session;
-        if (session?.access_token && session?.user?.id) {
-          S.authToken = session.access_token;
-          S.userId = session.user.id;
-          S.isGuest = false;
-          try { localStorage.setItem('mortalive_token', session.access_token); localStorage.setItem('mortalive_user_id', session.user.id); } catch (_) {}
-        }
-      }).catch(() => {}).finally(() => {
-        syncBottomNavAuthVisibility._sessionProbe = false;
-        window.setTimeout(() => syncBottomNavAuthVisibility(), 0);
-      });
+
+    // Keep the mobile bottom bar above transient Android browser chrome.
+    // Chromium/Brave can expose a layout viewport taller than the visible
+    // viewport, making bottom:0 appear underneath the browser toolbar.
+    const syncBottomNavViewport = () => {
+      const vv = window.visualViewport;
+      const vvHeight = Number(vv?.height);
+      const layoutHeight = Number(window.innerHeight);
+      const offsetTop = Number(vv?.offsetTop || 0);
+      const occlusion = (
+        Number.isFinite(vvHeight) &&
+        Number.isFinite(layoutHeight)
+      ) ? Math.max(0, Math.round(layoutHeight - vvHeight - offsetTop)) : 0;
+
+      document.documentElement.style.setProperty(
+        '--di2-browser-bottom-offset',
+        `${occlusion}px`
+      );
+
+      const currentNav = document.getElementById('di2-bot');
+      if (currentNav && shouldShow) {
+        currentNav.style.setProperty('bottom', `${occlusion}px`, 'important');
+      }
+    };
+
+    syncBottomNavViewport();
+
+    if (!syncBottomNavAuthVisibility._viewportBound) {
+      syncBottomNavAuthVisibility._viewportBound = true;
+      window.addEventListener('resize', syncBottomNavViewport, { passive: true });
+      window.addEventListener('orientationchange', () => {
+        window.setTimeout(syncBottomNavViewport, 120);
+      }, { passive: true });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', syncBottomNavViewport, { passive: true });
+        window.visualViewport.addEventListener('scroll', syncBottomNavViewport, { passive: true });
+      }
     }
   }
   syncBottomNavAuthVisibility._sessionProbe = false;
+  syncBottomNavAuthVisibility._viewportBound = false;
+  async function reconcileBottomNavSession() {
+    if (!window.sb?.auth?.getSession) return;
+    try {
+      const { data } = await window.sb.auth.getSession();
+      const session = data?.session;
+      if (session?.access_token && session?.user?.id) {
+        S.authToken = session.access_token;
+        S.userId = session.user.id;
+        S.isGuest = false;
+        try {
+          localStorage.setItem('mortalive_token', session.access_token);
+          localStorage.setItem('mortalive_user_id', session.user.id);
+        } catch (_) {}
+      }
+    } catch (_) {}
+    syncBottomNavAuthVisibility();
+  }
   function init() {
     /* CSS */
     const style = document.createElement('style');
@@ -16838,6 +16895,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     buildBottomNav();
     syncBottomNavAuthVisibility();
     syncBottomNavAuthVisibility();
+    reconcileBottomNavSession();
 
     /* Signal that we're live — hides old topbar via CSS */
     document.body.classList.add('di2-live');
