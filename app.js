@@ -417,7 +417,7 @@ function defaultProgress() {
     profileTheme: 'aurora',
     profileFrame: 'Liquid Glass',
     featuredQuote: 'Building momentum one connection at a time.',
-    pinnedNote: 'Connect with the world, build your crokz score, and unlock your profile.',
+    pinnedNote: 'Connect with the world, build your crockroach Score, and unlock your profile.',
     avatarFrame: 'halo',
     lastSyncedAt: 0
   });
@@ -428,7 +428,7 @@ function defaultProfile() {
     theme: 'aurora',
     frame: 'Liquid Glass',
     quote: 'Building momentum one connection at a time.',
-    pinned: 'Connect with the world, build your crokz score, and unlock your profile.',
+    pinned: 'Connect with the world, build your crockroach Score, and unlock your profile.',
     accent: 'rgba(90, 177, 255, .95)',
     pattern: 'mesh'
   });
@@ -634,7 +634,7 @@ function updateProgressText() {
 
   const scorePill = $('score-pill-btn');
   if (scorePill) {
-    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} crokz score · ${summary.badges} badges`;
+    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} crockroach Score · ${summary.badges} badges`;
     scorePill.title = S.isGuest
       ? 'Guest sessions do not earn status'
       : `Top ${summary.percentile}% · #${summary.rank} weekly rank`;
@@ -723,7 +723,7 @@ function awardProgress(kind, amount = 1, meta = {}) {
   if (meta.completion) {
     const goal = computeGoalText(progress);
     if (source === 'chat_complete') {
-      toast(`+${delta} crokz score · ${goal}`, '🧲');
+      toast(`+${delta} crockroach Score · ${goal}`, '🧲');
     } else {
       toast(`Milestone reached · ${goal}`, '🏁');
     }
@@ -785,7 +785,7 @@ function copyProgressShareCard() {
   const profile = getCurrentProfile();
   const text = [
     `Mortalive status`,
-    `${S.username || S.guestName || 'Guest'} · ${summary.score} crokz score`,
+    `${S.username || S.guestName || 'Guest'} · ${summary.score} crockroach Score`,
     `${summary.streak} day streak · ${summary.completions} completions`,
     `Top ${summary.percentile}% · #${summary.rank} weekly`,
     `Frame: ${profile.frame || 'Liquid Glass'}`
@@ -1419,7 +1419,7 @@ function updateIdentityDisplay() {
   const displayUsername = S.username || localStorage.getItem('mortalive_username');
 
   if (!S.isGuest && displayUsername) {
-    if (label) label.textContent = `Logged in as ${displayUsername} · 🧲 ${summary.score} crokz score · ${summary.streak} streak · #${summary.rank}`;
+    if (label) label.textContent = `Logged in as ${displayUsername} · 🧲 ${summary.score} crockroach Score · ${summary.streak} streak · #${summary.rank}`;
     if (switchBtn) switchBtn.style.display = 'none';
     if (logoutBtn) logoutBtn.style.display = '';
     if (scorePill) scorePill.style.display = '';
@@ -3919,7 +3919,7 @@ function generateProfileShareCard() {
   ctx.fillText(String(score), 135, 610);
   ctx.fillStyle = '#334155';
   ctx.font = '700 27px Inter, Arial, sans-serif';
-  ctx.fillText('crokz score', 140, 665);
+  ctx.fillText('crockroach Score', 140, 665);
 
   ctx.fillStyle = '#475569';
   ctx.font = '600 28px Inter, Arial, sans-serif';
@@ -4122,7 +4122,7 @@ function beginChat() {
   setText('peer-name', s.name);
   
   // V138: Interest match feedback
-  let scoreText = s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crokz score · connected`;
+  let scoreText = s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`;
   if (S.interest && S.peerInterest) {
     const interestMatch = S.interest.toLowerCase().trim() === S.peerInterest.toLowerCase().trim();
     scoreText += interestMatch ? ' ✓ Same interest' : ` · Interest: ${S.peerInterest}`;
@@ -4258,7 +4258,7 @@ function updateTypingIndicator() {
   if (!nameEl) return;
   
   const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
-  let scoreText = s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crokz score · connected`;
+  let scoreText = s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`;
   
   if (S.peerTyping) {
     scoreText += ' · typing…';
@@ -5224,11 +5224,15 @@ function syncFeedComposerTypeUI() {
     if (videoInput) videoInput.value = '';
     if (videoName) videoName.textContent = '';
   }
-  document.querySelectorAll('#pg-feed [data-compose-kind="reel"], #pg-feed [data-compose-kind="video"]').forEach(btn => {
-    const reelsUnlocked = !!_milestoneProgress?.reelsUnlocked;
-    btn.classList.toggle('locked', !reelsUnlocked);
-    btn.disabled = !reelsUnlocked;
-    btn.title = reelsUnlocked ? '' : 'Unlock by completing your milestones';
+  document.querySelectorAll('#pg-feed [data-compose-kind="reel"]').forEach(btn => {
+    btn.classList.add('locked');
+    btn.disabled = true;
+    btn.title = 'Quids can be uploaded from the upcoming app.';
+  });
+  document.querySelectorAll('#pg-feed [data-compose-kind="video"]').forEach(btn => {
+    btn.classList.remove('locked');
+    btn.disabled = false;
+    btn.title = 'Upload a long-form video';
   });
   if (qnaModeRow) qnaModeRow.style.display = kind === 'qna' ? 'flex' : 'none';
   if (qnaToggle) {
@@ -5271,7 +5275,11 @@ function setFeedComposerKind(kind = 'text') {
     $('feed-photo-input')?.click();
   }
   if (next === 'reel') {
-    $('feed-reel-input')?.click();
+    toast('Quids can be uploaded from the upcoming app.', '📱');
+    _feedComposerKind = 'text';
+    syncFeedComposerTypeUI();
+    syncFeedComposer();
+    return;
   }
   if (next === 'video') {
     $('feed-video-input')?.click();
@@ -7017,7 +7025,7 @@ async function openFeedProfileOverlay(userId) {
         <div class="feed-profile-stats">
           <div class="feed-profile-stat"><strong>${toNum(followData.followers).toLocaleString()}</strong><span>Followers</span></div>
           <div class="feed-profile-stat"><strong>${toNum(followData.following).toLocaleString()}</strong><span>Following</span></div>
-          <div class="feed-profile-stat"><strong>${toNum(score).toLocaleString()}</strong><span>crokz score</span></div>
+          <div class="feed-profile-stat"><strong>${toNum(score).toLocaleString()}</strong><span>crockroach Score</span></div>
           <div class="feed-profile-stat"><strong>${textPosts.length}</strong><span>Posts</span></div>
           <div class="feed-profile-stat"><strong>${photoPosts.length}</strong><span>Photos</span></div>
         </div>
@@ -7048,7 +7056,7 @@ async function openFeedProfileOverlay(userId) {
           <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open reel ${i + 1}">
             <video class="reel-thumb-bg" src="${sanitizeHTML(getPostMedia(post)[0]?.url || '')}" muted playsinline preload="metadata"></video>
             <span class="reel-thumb-play">▶</span>
-          </button>`).join('') : '<div class="reels-empty-state"><div class="reels-empty-icon">🎬</div><div class="reels-empty-title">No quids yet</div></div>'}</div>
+          </button>`).join('') : '<div class="reels-empty-state"><div class="reels-empty-icon">🎬</div><div class="reels-empty-title">No reels yet</div></div>'}</div>
       </div>
       <div class="feed-profile-section" data-profile-panel="stats" style="display:none;">
         <div class="profile-stats-panel">
@@ -7058,7 +7066,7 @@ async function openFeedProfileOverlay(userId) {
             <div class="profile-stats-row"><span class="profile-stats-key">Reels</span><strong class="profile-stats-val">${reels.length}</strong></div>
           </div>
           <div class="profile-stats-section"><div class="profile-stats-section-title">Profile</div>
-            <div class="profile-stats-row"><span class="profile-stats-key">crokz score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
+            <div class="profile-stats-row"><span class="profile-stats-key">crockroach Score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Followers</span><strong class="profile-stats-val">${toNum(followData.followers).toLocaleString()}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(followData.following).toLocaleString()}</strong></div>
           </div>
@@ -7136,14 +7144,14 @@ const PHOTO_UPLOAD_TYPES = new Set(['image/jpeg','image/png','image/webp']);
 const REEL_UPLOAD_MAX_BYTES = 60 * 1024 * 1024;
 const REEL_UPLOAD_TYPES = new Set(['video/mp4','video/webm','video/quicktime']);
 function validateReelFile(file) {
-  if (!file) throw new Error('Choose a quid video first.');
+  if (!file) throw new Error('Choose a reel video first.');
   if (!REEL_UPLOAD_TYPES.has(file.type)) throw new Error('Use MP4, WebM, or MOV videos.');
-  if (file.size > REEL_UPLOAD_MAX_BYTES) throw new Error('Quids must be 60 MB or smaller.');
+  if (file.size > REEL_UPLOAD_MAX_BYTES) throw new Error('Reels must be 60 MB or smaller.');
   return file;
 }
 async function uploadReelFile(file, folder = 'reels') {
   validateReelFile(file);
-  if (!S.userId || S.isGuest || !sb) throw new Error('Sign in to upload quids.');
+  if (!S.userId || S.isGuest || !sb) throw new Error('Sign in to upload reels.');
   const ext = file.type === 'video/webm' ? 'webm' : file.type === 'video/quicktime' ? 'mov' : 'mp4';
   const path = `${S.userId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2,10)}.${ext}`;
   const { error } = await sb.storage.from(PHOTO_UPLOAD_BUCKET).upload(path, file, {
@@ -7156,11 +7164,11 @@ async function uploadReelFile(file, folder = 'reels') {
 }
 
 // ── Long-form video (distinct from the milestone-gated short 'reel' type) ──
-const VIDEO_UPLOAD_MAX_BYTES = 300 * 1024 * 1024;
+const VIDEO_UPLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 function validateVideoFile(file) {
   if (!file) throw new Error('Choose a video first.');
   if (!REEL_UPLOAD_TYPES.has(file.type)) throw new Error('Use MP4, WebM, or MOV videos.');
-  if (file.size > VIDEO_UPLOAD_MAX_BYTES) throw new Error('Videos must be 300 MB or smaller.');
+  if (file.size > VIDEO_UPLOAD_MAX_BYTES) throw new Error('Videos must be 2 GB or smaller.');
   return file;
 }
 async function uploadVideoFile(file, folder = 'videos') {
@@ -7657,7 +7665,7 @@ function getPostMedia(post) {
     return post.post_meta.media
       .map((m, i) => ({
         type: m.type === 'video' ? 'video' : 'image',
-        url: getMediaUrl(m.media_id),
+        url: m.url || getMediaUrl(m.media_id),
         position: Number.isFinite(m.position) ? m.position : i
       }))
       .filter(m => m.url)
@@ -8332,10 +8340,13 @@ function clearComposePhotoPreview(inputId, buttonId, previewId, nameId) {
   if (button) button.classList.remove('active');
   if (name) name.textContent = '';
   if (preview) {
+    const urls = String(preview.dataset.objectUrls || '').split('|').filter(Boolean);
+    urls.forEach(url => { try { URL.revokeObjectURL(url); } catch (_) {} });
     const url = preview.dataset.objectUrl;
-    if (url) {
-      try { URL.revokeObjectURL(url); } catch (e) {}
+    if (url && !urls.includes(url)) {
+      try { URL.revokeObjectURL(url); } catch (_) {}
     }
+    preview.dataset.objectUrls = '';
     preview.dataset.objectUrl = '';
     preview.hidden = true;
     preview.innerHTML = '';
@@ -8347,30 +8358,39 @@ function renderComposePhotoPreview({ inputId, buttonId, previewId, nameId } = {}
   const button = $(buttonId);
   const preview = $(previewId);
   const name = $(nameId);
-  const file = input?.files?.[0] || null;
-  if (!file) {
+  const files = Array.from(input?.files || []);
+  if (!files.length) {
     clearComposePhotoPreview(inputId, buttonId, previewId, nameId);
     return;
   }
+  if (files.length > 10) throw new Error('Choose up to 10 photos for a carousel.');
+  files.forEach(validatePhotoFile);
 
-  validatePhotoFile(file);
-  const objectUrl = URL.createObjectURL(file);
-
+  const objectUrls = files.map(file => URL.createObjectURL(file));
   if (button) button.classList.add('active');
-  if (name) name.textContent = `${file.name} · ${formatPhotoSize(file.size)}`;
+  if (name) {
+    name.textContent = files.length === 1
+      ? `${files[0].name} · ${formatPhotoSize(files[0].size)}`
+      : `${files.length} photos selected · carousel`;
+  }
 
   if (preview) {
-    const previousUrl = preview.dataset.objectUrl;
-    if (previousUrl) {
-      try { URL.revokeObjectURL(previousUrl); } catch (e) {}
-    }
-    preview.dataset.objectUrl = objectUrl;
+    const previousUrls = String(preview.dataset.objectUrls || '').split('|').filter(Boolean);
+    previousUrls.forEach(url => { try { URL.revokeObjectURL(url); } catch (_) {} });
+    preview.dataset.objectUrls = objectUrls.join('|');
+    preview.dataset.objectUrl = objectUrls[0] || '';
     preview.hidden = false;
     preview.innerHTML = `
-      <img src="${objectUrl}" alt="Selected photo preview">
+      <div class="compose-carousel-preview-grid">
+        ${files.map((file, i) => `
+          <div class="compose-carousel-preview-tile">
+            <img src="${objectUrls[i]}" alt="Selected photo ${i + 1}" loading="lazy">
+            <span>${i + 1}</span>
+          </div>`).join('')}
+      </div>
       <div class="compose-photo-preview-meta">
-        <div class="compose-photo-preview-name">${sanitizeHTML(file.name)}</div>
-        <div class="compose-photo-preview-size">${sanitizeHTML(formatPhotoSize(file.size))}</div>
+        <div class="compose-photo-preview-name">${files.length === 1 ? sanitizeHTML(files[0].name) : `${files.length} photos ready for carousel`}</div>
+        <div class="compose-photo-preview-size">${sanitizeHTML(formatPhotoSize(files.reduce((sum, file) => sum + file.size, 0)))}</div>
       </div>
       <button type="button" class="compose-photo-discard">Discard</button>
     `;
@@ -8398,11 +8418,18 @@ async function submitFeedTextPost() {
   const kind = getFeedComposerKind();
   if (!field || !submit || S.isGuest || !S.userId || !sb) { toast('Sign in to post', '🔒'); return; }
   const content = field.value.trim();
-  const file = kind === 'reel' ? (reelInput?.files?.[0] || null)
-    : kind === 'video' ? (videoInput?.files?.[0] || null)
-    : (photoInput?.files?.[0] || null);
-  if (!content && !file && !['poll','qna'].includes(kind)) return;
-  if (kind === 'reel' && !file) { toast('Choose a quid video first.', '⚠️'); return; }
+  const photoFiles = Array.from(photoInput?.files || []);
+  const reelFile = reelInput?.files?.[0] || null;
+  const videoFile = videoInput?.files?.[0] || null;
+  const file = kind === 'reel' ? reelFile
+    : kind === 'video' ? videoFile
+    : (photoFiles[0] || null);
+  if (!content && !file && !photoFiles.length && !['poll','qna'].includes(kind)) return;
+  if (kind === 'photo' && photoFiles.length > 10) {
+    toast('Choose up to 10 photos for a carousel.', '⚠️');
+    return;
+  }
+  if (kind === 'reel' && !file) { toast('Choose a reel video first.', '⚠️'); return; }
   if (kind === 'video' && !file) { toast('Choose a video first.', '⚠️'); return; }
   if (content.length > FEED_MAX_POST_CHARS) { toast(`Posts are limited to ${FEED_MAX_POST_CHARS} characters`, '⚠️'); return; }
 
@@ -8423,10 +8450,15 @@ async function submitFeedTextPost() {
 
     submit.disabled = true; submit.textContent = 'Posting…';
     const durationSeconds = (kind === 'reel' || kind === 'video') && file ? Math.round(await readVideoDuration(file)) : 0;
-    const media = (kind === 'photo' || kind === 'text') && file ? await uploadPhotoFile(file, 'feed')
-      : kind === 'reel' && file ? await uploadReelFile(file, 'feed-reels')
-      : kind === 'video' && file ? await uploadVideoFile(file, 'feed-videos')
-      : null;
+    const uploadedPhotos = kind === 'photo'
+      ? await Promise.all(photoFiles.map(file => uploadPhotoFile(file, 'feed')))
+      : [];
+    const media = uploadedPhotos.length
+      ? uploadedPhotos[0]
+      : (kind === 'text' && file ? await uploadPhotoFile(file, 'feed')
+        : kind === 'reel' && file ? await uploadReelFile(file, 'feed-reels')
+        : kind === 'video' && file ? await uploadVideoFile(file, 'feed-videos')
+        : null);
     const insertContent = content || (media ? ' ' : content);
     const payload = {
       user_id: S.userId,
@@ -8439,7 +8471,23 @@ async function submitFeedTextPost() {
       payload.media_type = media.type;
       payload.media_size = media.size;
     }
-    if (durationSeconds > 0) payload.post_meta = { duration_seconds: durationSeconds };
+    if (uploadedPhotos.length > 1) {
+      payload.post_meta = {
+        media: uploadedPhotos.map((item, index) => ({
+          url: item.url,
+          type: 'image',
+          position: index + 1
+        })),
+        carousel: true,
+        media_count: uploadedPhotos.length
+      };
+    }
+    if (durationSeconds > 0) {
+      payload.post_meta = {
+        ...(payload.post_meta || {}),
+        duration_seconds: durationSeconds
+      };
+    }
     if (['poll','qna'].includes(kind)) {
       payload.post_meta = {
         kind,
@@ -8566,20 +8614,29 @@ function syncFeedComposer() {
   const count = $('char-count');
   const photoInput = $('feed-photo-input');
   const reelInput = $('feed-reel-input');
+  const videoInput = $('feed-video-input');
   if (!field || !submit) return;
   const len = field.value.length;
   const kind = getFeedComposerKind();
-  const file = kind === 'reel' ? (reelInput?.files?.[0] || null) : (photoInput?.files?.[0] || null);
+  const photoFiles = Array.from(photoInput?.files || []);
+  const file = kind === 'reel' ? (reelInput?.files?.[0] || null)
+    : kind === 'video' ? (videoInput?.files?.[0] || null)
+    : (photoFiles[0] || null);
   const hashtagCheck = syncHashtagStatus(field.value, 'compose-hashtag-status');
   const structured = validateFeedStructuredPost(kind, field.value, getFeedComposerOptionValues());
   if (count) count.textContent = `${Math.max(0, FEED_MAX_POST_CHARS - len)}`;
-  if ($('feed-photo-name')) $('feed-photo-name').textContent = kind === 'reel' ? '' : (file ? `${file.name} · ${formatPhotoSize(file.size)}` : '');
+  if ($('feed-photo-name')) {
+    $('feed-photo-name').textContent = kind === 'photo' && photoFiles.length > 1
+      ? `${photoFiles.length} photos selected · carousel`
+      : kind === 'reel' || kind === 'video' ? '' : (file ? `${file.name} · ${formatPhotoSize(file.size)}` : '');
+  }
   if ($('feed-reel-name') && kind === 'reel') $('feed-reel-name').textContent = file ? `${file.name} · ${formatPhotoSize(file.size)}` : '';
-  $('btn-feed-photo')?.classList.toggle('active', kind !== 'reel' && !!file);
+  if ($('feed-video-name') && kind === 'video') $('feed-video-name').textContent = file ? `${file.name} · ${formatPhotoSize(file.size)}` : '';
+  $('btn-feed-photo')?.classList.toggle('active', kind === 'photo' && !!photoFiles.length);
   const validBody = kind === 'poll' || kind === 'qna'
     ? structured.ok
-    : !!len || !!file;
-  const attachmentAllowed = kind === 'text' || kind === 'photo' || kind === 'reel';
+    : !!len || !!file || (kind === 'photo' && photoFiles.length > 0);
+  const attachmentAllowed = kind === 'text' || kind === 'photo' || kind === 'video';
   submit.disabled = S.isGuest || !S.userId || !validBody || (!attachmentAllowed && !!file)
     || (kind === 'reel' && !file)
     || len > FEED_MAX_POST_CHARS || !hashtagCheck.ok;
@@ -9974,7 +10031,7 @@ function initProfilePage() {
 
   // Progress Bar
   if ($('rank-label')) $('rank-label').textContent = `${tier.name}${tier.max < Infinity ? ' → ' + RANK_TIERS[RANK_TIERS.indexOf(tier)+1]?.name : ' (Max)'}`;
-  if ($('progress-label')) $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} crokz score`;
+  if ($('progress-label')) $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} crockroach Score`;
   if ($('progress-pct')) $('progress-pct').textContent = `${pct}%`;
   if ($('progress-fill')) $('progress-fill').style.width = `${pct}%`;
   if ($('progress-percentile')) $('progress-percentile').textContent = `Top ${summary.percentile}%`;
@@ -10198,7 +10255,7 @@ function openAchievementsSheet() {
       <div style="padding:18px 22px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px;">
           <div style="padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,var(--primary-alpha),rgba(124,58,237,.06));border:1px solid rgba(26,110,245,.14);">
-            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">crokz score</div>
+            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">crockroach Score</div>
             <div style="font-size:24px;font-weight:900;letter-spacing:-.04em;margin-top:4px;color:var(--primary);">${score.toLocaleString()}</div>
           </div>
           <div style="padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);">
@@ -10774,13 +10831,13 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
   ];
 
   const MATCH_TIPS = [
-    '💡 Completing chats earns crokz score',
+    '💡 Completing chats earns crockroach Score',
     '🌍 Your next match could be from any country on Earth',
     '⭐ Rate your chats to help improve future matches',
     '🔒 Your identity stays private — nothing is shared without your consent',
     '⚡ Average match time is under 30 seconds when others are online',
     '🎯 Adding a topic finds like-minded strangers faster',
-    '🧲 A high crokz score boosts your matching priority',
+    '🧲 A high crockroach Score boosts your matching priority',
     '💬 Text mode works without a camera — great for quieter moments',
     '🎬 If no match is found, a recorded stream will appear automatically'
   ];
@@ -11518,7 +11575,7 @@ function renderProfileReels(posts = _profilePosts) {
     grid.innerHTML = `
       <div class="reels-empty-state">
         <div class="reels-empty-icon">🎬</div>
-        <div class="reels-empty-title">No quids yet</div>
+        <div class="reels-empty-title">No reels yet</div>
         <div class="reels-empty-sub">Share a short video and let people discover your moment.</div>
         ${!S.profileViewUserId ? '<button class="reels-empty-cta" type="button" data-reel-upload-cta>+ Upload reel</button>' : ''}
       </div>`;
@@ -11553,7 +11610,7 @@ function renderProfileStatsPanel() {
     </div>
     <div class="profile-stats-section">
       <div class="profile-stats-section-title">Profile</div>
-      <div class="profile-stats-row"><span class="profile-stats-key">crokz score</span><strong class="profile-stats-val">${toNum(S.profileViewData?.crockroach_score ?? summary?.score).toLocaleString()}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">crockroach Score</span><strong class="profile-stats-val">${toNum(S.profileViewData?.crockroach_score ?? summary?.score).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Followers</span><strong class="profile-stats-val">${toNum(follow?.followers ?? _followCache.get(S.userId)?.followers).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(follow?.following ?? _followCache.get(S.userId)?.following).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Streak</span><strong class="profile-stats-val">${publicView ? '—' : `${toNum(summary?.streak)}d`}</strong></div>
@@ -11732,7 +11789,7 @@ function ensureReelViewer() {
     if (action.dataset.reelAction==='comment'){ $('rv-comments-sheet').classList.toggle('open'); }
     if (action.dataset.reelAction==='share'){
       const url=`${location.origin}${location.pathname}#feed-post-${encodeURIComponent(post.id)}`;
-      navigator.clipboard?.writeText(url).then(()=>toast('Quid link copied','📋')).catch(()=>toast(url,'🔗'));
+      navigator.clipboard?.writeText(url).then(()=>toast('Reel link copied','📋')).catch(()=>toast(url,'🔗'));
     }
     if (action.dataset.reelAction==='follow' && post.user_id && post.user_id!==S.userId){
       const fd=await fetchFollowData(post.user_id); const next=!fd.isFollowing;
@@ -11752,7 +11809,7 @@ function ensureReelViewer() {
   // Unreachable? kept below intentionally no
 }
 function openReelViewer(post, collection = []) {
-  if (S.isGuest || !S.userId) { toast('Sign in to view quids', '🔒'); return; }
+  if (S.isGuest || !S.userId) { toast('Sign in to view reels', '🔒'); return; }
   const viewer = ensureReelViewer();
   const all = Array.isArray(collection) && collection.length ? collection : [post];
   const ids = all.map(p => p.id);
@@ -13625,15 +13682,14 @@ document.addEventListener('click', (event) => {
     const current = window._followCache?.get?.(uid) || { isFollowing: false };
     const wantFollow = !current.isFollowing;
     try {
-      if (typeof window.toggleFollow !== 'function') throw new Error('Follow service is unavailable. Please refresh the page.');
-      const updated = await window.toggleFollow(uid, wantFollow);
+      const updated = await window.toggleFollow?.(uid, wantFollow);
       const nowFollowing = updated?.isFollowing ?? wantFollow;
       syncFollowBtns(uid, nowFollowing);
       window.toast?.(nowFollowing ? 'Following!' : 'Unfollowed', nowFollowing ? '✓' : '➖');
       // If followed from suggestions, remove from pool so the slot refreshes
       if (nowFollowing) {
         _suggestions = _suggestions.filter(u => u.id !== uid);
-        if ($('active-users-list')) { await loadSuggestions(true); renderSuggestions(); }
+        if ($('active-users-list')) renderSuggestions();
       }
     } catch (e) {
       window.toast?.(e?.message || 'Could not update follow.', '⚠️');
@@ -13749,7 +13805,7 @@ document.addEventListener('click', (event) => {
     const title = listEl.closest('.right-card')?.querySelector('.right-card-title');
     if (title && !title.dataset.mfeTitle) {
       title.dataset.mfeTitle = '1';
-      title.innerHTML = '🏆 Users with maximum crokz score';
+      title.innerHTML = '✨ Suggested for you';
     }
   }
 
@@ -16531,7 +16587,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
 
             <!-- Score -->
             <div class="di2-score" id="di2-score"
-              title="crokz score — click to open progress">
+              title="crockroach Score — click to open progress">
               🧲 <span id="di2-sv">—</span>
             </div>
           </div>
@@ -17423,7 +17479,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
      DATA — LOAD
   ══════════════════════════════════════════════════════════ */
   async function loadNotifications (options = {}) {
-    const client  = sb;
+    const client  = sb();
     const session = S();
     const forceAuthRefresh = options.forceAuthRefresh === true;
 
@@ -17529,7 +17585,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     updateBadge(st.unreadCount);
     render();
 
-    const client  = sb;
+    const client  = sb();
     const session = S();
     if (!client || !session?.userId) return;
     await client
@@ -17544,7 +17600,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     updateBadge(0);
     render();
 
-    const client  = sb;
+    const client  = sb();
     const session = S();
     if (!client || !session?.userId) return;
     await client
@@ -17563,7 +17619,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   async function insertNotification ({
     recipientId, type, entityId = null, entityType = null, message = ''
   }) {
-    const client  = sb;
+    const client  = sb();
     const session = S();
     if (!client || !session?.userId) return;
     if (!recipientId || String(recipientId) === String(session.userId)) return;  // no self-notif
@@ -17585,7 +17641,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
 
   /* convenience: parse @mentions from text, insert for each */
   async function insertMentionNotifications (text, entityId, entityType) {
-    const client  = sb;
+    const client  = sb();
     const session = S();
     if (!client || !session?.userId || !text) return;
 
@@ -17615,7 +17671,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
      REALTIME — SUPABASE CHANNEL
   ══════════════════════════════════════════════════════════ */
   function setupRealtime () {
-    const client  = sb;
+    const client  = sb();
     const session = S();
     if (!client || !session?.userId || session?.isGuest) return;
 
@@ -17669,7 +17725,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   }
 
   function teardown () {
-    if (st.channel && sb) { sb.removeChannel(st.channel); st.channel = null; }
+    if (st.channel && sb()) { sb().removeChannel(st.channel); st.channel = null; }
     if (st.pollTimer)       { clearInterval(st.pollTimer); st.pollTimer = null; }
   }
 
