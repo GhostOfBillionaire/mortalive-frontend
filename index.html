@@ -3893,6 +3893,48 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
 .profile-author-link,.post-author-link{color:inherit;text-decoration:none;cursor:pointer}
 .profile-author-link:hover,.post-author-link:hover{text-decoration:underline;text-underline-offset:2px}
 .feed-post-media{display:block;width:100%;max-height:520px;object-fit:cover;border-radius:14px;margin-top:12px;cursor:pointer}
+
+/* ── Long-form video card (post_type: 'video') ───────────────────────── */
+#pg-feed .feed-video-card{
+  position:relative; margin-top:12px; border-radius:14px; overflow:hidden;
+  background:#0d1117; aspect-ratio:16/9; cursor:pointer; width:100%;
+}
+#pg-feed .feed-video-thumb{ width:100%; height:100%; object-fit:cover; display:block; }
+#pg-feed .feed-video-play-btn{
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  width:52px; height:52px; border-radius:50%;
+  background:linear-gradient(145deg,var(--primary),var(--secondary)); color:#fff;
+  display:grid; place-items:center; font-size:18px; padding-left:3px;
+  box-shadow:0 6px 20px rgba(0,0,0,.35);
+  transition:transform var(--dur-fast) var(--ease-out);
+}
+#pg-feed .feed-video-card:hover .feed-video-play-btn{ transform:translate(-50%,-50%) scale(1.08); }
+#pg-feed .feed-video-duration{
+  position:absolute; bottom:8px; right:8px; padding:2px 7px; border-radius:5px;
+  background:rgba(0,0,0,.72); color:#fff; font-size:11.5px; font-weight:800; letter-spacing:.01em;
+}
+
+/* ── Reels shelf: horizontal rail inserted into the vertical feed ───────
+   Mirrors YouTube's home-feed pattern of a periodic Shorts shelf among
+   long-form video cards, while keeping Mortalive's own card chrome
+   (surface/border/elevation tokens) instead of YouTube's skin. ── */
+#pg-feed .feed-reels-shelf{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+  box-shadow:var(--elev-1); padding:14px 0 16px; overflow:hidden;
+}
+#pg-feed .feed-reels-shelf-head{
+  display:flex; align-items:center; gap:7px; padding:0 16px 12px;
+  font-size:15px; font-weight:800; color:var(--on-surface);
+}
+#pg-feed .feed-reels-shelf-track{
+  display:flex; gap:10px; overflow-x:auto; padding:0 16px 4px;
+  scrollbar-width:none; -webkit-overflow-scrolling:touch;
+}
+#pg-feed .feed-reels-shelf-track::-webkit-scrollbar{ display:none; }
+#pg-feed .feed-reels-shelf-track .reel-thumb{ flex:0 0 auto; width:118px; }
+@media(max-width:720px){
+  #pg-feed .feed-reels-shelf-track .reel-thumb{ width:102px; }
+}
 .feed-post-video{display:block;width:100%;max-height:520px;border-radius:14px;margin-top:12px;background:#000}
 .feed-carousel{position:relative;border-radius:14px;overflow:hidden;background:#000;margin-top:12px}
 .feed-carousel-track{position:relative}
@@ -6362,6 +6404,7 @@ body.mortalive-app-topbar-visible .profile-tabs-bar {
   position: absolute;
   bottom: 6px;
   left: 6px;
+  right: 40px;
   z-index: 2;
   display: flex;
   align-items: center;
@@ -6369,6 +6412,9 @@ body.mortalive-app-topbar-visible .profile-tabs-bar {
   color: rgba(255, 255, 255, 0.88);
   font-size: 10px;
   font-weight: 700;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* Upload reel tile */
@@ -8554,11 +8600,12 @@ body.profile-viewing-public #btn-follow-user{display:inline-flex!important}
 <style id="mortalive-v11-composer-overrides">
 #pg-feed .compose-writing-wrap{position:relative;}
 #pg-feed .compose-writing-wrap .compose-field{padding-left:15px;}
-#pg-feed .compose-type-switch{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-#pg-feed .compose-type-switch .compose-type-btn{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 10px;border-radius:999px;background:transparent;color:var(--on-surface-3);border:1px solid transparent;font-size:12px;font-weight:700;line-height:1;transition:background .14s ease,color .14s ease,border-color .14s ease;}
+#pg-feed .compose-type-switch{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+#pg-feed .compose-type-switch::-webkit-scrollbar{display:none;}
+#pg-feed .compose-type-switch .compose-type-btn{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 10px;border-radius:999px;background:transparent;color:var(--on-surface-3);border:1px solid transparent;font-size:12px;font-weight:700;line-height:1;transition:background .14s ease,color .14s ease,border-color .14s ease;}
 #pg-feed .compose-type-switch .compose-type-btn:hover{background:var(--surface-2);color:var(--on-surface);}
 #pg-feed .compose-type-switch .compose-type-btn.active{background:var(--primary-alpha);color:var(--primary);border-color:rgba(26,110,245,.16);}
-#pg-feed .compose-type-separator{color:var(--border-strong);font-size:12px;user-select:none;}
+#pg-feed .compose-type-separator{color:var(--border-strong);font-size:12px;user-select:none;flex-shrink:0;}
 #mortalive-post-viewer{background:rgba(245,247,250,.94);backdrop-filter:blur(12px) saturate(105%);-webkit-backdrop-filter:blur(12px) saturate(105%);}
 #mortalive-post-viewer .mortalive-post-viewer-dialog{background:#fff;border-color:rgba(0,0,0,.10);box-shadow:0 26px 80px rgba(15,23,42,.18);}
 #mortalive-post-viewer .mortalive-post-viewer-media-host{background:#f3f4f6;}
@@ -11396,6 +11443,8 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn locked" id="btn-type-reel" type="button" data-compose-kind="reel" disabled title="Unlock by completing your milestones">🔒 Reel</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
+  <button class="compose-type-btn locked" id="btn-type-video" type="button" data-compose-kind="video" disabled title="Unlock by completing your milestones">🔒 Video</button>
+  <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-poll" type="button" data-compose-kind="poll">Poll</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-qna" type="button" data-compose-kind="qna">Q&A</button>
@@ -11407,6 +11456,8 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <button class="compose-tool reel-compose-btn u-hidden" id="btn-feed-reel" type="button" title="Add reel" aria-hidden="true" tabindex="-1">🎬 Reel</button>
 <input id="feed-reel-input" type="file" accept="video/mp4,video/webm,video/quicktime" hidden>
 <span id="feed-reel-name" class="compose-photo-name" aria-live="polite"></span>
+<input id="feed-video-input" type="file" accept="video/mp4,video/webm,video/quicktime" hidden>
+<span id="feed-video-name" class="compose-photo-name" aria-live="polite"></span>
 <span style="flex:1;"></span>
 <span id="compose-hashtag-status" class="compose-hashtag-status u-hidden" aria-live="polite" ></span><span id="char-count" style="font-size:12px;color:var(--on-surface-3);">500</span>
 <button class="compose-submit" disabled="" id="compose-submit">Post</button>
