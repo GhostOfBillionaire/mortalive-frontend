@@ -81,19 +81,6 @@
   --dur-fast: 140ms;
   --dur-mid:  220ms;
   --dur-slow: 360ms;
-
-  /* Design handoff v1 — shared scale aliases.
-     Existing production radius values remain untouched to avoid broad regressions. */
-  --sp-xs: 4px;
-  --sp-sm: 8px;
-  --sp-md: 12px;
-  --sp-lg: 16px;
-  --sp-xl: 24px;
-  --sp-2xl: 32px;
-  --dur-normal: 300ms;
-  --avatar-lg: 120px;
-  --avatar-md: 56px;
-  --avatar-sm: 32px;
 }
 
 /* ── Reset ──────────────────────────────────────────── */
@@ -10647,122 +10634,209 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 </style>
 
 
-<style id="mortalive-design-handoff-audit-v1">
-/* =========================================================
-   MORTALIVE — Design handoff polish v1
-   Presentation-only overrides. Existing behavior/DOM hooks
-   remain intact unless explicitly noted in the audit patch.
-   ========================================================= */
+<style id="mortalive-v2-feed-responsive-design">
+/* MORTALIVE Feed UX v2 — design-system style pass
+   Source of truth remains the original handoff HTML. This layer only
+   corrects responsive geometry and media sizing; existing DOM/JS hooks stay intact. */
 
-/* Feed — consistent spacing + type separation */
-#pg-feed .post-card{
-  --post-gap: var(--sp-md);
+/* ── Feed shell: keep the Instagram-like reading column narrow and stable ── */
+#pg-feed .wrap{
+  width:min(1280px, calc(100% - 28px));
+  margin-inline:auto;
+  padding:20px 0;
 }
-#pg-feed .post-header{
-  padding: var(--sp-md) var(--sp-lg) 0;
+
+#pg-feed .feed-layout{
+  display:grid;
+  grid-template-columns:240px minmax(0,680px) 280px;
+  gap:20px;
+  align-items:start;
+  justify-content:center;
+  padding-top:8px;
 }
-#pg-feed .post-body{
-  padding: var(--sp-md) var(--sp-lg);
+
+/* Tablet / laptop: remove the right rail before it squeezes the feed. */
+@media (max-width:1440px){
+  #pg-feed .feed-layout{
+    grid-template-columns:220px minmax(0,680px);
+    justify-content:center;
+  }
+  #pg-feed .feed-right{display:none;}
 }
-#pg-feed .post-time{
-  gap: var(--sp-sm);
+
+@media (max-width:1080px){
+  #pg-feed .feed-layout{
+    grid-template-columns:200px minmax(0,680px);
+    justify-content:center;
+  }
 }
-#pg-feed .post-type-label{
-  display:inline-flex;
-  align-items:center;
-  padding:0.5px 0.5px;
-  border:1px dashed var(--border-strong);
-  border-radius:var(--r-xs);
-  font-size:11px;
-  font-weight:700;
-  letter-spacing:2px;
-  line-height:1.35;
-  text-transform:none;
-  color:var(--on-surface-2);
-  white-space:nowrap;
+
+/* Phone: true single-column social-feed presentation. */
+@media (max-width:720px){
+  #pg-feed .wrap{
+    width:100%;
+    padding:10px 0 24px;
+  }
+  #pg-feed .feed-layout{
+    display:block;
+    padding-top:0;
+  }
+  #pg-feed .feed-left,
+  #pg-feed .feed-right{display:none;}
+  #pg-feed .feed-center{
+    width:100%;
+    min-width:0;
+  }
+  #pg-feed .feed-tabs{
+    margin:0 10px 12px;
+  }
+  #pg-feed .compose-card{
+    margin:0 10px 12px;
+    padding:14px;
+    border-radius:16px;
+  }
+  #pg-feed .post-card{
+    margin:0 0 10px;
+    border-left:0;
+    border-right:0;
+    border-radius:0;
+    box-shadow:0 1px 0 var(--border);
+    transform:none;
+  }
+  #pg-feed .post-card:hover{
+    transform:none;
+    box-shadow:0 1px 0 var(--border);
+  }
+  #pg-feed .post-header{padding:14px 14px 0;}
+  #pg-feed .post-body{padding:12px 14px;}
+  #pg-feed .post-actions{padding:7px 10px 9px; gap:2px;}
+  #pg-feed .action-btn{
+    min-height:44px;
+    padding:8px 10px;
+    font-size:13px;
+  }
 }
-#pg-feed .post-actions{
-  gap:2px;
-  padding: var(--sp-sm) var(--sp-lg) var(--sp-md);
-}
-#pg-feed .post-actions .action-btn{
-  min-height:44px;
-  padding:8px;
-  font-size:16px;
-  gap:6px;
-}
-#pg-feed .post-actions .post-view-count{
-  min-height:44px;
-  padding:8px;
-}
-#pg-feed .action-btn .action-icon{
-  font-size:16px;
-  line-height:1;
-}
-#pg-feed .feed-video-card,
-#pg-feed .feed-reel-card,
-#pg-feed .feed-post-video,
-#pg-feed .feed-carousel,
-#pg-feed .feed-reels-shelf .reel-thumb{
+
+/* ── Media: preserve every user-uploaded image's aspect ratio ──────────────
+   The previous max-height + object-fit:cover combination could crop posts.
+   Feed media now scales down to fit without ever cutting content. */
+#pg-feed .feed-post-media{
+  display:block;
+  width:100%;
+  height:auto;
+  max-width:100%;
+  max-height:min(78vh,760px);
+  object-fit:contain;
+  object-position:center;
   border-radius:14px;
+  margin-top:12px;
+  cursor:pointer;
+  background:#f3f4f6;
 }
-#pg-feed .feed-carousel-arrow{
-  top:calc(50% - 15px);
-  transform:none;
+
+#pg-feed .feed-post-video{
+  display:block;
+  width:100%;
+  height:auto;
+  max-width:100%;
+  max-height:min(78vh,760px);
+  object-fit:contain;
+  object-position:center;
+  border-radius:14px;
+  margin-top:12px;
+  background:#000;
 }
+
 #pg-feed .feed-carousel{
   position:relative;
+  width:100%;
+  border-radius:14px;
+  overflow:hidden;
+  background:#000;
+  margin-top:12px;
 }
-#pg-feed .feed-carousel-dots{
-  display:flex;
-  flex-wrap:nowrap;
-  justify-content:center;
-  gap:4px;
+#pg-feed .feed-carousel-track{position:relative;width:100%;}
+#pg-feed .feed-carousel-slide{display:none;width:100%;}
+#pg-feed .feed-carousel-slide.active{display:block;}
+#pg-feed .feed-carousel-slide img,
+#pg-feed .feed-carousel-slide video{
+  display:block;
+  width:100%;
+  height:auto;
   max-width:100%;
-  overflow-x:auto;
-  scrollbar-width:none;
+  max-height:min(78vh,760px);
+  object-fit:contain;
+  object-position:center;
+  background:#000;
 }
-#pg-feed .feed-carousel-dots::-webkit-scrollbar{
-  display:none;
+#pg-feed .feed-carousel-arrow{
+  top:50%;
+  transform:translateY(-50%);
 }
 
-/* Feed sidebars */
+/* Keep normal portrait posts comfortable on small screens without cropping. */
+@media (max-width:720px){
+  #pg-feed .feed-post-media,
+  #pg-feed .feed-post-video,
+  #pg-feed .feed-carousel-slide img,
+  #pg-feed .feed-carousel-slide video{
+    max-height:none;
+    border-radius:0;
+  }
+  #pg-feed .feed-carousel{border-radius:0;}
+  #pg-feed .feed-carousel-arrow{width:34px;height:34px;}
+  #pg-feed .feed-carousel-dots{bottom:10px;}
+}
+
+/* ── Secondary polish that remains subordinate to the existing feed logic ── */
+#pg-feed .post-header{gap:14px;}
+#pg-feed .post-author{gap:8px;}
+#pg-feed .post-time{font-size:11.5px;gap:5px;}
+#pg-feed .post-badge{
+  font-size:11px;
+  letter-spacing:.02em;
+  padding:3px 7px;
+  border-style:dashed;
+}
+#pg-feed .post-actions{
+  padding:8px 12px 12px;
+  gap:3px;
+}
+#pg-feed .action-btn{
+  min-height:44px;
+  padding:8px 10px;
+}
+#pg-feed .action-btn .action-icon{font-size:17px;}
+
+/* Feed tabs: stable, low-noise selected state rather than a heavy blue block. */
+#pg-feed .feed-tab{
+  min-height:44px;
+  border:1px solid transparent;
+  transition:background var(--dur-fast) var(--ease-out),
+             border-color var(--dur-fast) var(--ease-out),
+             color var(--dur-fast) var(--ease-out);
+}
+#pg-feed .feed-tab.active{
+  background:var(--primary-alpha);
+  color:var(--primary);
+  border-color:rgba(26,110,245,.18);
+  box-shadow:none;
+}
+
+/* Milestone / right-rail cards: visible lift when the rail is present. */
+#pg-feed .right-card,
 #pg-feed .sidebar-card{
-  padding:12px 16px;
+  transition:box-shadow var(--dur-fast) var(--ease-out),
+             border-color var(--dur-fast) var(--ease-out);
 }
-#pg-feed .right-card{
-  padding:12px 14px;
-}
-#pg-feed .feed-left .feed-nav-link{
-  display:block !important;
-  padding:10px 14px !important;
-  border-radius:var(--r-sm) !important;
-  background:transparent !important;
-  color:var(--primary) !important;
-  border:1px solid var(--primary) !important;
-  box-shadow:none !important;
-  font-size:13px !important;
-  font-weight:700 !important;
-}
-#pg-feed .feed-left .feed-nav-link:hover{
-  background:var(--primary-alpha) !important;
-  box-shadow:0 2px 6px rgba(0,0,0,.08) !important;
-}
-#pg-feed .milestone-card-wrap{
-  border:1px solid var(--primary-alpha);
+#pg-feed .right-card:first-child{
+  border-color:var(--primary-alpha);
   background:var(--surface-tint);
   box-shadow:0 2px 6px rgba(0,0,0,.08);
 }
-#pg-feed #feed-milestone-card{
-  border:1px solid var(--border);
-  box-shadow:0 2px 6px rgba(0,0,0,.08);
-  border-radius:var(--r-sm);
-  background:var(--surface);
-  padding:var(--sp-md);
-}
 #pg-feed .trending-poll-item,
 #pg-feed .active-user-item{
-  transition:background var(--dur-fast), border-radius var(--dur-fast);
+  transition:background var(--dur-fast) var(--ease-out), border-radius var(--dur-fast) var(--ease-out);
 }
 #pg-feed .trending-poll-item:hover,
 #pg-feed .active-user-item:hover{
@@ -10770,280 +10844,13 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   border-radius:var(--r-xs);
 }
 
-/* Composer */
-#pg-feed .compose-type-switch .compose-type-btn{
-  background:transparent;
-  border:1px solid var(--border);
-}
-#pg-feed .compose-type-switch .compose-type-btn.active{
-  background:var(--primary-alpha);
-  border-color:var(--primary);
-  color:var(--primary);
-}
-#pg-feed .compose-submit{
-  position:sticky;
-  bottom:8px;
-  box-shadow:0 4px 12px rgba(26,110,245,.2);
-  min-height:44px;
-}
-#pg-feed .compose-submit .spinner{
-  width:16px;
-  height:16px;
-  flex:0 0 16px;
-  border:2px solid var(--primary-alpha);
-  border-top-color:#fff;
-  border-radius:50%;
-  animation: mortalive-spin .8s linear infinite;
-}
-#pg-feed .compose-submit.is-loading{
-  opacity:.92;
-}
-@keyframes mortalive-spin{
-  to{transform:rotate(360deg);}
-}
-#pg-feed .poll-option-row{
-  align-items:center;
-}
-#pg-feed .poll-remove-btn{
-  width:32px;
-  height:32px;
-  display:grid;
-  place-items:center;
-}
-#pg-feed .upload-progress{
-  display:block;
-  width:100%;
-  height:6px;
-  margin-top:10px;
-  border:0;
-  border-radius:var(--r-full);
-  overflow:hidden;
-  background:var(--surface-3);
-}
-#pg-feed .upload-progress::-webkit-progress-bar{
-  background:var(--surface-3);
-  border-radius:var(--r-full);
-}
-#pg-feed .upload-progress::-webkit-progress-value{
-  background:linear-gradient(90deg,var(--primary),var(--secondary));
-  border-radius:var(--r-full);
-  transition:width .25s var(--ease-out);
-}
-#pg-feed .upload-progress::-moz-progress-bar{
-  background:linear-gradient(90deg,var(--primary),var(--secondary));
-  border-radius:var(--r-full);
-}
-#pg-feed .upload-progress-label{
-  display:block;
-  margin-top:5px;
-  font-size:11px;
-  font-weight:700;
-  color:var(--on-surface-3);
-}
-#pg-feed .upload-progress[hidden],
-#pg-feed .upload-progress-label[hidden]{
-  display:none;
-}
-#pg-feed .compose-photo-preview{
-  flex-shrink:0;
-}
-@media (max-width:480px){
-  #pg-feed .compose-photo-preview:not([hidden]){
-    display:block;
-    width:100%;
-    max-width:100%;
-    margin-top:8px;
-  }
-  #pg-feed .compose-photo-preview img{
-    width:72px;
-    height:72px;
-  }
-}
-@media (max-width:640px){
-  #pg-feed .feed-right{
-    display:none;
-  }
-}
-
-/* Feed responsive tablet band from the audit */
-@media (min-width:1081px) and (max-width:1440px){
-  #pg-feed .feed-layout{
-    grid-template-columns:minmax(220px,260px) minmax(0,1fr);
-  }
-  #pg-feed .feed-right{
-    display:none;
-  }
-}
-
-/* Profile */
-#pg-profile .profile-avatar-shell{
-  width:var(--avatar-lg);
-  height:var(--avatar-lg);
-}
-#pg-profile .profile-avatar-modern{
-  width:100%;
-  height:100%;
-}
-#pg-profile .profile-bio-modern{
-  display:-webkit-box;
-  -webkit-line-clamp:2;
-  -webkit-box-orient:vertical;
-  overflow:hidden;
-}
-#pg-profile .profile-mini-stats{
-  grid-template-columns:repeat(auto-fit,minmax(120px,1fr)) !important;
-}
-#pg-profile .profile-tab-btn{
-  transition:
-    color var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out),
-    background var(--dur-fast);
-}
-#pg-profile #profile-gallery{
-  grid-template-columns:repeat(auto-fit,minmax(140px,1fr)) !important;
-}
-#pg-profile .reels-empty-cta{
-  border:1px solid var(--primary);
-  border-radius:var(--r-sm);
-  padding:10px 16px;
-  background:transparent;
-  color:var(--primary);
-  box-shadow:none;
-}
-#pg-profile .reels-empty-cta:hover{
-  background:var(--primary-alpha);
-  box-shadow:0 2px 6px rgba(0,0,0,.08);
-  transform:none;
-}
-@media (max-width:600px){
-  #pg-profile .profile-mini-stats{
-    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
-  }
-}
-@media (max-width:720px){
-  #pg-profile .profile-avatar-shell{
-    width:76px;
-    height:76px;
-  }
-}
-
-/* Gallery type badge */
-#pg-profile .profile-gallery-tile{
-  position:relative;
-}
-#pg-profile .gallery-type-badge{
-  position:absolute;
-  right:6px;
-  bottom:6px;
-  z-index:2;
-  display:inline-flex;
-  align-items:center;
-  padding:2px 5px;
-  border-radius:var(--r-xs);
-  background:rgba(13,17,23,.72);
-  color:#fff;
-  font-size:8px;
-  line-height:1.15;
-  font-weight:800;
-  letter-spacing:.04em;
-  text-transform:uppercase;
-  pointer-events:none;
-  backdrop-filter:blur(5px);
-}
-
-/* Post viewer */
-@keyframes mortalive-shimmer{
-  0%{opacity:.6}
-  50%{opacity:1}
-  100%{opacity:.6}
-}
-#mortalive-post-viewer .mortalive-post-viewer-media-frame.is-loading{
-  background:linear-gradient(90deg,var(--surface-2) 0%,var(--surface-3) 50%,var(--surface-2) 100%);
-  background-size:200% 100%;
-  animation:mortalive-shimmer 1.6s ease-in-out infinite;
-}
-#mortalive-post-viewer .mortalive-post-viewer-media-frame.is-loading::before{
-  content:'';
-  position:absolute;
-  inset:12px;
-  border-radius:var(--r-sm);
-  background:linear-gradient(90deg,rgba(255,255,255,.18) 0%,rgba(255,255,255,.55) 50%,rgba(255,255,255,.18) 100%);
-  background-size:200% 100%;
-  animation:mortalive-shimmer 1.6s ease-in-out infinite;
-  pointer-events:none;
-}
-#mortalive-post-viewer .mortalive-post-viewer-media-frame{
-  position:relative;
-}
-#mortalive-post-viewer .mortalive-post-viewer-media-frame > *{
-  position:relative;
-  z-index:1;
-}
-#mortalive-post-viewer .mortalive-post-viewer-media-host{
-  aspect-ratio:8 / 10;
-  width:100%;
-}
-#mortalive-post-viewer .mortalive-post-viewer-media-frame{
-  margin-bottom:16px;
-  aspect-ratio:8 / 10;
-}
-#mortalive-post-viewer .mortalive-post-viewer-media{
-  object-fit:contain;
-  object-position:center;
-}
-#mortalive-post-viewer .mortalive-post-viewer-header{
-  margin-top:12px;
-}
-#mortalive-post-viewer .mortalive-post-viewer-comment-head span{
-  font-size:11px;
-  color:var(--on-surface-3);
-}
-#mortalive-post-viewer .mortalive-post-viewer-comment.is-own{
-  border-left:3px solid var(--primary-alpha);
-  padding-left:10px;
-}
-#mortalive-post-viewer .mortalive-post-viewer-input{
-  min-height:76px;
-  resize:vertical;
-  line-height:1.45;
-  font-family:inherit;
-  padding:8px 10px;
-}
-#mortalive-post-viewer .mortalive-post-viewer-bottom{
-  border-top:1px solid var(--border);
-  padding-top:12px;
-  margin-top:12px;
-}
-#mortalive-post-viewer .mortalive-post-viewer-actions{
-  flex-wrap:nowrap;
-  overflow-x:auto;
-  scrollbar-width:none;
-}
-#mortalive-post-viewer .mortalive-post-viewer-actions::-webkit-scrollbar{
-  display:none;
-}
-#mortalive-post-viewer .mortalive-post-viewer-close{
-  width:40px;
-  height:40px;
-  display:grid;
-  place-items:center;
-}
-
-/* Global focus / disabled affordances, limited to genuine controls */
+/* Keyboard accessibility without altering click behavior. */
 #pg-feed button:focus-visible,
-#pg-profile button:focus-visible,
-#mortalive-post-viewer button:focus-visible,
+#pg-feed a:focus-visible,
 #pg-feed input:focus-visible,
-#pg-feed textarea:focus-visible,
-#pg-profile input:focus-visible,
-#pg-profile textarea:focus-visible,
-#mortalive-post-viewer textarea:focus-visible{
+#pg-feed textarea:focus-visible{
   outline:2px solid var(--primary);
   outline-offset:2px;
-}
-#pg-feed button:disabled,
-#pg-profile button:disabled{
-  cursor:not-allowed;
 }
 </style>
 </head>
@@ -11880,10 +11687,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <span id="feed-video-name" class="compose-photo-name" aria-live="polite"></span>
 <span style="flex:1;"></span>
 <span id="compose-hashtag-status" class="compose-hashtag-status u-hidden" aria-live="polite" ></span><span id="char-count" style="font-size:12px;color:var(--on-surface-3);">500</span>
-<button class="compose-submit" disabled="" id="compose-submit"><span class="compose-submit-label">Post</span><span class="spinner" aria-hidden="true" hidden></span></button>
-</div>
-<progress id="upload-progress" class="upload-progress" max="100" value="0" hidden aria-label="Video upload progress"></progress>
-<div id="upload-progress-label" class="upload-progress-label" hidden aria-live="polite">Uploading video…</div>
+<button class="compose-submit" disabled="" id="compose-submit">Post</button>
 </div>
 </div>
 <!-- Feed filter tabs -->
@@ -13039,7 +12843,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
         <div class="mortalive-post-viewer-actions"></div>
         <div class="mortalive-post-viewer-likes"></div>
         <div class="mortalive-post-viewer-comment-box">
-          <textarea class="mortalive-post-viewer-input" maxlength="300" rows="3" placeholder="Add a comment…" aria-label="Add a comment"></textarea>
+          <input class="mortalive-post-viewer-input" maxlength="300" type="text" placeholder="Add a comment…" aria-label="Add a comment">
           <button type="button" class="mortalive-post-viewer-submit">Post</button>
         </div>
         <div class="mortalive-post-viewer-status"></div>
