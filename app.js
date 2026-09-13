@@ -933,20 +933,6 @@ const TALK_PAGE_IDS = new Set([
 ]);
 
 
-function renderNotificationsSection() {
-  const host = document.getElementById('mortalive-notifications-list');
-  if (!host) return;
-
-  host.innerHTML = `
-    <div class="mortalive-notification-empty">
-      <div class="mortalive-notification-empty-icon">🔔</div>
-      <div class="mortalive-notification-empty-title">Notifications</div>
-      <div class="mortalive-notification-empty-sub">
-        You're all caught up.
-      </div>
-    </div>`;
-}
-
 function showPage(id, options = {}) {
   // Guests may view OTHER users' public profiles (read-only).
   // They are still blocked from their own profile page, Feed, and Messages.
@@ -1087,7 +1073,6 @@ function showPage(id, options = {}) {
     S.profileViewUserId = null;
     S.profileViewData = null;
     document.body.classList.remove('profile-viewing-public');
-    renderNotificationsSection();
     if (window.notifCenter && !S.isGuest && S.userId) {
       window.notifCenter.reload().catch(err =>
         console.warn('[notif] section reload:', err?.message || err)
@@ -5157,7 +5142,7 @@ function getFeedComposerKind() {
 }
 
 function getFeedStructuredKindLabel(kind) {
-  return kind === 'qna' ? 'Q&A' : kind === 'poll' ? 'Poll' : kind === 'photo' ? 'Photo' : kind === 'reel' ? 'Reel' : 'Text';
+  return kind === 'qna' ? 'Q&A' : kind === 'poll' ? 'Poll' : kind === 'photo' ? 'Photo' : kind === 'reel' ? 'Reel' : kind === 'video' ? 'Video' : 'Text';
 }
 
 function getFeedComposerOptionValues() {
@@ -5215,6 +5200,7 @@ function syncFeedComposerTypeUI() {
     ? (_feedQnaChoicesEnabled ? 'Ask a question for people to choose from…' : 'Ask a question people can reply to…')
     : kind === 'poll' ? 'Ask a poll question…'
     : kind === 'reel' ? 'Add a caption to your reel…'
+    : kind === 'video' ? 'Add a title or description for your video…'
     : "What's on your mind after that chat…";
   if (modeLabel) modeLabel.textContent = getFeedStructuredKindLabel(kind);
   if (builder) builder.classList.toggle('open', kind === 'poll' || kind === 'qna');
@@ -5233,7 +5219,12 @@ function syncFeedComposerTypeUI() {
     if (!allowed) clearComposePhotoPreview('feed-reel-input','btn-feed-reel','feed-reel-preview','feed-reel-name');
     reelButton.classList.toggle('active', kind === 'reel' && !!$('feed-reel-input')?.files?.[0]);
   }
-  document.querySelectorAll('#pg-feed [data-compose-kind="reel"]').forEach(btn => {
+  if (kind !== 'video') {
+    const videoInput = $('feed-video-input'), videoName = $('feed-video-name');
+    if (videoInput) videoInput.value = '';
+    if (videoName) videoName.textContent = '';
+  }
+  document.querySelectorAll('#pg-feed [data-compose-kind="reel"], #pg-feed [data-compose-kind="video"]').forEach(btn => {
     const reelsUnlocked = !!_milestoneProgress?.reelsUnlocked;
     btn.classList.toggle('locked', !reelsUnlocked);
     btn.disabled = !reelsUnlocked;
@@ -5269,7 +5260,7 @@ function syncFeedComposerTypeUI() {
 }
 
 function setFeedComposerKind(kind = 'text') {
-  const next = ['text','photo','reel','poll','qna'].includes(kind) ? kind : 'text';
+  const next = ['text','photo','reel','video','poll','qna'].includes(kind) ? kind : 'text';
   if (next === 'qna') { _feedQnaChoicesEnabled = false; _feedQnaCorrectOptionId = null; }
   if (next === 'poll') { _feedQnaChoicesEnabled = false; _feedQnaCorrectOptionId = null; }
   _feedComposerMenuOpen = false; // always close the type picker when a structured kind is selected
@@ -5281,6 +5272,9 @@ function setFeedComposerKind(kind = 'text') {
   }
   if (next === 'reel') {
     $('feed-reel-input')?.click();
+  }
+  if (next === 'video') {
+    $('feed-video-input')?.click();
   }
   _feedComposerMenuOpen = false;
   syncFeedComposerTypeUI();
@@ -6811,6 +6805,7 @@ async function createPostComment(postId, content) {
       renderPostComments(postId, _commentCache.get(postId));
     }
     toast('Comment added', '💬');
+    return data;
   } catch (e) {
     toast(e?.message || 'Could not add comment.', '⚠️');
   }
@@ -7160,6 +7155,42 @@ async function uploadReelFile(file, folder = 'reels') {
   return { url: data.publicUrl, path, size: file.size, type: file.type };
 }
 
+// ── Long-form video (distinct from the milestone-gated short 'reel' type) ──
+const VIDEO_UPLOAD_MAX_BYTES = 300 * 1024 * 1024;
+function validateVideoFile(file) {
+  if (!file) throw new Error('Choose a video first.');
+  if (!REEL_UPLOAD_TYPES.has(file.type)) throw new Error('Use MP4, WebM, or MOV videos.');
+  if (file.size > VIDEO_UPLOAD_MAX_BYTES) throw new Error('Videos must be 300 MB or smaller.');
+  return file;
+}
+async function uploadVideoFile(file, folder = 'videos') {
+  validateVideoFile(file);
+  if (!S.userId || S.isGuest || !sb) throw new Error('Sign in to upload videos.');
+  const ext = file.type === 'video/webm' ? 'webm' : file.type === 'video/quicktime' ? 'mov' : 'mp4';
+  const path = `${S.userId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2,10)}.${ext}`;
+  const { error } = await sb.storage.from(PHOTO_UPLOAD_BUCKET).upload(path, file, {
+    cacheControl: '31536000', upsert: false, contentType: file.type
+  });
+  if (error) throw error;
+  const { data } = sb.storage.from(PHOTO_UPLOAD_BUCKET).getPublicUrl(path);
+  if (!data?.publicUrl) throw new Error('Could not create the public video URL.');
+  return { url: data.publicUrl, path, size: file.size, type: file.type };
+}
+
+/** Reads a local video file's duration client-side, before upload, for the duration badge. */
+function readVideoDuration(file) {
+  return new Promise((resolve) => {
+    try {
+      const el = document.createElement('video');
+      el.preload = 'metadata';
+      const objectUrl = URL.createObjectURL(file);
+      const cleanup = () => { try { URL.revokeObjectURL(objectUrl); } catch (_) {} };
+      el.onloadedmetadata = () => { const d = el.duration; cleanup(); resolve(Number.isFinite(d) ? d : 0); };
+      el.onerror = () => { cleanup(); resolve(0); };
+      el.src = objectUrl;
+    } catch (_) { resolve(0); }
+  });
+}
 
 function validatePhotoFile(file) {
   if (!file) throw new Error('Choose a photo first.');
@@ -7698,6 +7729,90 @@ if (!document.documentElement.dataset.mortaliveCarouselBound) {
   }, true);
 }
 
+function formatVideoDuration(totalSeconds) {
+  const s = Math.max(0, Math.round(Number(totalSeconds) || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+function buildFeedPostCardHTML(post) {
+  const author = post.author || {};
+  const username = author.username || 'member';
+  const display = author.display_name || username;
+  const score = Number(author.crockroach_score) || 0;
+  const mine = post.user_id === S.userId;
+  const postMedia = getPostMedia(post);
+  const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A'
+    : post?.post_meta?.kind === 'poll' ? 'Poll'
+    : post.post_type === 'text' ? 'Text'
+    : post.post_type === 'reel' ? 'Reel'
+    : postMedia.length > 1 ? 'Carousel'
+    : postMedia[0]?.type === 'video' ? 'Video'
+    : postMedia.length ? 'Photo'
+    : post.post_type || 'Post';
+  const badge = score >= 700 ? '<span class="post-badge gold">Gold</span>' : score >= 420 ? '<span class="post-badge silver">Silver</span>' : '';
+  const avatarUrl = feedAvatarUrl(author.avatar_url);
+  const avatarMarkup = avatarUrl
+    ? `<div class="post-avatar"><img src="${avatarUrl}" alt="${sanitizeHTML(display)}" loading="lazy" decoding="async" style="width:100%;height:100%;display:block;object-fit:cover;border-radius:50%;" onerror="this.parentElement.textContent='${feedAvatarLetter(display)}';this.remove();"></div>`
+    : `<div class="post-avatar">${feedAvatarLetter(display)}</div>`;
+  const engagement = engagementFor(post.id);
+  const durationSeconds = Number(post?.post_meta?.duration_seconds) || 0;
+  const bodyHTML = post.post_type === 'video' && postMedia.length
+    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card js-photo-open" data-post-id="${sanitizeHTML(post.id)}"><video class="feed-video-thumb" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-video-play-btn">▶</span>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
+    : post.post_type === 'reel' && postMedia.length
+      ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
+      : postMedia.length
+        ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>${feedMediaMarkup(post)}`
+        : post?.post_meta?.kind ? renderStructuredFeedPost(post) : `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>`;
+  return `
+      <article class="post-card" data-post-id="${sanitizeHTML(post.id)}" data-post-owner="${sanitizeHTML(post.user_id || '')}" data-post-type="${sanitizeHTML(post.post_type || 'text')}">
+        <div class="post-header">
+          ${avatarMarkup}
+          <div class="post-meta">
+            <div class="post-author"><button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(post.user_id)}">${sanitizeHTML(display)} ${badge}</button></div>
+            <div class="post-time">@${sanitizeHTML(username)} · ${sanitizeHTML(feedRelTime(post.created_at))} · ${sanitizeHTML(typeLabel)}</div>
+          </div>
+          ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
+        </div>
+        <div class="post-body">${bodyHTML}</div>
+        <div class="post-actions">
+          <button class="action-btn like-btn ${engagement.liked ? 'liked' : ''}" type="button" data-feed-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${engagement.liked ? 'true' : 'false'}"><span class="action-icon">${engagement.liked ? '♥' : '♡'}</span><span class="like-count">${engagement.likes}</span></button>
+          <button class="action-btn comment-btn" type="button" data-feed-action="comments" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">💬</span><span>${engagement.comments}</span></button>
+          <button class="action-btn share-btn" type="button" data-feed-action="copy" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">↗</span><span>Share</span></button>
+          <span class="post-view-count" aria-label="${postViewCountFor(post.id)} views"><span class="action-icon">👁</span><span>${postViewCountFor(post.id)}</span></span>
+          <span class="action-btn" style="margin-left:auto;cursor:default;">${sanitizeHTML(post.visibility || 'public')}</span>
+        </div>
+        <div class="comments-section" data-post-id="${sanitizeHTML(post.id)}" aria-hidden="true"></div>
+      </article>`;
+}
+
+/** A horizontal, YouTube-Shorts-shelf-style rail of reel tiles, reusing the
+ *  same .reel-thumb component the profile Reels grid already uses so the
+ *  visual language stays consistent across the app. */
+function renderFeedReelsShelfHTML(reels) {
+  if (!reels.length) return '';
+  const tiles = reels.map((post, i) => {
+    const media = getPostMedia(post);
+    const duration = Number(post?.post_meta?.duration_seconds) || 0;
+    const caption = String(post.content || '').trim();
+    return `
+      <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open reel ${i + 1}">
+        <video class="reel-thumb-bg" src="${sanitizeHTML(media[0]?.url || '')}" muted playsinline preload="metadata"></video>
+        <span class="reel-thumb-play">▶</span>
+        ${duration > 0 ? `<span class="reel-thumb-duration">${formatVideoDuration(duration)}</span>` : ''}
+        ${caption ? `<span class="reel-thumb-views">${sanitizeHTML(caption.slice(0, 28))}${caption.length > 28 ? '…' : ''}</span>` : ''}
+      </button>`;
+  }).join('');
+  return `
+    <div class="feed-reels-shelf">
+      <div class="feed-reels-shelf-head"><span>🎬</span> Reels</div>
+      <div class="feed-reels-shelf-track">${tiles}</div>
+    </div>`;
+}
+
 function renderFeedPosts() {
   const openIds = _getOpenCommentIds(); // save before replacing innerHTML
   const container = $('feed-posts');
@@ -7714,52 +7829,22 @@ function renderFeedPosts() {
     return;
   }
 
-  container.innerHTML = posts.map(post => {
-    const author = post.author || {};
-    const username = author.username || 'member';
-    const display = author.display_name || username;
-    const score = Number(author.crockroach_score) || 0;
-    const mine = post.user_id === S.userId;
-    const postMedia = getPostMedia(post);
-    const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A'
-      : post?.post_meta?.kind === 'poll' ? 'Poll'
-      : post.post_type === 'text' ? 'Text'
-      : post.post_type === 'reel' ? 'Reel'
-      : postMedia.length > 1 ? 'Carousel'
-      : postMedia[0]?.type === 'video' ? 'Video'
-      : postMedia.length ? 'Photo'
-      : post.post_type || 'Post';
-    const badge = score >= 700 ? '<span class="post-badge gold">Gold</span>' : score >= 420 ? '<span class="post-badge silver">Silver</span>' : '';
-    const avatarUrl = feedAvatarUrl(author.avatar_url);
-    const avatarMarkup = avatarUrl
-      ? `<div class="post-avatar"><img src="${avatarUrl}" alt="${sanitizeHTML(display)}" loading="lazy" decoding="async" style="width:100%;height:100%;display:block;object-fit:cover;border-radius:50%;" onerror="this.parentElement.textContent='${feedAvatarLetter(display)}';this.remove();"></div>`
-      : `<div class="post-avatar">${feedAvatarLetter(display)}</div>`;
-    const engagement = engagementFor(post.id);
-    return `
-      <article class="post-card" data-post-id="${sanitizeHTML(post.id)}" data-post-owner="${sanitizeHTML(post.user_id || '')}" data-post-type="${sanitizeHTML(post.post_type || 'text')}">
-        <div class="post-header">
-          ${avatarMarkup}
-          <div class="post-meta">
-            <div class="post-author"><button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(post.user_id)}">${sanitizeHTML(display)} ${badge}</button></div>
-            <div class="post-time">@${sanitizeHTML(username)} · ${sanitizeHTML(feedRelTime(post.created_at))} · ${sanitizeHTML(typeLabel)}</div>
-          </div>
-          ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
-        </div>
-        <div class="post-body">${post.post_type === 'reel' && postMedia.length
-          ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
-          : postMedia.length
-            ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>${feedMediaMarkup(post)}`
-            : post?.post_meta?.kind ? renderStructuredFeedPost(post) : `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>`}</div>
-        <div class="post-actions">
-          <button class="action-btn like-btn ${engagement.liked ? 'liked' : ''}" type="button" data-feed-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${engagement.liked ? 'true' : 'false'}"><span class="action-icon">${engagement.liked ? '♥' : '♡'}</span><span class="like-count">${engagement.likes}</span></button>
-          <button class="action-btn comment-btn" type="button" data-feed-action="comments" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">💬</span><span>${engagement.comments}</span></button>
-          <button class="action-btn share-btn" type="button" data-feed-action="copy" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">↗</span><span>Share</span></button>
-          <span class="post-view-count" aria-label="${postViewCountFor(post.id)} views"><span class="action-icon">👁</span><span>${postViewCountFor(post.id)}</span></span>
-          <span class="action-btn" style="margin-left:auto;cursor:default;">${sanitizeHTML(post.visibility || 'public')}</span>
-        </div>
-        <div class="comments-section" data-post-id="${sanitizeHTML(post.id)}" aria-hidden="true"></div>
-      </article>`;
-  }).join('');
+  // Reels get pulled out of the vertical run entirely and shown as their own
+  // horizontal shelf (YouTube Shorts-shelf style) instead of as a full-width
+  // card, so short-form and long-form video read as genuinely different
+  // formats rather than the same card shape with a different aspect ratio.
+  const reelPosts = posts.filter(p => p.post_type === 'reel' && getPostMedia(p).length);
+  const mainPosts = posts.filter(p => !(p.post_type === 'reel' && getPostMedia(p).length));
+  const cardsHtml = mainPosts.map(buildFeedPostCardHTML);
+
+  if (reelPosts.length) {
+    const shelfHtml = renderFeedReelsShelfHTML(reelPosts.slice(0, 8));
+    const insertAt = Math.min(2, cardsHtml.length);
+    container.innerHTML = cardsHtml.slice(0, insertAt).join('') + shelfHtml + cardsHtml.slice(insertAt).join('');
+  } else {
+    container.innerHTML = cardsHtml.join('');
+  }
+
   // Restore any comment sections that were open before the innerHTML was replaced
   if (openIds.length) _restoreOpenCommentSections(openIds);
 }
@@ -8045,8 +8130,10 @@ function bindPostViewerKeys() {
 async function hydrateTrendingHashtags() {
   const box = $('hot-topics');
   if (!box) return;
+  const card = box.closest('.right-card');
   if (S.isGuest || !S.userId || !sb) {
     box.innerHTML = '<div class="topic-empty">Sign in to view trending hashtags.</div>';
+    if (card) card.style.display = '';
     return;
   }
   try {
@@ -8054,9 +8141,10 @@ async function hydrateTrendingHashtags() {
     if (error) throw error;
     const rows = Array.isArray(data) ? data : [];
     if (!rows.length) {
-      box.innerHTML = '<div class="topic-empty">No hashtags are trending yet.</div>';
+      if (card) card.style.display = 'none';
       return;
     }
+    if (card) card.style.display = '';
     box.innerHTML = rows.map(row => {
       const tag = String(row.tag || '').toLowerCase();
       const count = Number(row.usage_count) || 0;
@@ -8064,6 +8152,7 @@ async function hydrateTrendingHashtags() {
     }).join('');
   } catch (e) {
     console.warn('[Hashtags] trending lookup failed:', e?.message || e);
+    if (card) card.style.display = '';
     box.innerHTML = '<div class="topic-empty">Trending hashtags are unavailable right now.</div>';
   }
 }
@@ -8071,16 +8160,23 @@ async function hydrateTrendingHashtags() {
 function renderFeedSidebars() {
   const recent = $('trending-polls-list');
   if (recent) {
+    const recentCard = recent.closest('.right-card');
     const rows = _feedPosts.slice(0, 3);
-    recent.innerHTML = rows.length ? rows.map(post => `
+    if (rows.length) {
+      if (recentCard) recentCard.style.display = '';
+      recent.innerHTML = rows.map(post => `
       <div class="trending-poll-item">
         <div class="trending-poll-q">${sanitizeHTML(post.content || '').slice(0, 100)}${(post.content || '').length > 100 ? '…' : ''}</div>
         <div class="trending-poll-meta"><span>✍️ ${sanitizeHTML(post.author?.username || 'member')}</span><span>⏱ ${sanitizeHTML(feedRelTime(post.created_at))}</span></div>
-      </div>`).join('') : '<div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">No public posts yet.</div>';
+      </div>`).join('');
+    } else if (recentCard) {
+      recentCard.style.display = 'none';
+    }
   }
 
   const active = $('active-users-list');
   if (active) {
+    const activeCard = active.closest('.right-card');
     const seen = new Set();
     const authors = [];
     for (const post of _feedPosts) {
@@ -8090,12 +8186,21 @@ function renderFeedSidebars() {
       authors.push(post.author || {});
       if (authors.length >= 4) break;
     }
-    active.innerHTML = authors.length ? authors.map(author => `
+    if (authors.length) {
+      if (activeCard) activeCard.style.display = '';
+      active.innerHTML = authors.map(author => `
       <div class="active-user-item">
         <div class="active-user-ava">${feedAvatarLetter(author.display_name || author.username)}</div>
         <div class="active-user-info"><button type="button" class="active-user-name post-author-link" data-open-profile="${sanitizeHTML(author.id || '')}">${sanitizeHTML(author.display_name || author.username || 'Member')}</button><div class="active-user-sub">@${sanitizeHTML(author.username || 'member')}</div></div>
         <div class="active-user-score">${Number(author.crockroach_score) || 0}</div>
-      </div>`).join('') : '<div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">No active posters yet.</div>';
+      </div>`).join('');
+    } else if (activeCard) {
+      // Leave the show/hide call to renderSuggestions() if it's the one
+      // actually driving this card right now (see MFE module below) — only
+      // hide here if nothing has claimed it with a title change yet.
+      const title = activeCard.querySelector('.right-card-title')?.textContent || '';
+      if (!/suggested/i.test(title)) activeCard.style.display = 'none';
+    }
   }
 
   refreshMilestoneCard().catch(() => {});
@@ -8289,12 +8394,16 @@ async function submitFeedTextPost() {
   const submit = $('compose-submit');
   const photoInput = $('feed-photo-input');
   const reelInput = $('feed-reel-input');
+  const videoInput = $('feed-video-input');
   const kind = getFeedComposerKind();
   if (!field || !submit || S.isGuest || !S.userId || !sb) { toast('Sign in to post', '🔒'); return; }
   const content = field.value.trim();
-  const file = kind === 'reel' ? (reelInput?.files?.[0] || null) : (photoInput?.files?.[0] || null);
+  const file = kind === 'reel' ? (reelInput?.files?.[0] || null)
+    : kind === 'video' ? (videoInput?.files?.[0] || null)
+    : (photoInput?.files?.[0] || null);
   if (!content && !file && !['poll','qna'].includes(kind)) return;
   if (kind === 'reel' && !file) { toast('Choose a reel video first.', '⚠️'); return; }
+  if (kind === 'video' && !file) { toast('Choose a video first.', '⚠️'); return; }
   if (content.length > FEED_MAX_POST_CHARS) { toast(`Posts are limited to ${FEED_MAX_POST_CHARS} characters`, '⚠️'); return; }
 
   const hashtagCheck = validateUniqueHashtags(content);
@@ -8306,20 +8415,23 @@ async function submitFeedTextPost() {
   try {
     if ((kind === 'photo' || kind === 'text') && file) validatePhotoFile(file);
     if (kind === 'reel' && file) validateReelFile(file);
+    if (kind === 'video' && file) validateVideoFile(file);
     if (['poll','qna'].includes(kind) && file) {
       toast(`${getFeedStructuredKindLabel(kind)} posts cannot include an attachment.`, '⚠️');
       return;
     }
 
     submit.disabled = true; submit.textContent = 'Posting…';
+    const durationSeconds = (kind === 'reel' || kind === 'video') && file ? Math.round(await readVideoDuration(file)) : 0;
     const media = (kind === 'photo' || kind === 'text') && file ? await uploadPhotoFile(file, 'feed')
       : kind === 'reel' && file ? await uploadReelFile(file, 'feed-reels')
+      : kind === 'video' && file ? await uploadVideoFile(file, 'feed-videos')
       : null;
     const insertContent = content || (media ? ' ' : content);
     const payload = {
       user_id: S.userId,
       content: insertContent,
-      post_type: kind === 'reel' ? 'reel' : (media ? 'photo' : 'text'),
+      post_type: kind === 'reel' ? 'reel' : kind === 'video' ? 'video' : (media ? 'photo' : 'text'),
       visibility: 'public'
     };
     if (media) {
@@ -8327,6 +8439,7 @@ async function submitFeedTextPost() {
       payload.media_type = media.type;
       payload.media_size = media.size;
     }
+    if (durationSeconds > 0) payload.post_meta = { duration_seconds: durationSeconds };
     if (['poll','qna'].includes(kind)) {
       payload.post_meta = {
         kind,
@@ -8365,6 +8478,8 @@ async function submitFeedTextPost() {
     clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
     if ($('feed-reel-input')) $('feed-reel-input').value = '';
     if ($('feed-reel-name')) $('feed-reel-name').textContent = '';
+    if ($('feed-video-input')) $('feed-video-input').value = '';
+    if ($('feed-video-name')) $('feed-video-name').textContent = '';
     await fetchFeedPage(true);
     hydrateTrendingHashtags().catch(() => {});
     if (kind === 'photo') checkAndUnlockReels().catch(() => {});
@@ -8376,7 +8491,8 @@ async function submitFeedTextPost() {
         hydrateProfileGallery(S.userId).catch(() => {});
       }
     }
-    toast(kind === 'reel' ? 'Reel published!' : media ? 'Photo post published!' : kind === 'poll' ? 'Poll published!' : kind === 'qna' ? 'Q&A published!' : 'Post published!', kind === 'reel' ? '🎬' : '✍️');
+    toast(kind === 'reel' ? 'Reel published!' : kind === 'video' ? 'Video published!' : media ? 'Photo post published!' : kind === 'poll' ? 'Poll published!' : kind === 'qna' ? 'Q&A published!' : 'Post published!', (kind === 'reel' || kind === 'video') ? '🎬' : '✍️');
+    return createdPost;
   } catch (e) {
     console.warn('[Feed] post failed:', e);
     toast(e?.message || 'Could not publish post.', '⚠️');
@@ -8545,6 +8661,24 @@ function initFeedPage() {
       } catch (e) {
         reelInput.value = '';
         if ($('feed-reel-name')) $('feed-reel-name').textContent = '';
+        toast(e.message, '⚠️');
+      }
+      syncFeedComposer();
+    });
+  }
+
+  const videoInput = $('feed-video-input');
+  if (videoInput && !videoInput.dataset.bound) {
+    videoInput.dataset.bound = '1';
+    videoInput.addEventListener('change', () => {
+      const file = videoInput.files?.[0];
+      if (!file) { if ($('feed-video-name')) $('feed-video-name').textContent=''; syncFeedComposer(); return; }
+      try {
+        validateVideoFile(file);
+        if ($('feed-video-name')) $('feed-video-name').textContent = `${file.name} · ${formatPhotoSize(file.size)}`;
+      } catch (e) {
+        videoInput.value = '';
+        if ($('feed-video-name')) $('feed-video-name').textContent = '';
         toast(e.message, '⚠️');
       }
       syncFeedComposer();
@@ -13655,9 +13789,11 @@ document.addEventListener('click', (event) => {
     const container = $('active-users-list');
     if (!container) return;
     const S = getS();
+    const card = container.closest('.right-card');
 
     if (S.isGuest || !S.userId) {
       _sugLock = true;
+      if (card) card.style.display = '';
       container.innerHTML = '<div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">Sign in to see suggested accounts.</div>';
       setTimeout(() => { _sugLock = false; }, 60);
       return;
@@ -13665,10 +13801,14 @@ document.addEventListener('click', (event) => {
 
     if (!_suggestions.length) {
       _sugLock = true;
-      container.innerHTML = '<div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">No new suggestions right now — follow more people to unlock more.</div>';
+      if (card) card.style.display = 'none';
+      container.innerHTML = '';
       setTimeout(() => { _sugLock = false; }, 60);
       return;
     }
+
+    if (card) card.style.display = '';
+    updateSuggestionsTitle();
 
     const start = _sugPage * SUG_PER_PAGE;
     const page  = _suggestions.slice(start, start + SUG_PER_PAGE);
@@ -17870,9 +18010,45 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   };
 
   /* 3. COMMENT ───────────────────────────────────────────────── */
-  //  addPostComment is a lexical function inside initFeedPage; it is not on
-  //  window. We patch via a MutationObserver trick — see AUDIT section 4.3
-  //  for the recommended DB-trigger alternative.
-  //  If you refactor addPostComment to window.addPostComment, wire it here.
+  //  createPostComment is a top-level function declaration, so (like
+  //  togglePostLike/toggleFollow above) it is already on window in this
+  //  classic <script> — no MutationObserver trick needed. It now returns
+  //  the inserted row on success (and nothing on a validation bail-out or
+  //  DB error), which is what lets this wrapper tell a real comment apart
+  //  from a no-op.
+  const _origComment = window.createPostComment || createPostComment;
+  window.createPostComment = async function patchedCreatePostComment (postId, content) {
+    const savedComment = await _origComment(postId, content);
+    if (!savedComment || !window.notifCenter) return savedComment;
+
+    const post = (window._feedPosts || []).find(p => String(p.id) === String(postId))
+              || (_feedPosts       || []).find(p => String(p.id) === String(postId));
+    const text = String(content || '').trim();
+    const actorName = S?.accountData?.display_name || S?.username || 'Someone';
+
+    if (post && String(post.user_id) !== String(S.userId)) {
+      await window.notifCenter.insert({
+        recipientId: post.user_id,
+        type:        'comment',
+        entityId:    postId,
+        entityType:  'post',
+        message:     `${actorName} commented: "${text.slice(0, 80)}${text.length > 80 ? '…' : ''}"`
+      });
+    }
+    await window.notifCenter.insertMentions?.(text, postId, 'post');
+    return savedComment;
+  };
+
+  /* 4. MENTIONS IN NEW POSTS ─────────────────────────────────── */
+  //  submitFeedTextPost also now returns the created row on success only,
+  //  for the same reason as above.
+  const _origSubmitPost = window.submitFeedTextPost || submitFeedTextPost;
+  window.submitFeedTextPost = async function patchedSubmitFeedTextPost () {
+    const createdPost = await _origSubmitPost();
+    if (createdPost && window.notifCenter) {
+      await window.notifCenter.insertMentions?.(createdPost.content || '', createdPost.id, 'post');
+    }
+    return createdPost;
+  };
 
 })();
