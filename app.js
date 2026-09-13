@@ -5240,14 +5240,12 @@ function syncFeedComposerTypeUI() {
     if (!allowed) clearComposePhotoPreview('feed-photo-input','btn-feed-photo','feed-photo-preview','feed-photo-name');
   }
   if (reelButton) {
-    // Reels stay locked until checkAndUnlockReels() has flipped
-    // _milestoneProgress.reelsUnlocked (see the milestone system further
-    // down); once unlocked, behaves the same way the photo tool button does.
-    const reelsUnlocked = !!_milestoneProgress?.reelsUnlocked;
-    const allowed = reelsUnlocked && kind === 'reel';
-    reelButton.style.display = allowed ? '' : 'none';
-    if (!allowed) clearComposePhotoPreview('feed-reel-input','btn-feed-reel','feed-reel-preview','feed-reel-name');
-    reelButton.classList.toggle('active', kind === 'reel' && !!$('feed-reel-input')?.files?.[0]);
+    // Browser Quid/Reel upload is categorically disabled (product decision:
+    // Quids are uploaded from the Mortalive app, not the browser, regardless
+    // of milestone-unlock status). This toolbar button therefore never shows
+    // in the browser — matches the data-compose-kind="reel" handling below.
+    reelButton.style.display = 'none';
+    clearComposePhotoPreview('feed-reel-input','btn-feed-reel','feed-reel-preview','feed-reel-name');
   }
   if (kind !== 'video') {
     const videoInput = $('feed-video-input'), videoName = $('feed-video-name');
@@ -7695,7 +7693,7 @@ function getPostMedia(post) {
     return post.post_meta.media
       .map((m, i) => ({
         type: m.type === 'video' ? 'video' : 'image',
-        url: m.url || getMediaUrl(m.media_id),
+        url: m.url ? feedAvatarUrl(m.url) : getMediaUrl(m.media_id),
         position: Number.isFinite(m.position) ? m.position : i
       }))
       .filter(m => m.url)
@@ -11607,7 +11605,7 @@ function renderProfileReels(posts = _profilePosts) {
         <div class="reels-empty-icon">🎬</div>
         <div class="reels-empty-title">No reels yet</div>
         <div class="reels-empty-sub">Share a short video and let people discover your moment.</div>
-        ${!S.profileViewUserId ? '<button class="reels-empty-cta" type="button" data-reel-upload-cta>+ Upload reel</button>' : ''}
+        ${!S.profileViewUserId ? '<button class="reels-empty-cta" type="button" data-reel-upload-cta>📱 Upload from the app</button>' : ''}
       </div>`;
     return;
   }
@@ -11872,11 +11870,11 @@ bindReelNavigationClicks();
 document.addEventListener('click', (event) => {
   const cta = event.target.closest?.('[data-reel-upload-cta]');
   if (!cta || S.profileViewUserId) return;
-  showPage('pg-feed');
-  setTimeout(() => {
-    setFeedComposerKind?.('reel');
-    setTimeout(() => $('feed-reel-input')?.click(), 0);
-  }, 60);
+  // Quid upload is app-only (browser upload is categorically disabled) —
+  // this used to route into the composer and open the native file picker,
+  // which silently bypassed that restriction. Now it just explains where
+  // to actually upload, matching the composer button's own messaging.
+  toast('Quids can be uploaded from the upcoming Mortalive app.', '📱');
 });
 
 /* ── FINAL PROFILE INTERACTION PATCH ───────────────────────────────────────
