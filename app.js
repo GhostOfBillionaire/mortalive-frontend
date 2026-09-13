@@ -5227,11 +5227,11 @@ function syncFeedComposerTypeUI() {
   const qnaOpen = kind === 'qna' && !_feedQnaChoicesEnabled;
   if (title) title.textContent = kind === 'qna' ? (_feedQnaChoicesEnabled ? 'Q&A choices' : 'Open Q&A') : 'Poll options';
   if (field) field.placeholder = kind === 'qna'
-    ? 'Ask a question…'
+    ? (_feedQnaChoicesEnabled ? 'Ask a question for people to choose from…' : 'Ask a question people can reply to…')
     : kind === 'poll' ? 'Ask a poll question…'
     : kind === 'reel' ? 'Add a caption to your reel…'
-    : kind === 'video' ? 'Add a title or description…'
-    : "What's on your mind…";
+    : kind === 'video' ? 'Add a title or description for your video…'
+    : "What's on your mind after that chat…";
   if (modeLabel) modeLabel.textContent = getFeedStructuredKindLabel(kind);
   if (builder) builder.classList.toggle('open', kind === 'poll' || kind === 'qna');
   if (photoButton) {
@@ -5251,7 +5251,6 @@ function syncFeedComposerTypeUI() {
     const videoInput = $('feed-video-input'), videoName = $('feed-video-name');
     if (videoInput) videoInput.value = '';
     if (videoName) videoName.textContent = '';
-    setFeedUploadProgress(false);
   }
   document.querySelectorAll('#pg-feed [data-compose-kind="reel"]').forEach(btn => {
     btn.classList.add('locked');
@@ -7810,7 +7809,7 @@ function buildFeedPostCardHTML(post) {
           ${avatarMarkup}
           <div class="post-meta">
             <div class="post-author"><button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(post.user_id)}">${sanitizeHTML(display)} ${badge}</button></div>
-            <div class="post-time">@${sanitizeHTML(username)} · ${sanitizeHTML(feedRelTime(post.created_at))} · <span class="post-type-label">${sanitizeHTML(typeLabel)}</span></div>
+            <div class="post-time">@${sanitizeHTML(username)} · ${sanitizeHTML(feedRelTime(post.created_at))} · ${sanitizeHTML(typeLabel)}</div>
           </div>
           ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
         </div>
@@ -7948,9 +7947,8 @@ function postViewerCommentRows(comments = []) {
   return comments.map(comment => {
     const author = comment.author || {};
     const display = author.display_name || author.username || 'Member';
-    const isOwn = String(comment.user_id || author.id || '') === String(S.userId || '');
     return `
-      <div class="mortalive-post-viewer-comment${isOwn ? ' is-own' : ''}">
+      <div class="mortalive-post-viewer-comment">
         ${buildPostViewerAvatar(author, 34)}
         <div class="mortalive-post-viewer-comment-copy">
           <div class="mortalive-post-viewer-comment-head">
@@ -7994,37 +7992,7 @@ function postViewerRender(post, comments = _commentCache.get(post?.id) || []) {
   const isTextPost = !viewerMedia.length;
   modal.classList.toggle('text-mode', isTextPost);
 
-  if (mediaHost) {
-    mediaHost.innerHTML = isTextPost ? '' : postViewerMediaMarkup(post);
-    if (!isTextPost) {
-      const frames = Array.from(mediaHost.querySelectorAll('.mortalive-post-viewer-media-frame'));
-      frames.forEach(frame => {
-        frame.classList.add('is-loading');
-        const mediaEls = Array.from(frame.querySelectorAll('img,video'));
-        if (!mediaEls.length) {
-          frame.classList.remove('is-loading');
-          return;
-        }
-        let remaining = mediaEls.length;
-        const done = () => {
-          remaining -= 1;
-          if (remaining <= 0) frame.classList.remove('is-loading');
-        };
-        mediaEls.forEach(el => {
-          let settled = false;
-          const settle = () => {
-            if (settled) return;
-            settled = true;
-            done();
-          };
-          el.addEventListener('load', settle, { once: true });
-          el.addEventListener('loadeddata', settle, { once: true });
-          if (el.tagName === 'IMG' && el.complete) settle();
-          else if (el.tagName === 'VIDEO' && el.readyState >= 2) settle();
-        });
-      });
-    }
-  }
+  if (mediaHost) mediaHost.innerHTML = isTextPost ? '' : postViewerMediaMarkup(post);
   if (textHost) textHost.innerHTML = isTextPost ? renderHashtagRichText(String(post.content || '').trim()) : '';
   if (avatarHost) avatarHost.innerHTML = buildPostViewerAvatar(author, 42);
   if (nameEl) nameEl.textContent = display;
@@ -8469,32 +8437,6 @@ function renderComposePhotoPreview({ inputId, buttonId, previewId, nameId } = {}
   }
 }
 
-function setFeedSubmitBusy(button, busy) {
-  if (!button) return;
-  button.disabled = !!busy;
-  button.classList.toggle('is-loading', !!busy);
-  const label = button.querySelector('.compose-submit-label');
-  const spinner = button.querySelector('.spinner');
-  if (label) label.textContent = busy ? 'Posting…' : 'Post';
-  if (spinner) spinner.hidden = !busy;
-}
-
-function setFeedUploadProgress(active, value = 0, labelText = 'Uploading video…') {
-  const progress = $('upload-progress');
-  const label = $('upload-progress-label');
-  if (!progress || !label) return;
-  if (!active) {
-    progress.hidden = true;
-    label.hidden = true;
-    progress.value = 0;
-    return;
-  }
-  progress.hidden = false;
-  label.hidden = false;
-  progress.value = Math.max(0, Math.min(100, Number(value) || 0));
-  label.textContent = labelText;
-}
-
 async function submitFeedTextPost() {
   const field = $('compose-field');
   const submit = $('compose-submit');
@@ -8534,38 +8476,17 @@ async function submitFeedTextPost() {
       return;
     }
 
-    setFeedSubmitBusy(submit, true);
+    submit.disabled = true; submit.textContent = 'Posting…';
     const durationSeconds = (kind === 'reel' || kind === 'video') && file ? Math.round(await readVideoDuration(file)) : 0;
     const uploadedPhotos = kind === 'photo'
       ? await Promise.all(photoFiles.map(file => uploadPhotoFile(file, 'feed')))
       : [];
-    let uploadPulseTimer = null;
-    let videoUploadSucceeded = false;
-    if (kind === 'video' && file) {
-      setFeedUploadProgress(true, 8);
-      let pulseValue = 8;
-      uploadPulseTimer = setInterval(() => {
-        pulseValue = Math.min(90, pulseValue + 7);
-        setFeedUploadProgress(true, pulseValue);
-      }, 350);
-    }
-    let media;
-    try {
-      media = uploadedPhotos.length
-        ? uploadedPhotos[0]
-        : (kind === 'text' && file ? await uploadPhotoFile(file, 'feed')
-          : kind === 'reel' && file ? await uploadReelFile(file, 'feed-reels')
-          : kind === 'video' && file ? await uploadVideoFile(file, 'feed-videos')
-          : null);
-      videoUploadSucceeded = kind === 'video' && !!file;
-    } finally {
-      if (uploadPulseTimer) clearInterval(uploadPulseTimer);
-      uploadPulseTimer = null;
-      if (kind === 'video' && file) {
-        if (videoUploadSucceeded) setFeedUploadProgress(true, 100, 'Video uploaded');
-        else setFeedUploadProgress(false);
-      }
-    }
+    const media = uploadedPhotos.length
+      ? uploadedPhotos[0]
+      : (kind === 'text' && file ? await uploadPhotoFile(file, 'feed')
+        : kind === 'reel' && file ? await uploadReelFile(file, 'feed-reels')
+        : kind === 'video' && file ? await uploadVideoFile(file, 'feed-videos')
+        : null);
     const insertContent = content || (media ? ' ' : content);
     const payload = {
       user_id: S.userId,
@@ -8652,8 +8573,7 @@ async function submitFeedTextPost() {
     console.warn('[Feed] post failed:', e);
     toast(e?.message || 'Could not publish post.', '⚠️');
   } finally {
-    setFeedUploadProgress(false);
-    setFeedSubmitBusy(submit, false);
+    submit.textContent = 'Post';
     syncFeedComposerTypeUI();
     syncFeedComposer();
   }
@@ -9444,13 +9364,8 @@ function renderProfileGallery(posts = _profilePosts) {
       const postId = sanitizeHTML(p.id || '');
       const photoUrl = sanitizeHTML(p.media_url || '');
 
-      const galleryMedia = getPostMedia(p);
-      const galleryType = galleryMedia.length > 1 ? 'Carousel'
-        : galleryMedia[0]?.type === 'video' ? 'Video'
-        : 'Photo';
       return `<button type="button" class="profile-gallery-tile" data-post-id="${postId}" data-photo-url="${photoUrl}" data-photo-caption="${caption}" data-photo-author="${ownerName}" aria-label="Open photo ${i + 1}">
         <img src="${photoUrl}" alt="${ownerName} photo post" loading="lazy" data-photo-url="${photoUrl}" data-photo-caption="${caption}" data-photo-author="${ownerName}" style="width:100%;height:100%;object-fit:cover;display:block">
-        <span class="gallery-type-badge">${galleryType}</span>
       </button>`;
     }).join('');
 
