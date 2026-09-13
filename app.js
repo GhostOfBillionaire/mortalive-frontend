@@ -417,7 +417,7 @@ function defaultProgress() {
     profileTheme: 'aurora',
     profileFrame: 'Liquid Glass',
     featuredQuote: 'Building momentum one connection at a time.',
-    pinnedNote: 'Connect with the world, build your crockroach Score, and unlock your profile.',
+    pinnedNote: 'Connect with the world, build your crokz score, and unlock your profile.',
     avatarFrame: 'halo',
     lastSyncedAt: 0
   });
@@ -428,7 +428,7 @@ function defaultProfile() {
     theme: 'aurora',
     frame: 'Liquid Glass',
     quote: 'Building momentum one connection at a time.',
-    pinned: 'Connect with the world, build your crockroach Score, and unlock your profile.',
+    pinned: 'Connect with the world, build your crokz score, and unlock your profile.',
     accent: 'rgba(90, 177, 255, .95)',
     pattern: 'mesh'
   });
@@ -634,7 +634,7 @@ function updateProgressText() {
 
   const scorePill = $('score-pill-btn');
   if (scorePill) {
-    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} crockroach Score · ${summary.badges} badges`;
+    scorePill.textContent = S.isGuest ? 'Guest mode' : `🧲 ${summary.score} crokz score · ${summary.badges} badges`;
     scorePill.title = S.isGuest
       ? 'Guest sessions do not earn status'
       : `Top ${summary.percentile}% · #${summary.rank} weekly rank`;
@@ -723,7 +723,7 @@ function awardProgress(kind, amount = 1, meta = {}) {
   if (meta.completion) {
     const goal = computeGoalText(progress);
     if (source === 'chat_complete') {
-      toast(`+${delta} crockroach Score · ${goal}`, '🧲');
+      toast(`+${delta} crokz score · ${goal}`, '🧲');
     } else {
       toast(`Milestone reached · ${goal}`, '🏁');
     }
@@ -785,7 +785,7 @@ function copyProgressShareCard() {
   const profile = getCurrentProfile();
   const text = [
     `Mortalive status`,
-    `${S.username || S.guestName || 'Guest'} · ${summary.score} crockroach Score`,
+    `${S.username || S.guestName || 'Guest'} · ${summary.score} crokz score`,
     `${summary.streak} day streak · ${summary.completions} completions`,
     `Top ${summary.percentile}% · #${summary.rank} weekly`,
     `Frame: ${profile.frame || 'Liquid Glass'}`
@@ -1419,7 +1419,7 @@ function updateIdentityDisplay() {
   const displayUsername = S.username || localStorage.getItem('mortalive_username');
 
   if (!S.isGuest && displayUsername) {
-    if (label) label.textContent = `Logged in as ${displayUsername} · 🧲 ${summary.score} crockroach Score · ${summary.streak} streak · #${summary.rank}`;
+    if (label) label.textContent = `Logged in as ${displayUsername} · 🧲 ${summary.score} crokz score · ${summary.streak} streak · #${summary.rank}`;
     if (switchBtn) switchBtn.style.display = 'none';
     if (logoutBtn) logoutBtn.style.display = '';
     if (scorePill) scorePill.style.display = '';
@@ -1636,6 +1636,34 @@ const _arrivedViaAuthRedirect = /access_token=|refresh_token=|[?&]code=/.test(
 // whether we're mid-signup or mid-password-reset) so the verify step
 // knows what to check the code against and what to do once it's valid.
 let _otpContext = null; // { mode: 'signup' | 'reset', source: 'login'|null, email }
+// ── Referral attribution ───────────────────────────────────────────────────
+const MORTALIVE_REFERRAL_KEY = 'mortalive_referrer_v1';
+function captureReferralAttribution() {
+  try {
+    const raw = new URLSearchParams(window.location.search).get('ref');
+    const ref = String(raw || '').trim();
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (uuidRe.test(ref)) localStorage.setItem(MORTALIVE_REFERRAL_KEY, ref);
+    return localStorage.getItem(MORTALIVE_REFERRAL_KEY) || null;
+  } catch (_) { return null; }
+}
+captureReferralAttribution();
+async function claimReferralAttribution(userId) {
+  if (!userId || !sb) return false;
+  let referrerId = null;
+  try { referrerId = localStorage.getItem(MORTALIVE_REFERRAL_KEY); } catch (_) {}
+  if (!referrerId || String(referrerId) === String(userId)) return false;
+  try {
+    const { error } = await sb.rpc('claim_referral', { p_referrer_id: referrerId });
+    if (error) throw error;
+    try { localStorage.removeItem(MORTALIVE_REFERRAL_KEY); } catch (_) {}
+    return true;
+  } catch (e) {
+    console.warn('[Referral] claim failed:', e?.message || e);
+    return false;
+  }
+}
+
 let _resendCooldownTimer = null;
 
 // Shared 60s cooldown across every "send a code" entry point (signup's
@@ -2010,8 +2038,8 @@ function initAuthControls() {
       setUsernameStatus(null, '');
       return;
     }
-    if (!/^[a-zA-Z0-9_]{3,24}$/.test(val)) {
-      setUsernameStatus('bad', '3–24 characters: letters, numbers, underscore only.');
+    if (!/^(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)$/.test(val)) {
+      setUsernameStatus('bad', '1–30 characters: letters, numbers, periods, underscore; no leading, trailing, or consecutive periods.');
       return;
     }
     _usernameCheckTimer = setTimeout(() => checkUsernameAvailability(val), 450);
@@ -2020,7 +2048,7 @@ function initAuthControls() {
   // enough that the debounce timer hasn't fired yet.
   usernameInput?.addEventListener('blur', () => {
     const val = usernameInput.value.trim();
-    if (/^[a-zA-Z0-9_]{3,24}$/.test(val) && _usernameCheck.username !== val) {
+    if (/^(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)$/.test(val) && _usernameCheck.username !== val) {
       clearTimeout(_usernameCheckTimer);
       checkUsernameAvailability(val);
     }
@@ -2037,8 +2065,8 @@ function initAuthControls() {
     const terms    = $('signup-terms');
     setError('signup-error', null);
 
-    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
-      setError('signup-error', 'Username must be 3–24 characters: letters, numbers, underscore only.');
+    if (!/^(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)$/.test(username)) {
+      setError('signup-error', 'Username must be 1–30 characters: letters, numbers, periods, underscore; no leading, trailing, or consecutive periods.');
       return;
     }
     if (_usernameCheck.username === username && _usernameCheck.available === false) {
@@ -2223,7 +2251,8 @@ function initAuthControls() {
           // Not fatal — they're verified and logged in either way; they
           // can set a password later via "Forgot password?" if this failed.
         }
-        const profile = await fetchUserProfile(user.id);
+                await claimReferralAttribution(user.id);
+const profile = await fetchUserProfile(user.id);
         const links = await fetchUserLinks(user.id);
         S.accountData = profile;
         S.userLinks = links;
@@ -3919,7 +3948,7 @@ function generateProfileShareCard() {
   ctx.fillText(String(score), 135, 610);
   ctx.fillStyle = '#334155';
   ctx.font = '700 27px Inter, Arial, sans-serif';
-  ctx.fillText('crockroach Score', 140, 665);
+  ctx.fillText('crokz score', 140, 665);
 
   ctx.fillStyle = '#475569';
   ctx.font = '600 28px Inter, Arial, sans-serif';
@@ -3959,7 +3988,8 @@ function showConnectMoreOverlay() {
 function showShareOverlay() {
   document.getElementById('syn-share-overlay')?.remove();
 
-  const shareUrl  = window.location.origin;
+  const referralId = (!S.isGuest && S.userId) ? String(S.userId) : '';
+  const shareUrl  = referralId ? `${window.location.origin}/?ref=${encodeURIComponent(referralId)}` : window.location.origin;
   const shareText = `Join me on Mortalive — meet people and build your network: ${shareUrl}`;
 
   const overlay = document.createElement('div');
@@ -4122,7 +4152,7 @@ function beginChat() {
   setText('peer-name', s.name);
   
   // V138: Interest match feedback
-  let scoreText = s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`;
+  let scoreText = s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crokz score · connected`;
   if (S.interest && S.peerInterest) {
     const interestMatch = S.interest.toLowerCase().trim() === S.peerInterest.toLowerCase().trim();
     scoreText += interestMatch ? ' ✓ Same interest' : ` · Interest: ${S.peerInterest}`;
@@ -4258,7 +4288,7 @@ function updateTypingIndicator() {
   if (!nameEl) return;
   
   const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
-  let scoreText = s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crockroach Score · connected`;
+  let scoreText = s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crokz score · connected`;
   
   if (S.peerTyping) {
     scoreText += ' · typing…';
@@ -7025,7 +7055,7 @@ async function openFeedProfileOverlay(userId) {
         <div class="feed-profile-stats">
           <div class="feed-profile-stat"><strong>${toNum(followData.followers).toLocaleString()}</strong><span>Followers</span></div>
           <div class="feed-profile-stat"><strong>${toNum(followData.following).toLocaleString()}</strong><span>Following</span></div>
-          <div class="feed-profile-stat"><strong>${toNum(score).toLocaleString()}</strong><span>crockroach Score</span></div>
+          <div class="feed-profile-stat"><strong>${toNum(score).toLocaleString()}</strong><span>crokz score</span></div>
           <div class="feed-profile-stat"><strong>${textPosts.length}</strong><span>Posts</span></div>
           <div class="feed-profile-stat"><strong>${photoPosts.length}</strong><span>Photos</span></div>
         </div>
@@ -7066,7 +7096,7 @@ async function openFeedProfileOverlay(userId) {
             <div class="profile-stats-row"><span class="profile-stats-key">Reels</span><strong class="profile-stats-val">${reels.length}</strong></div>
           </div>
           <div class="profile-stats-section"><div class="profile-stats-section-title">Profile</div>
-            <div class="profile-stats-row"><span class="profile-stats-key">crockroach Score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
+            <div class="profile-stats-row"><span class="profile-stats-key">crokz score</span><strong class="profile-stats-val">${toNum(score).toLocaleString()}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Followers</span><strong class="profile-stats-val">${toNum(followData.followers).toLocaleString()}</strong></div>
             <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(followData.following).toLocaleString()}</strong></div>
           </div>
@@ -10031,7 +10061,7 @@ function initProfilePage() {
 
   // Progress Bar
   if ($('rank-label')) $('rank-label').textContent = `${tier.name}${tier.max < Infinity ? ' → ' + RANK_TIERS[RANK_TIERS.indexOf(tier)+1]?.name : ' (Max)'}`;
-  if ($('progress-label')) $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} crockroach Score`;
+  if ($('progress-label')) $('progress-label').textContent = `${score} / ${tier.max < Infinity ? tier.max : score} crokz score`;
   if ($('progress-pct')) $('progress-pct').textContent = `${pct}%`;
   if ($('progress-fill')) $('progress-fill').style.width = `${pct}%`;
   if ($('progress-percentile')) $('progress-percentile').textContent = `Top ${summary.percentile}%`;
@@ -10255,7 +10285,7 @@ function openAchievementsSheet() {
       <div style="padding:18px 22px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px;">
           <div style="padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,var(--primary-alpha),rgba(124,58,237,.06));border:1px solid rgba(26,110,245,.14);">
-            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">crockroach Score</div>
+            <div style="font-size:9px;font-weight:800;letter-spacing:.10em;text-transform:uppercase;color:var(--on-surface-3);">crokz score</div>
             <div style="font-size:24px;font-weight:900;letter-spacing:-.04em;margin-top:4px;color:var(--primary);">${score.toLocaleString()}</div>
           </div>
           <div style="padding:12px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);">
@@ -10831,13 +10861,13 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
   ];
 
   const MATCH_TIPS = [
-    '💡 Completing chats earns crockroach Score',
+    '💡 Completing chats earns crokz score',
     '🌍 Your next match could be from any country on Earth',
     '⭐ Rate your chats to help improve future matches',
     '🔒 Your identity stays private — nothing is shared without your consent',
     '⚡ Average match time is under 30 seconds when others are online',
     '🎯 Adding a topic finds like-minded strangers faster',
-    '🧲 A high crockroach Score boosts your matching priority',
+    '🧲 A high crokz score boosts your matching priority',
     '💬 Text mode works without a camera — great for quieter moments',
     '🎬 If no match is found, a recorded stream will appear automatically'
   ];
@@ -11610,7 +11640,7 @@ function renderProfileStatsPanel() {
     </div>
     <div class="profile-stats-section">
       <div class="profile-stats-section-title">Profile</div>
-      <div class="profile-stats-row"><span class="profile-stats-key">crockroach Score</span><strong class="profile-stats-val">${toNum(S.profileViewData?.crockroach_score ?? summary?.score).toLocaleString()}</strong></div>
+      <div class="profile-stats-row"><span class="profile-stats-key">crokz score</span><strong class="profile-stats-val">${toNum(S.profileViewData?.crockroach_score ?? summary?.score).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Followers</span><strong class="profile-stats-val">${toNum(follow?.followers ?? _followCache.get(S.userId)?.followers).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Following</span><strong class="profile-stats-val">${toNum(follow?.following ?? _followCache.get(S.userId)?.following).toLocaleString()}</strong></div>
       <div class="profile-stats-row"><span class="profile-stats-key">Streak</span><strong class="profile-stats-val">${publicView ? '—' : `${toNum(summary?.streak)}d`}</strong></div>
@@ -13805,7 +13835,7 @@ document.addEventListener('click', (event) => {
     const title = listEl.closest('.right-card')?.querySelector('.right-card-title');
     if (title && !title.dataset.mfeTitle) {
       title.dataset.mfeTitle = '1';
-      title.innerHTML = '✨ Suggested for you';
+      title.innerHTML = '🏆 Users with maximum crokz score';
     }
   }
 
@@ -16410,7 +16440,7 @@ body.di2-msg .di2-pill.search-on {
 
 /* Show only on mobile */
 @media (max-width: 640px) {
-  body.di2-live.di2-authenticated #di2-bot { display: flex !important; }
+  body.di2-live.di2-authenticated:not(.di2-on-landing):not(.di2-on-auth) #di2-bot { display: flex !important; }
 }
 
 /* Messages dark bottom nav */
@@ -16587,7 +16617,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
 
             <!-- Score -->
             <div class="di2-score" id="di2-score"
-              title="crockroach Score — click to open progress">
+              title="crokz score — click to open progress">
               🧲 <span id="di2-sv">—</span>
             </div>
           </div>
@@ -17264,12 +17294,12 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       nav.dataset.authenticated = authenticated ? '1' : '0';
       nav.dataset.navVisible = shouldShow ? '1' : '0';
 
-      // Directly control the actual element so the final state does not
-      // depend on the order of the many historical Dynamic Island style blocks.
-      nav.style.setProperty('display', shouldShow ? 'flex' : 'none', 'important');
-      nav.style.setProperty('visibility', shouldShow ? 'visible' : 'hidden', 'important');
-      nav.style.setProperty('opacity', shouldShow ? '1' : '0', 'important');
-      nav.style.setProperty('pointer-events', shouldShow ? 'auto' : 'none', 'important');
+      // CSS/page-state rules own #di2-bot visual visibility.
+      // Do not write a transient inline hide during auth hydration.
+      nav.style.removeProperty('display');
+      nav.style.removeProperty('visibility');
+      nav.style.removeProperty('opacity');
+      nav.style.removeProperty('pointer-events');
     }
 
     // Reconcile with the real Supabase session after startup/auth hydration.
