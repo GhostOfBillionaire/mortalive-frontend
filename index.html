@@ -10520,7 +10520,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   ─────────────────────────────────────────────────────────────────────────
   Base rule (in app.js CSS injected to <head>):
     @media (max-width:640px) {
-      body.di2-live.di2-authenticated #di2-bot { display:flex !important; }
+      body.di2-live.di2-authenticated:not(.di2-on-landing):not(.di2-on-auth) #di2-bot { display:flex !important; }
     }
   That is the ONLY rule that shows the nav. Everything below is a hide-only
   layer that suppresses it on specific non-app pages.
