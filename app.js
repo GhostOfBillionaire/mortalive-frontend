@@ -7786,7 +7786,7 @@ function buildFeedPostCardHTML(post) {
   const typeLabel = post?.post_meta?.kind === 'qna' ? 'Q&A'
     : post?.post_meta?.kind === 'poll' ? 'Poll'
     : post.post_type === 'text' ? 'Text'
-    : post.post_type === 'reel' ? 'Reel'
+    : post.post_type === 'reel' ? 'Quid'
     : postMedia.length > 1 ? 'Carousel'
     : postMedia[0]?.type === 'video' ? 'Video'
     : postMedia.length ? 'Photo'
@@ -7837,7 +7837,7 @@ function renderFeedReelsShelfHTML(reels) {
     const duration = Number(post?.post_meta?.duration_seconds) || 0;
     const caption = String(post.content || '').trim();
     return `
-      <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open reel ${i + 1}">
+      <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open Quid ${i + 1}">
         <video class="reel-thumb-bg" src="${sanitizeHTML(media[0]?.url || '')}" muted playsinline preload="metadata"></video>
         <span class="reel-thumb-play">▶</span>
         ${duration > 0 ? `<span class="reel-thumb-duration">${formatVideoDuration(duration)}</span>` : ''}
@@ -7846,7 +7846,7 @@ function renderFeedReelsShelfHTML(reels) {
   }).join('');
   return `
     <div class="feed-reels-shelf">
-      <div class="feed-reels-shelf-head"><span>🎬</span> Reels</div>
+      <div class="feed-reels-shelf-head"><span>🎬</span> Quids</div>
       <div class="feed-reels-shelf-track">${tiles}</div>
     </div>`;
 }
@@ -8245,7 +8245,7 @@ function renderFeedSidebars() {
 }
 
 // ── Reels-unlock milestone system ───────────────────────────────────────
-// Progress toward unlocking reel/video posting: follow 20 people, upload 10
+// Progress toward unlocking Quid posting: follow 20 people, upload 10
 // photos, complete your profile (avatar + bio), invite a friend. Backed by
 // get_milestone_progress()/check_and_unlock_reels() (see milestones.sql).
 // The unlock itself is persisted server-side (accounts.reels_unlocked_at) so
@@ -8316,7 +8316,7 @@ async function checkAndUnlockReels() {
       reelsUnlockedAt: row.reels_unlocked_at || null
     };
     if (row.newly_unlocked) {
-      toast('Reels unlocked — you can post video now! 🎬', '🔓');
+      toast('Quids unlocked! Post them from the Mortalive app 📱', '🔓');
     }
     syncFeedComposerTypeUI();
     renderMilestoneCard();
