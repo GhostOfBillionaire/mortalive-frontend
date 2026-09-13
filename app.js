@@ -17207,8 +17207,8 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       nav.dataset.authenticated = authenticated ? '1' : '0';
       nav.dataset.navVisible = shouldShow ? '1' : '0';
 
-      // CSS/page-state rules own #di2-bot visual visibility; do not let transient auth
-      // hydration write a permanent inline hide onto the authenticated downbar.
+      // CSS/page-state rules own #di2-bot visual visibility.
+      // Do not let transient auth hydration write a permanent inline hide.
       nav.style.removeProperty('display');
       nav.style.removeProperty('visibility');
       nav.style.removeProperty('opacity');
