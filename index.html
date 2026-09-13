@@ -3914,7 +3914,7 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
   background:rgba(0,0,0,.72); color:#fff; font-size:11.5px; font-weight:800; letter-spacing:.01em;
 }
 
-/* ── Reels shelf: horizontal rail inserted into the vertical feed ───────
+/* ── Quids shelf: horizontal rail inserted into the vertical feed ───────
    Mirrors YouTube's home-feed pattern of a periodic Shorts shelf among
    long-form video cards, while keeping Mortalive's own card chrome
    (surface/border/elevation tokens) instead of YouTube's skin. ── */
@@ -6065,7 +6065,7 @@ body.profile-viewing-public #pg-profile {
 COMPLETE CSS FOR REEL SYSTEM, PROFILE TAB AND AUDIT FIXES
 
 /* ═══════════════════════════════════════════════════════════════════════
-   MORTALIVE — Profile Reels System + Audit Fixes  v1
+   MORTALIVE — Profile Quids System + Audit Fixes  v1
    Paste as a new <style> block in index.html (after existing styles, 
    before <script>
 // v47 security/profile bridge: visible Edit/Share use the same app-level actions.
@@ -6214,7 +6214,7 @@ COMPLETE CSS FOR REEL SYSTEM, PROFILE TAB AND AUDIT FIXES
 
 /* ────────────────────────────────────────────────────────────────────
    PROFILE SECTION TABS
-   Posts · Photos · Reels · Stats
+   Posts · Photos · Quids · Stats
    Sits between .modern-profile-card and .profile-content-shell
    ──────────────────────────────────────────────────────────────────── */
 .profile-tabs-bar {
@@ -6759,7 +6759,7 @@ body.mortalive-app-topbar-visible .profile-tabs-bar {
   text-shadow: 0 1px 4px rgba(0,0,0,0.5);
 }
 
-/* Reel author / caption bar at bottom */
+/* Quid author / caption bar at bottom */
 .rv-bottom {
   position: absolute;
   bottom: 0;
@@ -6864,7 +6864,7 @@ body.mortalive-app-topbar-visible .profile-tabs-bar {
   transform: scale(1.1);
 }
 
-/* Reel counter indicator (1/N) */
+/* Quid counter indicator (1/N) */
 .rv-counter {
   position: absolute;
   top: 68px;
@@ -7067,7 +7067,7 @@ body.mortalive-app-topbar-visible .profile-tabs-bar {
 }
 
 /* ────────────────────────────────────────────────────────────────────
-   FEED: Reel post cards (inline in feed, click to open viewer)
+   FEED: Quid post cards (inline in feed, click to open viewer)
    ──────────────────────────────────────────────────────────────────── */
 .feed-reel-card {
   position: relative;
@@ -7179,11 +7179,11 @@ FULL AUDIT REPORT OF THE PROFILE SECTION
 
 | # | Problem | Impact |
 |---|---------|--------|
-| 6 | **Reels section entirely missing** | Major content type gap vs. competitors |
-| 7 | **No profile content tabs** (Posts · Photos · Reels · Stats) | All sections stacked — hard to navigate, no UX hierarchy |
-| 8 | **Video upload not supported** in composer | Reels can't be created |
-| 9 | **`openFeedProfileOverlay`** has Posts/Photos tabs but no Reels tab | Inconsistent profile view |
-| 10 | Feed split-viewer doesn't handle `post_type='reel'` | Reel posts would open as broken image viewer |
+| 6 | **Quids section entirely missing** | Major content type gap vs. competitors |
+| 7 | **No profile content tabs** (Posts · Photos · Quids · Stats) | All sections stacked — hard to navigate, no UX hierarchy |
+| 8 | **Video upload not supported** in composer | Quids can't be created |
+| 9 | **`openFeedProfileOverlay`** has Posts/Photos tabs but no Quids tab | Inconsistent profile view |
+| 10 | Feed split-viewer doesn't handle `post_type='reel'` | Quid posts would open as broken image viewer |
 
 ## 🟡 UI Polish Issues
 
@@ -7298,7 +7298,7 @@ JS Bugs (app.js)
 .feed-reel-card video { width:100%; height:100%; object-fit:cover; }
 .feed-reel-play { position:absolute; inset:0; display:grid; place-items:center; font-size:38px; color:#fff; text-shadow:0 2px 12px rgba(0,0,0,.5); background:rgba(0,0,0,.12); pointer-events:none; }
 
-/* Reels-unlock milestone progress card (right sidebar) */
+/* Quids-unlock milestone progress card (right sidebar) */
 .milestone-card-wrap[hidden] { display:none !important; }
 .milestone-card-sub { font-size:12px; font-weight:700; color:var(--on-surface-3); margin-bottom:10px; }
 .milestone-card-steps { display:flex; flex-direction:column; gap:9px; }
@@ -7309,7 +7309,7 @@ JS Bugs (app.js)
 .milestone-step-label { flex:1; }
 .milestone-step-count { flex:0 0 auto; font-size:11px; font-weight:700; color:var(--on-surface-3); }
 
-/* Locked compose-type button (e.g. Reel, once its input/button are wired) */
+/* Locked compose-type button (e.g. Quid, once its input/button are wired) */
 .compose-type-btn.locked { opacity:.5; cursor:not-allowed; }
 .profile-reels-section { margin-top:12px; }
 .profile-stats-panel { margin-top:12px; }
@@ -10513,6 +10513,71 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 </style>
 
 
+
+<style id="mortalive-v193-mobile-bottom-nav">
+/*
+  MOBILE BOTTOM NAV VISIBILITY
+  ─────────────────────────────────────────────────────────────────────────
+  Base rule (in app.js CSS injected to <head>):
+    @media (max-width:640px) {
+      body.di2-live.di2-authenticated #di2-bot { display:flex !important; }
+    }
+  That is the ONLY rule that shows the nav. Everything below is a hide-only
+  layer that suppresses it on specific non-app pages.
+
+  We do NOT set a blanket body.di2-live hide here because:
+   (a) the base rule already defaults #di2-bot to display:none
+   (b) adding a blanket hide with lower specificity than the authenticated
+       rule would be safe in theory but caused a cascade fight in practice
+       because the page-specific :has() rules carry ID specificity (1,x,x)
+       which beats the class-only authenticated rule (0,2,x) — so an
+       authenticated user on pg-land would correctly see it hidden but the
+       blanket hide would also block the re-show on app pages.
+
+  LANDING + AUTH pages: use body.di2-on-landing and body.di2-on-auth
+  classes — set by JS in showPage() — instead of :has() selectors.
+  Reason: :has() with an ID argument gives specificity (1,1,0) which
+  outranks (0,2,2) authenticated rule, causing it to win even for logged-in
+  users on those pages. Class-based flags stay at (0,1,x) specificity.
+*/
+@media (max-width:640px){
+  /* Default: the mobile app nav is hidden unless runtime explicitly marks
+     the authenticated app navigation as visible. */
+  body.di2-app-nav-hidden #di2-bot {
+    display:none !important;
+    visibility:hidden !important;
+    opacity:0 !important;
+    pointer-events:none !important;
+  }
+  body.di2-app-nav-visible #di2-bot {
+    display:flex !important;
+    visibility:visible !important;
+    opacity:1 !important;
+    pointer-events:auto !important;
+  }
+
+  /* Landing/auth remain hard-hidden even if a stale auth-visible class
+     survives a fast navigation transition. */
+  body.di2-on-landing #di2-bot,
+  body.di2-on-auth    #di2-bot {
+    display:none !important;
+    visibility:hidden !important;
+    opacity:0 !important;
+    pointer-events:none !important;
+  }
+
+  /* Tab strip always visible when the nav bar itself is visible */
+  body.di2-live #di2-bot-tabs{
+    display:flex !important;
+  }
+  body.di2-live #di2-bot-tabs [data-di-page="pg-search"],
+  body.di2-live #di2-bot-tabs [data-di-page="pg-notifications"]{
+    display:flex !important;
+  }
+}
+</style>
+
+
 <style id="mortalive-v194-mobile-minimal-topisland">
 @media (max-width:640px){
   body.di2-live.di2-search #di2,
@@ -10653,7 +10718,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
         <div class="live-dot"></div>
         <span id="app-topbar-online-count">—</span> online
       </div>
-      <div class="topbar-stat app-topbar-score" id="app-topbar-score-pill" title="Open crockroach Score">
+      <div class="topbar-stat app-topbar-score" id="app-topbar-score-pill" title="Open crokz score">
         🧲 <span id="app-topbar-score-val">—</span>
       </div>
     </div>
@@ -10919,7 +10984,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
                    placeholder="Pick a name for this session" autocomplete="off">
             <div class="help-row">
               <span>No account needed</span>
-              <span>Guests don't earn crockroach Score</span>
+              <span>Guests don't earn crokz score</span>
             </div>
           </div>
           <button class="btn btn-primary btn-wide" id="btn-continue-guest" style="margin-top:14px;">
@@ -11316,7 +11381,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <div class="sidebar-card" style="text-align:center;">
 <div style="font-size:28px;margin-bottom:8px;">🌐</div>
 <div style="font-size:14px;font-weight:700;margin-bottom:4px;">Start a new chat</div>
-<div style="font-size:12.5px;color:var(--on-surface-3);margin-bottom:14px;line-height:1.6;">Every chat earns crockroach Score and unlocks badges.</div>
+<div style="font-size:12.5px;color:var(--on-surface-3);margin-bottom:14px;line-height:1.6;">Every chat earns crokz score and unlocks badges.</div>
 <a href="#" class="feed-nav-link" data-feed-target="pg-lobby" style="display:block;padding:11px;border-radius:var(--r-sm);background:linear-gradient(145deg,var(--primary),var(--secondary));color:#fff;font-size:13.5px;font-weight:700;text-align:center;box-shadow:0 4px 14px rgba(26,110,245,.28);">
           Connect now →
         </a>
@@ -11376,7 +11441,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-photo" type="button" data-compose-kind="photo">Photo</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
-  <button class="compose-type-btn locked" id="btn-type-reel" type="button" data-compose-kind="reel" disabled title="Unlock by completing your milestones">🔒 Reel</button>
+  <button class="compose-type-btn locked" id="btn-type-reel" type="button" data-compose-kind="reel" disabled title="Unlock by completing your milestones">🔒 Quid</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn locked" id="btn-type-video" type="button" data-compose-kind="video" disabled title="Unlock by completing your milestones">🔒 Video</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
@@ -11388,7 +11453,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <input id="feed-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
 <span id="feed-photo-name" class="compose-photo-name" aria-live="polite"></span>
 <div id="feed-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
-<button class="compose-tool reel-compose-btn u-hidden" id="btn-feed-reel" type="button" title="Add reel" aria-hidden="true" tabindex="-1">🎬 Reel</button>
+<button class="compose-tool reel-compose-btn u-hidden" id="btn-feed-reel" type="button" title="Add reel" aria-hidden="true" tabindex="-1">🎬 Quid</button>
 <input id="feed-reel-input" type="file" accept="video/mp4,video/webm,video/quicktime" hidden>
 <span id="feed-reel-name" class="compose-photo-name" aria-live="polite"></span>
 <input id="feed-video-input" type="file" accept="video/mp4,video/webm,video/quicktime" hidden>
@@ -11436,7 +11501,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 </main>
 <!-- ── RIGHT SIDEBAR ───────────────── -->
 <aside class="feed-right">
-<!-- Reels-unlock milestone progress (hidden once unlocked or for guests) -->
+<!-- Quids-unlock milestone progress (hidden once unlocked or for guests) -->
 <div class="right-card milestone-card-wrap" id="feed-milestone-wrap" hidden>
         <div class="right-card-title">🔓 Unlock video posting</div>
         <div id="feed-milestone-card"><div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">Loading your progress…</div></div>
@@ -11450,7 +11515,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 
       <!-- Active users -->
 <div class="right-card">
-        <div class="right-card-title">⚡ Recent posters</div>
+        <div class="right-card-title">🏆 Users with maximum crokz score</div>
         <div id="active-users-list"><div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">Loading active posters…</div></div>
       </div>
 
@@ -11795,7 +11860,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
       <div class="profile-bio-row">
         <p class="profile-bio-modern" id="profile-bio-display">—</p>
         <div class="profile-meta-row">
-          <span class="profile-meta-item">🧲 <strong id="profile-hero-score">—</strong> crockroach Score</span>
+          <span class="profile-meta-item">🧲 <strong id="profile-hero-score">—</strong> crokz score</span>
           <span class="profile-meta-item">•</span>
           <span class="profile-meta-item" id="profile-details-meta">Member</span>
         </div>
@@ -12042,7 +12107,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
     </div>
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
       <div class="u-glass-tile">
-        <div class="u-stat-label">crockroach Score</div>
+        <div class="u-stat-label">crokz score</div>
         <div id="progress-score" class="u-stat-value">0</div>
       </div>
       <div class="u-glass-tile">
