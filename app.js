@@ -1636,41 +1636,6 @@ const _arrivedViaAuthRedirect = /access_token=|refresh_token=|[?&]code=/.test(
 // whether we're mid-signup or mid-password-reset) so the verify step
 // knows what to check the code against and what to do once it's valid.
 let _otpContext = null; // { mode: 'signup' | 'reset', source: 'login'|null, email }
-
-// ── Referral attribution ───────────────────────────────────────────────────
-// Referral links use ?ref=<referrer's account UUID>. Keep attribution locally
-// until the new account has completed email verification.
-const MORTALIVE_REFERRAL_KEY = 'mortalive_referrer_v1';
-
-function captureReferralAttribution() {
-  try {
-    const ref = new URLSearchParams(window.location.search).get('ref');
-    const clean = String(ref || '').trim();
-    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (uuidRe.test(clean)) localStorage.setItem(MORTALIVE_REFERRAL_KEY, clean);
-    return localStorage.getItem(MORTALIVE_REFERRAL_KEY) || null;
-  } catch (_) {
-    return null;
-  }
-}
-captureReferralAttribution();
-
-async function claimReferralAttribution(userId) {
-  if (!userId || !sb) return false;
-  let referrerId = null;
-  try { referrerId = localStorage.getItem(MORTALIVE_REFERRAL_KEY); } catch (_) {}
-  if (!referrerId || String(referrerId) === String(userId)) return false;
-  try {
-    const { error } = await sb.rpc('claim_referral', { p_referrer_id: referrerId });
-    if (error) throw error;
-    try { localStorage.removeItem(MORTALIVE_REFERRAL_KEY); } catch (_) {}
-    return true;
-  } catch (e) {
-    console.warn('[Referral] attribution claim failed:', e?.message || e);
-    return false;
-  }
-}
-
 let _resendCooldownTimer = null;
 
 // Shared 60s cooldown across every "send a code" entry point (signup's
@@ -2045,8 +2010,8 @@ function initAuthControls() {
       setUsernameStatus(null, '');
       return;
     }
-    if (!/^(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)$/.test(val)) {
-      setUsernameStatus('bad', '1–30 characters: letters, numbers, periods, underscore; no leading, trailing, or consecutive periods.');
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(val)) {
+      setUsernameStatus('bad', '3–24 characters: letters, numbers, underscore only.');
       return;
     }
     _usernameCheckTimer = setTimeout(() => checkUsernameAvailability(val), 450);
@@ -2055,7 +2020,7 @@ function initAuthControls() {
   // enough that the debounce timer hasn't fired yet.
   usernameInput?.addEventListener('blur', () => {
     const val = usernameInput.value.trim();
-    if (/^(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)$/.test(val) && _usernameCheck.username !== val) {
+    if (/^[a-zA-Z0-9_]{3,24}$/.test(val) && _usernameCheck.username !== val) {
       clearTimeout(_usernameCheckTimer);
       checkUsernameAvailability(val);
     }
@@ -2072,8 +2037,8 @@ function initAuthControls() {
     const terms    = $('signup-terms');
     setError('signup-error', null);
 
-    if (!/^(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)$/.test(username)) {
-      setError('signup-error', 'Username must be 1–30 characters: letters, numbers, periods, underscore; no leading, trailing, or consecutive periods.');
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
+      setError('signup-error', 'Username must be 3–24 characters: letters, numbers, underscore only.');
       return;
     }
     if (_usernameCheck.username === username && _usernameCheck.available === false) {
@@ -2258,7 +2223,6 @@ function initAuthControls() {
           // Not fatal — they're verified and logged in either way; they
           // can set a password later via "Forgot password?" if this failed.
         }
-        await claimReferralAttribution(user.id);
         const profile = await fetchUserProfile(user.id);
         const links = await fetchUserLinks(user.id);
         S.accountData = profile;
@@ -3995,10 +3959,7 @@ function showConnectMoreOverlay() {
 function showShareOverlay() {
   document.getElementById('syn-share-overlay')?.remove();
 
-  const referralId = (!S.isGuest && S.userId) ? String(S.userId) : '';
-  const shareUrl  = referralId
-    ? `${window.location.origin}/?ref=${encodeURIComponent(referralId)}`
-    : window.location.origin;
+  const shareUrl  = window.location.origin;
   const shareText = `Join me on Mortalive — meet people and build your network: ${shareUrl}`;
 
   const overlay = document.createElement('div');
@@ -17246,8 +17207,8 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       nav.dataset.authenticated = authenticated ? '1' : '0';
       nav.dataset.navVisible = shouldShow ? '1' : '0';
 
-      // CSS owns the nav visual state; clear transient inline state first.
-      // This prevents auth-hydration races from permanently hiding the bar.
+      // CSS/page-state rules own #di2-bot visual visibility; do not let transient auth
+      // hydration write a permanent inline hide onto the authenticated downbar.
       nav.style.removeProperty('display');
       nav.style.removeProperty('visibility');
       nav.style.removeProperty('opacity');
