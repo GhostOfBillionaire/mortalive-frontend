@@ -3914,7 +3914,7 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
   background:rgba(0,0,0,.72); color:#fff; font-size:11.5px; font-weight:800; letter-spacing:.01em;
 }
 
-/* ── Quids shelf: horizontal rail inserted into the vertical feed ───────
+/* ── Reels shelf: horizontal rail inserted into the vertical feed ───────
    Mirrors YouTube's home-feed pattern of a periodic Shorts shelf among
    long-form video cards, while keeping Mortalive's own card chrome
    (surface/border/elevation tokens) instead of YouTube's skin. ── */
@@ -3964,6 +3964,11 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
 
 
 #pg-feed textarea{ font: inherit; }
+.compose-carousel-preview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px;margin-bottom:10px;}
+.compose-carousel-preview-tile{position:relative;aspect-ratio:1/1;border-radius:10px;overflow:hidden;background:var(--surface-3);border:1px solid var(--border);}
+.compose-carousel-preview-tile img{width:100%;height:100%;object-fit:cover;display:block;}
+.compose-carousel-preview-tile span{position:absolute;top:5px;left:5px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;display:grid;place-items:center;background:rgba(0,0,0,.72);color:#fff;font-size:10px;font-weight:800;}
+
 
 
 
@@ -6065,7 +6070,7 @@ body.profile-viewing-public #pg-profile {
 COMPLETE CSS FOR REEL SYSTEM, PROFILE TAB AND AUDIT FIXES
 
 /* ═══════════════════════════════════════════════════════════════════════
-   MORTALIVE — Profile Quids System + Audit Fixes  v1
+   MORTALIVE — Profile Reels System + Audit Fixes  v1
    Paste as a new <style> block in index.html (after existing styles, 
    before <script>
 // v47 security/profile bridge: visible Edit/Share use the same app-level actions.
@@ -6214,7 +6219,7 @@ COMPLETE CSS FOR REEL SYSTEM, PROFILE TAB AND AUDIT FIXES
 
 /* ────────────────────────────────────────────────────────────────────
    PROFILE SECTION TABS
-   Posts · Photos · Quids · Stats
+   Posts · Photos · Reels · Stats
    Sits between .modern-profile-card and .profile-content-shell
    ──────────────────────────────────────────────────────────────────── */
 .profile-tabs-bar {
@@ -6759,7 +6764,7 @@ body.mortalive-app-topbar-visible .profile-tabs-bar {
   text-shadow: 0 1px 4px rgba(0,0,0,0.5);
 }
 
-/* Quid author / caption bar at bottom */
+/* Reel author / caption bar at bottom */
 .rv-bottom {
   position: absolute;
   bottom: 0;
@@ -6864,7 +6869,7 @@ body.mortalive-app-topbar-visible .profile-tabs-bar {
   transform: scale(1.1);
 }
 
-/* Quid counter indicator (1/N) */
+/* Reel counter indicator (1/N) */
 .rv-counter {
   position: absolute;
   top: 68px;
@@ -7067,7 +7072,7 @@ body.mortalive-app-topbar-visible .profile-tabs-bar {
 }
 
 /* ────────────────────────────────────────────────────────────────────
-   FEED: Quid post cards (inline in feed, click to open viewer)
+   FEED: Reel post cards (inline in feed, click to open viewer)
    ──────────────────────────────────────────────────────────────────── */
 .feed-reel-card {
   position: relative;
@@ -7179,11 +7184,11 @@ FULL AUDIT REPORT OF THE PROFILE SECTION
 
 | # | Problem | Impact |
 |---|---------|--------|
-| 6 | **Quids section entirely missing** | Major content type gap vs. competitors |
-| 7 | **No profile content tabs** (Posts · Photos · Quids · Stats) | All sections stacked — hard to navigate, no UX hierarchy |
-| 8 | **Video upload not supported** in composer | Quids can't be created |
-| 9 | **`openFeedProfileOverlay`** has Posts/Photos tabs but no Quids tab | Inconsistent profile view |
-| 10 | Feed split-viewer doesn't handle `post_type='reel'` | Quid posts would open as broken image viewer |
+| 6 | **Reels section entirely missing** | Major content type gap vs. competitors |
+| 7 | **No profile content tabs** (Posts · Photos · Reels · Stats) | All sections stacked — hard to navigate, no UX hierarchy |
+| 8 | **Video upload not supported** in composer | Reels can't be created |
+| 9 | **`openFeedProfileOverlay`** has Posts/Photos tabs but no Reels tab | Inconsistent profile view |
+| 10 | Feed split-viewer doesn't handle `post_type='reel'` | Reel posts would open as broken image viewer |
 
 ## 🟡 UI Polish Issues
 
@@ -7298,7 +7303,7 @@ JS Bugs (app.js)
 .feed-reel-card video { width:100%; height:100%; object-fit:cover; }
 .feed-reel-play { position:absolute; inset:0; display:grid; place-items:center; font-size:38px; color:#fff; text-shadow:0 2px 12px rgba(0,0,0,.5); background:rgba(0,0,0,.12); pointer-events:none; }
 
-/* Quids-unlock milestone progress card (right sidebar) */
+/* Reels-unlock milestone progress card (right sidebar) */
 .milestone-card-wrap[hidden] { display:none !important; }
 .milestone-card-sub { font-size:12px; font-weight:700; color:var(--on-surface-3); margin-bottom:10px; }
 .milestone-card-steps { display:flex; flex-direction:column; gap:9px; }
@@ -7309,7 +7314,7 @@ JS Bugs (app.js)
 .milestone-step-label { flex:1; }
 .milestone-step-count { flex:0 0 auto; font-size:11px; font-weight:700; color:var(--on-surface-3); }
 
-/* Locked compose-type button (e.g. Quid, once its input/button are wired) */
+/* Locked compose-type button (e.g. Reel, once its input/button are wired) */
 .compose-type-btn.locked { opacity:.5; cursor:not-allowed; }
 .profile-reels-section { margin-top:12px; }
 .profile-stats-panel { margin-top:12px; }
@@ -10718,7 +10723,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
         <div class="live-dot"></div>
         <span id="app-topbar-online-count">—</span> online
       </div>
-      <div class="topbar-stat app-topbar-score" id="app-topbar-score-pill" title="Open crokz score">
+      <div class="topbar-stat app-topbar-score" id="app-topbar-score-pill" title="Open crockroach Score">
         🧲 <span id="app-topbar-score-val">—</span>
       </div>
     </div>
@@ -10984,7 +10989,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
                    placeholder="Pick a name for this session" autocomplete="off">
             <div class="help-row">
               <span>No account needed</span>
-              <span>Guests don't earn crokz score</span>
+              <span>Guests don't earn crockroach Score</span>
             </div>
           </div>
           <button class="btn btn-primary btn-wide" id="btn-continue-guest" style="margin-top:14px;">
@@ -11381,7 +11386,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <div class="sidebar-card" style="text-align:center;">
 <div style="font-size:28px;margin-bottom:8px;">🌐</div>
 <div style="font-size:14px;font-weight:700;margin-bottom:4px;">Start a new chat</div>
-<div style="font-size:12.5px;color:var(--on-surface-3);margin-bottom:14px;line-height:1.6;">Every chat earns crokz score and unlocks badges.</div>
+<div style="font-size:12.5px;color:var(--on-surface-3);margin-bottom:14px;line-height:1.6;">Every chat earns crockroach Score and unlocks badges.</div>
 <a href="#" class="feed-nav-link" data-feed-target="pg-lobby" style="display:block;padding:11px;border-radius:var(--r-sm);background:linear-gradient(145deg,var(--primary),var(--secondary));color:#fff;font-size:13.5px;font-weight:700;text-align:center;box-shadow:0 4px 14px rgba(26,110,245,.28);">
           Connect now →
         </a>
@@ -11441,19 +11446,19 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-photo" type="button" data-compose-kind="photo">Photo</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
-  <button class="compose-type-btn locked" id="btn-type-reel" type="button" data-compose-kind="reel" disabled title="Unlock by completing your milestones">🔒 Quid</button>
+  <button class="compose-type-btn locked" id="btn-type-reel" type="button" data-compose-kind="reel" disabled title="Quids can be uploaded from the upcoming app.">📱 Quid · App</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
-  <button class="compose-type-btn locked" id="btn-type-video" type="button" data-compose-kind="video" disabled title="Unlock by completing your milestones">🔒 Video</button>
+  <button class="compose-type-btn" id="btn-type-video" type="button" data-compose-kind="video" title="Upload a long-form video">🎬 Video</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-poll" type="button" data-compose-kind="poll">Poll</button>
   <span class="compose-type-separator" aria-hidden="true">|</span>
   <button class="compose-type-btn" id="btn-type-qna" type="button" data-compose-kind="qna">Q&A</button>
 </div>
 <button class="compose-tool photo-compose-btn u-hidden" id="btn-feed-photo" type="button" title="Add photo" aria-hidden="true" tabindex="-1" >📷 Photo</button>
-<input id="feed-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+<input id="feed-photo-input" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
 <span id="feed-photo-name" class="compose-photo-name" aria-live="polite"></span>
 <div id="feed-photo-preview" class="compose-photo-preview" hidden aria-live="polite"></div>
-<button class="compose-tool reel-compose-btn u-hidden" id="btn-feed-reel" type="button" title="Add reel" aria-hidden="true" tabindex="-1">🎬 Quid</button>
+<button class="compose-tool reel-compose-btn u-hidden" id="btn-feed-reel" type="button" title="Add reel" aria-hidden="true" tabindex="-1">🎬 Reel</button>
 <input id="feed-reel-input" type="file" accept="video/mp4,video/webm,video/quicktime" hidden>
 <span id="feed-reel-name" class="compose-photo-name" aria-live="polite"></span>
 <input id="feed-video-input" type="file" accept="video/mp4,video/webm,video/quicktime" hidden>
@@ -11501,7 +11506,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 </main>
 <!-- ── RIGHT SIDEBAR ───────────────── -->
 <aside class="feed-right">
-<!-- Quids-unlock milestone progress (hidden once unlocked or for guests) -->
+<!-- Reels-unlock milestone progress (hidden once unlocked or for guests) -->
 <div class="right-card milestone-card-wrap" id="feed-milestone-wrap" hidden>
         <div class="right-card-title">🔓 Unlock video posting</div>
         <div id="feed-milestone-card"><div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">Loading your progress…</div></div>
@@ -11515,7 +11520,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 
       <!-- Active users -->
 <div class="right-card">
-        <div class="right-card-title">🏆 Users with maximum crokz score</div>
+        <div class="right-card-title">⚡ Recent posters</div>
         <div id="active-users-list"><div style="font-size:12.5px;color:var(--on-surface-3);line-height:1.6;">Loading active posters…</div></div>
       </div>
 
@@ -11860,7 +11865,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
       <div class="profile-bio-row">
         <p class="profile-bio-modern" id="profile-bio-display">—</p>
         <div class="profile-meta-row">
-          <span class="profile-meta-item">🧲 <strong id="profile-hero-score">—</strong> crokz score</span>
+          <span class="profile-meta-item">🧲 <strong id="profile-hero-score">—</strong> crockroach Score</span>
           <span class="profile-meta-item">•</span>
           <span class="profile-meta-item" id="profile-details-meta">Member</span>
         </div>
@@ -12107,7 +12112,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
     </div>
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
       <div class="u-glass-tile">
-        <div class="u-stat-label">crokz score</div>
+        <div class="u-stat-label">crockroach Score</div>
         <div id="progress-score" class="u-stat-value">0</div>
       </div>
       <div class="u-glass-tile">
