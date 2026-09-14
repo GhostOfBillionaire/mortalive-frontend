@@ -17952,11 +17952,15 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     if (!client || !session?.userId) return;
     if (!recipientId || String(recipientId) === String(session.userId)) return;  // no self-notif
 
+    const normalizedEntityId = entityId ? String(entityId) : null;
+    const isUuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
+    if (normalizedEntityId && entityType === 'post' && !isUuid(normalizedEntityId)) return;
+
     const row = {
       user_id:     recipientId,
       type,
       actor_id:    session.userId,
-      entity_id:   entityId  ? String(entityId)  : null,
+      entity_id:   normalizedEntityId,
       entity_type: entityType ? String(entityType) : null,
       message,
       read:        false,
@@ -18364,7 +18368,9 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   window.togglePostLike = async function patchedTogglePostLike (postId) {
     await _origLike(postId);
 
-    // Only fire notification on a new like (not an unlike)
+    // Archive/D1 posts must never create live Supabase notifications.
+    if (typeof isArchivePostId === 'function' && isArchivePostId(postId)) return;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(postId || ''))) return;
     if (!window.notifCenter) return;
     const post = (window._feedPosts || []).find(p => String(p.id) === String(postId))
               || (_feedPosts       || []).find(p => String(p.id) === String(postId));
@@ -18383,6 +18389,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   const _origFollow = window.toggleFollow;
   window.toggleFollow = async function patchedToggleFollow (profileUserId, shouldFollow) {
     const result = await _origFollow(profileUserId, shouldFollow);
+    if (/^cr_/i.test(String(profileUserId || ''))) return result;
     if (shouldFollow && window.notifCenter) {
       const actorName = S?.accountData?.display_name || S?.username || 'Someone';
       await window.notifCenter.insert({
@@ -18405,6 +18412,8 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   window.createPostComment = async function patchedCreatePostComment (postId, content) {
     const savedComment = await _origComment(postId, content);
     if (!savedComment || !window.notifCenter) return savedComment;
+    if (typeof isArchivePostId === 'function' && isArchivePostId(postId)) return savedComment;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(postId || ''))) return savedComment;
 
     const post = (window._feedPosts || []).find(p => String(p.id) === String(postId))
               || (_feedPosts       || []).find(p => String(p.id) === String(postId));
