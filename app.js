@@ -81,6 +81,13 @@ const SERVER_URL =
     ? 'http://localhost:3001'
     : 'https://mortalive-server.onrender.com');
 
+// Archive/media data is served by the dedicated Cloudflare Worker.
+// Keep this separate from SERVER_URL because the archive does not live on
+// the main Mortalive Node/Express server.
+const MORTALIVE_MEDIA_WORKER_URL =
+  window.MORTALIVE_MEDIA_WORKER_URL ||
+  'https://mortalive-media-dev.pdrive777yhgtu.workers.dev';
+
 // V128: Talk state machine — real-user first → 30-second priority → synthetic fallback → indefinite cycle.
 
 
@@ -6422,10 +6429,10 @@ const FEED_MAX_POST_CHARS = 500;
 let _feedInitialized = false;
 let _feedFilter = 'all';
 let _feedOffset = 0;
-let _feedArchiveOffset = 0;
 let _feedLiveOffset = 0;
-let _feedHasMoreArchive = true;
+let _feedArchiveOffset = 0;
 let _feedHasMoreLive = true;
+let _feedHasMoreArchive = true;
 let _feedMergeBuffer = [];
 let _feedHasMore = true;
 let _feedLoading = false;
@@ -6545,7 +6552,6 @@ async function fetchFeedProfileDirectory(userIds) {
   return map;
 }
 
-
 async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
   const endpoint =
     `${MORTALIVE_MEDIA_WORKER_URL}/api/archive-feed?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`;
@@ -6553,9 +6559,7 @@ async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
   try {
     const response = await fetch(endpoint, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json'
-      },
+      headers: { 'Accept': 'application/json' },
       cache: 'no-store',
       credentials: 'omit'
     });
@@ -6580,28 +6584,28 @@ async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
     };
   } catch (error) {
     console.warn('[Archive Feed] hydration failed:', error?.message || error);
-    return {
-      posts: [],
-      hasMore: false,
-      error
-    };
+    return { posts: [], hasMore: false, error };
   }
 }
 
 async function fetchFeedPage(reset = false) {
-  if (_feedLoading) return;
+  if (S.isGuest || !S.userId || !sb || _feedLoading) return;
+
+  if (!(await requireAuthenticatedSession())) {
+    toast('Your session has expired. Please sign in again.', '🔒');
+    return;
+  }
 
   if (reset) {
     _feedOffset = 0;
-    _feedArchiveOffset = 0;
     _feedLiveOffset = 0;
-    _feedHasMoreArchive = true;
+    _feedArchiveOffset = 0;
     _feedHasMoreLive = true;
+    _feedHasMoreArchive = true;
     _feedMergeBuffer = [];
     _feedHasMore = true;
     _feedPosts = [];
   }
-
   if (!_feedHasMore) return;
 
   const container = $('feed-posts');
@@ -6609,160 +6613,94 @@ async function fetchFeedPage(reset = false) {
 
   if (_feedOffset === 0 && container) {
     container.innerHTML = `
-      <div class="skel-post">
-        <div class="skel-row">
-          <div class="skeleton skel-circle"></div>
-          <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
-            <div class="skeleton skel-line" style="width:38%;"></div>
-            <div class="skeleton skel-line" style="width:22%;height:11px;"></div>
-          </div>
-        </div>
-        <div class="skeleton skel-line" style="width:100%;margin-bottom:8px;"></div>
-        <div class="skeleton skel-line" style="width:85%;"></div>
-      </div>`;
+      <div class="skel-post"><div class="skel-row"><div class="skeleton skel-circle"></div><div style="flex:1;display:flex;flex-direction:column;gap:6px;"><div class="skeleton skel-line" style="width:38%;"></div><div class="skeleton skel-line" style="width:22%;height:11px;"></div></div></div><div class="skeleton skel-line" style="width:100%;margin-bottom:8px;"></div><div class="skeleton skel-line" style="width:85%;"></div></div>`;
   }
 
   _feedLoading = true;
   if (loadMore) loadMore.disabled = true;
 
   try {
-    /*
-     * PUBLIC FEED = one logical timeline composed from BOTH stores.
-     * D1/Cloudflare archive supplies imported/synthetic history while
-     * Supabase supplies current/live posts. Each source keeps its own
-     * pagination cursor so neither store can hide rows from the other.
-     */
-    if (
-      _feedFilter === 'mine' &&
-      S.isGuest
-    ) {
-      _feedPosts = [];
-      _feedHasMore = false;
+    // Each source has an independent cursor. The two requests intentionally
+    // start together so the archive path is visible in Network whenever the
+    // public Feed is hydrated instead of waiting for Supabase to finish.
+    const archivePromise =
+      _feedFilter !== 'mine' && _feedHasMoreArchive
+        ? fetchArchiveFeedPage(FEED_PAGE_SIZE, _feedArchiveOffset)
+        : Promise.resolve({ posts: [], hasMore: _feedHasMoreArchive });
 
-      if (container) {
-        container.innerHTML = `
-          <div class="feed-empty">
-            <div class="feed-empty-icon">🔒</div>
-            <h3>Sign in to see your posts</h3>
-          </div>`;
-      }
+    const livePromise = (async () => {
+      if (!_feedHasMoreLive) return { posts: [], hasMore: false };
 
-      return;
-    }
-
-    let archiveResult = { posts: [], hasMore: false };
-    let livePosts = [];
-
-    if (_feedFilter !== 'mine' && _feedHasMoreArchive) {
-      archiveResult = await fetchArchiveFeedPage(
-        FEED_PAGE_SIZE,
-        _feedArchiveOffset
-      );
-      _feedArchiveOffset += archiveResult.posts.length;
-      _feedHasMoreArchive = Boolean(archiveResult.hasMore);
-    }
-
-    if (_feedFilter === 'mine') {
-      if (!(await requireAuthenticatedSession())) {
-        toast('Your session has expired. Please sign in again.', '🔒');
-        return;
-      }
-    }
-
-    /*
-     * Always fetch Supabase alongside the archive for the public feed.
-     * This deliberately does NOT make Supabase optional just because
-     * archive/synthetic content exists. If Supabase fails, archive rows
-     * still render; when it works, live rows are merged into the same feed.
-     */
-    if (_feedHasMoreLive && sb && S.userId) {
       try {
-        const sessionOk = await requireAuthenticatedSession();
+        let query = sb
+          .from('posts')
+          .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
+          .order('created_at', { ascending: false })
+          .range(_feedLiveOffset, _feedLiveOffset + FEED_PAGE_SIZE - 1);
 
-        if (sessionOk) {
-          let query = sb
-            .from('posts')
-            .select(
-              'id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta'
-            )
-            .order('created_at', { ascending: false })
-            .range(
-              _feedLiveOffset,
-              _feedLiveOffset + FEED_PAGE_SIZE - 1
-            );
-
-          if (_feedFilter === 'mine') {
-            query = query.eq('user_id', S.userId);
-          } else {
-            query = query.eq('visibility', 'public');
-          }
-
-          const { data, error } = await query;
-
-          if (error) throw error;
-
-          livePosts = Array.isArray(data) ? data : [];
-          _feedLiveOffset += livePosts.length;
-          _feedHasMoreLive = livePosts.length === FEED_PAGE_SIZE;
+        if (_feedFilter === 'mine') {
+          query = query.eq('user_id', S.userId);
+        } else {
+          query = query.eq('visibility', 'public');
         }
-      } catch (liveError) {
-        console.warn(
-          '[Feed] live Supabase merge skipped for this page:',
-          liveError?.message || liveError
-        );
-        /* Do not kill the archive feed if Supabase is temporarily unavailable. */
-      }
-    }
 
-    /* Resolve Supabase authors only for live rows. Archive rows already carry author metadata. */
+        const { data, error } = await query;
+        if (error) throw error;
+
+        const rows = Array.isArray(data) ? data : [];
+        return {
+          posts: rows,
+          hasMore: rows.length === FEED_PAGE_SIZE
+        };
+      } catch (liveError) {
+        console.warn('[Feed] Supabase source failed; archive source remains available:', liveError?.message || liveError);
+        return { posts: [], hasMore: false, error: liveError };
+      }
+    })();
+
+    const [archiveResult, liveResult] = await Promise.all([archivePromise, livePromise]);
+    const archivePosts = Array.isArray(archiveResult.posts) ? archiveResult.posts : [];
+    const livePosts = Array.isArray(liveResult.posts) ? liveResult.posts : [];
+
+    _feedArchiveOffset += archivePosts.length;
+    _feedHasMoreArchive = Boolean(archiveResult.hasMore);
+    _feedLiveOffset += livePosts.length;
+    _feedHasMoreLive = Boolean(liveResult.hasMore);
+
+    // Archive rows arrive with their author already attached. Only live rows
+    // need the existing Supabase directory lookup.
     let mappedLive = [];
     if (livePosts.length) {
-      const directory = await fetchFeedProfileDirectory(
-        livePosts.map(row => row.user_id)
-      );
-
+      const directory = await fetchFeedProfileDirectory(livePosts.map(row => row.user_id));
       mappedLive = livePosts.map(row => ({
         ...row,
-        source: row.source || 'live',
+        source: 'live',
         author:
           directory.get(row.user_id) ||
           feedProfileFor(row.user_id) ||
-          {
-            username: 'Mortalive member',
-            display_name: 'Mortalive member',
-            crockroach_score: 0
-          }
+          { username: 'Mortalive member', display_name: 'Mortalive member', crockroach_score: 0 }
       }));
     }
 
     const incoming = [
-      ...archiveResult.posts,
+      ...archivePosts,
       ...mappedLive
-    ]
-      .filter(Boolean)
-      .sort((a, b) =>
-        Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0)
-      );
+    ].filter(Boolean).sort((a, b) =>
+      Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0)
+    );
 
-    /*
-     * Keep a small client-side merge buffer. A source can hand us more
-     * timeline rows than the UI needs for this page; preserving the rest
-     * prevents gaps while the two independent cursors advance.
-     */
     const seen = new Set();
     const combined = [
       ..._feedMergeBuffer,
       ...incoming
-    ]
-      .filter(post => {
-        const key = `${post.source || 'live'}:${post.id || ''}`;
-        if (!post.id || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .sort((a, b) =>
-        Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0)
-      );
+    ].filter(post => {
+      const key = `${post.source || 'live'}:${post.id || ''}`;
+      if (!post.id || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((a, b) =>
+      Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0)
+    );
 
     const pagePosts = combined.slice(0, FEED_PAGE_SIZE);
     _feedMergeBuffer = combined.slice(FEED_PAGE_SIZE);
@@ -6772,42 +6710,43 @@ async function fetchFeedPage(reset = false) {
       : [..._feedPosts, ...pagePosts];
 
     _feedOffset += pagePosts.length;
-
-    /* Continue while either source still has rows or the merge buffer does. */
-    _feedHasMore =
-      _feedMergeBuffer.length > 0 ||
+    _feedHasMore = Boolean(
+      _feedMergeBuffer.length ||
       _feedHasMoreArchive ||
-      _feedHasMoreLive;
+      _feedHasMoreLive
+    );
 
-    const liveIds = mappedLive
-      .map(row => row.id)
-      .filter(Boolean);
-
-    if (liveIds.length) {
-      await hydratePostEngagement(liveIds);
-      await hydratePostViewCounts(liveIds);
+    // Engagement APIs belong to live Supabase posts only. Archive rows must
+    // never be sent into live interaction tables merely because they render in
+    // the same Feed collection.
+    if (livePosts.length) {
+      await hydratePostEngagement(livePosts.map(row => row.id));
+      await hydratePostViewCounts(livePosts.map(row => row.id));
+      await hydrateQnaResponses(livePosts
+        .filter(row => row?.post_meta?.kind === 'qna' && row?.post_meta?.mode === 'mcq')
+        .map(row => row.id));
+      await hydratePollResults(livePosts
+        .filter(row => row?.post_meta?.kind === 'poll')
+        .map(row => row.id));
     }
 
     renderFeedPosts();
-
-    if (loadMore) {
-      loadMore.style.display = _feedHasMore ? '' : 'none';
-      loadMore.disabled = !_feedHasMore;
-    }
+    renderFeedSidebars();
+    hydrateTrendingHashtags().catch(() => {});
   } catch (e) {
-    console.error('[Feed] fetch failed:', e);
-    if (container && _feedOffset === 0) {
-      container.innerHTML = `
-        <div class="feed-empty">
-          <div class="feed-empty-icon">⚠️</div>
-          <h3>Unable to load the feed</h3>
-          <p>Please try again.</p>
-        </div>`;
+    console.warn('[Feed] fetch failed:', e?.message || e);
+    // Do not turn a single-source failure into a full Feed failure. The source
+    // fetchers above already isolate Supabase/Cloudflare failures; this block
+    // is only for unexpected normalization/render exceptions.
+    if (container && !_feedPosts.length) {
+      container.innerHTML = `<div class="feed-empty"><div class="feed-empty-icon">⚠️</div><h3>Feed unavailable</h3><p>${sanitizeHTML(e?.message || 'Could not load public posts right now.')}</p><button class="load-more-btn" type="button" data-feed-action="retry">Retry</button></div>`;
     }
-    if (loadMore) loadMore.style.display = 'none';
   } finally {
     _feedLoading = false;
-    if (loadMore) loadMore.disabled = false;
+    if (loadMore) {
+      loadMore.disabled = false;
+      loadMore.style.display = _feedHasMore ? 'flex' : 'none';
+    }
   }
 }
 
@@ -7879,7 +7818,8 @@ function detectMediaType(mediaType, url) {
 // change again once the Worker gateway is live; nothing else should build
 // this path itself.
 function getMediaUrl(mediaId) {
-  return getArchiveMediaUrl(mediaId);
+  if (!mediaId) return '';
+  return `${MORTALIVE_MEDIA_WORKER_URL}/media/${encodeURIComponent(String(mediaId))}`;
 }
 
 // Normalizes any post row into an ordered media[] array: [{type, url, position}].
@@ -8015,14 +7955,10 @@ function buildFeedPostCardHTML(post) {
         </div>
         <div class="post-body">${bodyHTML}</div>
         <div class="post-actions">
-          ${post.source === 'archive'
-            ? `<span class="action-btn" style="cursor:default;opacity:.7;">Archive</span>`
-            : `<button class="action-btn like-btn ${engagement.liked ? 'liked' : ''}" type="button" data-feed-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${engagement.liked ? 'true' : 'false'}"><span class="action-icon">${engagement.liked ? '♥' : '♡'}</span><span class="like-count">${engagement.likes}</span></button>
-               <button class="action-btn comment-btn" type="button" data-feed-action="comments" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">💬</span><span>${engagement.comments}</span></button>`}
+          <button class="action-btn like-btn ${engagement.liked ? 'liked' : ''}" type="button" data-feed-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${engagement.liked ? 'true' : 'false'}"><span class="action-icon">${engagement.liked ? '♥' : '♡'}</span><span class="like-count">${engagement.likes}</span></button>
+          <button class="action-btn comment-btn" type="button" data-feed-action="comments" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">💬</span><span>${engagement.comments}</span></button>
           <button class="action-btn share-btn" type="button" data-feed-action="copy" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">↗</span><span>Share</span></button>
-          ${post.source === 'archive'
-            ? ''
-            : `<span class="post-view-count" aria-label="${postViewCountFor(post.id)} views"><span class="action-icon">👁</span><span>${postViewCountFor(post.id)}</span></span>`}
+          <span class="post-view-count" aria-label="${postViewCountFor(post.id)} views"><span class="action-icon">👁</span><span>${postViewCountFor(post.id)}</span></span>
           <span class="action-btn" style="margin-left:auto;cursor:default;">${sanitizeHTML(post.visibility || 'public')}</span>
         </div>
         <div class="comments-section" data-post-id="${sanitizeHTML(post.id)}" aria-hidden="true"></div>
@@ -9208,23 +9144,94 @@ let _profilePosts = [];
 let _profilePostsOwner = null;
 let _postsHydrationPromise = null;
 
+async function fetchArchiveProfilePosts(userId, limit = POSTS_PAGE_SIZE, offset = 0) {
+  if (!userId) return { posts: [], creator: null, hasMore: false };
+
+  const endpoint =
+    `${MORTALIVE_MEDIA_WORKER_URL}/api/archive-profile?id=${encodeURIComponent(String(userId))}&limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      cache: 'no-store',
+      credentials: 'omit'
+    });
+
+    if (response.status === 404) {
+      return { posts: [], creator: null, hasMore: false };
+    }
+    if (!response.ok) {
+      throw new Error(`Archive profile request failed: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    return {
+      posts: Array.isArray(payload?.posts) ? payload.posts.map(post => ({
+        ...post,
+        source: 'archive',
+        visibility: post.visibility || 'public',
+        post_meta: post.post_meta && typeof post.post_meta === 'object' ? post.post_meta : {}
+      })) : [],
+      creator: payload?.creator || null,
+      hasMore: Boolean(payload?.hasMore)
+    };
+  } catch (error) {
+    console.warn('[Archive Profile] hydration failed:', error?.message || error);
+    return { posts: [], creator: null, hasMore: false, error };
+  }
+}
+
 async function fetchProfilePosts(userId = S.userId) {
   if (!userId || S.isGuest || !sb) return [];
   if (!(await requireAuthenticatedSession())) return [];
-  try {
-    const { data, error } = await sb
-      .from('posts')
-      .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(POSTS_PAGE_SIZE);
 
-    if (error) throw error;
-    return Array.isArray(data) ? data : [];
-  } catch (e) {
-    console.warn('[Posts] profile fetch failed:', e?.message || e);
-    return [];
+  const archivePromise = fetchArchiveProfilePosts(userId, POSTS_PAGE_SIZE, 0);
+  const livePromise = (async () => {
+    try {
+      const { data, error } = await sb
+        .from('posts')
+        .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(POSTS_PAGE_SIZE);
+      if (error) throw error;
+      return Array.isArray(data) ? data : [];
+    } catch (e) {
+      console.warn('[Posts] live profile fetch failed:', e?.message || e);
+      return [];
+    }
+  })();
+
+  const [archiveResult, livePosts] = await Promise.all([archivePromise, livePromise]);
+
+  let mappedLive = [];
+  if (livePosts.length) {
+    const directory = await fetchFeedProfileDirectory(livePosts.map(row => row.user_id));
+    mappedLive = livePosts.map(row => ({
+      ...row,
+      source: 'live',
+      author:
+        directory.get(row.user_id) ||
+        feedProfileFor(row.user_id) ||
+        { username: 'Mortalive member', display_name: 'Mortalive member', crockroach_score: 0 }
+    }));
   }
+
+  const combined = [
+    ...(archiveResult?.posts || []),
+    ...mappedLive
+  ].filter(Boolean).sort((a, b) =>
+    Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0)
+  );
+
+  const seen = new Set();
+  return combined.filter(post => {
+    const key = `${post.source || 'live'}:${post.id || ''}`;
+    if (!post.id || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, POSTS_PAGE_SIZE);
 }
 
 function formatPostTime(iso) {
@@ -9530,7 +9537,11 @@ function renderProfileGallery(posts = _profilePosts) {
   if (!gallery) return;
 
   const photos = (posts || [])
-    .filter((p) => p?.media_url && p.post_type !== 'reel' && detectMediaType(p.media_type, p.media_url) === 'image')
+    .filter((p) => {
+      if (p?.post_type === 'reel') return false;
+      const media = getPostMedia(p);
+      return media.some(item => item.type === 'image');
+    })
     .sort((a, b) => {
       const ta = new Date(a?.created_at || a?.ts || a?.uploaded_at || 0).getTime();
       const tb = new Date(b?.created_at || b?.ts || b?.uploaded_at || 0).getTime();
@@ -9566,7 +9577,8 @@ function renderProfileGallery(posts = _profilePosts) {
         'user'
       );
       const postId = sanitizeHTML(p.id || '');
-      const photoUrl = sanitizeHTML(p.media_url || '');
+      const photoMedia = getPostMedia(p).find(item => item.type === 'image');
+      const photoUrl = sanitizeHTML(photoMedia?.url || '');
 
       return `<button type="button" class="profile-gallery-tile" data-post-id="${postId}" data-photo-url="${photoUrl}" data-photo-caption="${caption}" data-photo-author="${ownerName}" aria-label="Open photo ${i + 1}">
         <img src="${photoUrl}" alt="${ownerName} photo post" loading="lazy" data-photo-url="${photoUrl}" data-photo-caption="${caption}" data-photo-author="${ownerName}" style="width:100%;height:100%;object-fit:cover;display:block">
@@ -9621,7 +9633,12 @@ async function hydrateProfilePosts(userId = S.userId, options = {}) {
     .then(async (posts) => {
       if ((S.userId === userId || S.profileViewUserId === userId) && !S.isGuest) {
         _profilePosts = posts;
-        _profilePostsOwner = S.profileViewData || (S.userId === userId ? { id: S.userId, username: S.username, display_name: S.username } : null);
+        const archiveAuthor = Array.isArray(posts)
+          ? posts.find(post => post?.source === 'archive' && post?.author)?.author
+          : null;
+        _profilePostsOwner = S.profileViewData ||
+          archiveAuthor ||
+          (S.userId === userId ? { id: S.userId, username: S.username, display_name: S.username } : null);
         // Hydrate real like/comment counts before rendering so cards show live numbers
         if (posts.length) {
           const postIds = posts.map(p => p.id).filter(Boolean);
