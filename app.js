@@ -10712,6 +10712,16 @@ async function toggleFollow(profileUserId, shouldFollow) {
 
 async function fetchFollowData(profileUserId) {
   if (!sb || !profileUserId) return { followers: 0, following: 0, isFollowing: false };
+
+  // Archive creator IDs (cr_...) are D1 identities, not Supabase UUIDs.
+  // Never send them to the UUID-only follow RPC. Mapped archive creators
+  // arrive here as their canonical Supabase account_id instead.
+  if (/^cr_/i.test(String(profileUserId))) {
+    const result = { followers: 0, following: 0, isFollowing: false };
+    _followCache.set(profileUserId, result);
+    return result;
+  }
+
   if (_followCache.has(profileUserId)) return _followCache.get(profileUserId);
   try {
     const { data, error } = await sb.rpc('get_profile_follow_data', {
@@ -11815,6 +11825,19 @@ window.PROFILE_INTERESTS      = PROFILE_INTERESTS; // needed by renderProfileInf
     syncModeCards();
     if ($('pg-lobby')?.classList.contains('active')) refreshLobbyStats();
   }, 9000);
+
+  /* ── Auth visibility bridge ─────────────────────────────────────────────
+     The Dynamic Island module owns the implementation later in this file,
+     while the main app invokes this hook earlier. Keep a global bridge so
+     those invocations never throw during auth/navigation hydration.
+  ───────────────────────────────────────────────────────────────────────── */
+  if (typeof window.syncBottomNavAuthVisibility !== 'function') {
+    window.syncBottomNavAuthVisibility = function (...args) {
+      return window.__mortaliveSyncBottomNavAuthVisibility?.(...args);
+    };
+  }
+  var syncBottomNavAuthVisibility = (...args) =>
+    window.syncBottomNavAuthVisibility?.(...args);
 
   /* ── Auth state hook (app.js fires this after login/logout/navigation) ─── */
   window.addEventListener('mortalive-auth-state', () => {
@@ -17600,6 +17623,8 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
   }
   syncBottomNavAuthVisibility._sessionProbe = false;
   syncBottomNavAuthVisibility._sessionProbe = false;
+  window.__mortaliveSyncBottomNavAuthVisibility = syncBottomNavAuthVisibility;
+  window.syncBottomNavAuthVisibility = syncBottomNavAuthVisibility;
   let _bottomNavObserver = null;
   function installBottomNavVisibilityObserver() {
     if (_bottomNavObserver || !document.body) return;
