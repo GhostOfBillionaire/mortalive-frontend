@@ -6422,6 +6422,11 @@ const FEED_MAX_POST_CHARS = 500;
 let _feedInitialized = false;
 let _feedFilter = 'all';
 let _feedOffset = 0;
+let _feedArchiveOffset = 0;
+let _feedLiveOffset = 0;
+let _feedHasMoreArchive = true;
+let _feedHasMoreLive = true;
+let _feedMergeBuffer = [];
 let _feedHasMore = true;
 let _feedLoading = false;
 let _feedPosts = [];
@@ -6540,73 +6545,269 @@ async function fetchFeedProfileDirectory(userIds) {
   return map;
 }
 
-async function fetchFeedPage(reset = false) {
-  if (S.isGuest || !S.userId || !sb || _feedLoading) return;
-  if (!(await requireAuthenticatedSession())) {
-    toast('Your session has expired. Please sign in again.', '🔒');
-    return;
+
+async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
+  const endpoint =
+    `${MORTALIVE_MEDIA_WORKER_URL}/api/archive-feed?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      },
+      cache: 'no-store',
+      credentials: 'omit'
+    });
+
+    if (!response.ok) {
+      throw new Error(`Archive feed request failed: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const rows = Array.isArray(payload?.posts) ? payload.posts : [];
+
+    return {
+      posts: rows.map((post) => ({
+        ...post,
+        source: 'archive',
+        visibility: post.visibility || 'public',
+        post_meta: post.post_meta && typeof post.post_meta === 'object'
+          ? post.post_meta
+          : {}
+      })),
+      hasMore: Boolean(payload?.hasMore)
+    };
+  } catch (error) {
+    console.warn('[Archive Feed] hydration failed:', error?.message || error);
+    return {
+      posts: [],
+      hasMore: false,
+      error
+    };
   }
+}
+
+async function fetchFeedPage(reset = false) {
+  if (_feedLoading) return;
+
   if (reset) {
     _feedOffset = 0;
+    _feedArchiveOffset = 0;
+    _feedLiveOffset = 0;
+    _feedHasMoreArchive = true;
+    _feedHasMoreLive = true;
+    _feedMergeBuffer = [];
     _feedHasMore = true;
     _feedPosts = [];
   }
+
   if (!_feedHasMore) return;
 
   const container = $('feed-posts');
   const loadMore = $('load-more-btn');
+
   if (_feedOffset === 0 && container) {
     container.innerHTML = `
-      <div class="skel-post"><div class="skel-row"><div class="skeleton skel-circle"></div><div style="flex:1;display:flex;flex-direction:column;gap:6px;"><div class="skeleton skel-line" style="width:38%;"></div><div class="skeleton skel-line" style="width:22%;height:11px;"></div></div></div><div class="skeleton skel-line" style="width:100%;margin-bottom:8px;"></div><div class="skeleton skel-line" style="width:85%;"></div></div>`;
+      <div class="skel-post">
+        <div class="skel-row">
+          <div class="skeleton skel-circle"></div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+            <div class="skeleton skel-line" style="width:38%;"></div>
+            <div class="skeleton skel-line" style="width:22%;height:11px;"></div>
+          </div>
+        </div>
+        <div class="skeleton skel-line" style="width:100%;margin-bottom:8px;"></div>
+        <div class="skeleton skel-line" style="width:85%;"></div>
+      </div>`;
   }
+
   _feedLoading = true;
   if (loadMore) loadMore.disabled = true;
 
   try {
-    let query = sb
-      .from('posts')
-      .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
-      .order('created_at', { ascending: false })
-      .range(_feedOffset, _feedOffset + FEED_PAGE_SIZE - 1);
+    /*
+     * PUBLIC FEED = one logical timeline composed from BOTH stores.
+     * D1/Cloudflare archive supplies imported/synthetic history while
+     * Supabase supplies current/live posts. Each source keeps its own
+     * pagination cursor so neither store can hide rows from the other.
+     */
+    if (
+      _feedFilter === 'mine' &&
+      S.isGuest
+    ) {
+      _feedPosts = [];
+      _feedHasMore = false;
+
+      if (container) {
+        container.innerHTML = `
+          <div class="feed-empty">
+            <div class="feed-empty-icon">🔒</div>
+            <h3>Sign in to see your posts</h3>
+          </div>`;
+      }
+
+      return;
+    }
+
+    let archiveResult = { posts: [], hasMore: false };
+    let livePosts = [];
+
+    if (_feedFilter !== 'mine' && _feedHasMoreArchive) {
+      archiveResult = await fetchArchiveFeedPage(
+        FEED_PAGE_SIZE,
+        _feedArchiveOffset
+      );
+      _feedArchiveOffset += archiveResult.posts.length;
+      _feedHasMoreArchive = Boolean(archiveResult.hasMore);
+    }
 
     if (_feedFilter === 'mine') {
-      query = query.eq('user_id', S.userId);
-    } else {
-      query = query.eq('visibility', 'public');
+      if (!(await requireAuthenticatedSession())) {
+        toast('Your session has expired. Please sign in again.', '🔒');
+        return;
+      }
     }
 
-    const { data, error } = await query;
-    if (error) throw error;
+    /*
+     * Always fetch Supabase alongside the archive for the public feed.
+     * This deliberately does NOT make Supabase optional just because
+     * archive/synthetic content exists. If Supabase fails, archive rows
+     * still render; when it works, live rows are merged into the same feed.
+     */
+    if (_feedHasMoreLive && sb && S.userId) {
+      try {
+        const sessionOk = await requireAuthenticatedSession();
 
-    const rows = Array.isArray(data) ? data : [];
-    const directory = await fetchFeedProfileDirectory(rows.map(row => row.user_id));
-    const mapped = rows.map(row => ({
-      ...row,
-      author: directory.get(row.user_id) || feedProfileFor(row.user_id) || { username: 'Mortalive member', display_name: 'Mortalive member', crockroach_score: 0 }
-    }));
+        if (sessionOk) {
+          let query = sb
+            .from('posts')
+            .select(
+              'id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta'
+            )
+            .order('created_at', { ascending: false })
+            .range(
+              _feedLiveOffset,
+              _feedLiveOffset + FEED_PAGE_SIZE - 1
+            );
 
-    _feedPosts = reset || _feedOffset === 0 ? mapped : [..._feedPosts, ...mapped];
-    _feedOffset += rows.length;
-    _feedHasMore = rows.length === FEED_PAGE_SIZE;
-    await hydratePostEngagement(rows.map(row => row.id));
-    await hydratePostViewCounts(rows.map(row => row.id));
-    await hydrateQnaResponses(rows.filter(row => row?.post_meta?.kind === 'qna' && row?.post_meta?.mode === 'mcq').map(row => row.id));
-    await hydratePollResults(rows.filter(row => row?.post_meta?.kind === 'poll').map(row => row.id));
+          if (_feedFilter === 'mine') {
+            query = query.eq('user_id', S.userId);
+          } else {
+            query = query.eq('visibility', 'public');
+          }
+
+          const { data, error } = await query;
+
+          if (error) throw error;
+
+          livePosts = Array.isArray(data) ? data : [];
+          _feedLiveOffset += livePosts.length;
+          _feedHasMoreLive = livePosts.length === FEED_PAGE_SIZE;
+        }
+      } catch (liveError) {
+        console.warn(
+          '[Feed] live Supabase merge skipped for this page:',
+          liveError?.message || liveError
+        );
+        /* Do not kill the archive feed if Supabase is temporarily unavailable. */
+      }
+    }
+
+    /* Resolve Supabase authors only for live rows. Archive rows already carry author metadata. */
+    let mappedLive = [];
+    if (livePosts.length) {
+      const directory = await fetchFeedProfileDirectory(
+        livePosts.map(row => row.user_id)
+      );
+
+      mappedLive = livePosts.map(row => ({
+        ...row,
+        source: row.source || 'live',
+        author:
+          directory.get(row.user_id) ||
+          feedProfileFor(row.user_id) ||
+          {
+            username: 'Mortalive member',
+            display_name: 'Mortalive member',
+            crockroach_score: 0
+          }
+      }));
+    }
+
+    const incoming = [
+      ...archiveResult.posts,
+      ...mappedLive
+    ]
+      .filter(Boolean)
+      .sort((a, b) =>
+        Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0)
+      );
+
+    /*
+     * Keep a small client-side merge buffer. A source can hand us more
+     * timeline rows than the UI needs for this page; preserving the rest
+     * prevents gaps while the two independent cursors advance.
+     */
+    const seen = new Set();
+    const combined = [
+      ..._feedMergeBuffer,
+      ...incoming
+    ]
+      .filter(post => {
+        const key = `${post.source || 'live'}:${post.id || ''}`;
+        if (!post.id || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) =>
+        Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0)
+      );
+
+    const pagePosts = combined.slice(0, FEED_PAGE_SIZE);
+    _feedMergeBuffer = combined.slice(FEED_PAGE_SIZE);
+
+    _feedPosts = reset || _feedOffset === 0
+      ? pagePosts
+      : [..._feedPosts, ...pagePosts];
+
+    _feedOffset += pagePosts.length;
+
+    /* Continue while either source still has rows or the merge buffer does. */
+    _feedHasMore =
+      _feedMergeBuffer.length > 0 ||
+      _feedHasMoreArchive ||
+      _feedHasMoreLive;
+
+    const liveIds = mappedLive
+      .map(row => row.id)
+      .filter(Boolean);
+
+    if (liveIds.length) {
+      await hydratePostEngagement(liveIds);
+      await hydratePostViewCounts(liveIds);
+    }
+
     renderFeedPosts();
-    renderFeedSidebars();
-    hydrateTrendingHashtags().catch(() => {});
-  } catch (e) {
-    console.warn('[Feed] fetch failed:', e?.message || e);
-    if (container) {
-      container.innerHTML = `<div class="feed-empty"><div class="feed-empty-icon">⚠️</div><h3>Feed unavailable</h3><p>${sanitizeHTML(e?.message || 'Could not load public posts right now.')}</p><button class="load-more-btn" type="button" data-feed-action="retry">Retry</button></div>`;
+
+    if (loadMore) {
+      loadMore.style.display = _feedHasMore ? '' : 'none';
+      loadMore.disabled = !_feedHasMore;
     }
-    _feedHasMore = false;
+  } catch (e) {
+    console.error('[Feed] fetch failed:', e);
+    if (container && _feedOffset === 0) {
+      container.innerHTML = `
+        <div class="feed-empty">
+          <div class="feed-empty-icon">⚠️</div>
+          <h3>Unable to load the feed</h3>
+          <p>Please try again.</p>
+        </div>`;
+    }
+    if (loadMore) loadMore.style.display = 'none';
   } finally {
     _feedLoading = false;
-    if (loadMore) {
-      loadMore.disabled = false;
-      loadMore.style.display = _feedHasMore ? 'flex' : 'none';
-    }
+    if (loadMore) loadMore.disabled = false;
   }
 }
 
@@ -7678,8 +7879,7 @@ function detectMediaType(mediaType, url) {
 // change again once the Worker gateway is live; nothing else should build
 // this path itself.
 function getMediaUrl(mediaId) {
-  if (!mediaId) return '';
-  return `/media/${mediaId}`;
+  return getArchiveMediaUrl(mediaId);
 }
 
 // Normalizes any post row into an ordered media[] array: [{type, url, position}].
@@ -7815,10 +8015,14 @@ function buildFeedPostCardHTML(post) {
         </div>
         <div class="post-body">${bodyHTML}</div>
         <div class="post-actions">
-          <button class="action-btn like-btn ${engagement.liked ? 'liked' : ''}" type="button" data-feed-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${engagement.liked ? 'true' : 'false'}"><span class="action-icon">${engagement.liked ? '♥' : '♡'}</span><span class="like-count">${engagement.likes}</span></button>
-          <button class="action-btn comment-btn" type="button" data-feed-action="comments" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">💬</span><span>${engagement.comments}</span></button>
+          ${post.source === 'archive'
+            ? `<span class="action-btn" style="cursor:default;opacity:.7;">Archive</span>`
+            : `<button class="action-btn like-btn ${engagement.liked ? 'liked' : ''}" type="button" data-feed-action="like" data-post-id="${sanitizeHTML(post.id)}" aria-pressed="${engagement.liked ? 'true' : 'false'}"><span class="action-icon">${engagement.liked ? '♥' : '♡'}</span><span class="like-count">${engagement.likes}</span></button>
+               <button class="action-btn comment-btn" type="button" data-feed-action="comments" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">💬</span><span>${engagement.comments}</span></button>`}
           <button class="action-btn share-btn" type="button" data-feed-action="copy" data-post-id="${sanitizeHTML(post.id)}"><span class="action-icon">↗</span><span>Share</span></button>
-          <span class="post-view-count" aria-label="${postViewCountFor(post.id)} views"><span class="action-icon">👁</span><span>${postViewCountFor(post.id)}</span></span>
+          ${post.source === 'archive'
+            ? ''
+            : `<span class="post-view-count" aria-label="${postViewCountFor(post.id)} views"><span class="action-icon">👁</span><span>${postViewCountFor(post.id)}</span></span>`}
           <span class="action-btn" style="margin-left:auto;cursor:default;">${sanitizeHTML(post.visibility || 'public')}</span>
         </div>
         <div class="comments-section" data-post-id="${sanitizeHTML(post.id)}" aria-hidden="true"></div>
