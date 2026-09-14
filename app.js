@@ -17831,7 +17831,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       const { data, error } = await client
         .from('notifications')
         .select('id, type, actor_id, entity_id, entity_type, message, read, created_at')
-        .eq('user_id', String(session.userId))
+        .eq('recipient_id', String(session.userId))
         .order('created_at', { ascending: false })
         .limit(PAGE_SIZE);
 
@@ -17920,7 +17920,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
       .from('notifications')
       .update({ read: true })
       .eq('id', notifId)
-      .eq('user_id', session.userId);
+      .eq('recipient_id', session.userId);
   }
 
   async function markAllRead () {
@@ -17934,7 +17934,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     await client
       .from('notifications')
       .update({ read: true })
-      .eq('user_id', session.userId)
+      .eq('recipient_id', session.userId)
       .eq('read', false);
   }
 
@@ -17954,17 +17954,18 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
 
     const normalizedEntityId = entityId ? String(entityId) : null;
     const isUuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
-    if (normalizedEntityId && entityType === 'post' && !isUuid(normalizedEntityId)) return;
+    if (normalizedEntityId && !isUuid(normalizedEntityId)) return;
 
     const row = {
-      user_id:     recipientId,
+      recipient_id: String(recipientId),
+      user_id:      String(recipientId),
       type,
-      actor_id:    session.userId,
-      entity_id:   normalizedEntityId,
-      entity_type: entityType ? String(entityType) : null,
+      actor_id:     session.userId,
+      entity_id:    normalizedEntityId,
+      entity_type:  entityType ? String(entityType) : null,
       message,
-      read:        false,
-      created_at:  new Date().toISOString()
+      read:         false,
+      created_at:   new Date().toISOString()
     };
 
     const { error } = await client.from('notifications').insert(row);
@@ -18018,7 +18019,7 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
           event:  'INSERT',
           schema: 'public',
           table:  'notifications',
-          filter: `user_id=eq.${session.userId}`
+          filter: `recipient_id=eq.${session.userId}`
         },
         async payload => {
           const row = payload.new;
