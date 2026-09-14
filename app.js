@@ -6552,6 +6552,21 @@ async function fetchFeedProfileDirectory(userIds) {
   return map;
 }
 
+function isArchivePost(post) {
+  return String(post?.source || '').toLowerCase() === 'archive';
+}
+
+function isArchivePostId(postId) {
+  if (!postId) return false;
+  const id = String(postId);
+  return _feedPosts.some(p => String(p?.id || '') === id && isArchivePost(p)) ||
+    _profilePosts.some(p => String(p?.id || '') === id && isArchivePost(p));
+}
+
+function canonicalProfileTargetId(post, fallback = '') {
+  return post?.author?.account_id || post?.user_id || fallback || '';
+}
+
 async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
   const endpoint =
     `${MORTALIVE_MEDIA_WORKER_URL}/api/archive-feed?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`;
@@ -6757,7 +6772,7 @@ function filteredFeedPosts() {
 
 
 async function hydratePostEngagement(postIds) {
-  const ids = Array.from(new Set((postIds || []).filter(Boolean)));
+  const ids = Array.from(new Set((postIds || []).filter(Boolean))).filter(id => !isArchivePostId(id));
   if (!ids.length || !sb || S.isGuest) return;
   try {
     const { data, error } = await sb.rpc('get_post_engagement', { p_post_ids: ids });
@@ -6790,7 +6805,7 @@ function postViewCountFor(postId) {
 }
 
 async function hydratePostViewCounts(postIds = []) {
-  const ids = Array.from(new Set((postIds || []).filter(Boolean)));
+  const ids = Array.from(new Set((postIds || []).filter(Boolean))).filter(id => !isArchivePostId(id));
   if (!ids.length || !sb || S.isGuest) return;
   try {
     const { data, error } = await sb.rpc('get_post_view_counts', { p_post_ids: ids });
@@ -6811,7 +6826,7 @@ async function hydratePostViewCounts(postIds = []) {
 }
 
 async function recordPostView(postId) {
-  if (S.isGuest || !S.userId || !sb || !postId || _feedViewRecording.has(postId)) return;
+  if (S.isGuest || !S.userId || !sb || !postId || isArchivePostId(postId) || _feedViewRecording.has(postId)) return;
   _feedViewRecording.add(postId);
   try {
     const { data, error } = await sb.rpc('record_post_view', { p_post_id: postId });
@@ -6845,6 +6860,7 @@ function _rerenderPostEngagement(postId) {
 }
 
 async function togglePostLike(postId) {
+  if (isArchivePostId(postId)) { toast('Archive posts use synthetic interactions and are read-only here.', 'ℹ️'); return; }
   if (S.isGuest || !S.userId || !sb) {
     toast('Sign in to like posts', '🔒');
     return;
@@ -6872,7 +6888,7 @@ async function togglePostLike(postId) {
 }
 
 async function loadPostComments(postId, force = false) {
-  if (!postId || !sb || S.isGuest) return [];
+  if (!postId || isArchivePostId(postId) || !sb || S.isGuest) return [];
   if (!force && _commentCache.has(postId)) return _commentCache.get(postId);
   if (_commentLoading.has(postId)) return _commentCache.get(postId) || [];
   _commentLoading.add(postId);
@@ -6949,6 +6965,7 @@ async function togglePostComments(postId) {
 }
 
 async function createPostComment(postId, content) {
+  if (isArchivePostId(postId)) { toast('Archive posts use synthetic interactions and are read-only here.', 'ℹ️'); return false; }
   if (S.isGuest || !S.userId || !sb) {
     toast('Sign in to comment', '🔒');
     return;
@@ -7598,6 +7615,7 @@ async function hydratePollResults(postIds = []) {
 }
 
 async function submitPollVote(postId, optionId) {
+  if (isArchivePostId(postId)) { toast('Archive posts use synthetic interactions and are read-only here.', 'ℹ️'); return; }
   if (S.isGuest || !S.userId || !sb) { toast('Sign in to vote', '🔒'); return; }
   if (!postId || !optionId) return;
 
@@ -7707,6 +7725,7 @@ async function submitPollVote(postId, optionId) {
   toast('Vote recorded', '✅');
 }
 async function submitQnaResponse(postId, optionId) {
+  if (isArchivePostId(postId)) { toast('Archive posts use synthetic interactions and are read-only here.', 'ℹ️'); return; }
   if (S.isGuest || !S.userId || !sb) { toast('Sign in to answer', '🔒'); return; }
   if (!postId || !optionId) return;
   if (_feedQnaResponseCache.has(postId)) { toast('You already answered this Q&A.', 'ℹ️'); return; }
@@ -7948,7 +7967,7 @@ function buildFeedPostCardHTML(post) {
         <div class="post-header">
           ${avatarMarkup}
           <div class="post-meta">
-            <div class="post-author"><button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(post.user_id)}">${sanitizeHTML(display)} ${badge}</button></div>
+            <div class="post-author"><button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(canonicalProfileTargetId(post))}">${sanitizeHTML(display)} ${badge}</button></div>
             <div class="post-time">@${sanitizeHTML(username)} · ${sanitizeHTML(feedRelTime(post.created_at))} · ${sanitizeHTML(typeLabel)}</div>
           </div>
           ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
@@ -8367,7 +8386,7 @@ function renderFeedSidebars() {
       active.innerHTML = authors.map(author => `
       <div class="active-user-item">
         <div class="active-user-ava">${feedAvatarLetter(author.display_name || author.username)}</div>
-        <div class="active-user-info"><button type="button" class="active-user-name post-author-link" data-open-profile="${sanitizeHTML(author.id || '')}">${sanitizeHTML(author.display_name || author.username || 'Member')}</button><div class="active-user-sub">@${sanitizeHTML(author.username || 'member')}</div></div>
+        <div class="active-user-info"><button type="button" class="active-user-name post-author-link" data-open-profile="${sanitizeHTML(author.account_id || author.id || '')}">${sanitizeHTML(author.display_name || author.username || 'Member')}</button><div class="active-user-sub">@${sanitizeHTML(author.username || 'member')}</div></div>
         <div class="active-user-score">${Number(author.crockroach_score) || 0}</div>
       </div>`).join('');
     } else if (activeCard) {
@@ -9452,7 +9471,7 @@ function renderProfilePosts(posts = _profilePosts) {
       <article class="profile-post-card" data-post-id="${sanitizeHTML(post.id)}" data-post-owner="${sanitizeHTML(post.user_id || _profilePostsOwner?.id || S.userId || '')}" data-post-type="${sanitizeHTML(post.post_type || 'text')}">
         <div class="profile-post-header">
           <div class="profile-post-mini-avatar" style="background:linear-gradient(135deg,#1a6ef5,#7c3aed)">${initial}</div>
-          <div class="profile-post-author"><button type="button" class="profile-author-link" data-open-profile="${sanitizeHTML(post.user_id || _profilePostsOwner?.id || S.userId || '')}">${sanitizeHTML(ownerName)}</button></div>
+          <div class="profile-post-author"><button type="button" class="profile-author-link" data-open-profile="${sanitizeHTML(post.author?.account_id || post.user_id || _profilePostsOwner?.id || S.userId || '')}">${sanitizeHTML(ownerName)}</button></div>
           <div class="profile-post-time">${time}</div>
         </div>
         <div class="profile-post-body">
@@ -9597,32 +9616,41 @@ function renderProfileGallery(posts = _profilePosts) {
 async function hydrateProfileGallery(userId = S.userId) {
   const gallery = $('profile-gallery');
   if (!gallery || !userId || S.isGuest || !sb) return;
-  try {
-    const { data, error } = await sb.rpc('gallery_photos', { p_user_id: userId, p_limit: 24 });
-    if (error) throw error;
-    let photos = Array.isArray(data) ? data.filter(p => p.media_url && detectMediaType(p.media_type, p.media_url) === 'image') : [];
-    if (!photos.length) { renderProfileGallery([]); return; }
 
-    // The gallery RPC may return media metadata without the original caption.
-    // Merge known post data first, then fetch any missing captions directly.
-    const knownById = new Map((_profilePosts || []).map(post => [post.id, post]));
-    photos = photos.map(photo => ({ ...photo, ...(knownById.get(photo.id) || {}) }));
-    const missingCaptionIds = photos.filter(photo => !String(photo.content || '').trim() && photo.id).map(photo => photo.id);
-    if (missingCaptionIds.length) {
-      try {
-        const { data: captionRows } = await sb.from('posts').select('id,user_id,content,media_url,post_meta').in('id', missingCaptionIds);
-        const captionById = new Map((captionRows || []).map(row => [row.id, row]));
-        photos = photos.map(photo => ({ ...photo, ...(captionById.get(photo.id) || {}) }));
-      } catch (e) {
-        console.warn('[Gallery] caption hydration warning:', e?.message || e);
-      }
+  const archivePromise = fetchArchiveProfilePosts(userId, 24, 0).catch(() => ({ posts: [], hasMore: false }));
+  const livePromise = (async () => {
+    try {
+      const { data, error } = await sb.rpc('gallery_photos', { p_user_id: userId, p_limit: 24 });
+      if (error) throw error;
+      return Array.isArray(data) ? data.filter(p => p.media_url && detectMediaType(p.media_type, p.media_url) === 'image') : [];
+    } catch (e) {
+      console.warn('[Gallery] gallery_photos RPC unavailable, using post-strip/archive fallback:', e?.message || e);
+      return [];
     }
+  })();
 
-    renderProfileGallery(photos);
-  } catch (e) {
-    // gallery_photos RPC not yet deployed — post-strip fallback is already showing
-    console.warn('[Gallery] gallery_photos RPC unavailable, using post-strip fallback:', e?.message || e);
+  const [archiveResult, livePhotos] = await Promise.all([archivePromise, livePromise]);
+  const archivePhotos = (archiveResult?.posts || []).filter(post =>
+    !isArchivePost(post) ? false : getPostMedia(post).some(item => item.type === 'image')
+  );
+
+  const knownById = new Map((_profilePosts || []).map(post => [post.id, post]));
+  let mergedLivePhotos = livePhotos.map(photo => ({ ...photo, ...(knownById.get(photo.id) || {}) }));
+  const missingCaptionIds = mergedLivePhotos.filter(photo => !String(photo.content || '').trim() && photo.id).map(photo => photo.id);
+  if (missingCaptionIds.length) {
+    try {
+      const { data: captionRows } = await sb.from('posts').select('id,user_id,content,media_url,post_meta').in('id', missingCaptionIds);
+      const captionById = new Map((captionRows || []).map(row => [row.id, row]));
+      mergedLivePhotos = mergedLivePhotos.map(photo => ({ ...photo, ...(captionById.get(photo.id) || {}) }));
+    } catch (e) {
+      console.warn('[Gallery] caption hydration warning:', e?.message || e);
+    }
   }
+
+  const combined = [...archivePhotos, ...mergedLivePhotos]
+    .sort((a, b) => Date.parse(b?.created_at || 0) - Date.parse(a?.created_at || 0));
+
+  renderProfileGallery(combined);
 }
 
 async function hydrateProfilePosts(userId = S.userId, options = {}) {
@@ -9641,13 +9669,14 @@ async function hydrateProfilePosts(userId = S.userId, options = {}) {
           (S.userId === userId ? { id: S.userId, username: S.username, display_name: S.username } : null);
         // Hydrate real like/comment counts before rendering so cards show live numbers
         if (posts.length) {
-          const postIds = posts.map(p => p.id).filter(Boolean);
-          await hydratePostEngagement(postIds);
+          const livePosts = posts.filter(post => !isArchivePost(post));
+          const livePostIds = livePosts.map(p => p.id).filter(Boolean);
+          if (livePostIds.length) await hydratePostEngagement(livePostIds);
 
-          // Keep profile polls/Q&A on the same durable result caches as Feed.
-          const structuredPosts = posts.filter(post => post?.post_meta?.kind === 'poll' || post?.post_meta?.kind === 'qna');
+          // Keep profile polls/Q&A on the same durable result caches as Feed,
+          // but never send archive post IDs into the live Supabase interaction RPCs.
+          const structuredPosts = livePosts.filter(post => post?.post_meta?.kind === 'poll' || post?.post_meta?.kind === 'qna');
           if (structuredPosts.length) {
-            const structuredIds = structuredPosts.map(post => post.id).filter(Boolean);
             const pollIds = structuredPosts.filter(post => post.post_meta?.kind === 'poll').map(post => post.id).filter(Boolean);
             const qnaIds = structuredPosts.filter(post => post.post_meta?.kind === 'qna').map(post => post.id).filter(Boolean);
             if (pollIds.length) await hydratePollResults(pollIds);
@@ -10037,19 +10066,39 @@ async function fetchPublicProfileData(userId) {
   // Interactive actions (follow, like, comment) enforce their own auth checks.
   let seed = { id: userId, username: 'user', display_name: 'User' };
   if (!S.isGuest) {
-    // For authenticated sessions, pull from the profile directory first
-    // (includes crockroach_score, account_type) then enrich from accounts.
     seed = (await fetchFeedProfileDirectory([userId])).get(userId) || seed;
   }
+
+  const archivePromise = fetchArchiveProfilePosts(userId, 1, 0).catch(() => ({ creator: null, posts: [] }));
+  let account = null;
   try {
     const { data, error } = await sb
       .from('accounts')
       .select('id,username,display_name,bio,details,website,interests,avatar_url,crockroach_score,account_type')
       .eq('id', userId)
       .maybeSingle();
-    if (!error && data) return { ...seed, ...data, id: userId };
+    if (!error && data) account = data;
   } catch (_) {}
-  return { ...seed, id: userId };
+
+  const archiveResult = await archivePromise;
+  const archiveCreator = archiveResult?.creator || null;
+  const canonicalId = account?.id || archiveCreator?.account_id || userId;
+
+  // Supabase remains the canonical identity source. Cloudflare is allowed to
+  // fill synthetic profile presentation/data where it has a value, but it
+  // cannot replace the canonical Supabase account ID.
+  return {
+    ...seed,
+    ...(account || {}),
+    id: canonicalId,
+    username: account?.username || archiveCreator?.username || seed.username || 'user',
+    display_name: account?.display_name || archiveCreator?.display_name || archiveCreator?.username || seed.display_name || 'User',
+    avatar_url: account?.avatar_url || archiveCreator?.avatar_url || seed.avatar_url || '',
+    account_type: account?.account_type || archiveCreator?.account_type || seed.account_type || 'creator',
+    source: account ? 'live' : (archiveCreator ? 'archive' : 'unknown'),
+    archive_creator_id: archiveCreator?.creator_id || null,
+    account_id: archiveCreator?.account_id || account?.id || null
+  };
 }
 
 function applyProfileAvatar(url, name) {
@@ -10131,11 +10180,12 @@ async function initPublicProfilePage(userId) {
     $('profile-info-goal-val').onclick = () => toast('Public profile stats are shown here.', '👤');
     $('profile-info-goal-val').style.cursor = 'default';
   }
+  const canonicalUserId = profile.account_id || profile.id || userId;
   resetProfilePosts();
   // Follow button + counts (non-blocking)
-  await initFollowSection(userId);
-  await hydrateProfilePosts(userId);
-  hydrateProfileGallery(userId).catch((error) => console.warn('[Gallery] public profile hydration warning:', error));
+  await initFollowSection(canonicalUserId);
+  await hydrateProfilePosts(canonicalUserId);
+  hydrateProfileGallery(canonicalUserId).catch((error) => console.warn('[Gallery] public profile hydration warning:', error));
   bindHorizontalProfileStrip($('profile-post-strip'));
   stabilizeProfileScrollAxes();
   initProfileScrollProgress();
@@ -11996,8 +12046,10 @@ function ensureReelViewer() {
     likeBtn?.querySelector('.rv-action-icon')?.replaceChildren(document.createTextNode(eng.liked ? '♥' : '♡'));
     const followBtn = viewer.querySelector('[data-reel-action="follow"]');
     if (followBtn) {
-      const fd = post.user_id && post.user_id !== S.userId ? await fetchFollowData(post.user_id) : {isFollowing:false};
-      followBtn.style.display = post.user_id === S.userId ? 'none' : 'flex';
+      const followTargetId = canonicalProfileTargetId(post);
+      const canFollow = !!followTargetId && followTargetId !== S.userId;
+      const fd = canFollow ? await fetchFollowData(followTargetId) : {isFollowing:false};
+      followBtn.style.display = canFollow ? 'flex' : 'none';
       followBtn.querySelector('.rv-action-icon').textContent = fd.isFollowing ? '✓' : '＋';
       followBtn.querySelector('.rv-action-label').textContent = fd.isFollowing ? 'Following' : 'Follow';
       followBtn.dataset.followState = fd.isFollowing ? '1' : '0';
@@ -12040,9 +12092,11 @@ function ensureReelViewer() {
       const url=`${location.origin}${location.pathname}#feed-post-${encodeURIComponent(post.id)}`;
       navigator.clipboard?.writeText(url).then(()=>toast('Reel link copied','📋')).catch(()=>toast(url,'🔗'));
     }
-    if (action.dataset.reelAction==='follow' && post.user_id && post.user_id!==S.userId){
-      const fd=await fetchFollowData(post.user_id); const next=!fd.isFollowing;
-      try{ await toggleFollow(post.user_id,next); render(); toast(next?'Following!':'Unfollowed',next?'✓':'➖'); }catch(err){toast(err?.message||'Could not update follow.','⚠️');}
+    if (action.dataset.reelAction==='follow'){
+      const followTargetId = canonicalProfileTargetId(post);
+      if (!followTargetId || followTargetId === S.userId) return;
+      const fd=await fetchFollowData(followTargetId); const next=!fd.isFollowing;
+      try{ await toggleFollow(followTargetId,next); render(); toast(next?'Following!':'Unfollowed',next?'✓':'➖'); }catch(err){toast(err?.message||'Could not update follow.','⚠️');}
     }
   });
   $('rv-comment-send')?.addEventListener('click', async ()=>{
