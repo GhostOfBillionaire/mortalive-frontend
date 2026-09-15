@@ -3074,7 +3074,8 @@ function initChatControls() {
     if (S.localStream) S.localStream.getAudioTracks().forEach((t) => (t.enabled = !S.micMuted));
     const btn = $('vc-mic');
     if (btn) {
-      btn.textContent = S.micMuted ? '🔇' : '🎤';
+      const label = btn.querySelector('span');
+      if (label) label.textContent = 'Mic';
       btn.classList.toggle('off', S.micMuted);
     }
     toast(S.micMuted ? 'Mic muted' : 'Mic on', S.micMuted ? '🔇' : '🎤');
@@ -3085,7 +3086,8 @@ function initChatControls() {
     if (S.localStream) S.localStream.getVideoTracks().forEach((t) => (t.enabled = !S.camOff));
     const btn = $('vc-cam');
     if (btn) {
-      btn.textContent = S.camOff ? '🚫' : '📷';
+      const label = btn.querySelector('span');
+      if (label) label.textContent = 'Cam';
       btn.classList.toggle('off', S.camOff);
     }
     toast(S.camOff ? 'Camera off' : 'Camera on', S.camOff ? '🚫' : '📷');
