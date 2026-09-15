@@ -6634,11 +6634,10 @@ function archiveMediaTelemetryPostId(el) {
 }
 
 function isArchiveMediaElement(el) {
-  const mediaId = el?.getAttribute?.('data-media-id') || '';
-  if (!mediaId) return false;
+  const mediaId = String(el?.getAttribute?.('data-media-id') || '').trim();
+  if (!/^med_[a-zA-Z0-9_-]{6,120}$/.test(mediaId)) return false;
   const postId = archiveMediaTelemetryPostId(el);
-  if (!postId) return false;
-  return isArchivePostId(postId);
+  return !postId || /^post_[a-zA-Z0-9_-]{6,160}$/.test(String(postId));
 }
 
 function queueArchiveMediaTelemetry(eventType, el) {
@@ -6683,10 +6682,27 @@ async function flushArchiveMediaTelemetry() {
     });
     if (!response.ok) throw new Error(`Telemetry request failed: ${response.status}`);
   } catch (error) {
-    // Telemetry is strictly non-blocking. Drop failed batches rather than
-    // allowing an unavailable telemetry service to affect Feed rendering.
+    // Telemetry is strictly non-blocking. Keep one bounded retry batch so a
+    // transient network/CORS failure does not silently erase useful demand data.
+    _archiveMediaTelemetryQueue.unshift(...events);
+    if (_archiveMediaTelemetryQueue.length > 120) {
+      _archiveMediaTelemetryQueue.splice(0, _archiveMediaTelemetryQueue.length - 120);
+    }
     console.warn('[Archive Media Telemetry] batch failed:', error?.message || error);
   }
+}
+
+if (!window.__mortaliveArchiveTelemetryLifecycleBound) {
+  window.__mortaliveArchiveTelemetryLifecycleBound = true;
+  window.addEventListener('pagehide', () => {
+    if (!_archiveMediaTelemetryQueue.length || !navigator.sendBeacon) return;
+    const events = _archiveMediaTelemetryQueue.splice(0, 40);
+    try {
+      const endpoint = `${MORTALIVE_MEDIA_WORKER_URL}/api/media-telemetry`;
+      const blob = new Blob([JSON.stringify({ events })], { type: 'application/json' });
+      navigator.sendBeacon(endpoint, blob);
+    } catch (_) {}
+  }, { passive: true });
 }
 
 function initArchiveMediaTelemetry(root = document) {
@@ -6718,10 +6734,79 @@ function initArchiveMediaTelemetry(root = document) {
     if (!isArchiveMediaElement(el) || el.dataset.mortaliveTelemetryBound === '1') return;
     el.dataset.mortaliveTelemetryBound = '1';
     queueArchiveMediaTelemetry('media_call', el);
-    const loadedEvent = el.tagName === 'VIDEO' ? 'loadeddata' : 'load';
+    const loadedEvent = el.tagName === 'VIDEO' ? 'loadedmetadata' : 'load';
     el.addEventListener(loadedEvent, () => queueArchiveMediaTelemetry('media_loaded', el), { once: true, passive: true });
     _archiveMediaTelemetryObserver?.observe(el);
   });
+}
+
+
+/* ── Feed performance controller / Phase 1B ───────────────────────────────
+ * Keeps the browser work bounded without changing Feed ordering or data.
+ * - Applies browser-native content containment to off-screen cards.
+ * - Keeps only near-viewport archive videos actively loaded/playing.
+ * - Uses one delegated IntersectionObserver rather than one observer per card.
+ * - Never removes post data; it only reduces expensive media/layout work.
+ */
+let _feedPerformanceObserver = null;
+let _feedPerformanceRoot = null;
+let _feedPerformanceBound = false;
+
+function applyFeedPerformanceStyles() {
+  if (document.getElementById('mortalive-feed-performance-style')) return;
+  const style = document.createElement('style');
+  style.id = 'mortalive-feed-performance-style';
+  style.textContent = `
+    #feed-posts > .post-card,
+    #feed-posts > .feed-reels-shelf {\n      content-visibility: auto;\n      contain: layout style paint;\n      contain-intrinsic-size: auto 720px;\n    }\n    #feed-posts .post-card img,\n    #feed-posts .feed-reels-shelf img {\n      content-visibility: auto;\n    }\n  `;
+  document.head.appendChild(style);
+}
+
+function initFeedPerformance(root = $('feed-posts')) {
+  if (!root || !('IntersectionObserver' in window)) return;
+  applyFeedPerformanceStyles();
+  if (_feedPerformanceObserver && _feedPerformanceRoot === root) return;
+  if (_feedPerformanceObserver) _feedPerformanceObserver.disconnect();
+  _feedPerformanceRoot = root;
+
+  _feedPerformanceObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      const card = entry.target;
+      const videos = card.querySelectorAll?.('video');
+      if (!videos?.length) return;
+
+      videos.forEach((video) => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.10) {
+          video.dataset.mortaliveNearViewport = '1';
+          // Let the browser decide whether to fetch; do not force autoplay.
+          if (video.preload === 'none') video.preload = 'metadata';
+        } else {
+          video.dataset.mortaliveNearViewport = '0';
+          if (!video.paused) video.pause();
+          // Keep the source intact so controls/carousels remain reliable.
+          // We only release playback/decoder pressure here.
+        }
+      });
+    });
+  }, { threshold: [0, 0.10, 0.5], rootMargin: '600px 0px' });
+
+  root.querySelectorAll(':scope > .post-card, :scope > .feed-reels-shelf').forEach((card) => {
+    _feedPerformanceObserver.observe(card);
+  });
+
+  if (!_feedPerformanceBound) {
+    _feedPerformanceBound = true;
+    const mutationObserver = new MutationObserver(() => {
+      if (!_feedPerformanceObserver || !_feedPerformanceRoot) return;
+      _feedPerformanceRoot.querySelectorAll(':scope > .post-card, :scope > .feed-reels-shelf').forEach((card) => {
+        if (!card.dataset.mortalivePerfObserved) {
+          card.dataset.mortalivePerfObserved = '1';
+          _feedPerformanceObserver.observe(card);
+        }
+      });
+    });
+    mutationObserver.observe(root, { childList: true });
+  }
 }
 
 async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
@@ -6903,6 +6988,7 @@ async function fetchFeedPage(reset = false) {
     }
 
     renderFeedPosts();
+    initFeedPerformance($('feed-posts'));
     initArchiveMediaTelemetry($('feed-posts'));
     renderFeedSidebars();
     hydrateTrendingHashtags().catch(() => {});
@@ -8031,7 +8117,7 @@ function feedMediaMarkup(post) {
   if (media.length > 1) return feedCarouselMarkup(media, post);
   const item = media[0];
   if (item.type === 'video') {
-    return `<video class="feed-post-video" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" controls playsinline preload="metadata"></video>`;
+    return `<video class="feed-post-video" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" controls playsinline preload="none"></video>`;
   }
   const display = post?.author?.display_name || post?.author?.username || 'member';
   return `<img class="feed-post-media js-photo-open" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(item.url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">`;
@@ -8044,7 +8130,7 @@ function feedMediaMarkup(post) {
 function feedCarouselMarkup(media, post) {
   const slides = media.map((m, i) => {
     if (m.type === 'video') {
-      return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><video data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" controls playsinline preload="metadata"></video></div>`;
+      return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><video data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" controls playsinline preload="none"></video></div>`;
     }
     return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><img class="js-photo-open" data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" alt="" loading="lazy" data-photo-url="${sanitizeHTML(m.url)}" data-profile-owner="${sanitizeHTML(post?.user_id || '')}"></div>`;
   }).join('');
@@ -8253,7 +8339,7 @@ function postViewerMediaMarkup(post) {
   }
   const item = media[0];
   if (item.type === 'video') {
-    return `<div class="mortalive-post-viewer-media-frame"><video class="mortalive-post-viewer-media" src="${sanitizeHTML(item.url)}" controls playsinline preload="metadata"></video></div>`;
+    return `<div class="mortalive-post-viewer-media-frame"><video class="mortalive-post-viewer-media" src="${sanitizeHTML(item.url)}" controls playsinline preload="none"></video></div>`;
   }
   return `<div class="mortalive-post-viewer-media-frame"><img class="mortalive-post-viewer-media" src="${sanitizeHTML(item.url)}" alt="Post photo" loading="eager" decoding="async"></div>`;
 }
