@@ -997,19 +997,22 @@ function showPage(id, options = {}) {
   }
 
   if (id === 'pg-perm') {
-    // Permission page back button: guests go back to auth form to choose login
-    // or continue as guest; logged-in users go back to the lobby.
+    // Permission page back button: always returns to the lobby. Previously
+    // sent guests to pg-auth, but with the guest-by-default landing flow
+    // every user — guest or authenticated — reaches pg-perm only by way of
+    // the lobby (Find, or the Video Chat mode tab), so that's always where
+    // "Back" should actually go.
     const permBackBtn = $('pg-perm')?.querySelector('.setup-back');
     if (permBackBtn) {
-      permBackBtn.dataset.target = isAuthenticated ? 'pg-lobby' : 'pg-auth';
+      permBackBtn.dataset.target = 'pg-lobby';
     }
   }
 
   if (id === 'pg-match') {
-    // Match/search page back button: same logic as perm.
+    // Match/search page back button: same reasoning as pg-perm above.
     const matchBackBtn = $('pg-match')?.querySelector('.setup-back');
     if (matchBackBtn) {
-      matchBackBtn.dataset.target = isAuthenticated ? 'pg-lobby' : 'pg-auth';
+      matchBackBtn.dataset.target = 'pg-lobby';
     }
   }
 
@@ -1327,7 +1330,7 @@ function setPrimaryButtonsEnabled(enabled) {
 }
 
 function updateConsentState() {
-  // The landing page uses a single consent checkbox for the Terms and Privacy agreement.
+  // Real <input type="checkbox" id="landing-consent"> used in the current HTML
   const terms = $('landing-consent') || $('terms') || $('terms-checkbox');
   const oldChecks = ['c1', 'c2', 'c3'].map((id) => $(id)).filter(Boolean);
 
@@ -1395,6 +1398,33 @@ function ensureLobbyCameraPreview() {
   if (preview && S.localStream) preview.srcObject = S.localStream;
   const strip = $('cam-strip');
   if (strip) strip.style.display = S.localStream ? 'flex' : 'none';
+}
+
+// Sets up an anonymous guest session and enters the lobby. Shared by:
+//  1. The explicit "Continue as guest" button on pg-auth's guest panel
+//     (passes whatever name the user typed, if any).
+//  2. proceedPastLanding() — the landing page's fast path, which calls this
+//     with no name so it falls back to an existing saved guest name or a
+//     fresh random one, skipping the pg-auth interstitial entirely for
+//     first-time/anonymous visitors.
+function continueAsGuest(name = '') {
+  const trimmed = (name || '').trim();
+  S.authToken   = null;
+  S.username    = null;
+  S.userId      = null;
+  S.accountData = null;
+  S.userLinks   = [];
+  S.crockroachScore = null;
+  S.isGuest     = true;
+  // Preference order: explicitly typed name > previously saved guest name
+  // (so returning guests keep their chosen identity) > fresh random name.
+  S.guestName   = trimmed.slice(0, 24) || S.guestName || `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
+  updateProgressText();
+  localStorage.removeItem('mortalive_token');
+  localStorage.removeItem('mortalive_username');
+  localStorage.removeItem('mortalive_user_id');
+  localStorage.setItem('mortalive_guest_name', S.guestName);
+  enterLobby();
 }
 
 function enterLobby() {
@@ -1497,24 +1527,30 @@ function requestCameraPermission() {
 
       queueSnapshotBurst('permission', 2, ['perm-video', 'lobby-cam-preview', 'vid-local'], 140, 320);
 
-      showPage('pg-lobby');
-
       if (S.pendingAction === 'match') {
         S.pendingAction = null;
         // Permission just succeeded because the user clicked "Find" while
-        // in video mode without a camera yet — NOW it's safe to commit
-        // S.mode to 'video' and sync the visible toggle button, right
-        // before actually queuing for a match.
-        // P0 FIX: use beginRealUserPrioritySearch so the 30-second synthetic
-        // fallback timer is registered even for this permission-grant entry path.
+        // in video mode without a camera yet — go straight into the search
+        // (beginRealUserPrioritySearch shows pg-match itself). Previously
+        // this routed through showPage('pg-lobby') first, producing a
+        // visible flash back to the lobby before immediately flashing again
+        // to the matching screen — pure wasted latency, no functional
+        // purpose. Committing S.mode to 'video' happens right here, right
+        // before queuing, same as before.
         setActiveMode('video');
-        setTimeout(() => beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'first-search', priorityWindowMs: 30 * 1000 }), 350);
+        beginRealUserPrioritySearch({ fallbackToSynthetic: true, reason: 'first-search', priorityWindowMs: 30 * 1000 });
       } else if (S.pendingAction === 'lobby-video') {
         // Permission succeeded because the user just clicked the "Video
         // Chat" mode tab in the lobby (not "Find") — switch the mode and
         // stay right here in the lobby. Do NOT auto-start a match.
         S.pendingAction = null;
+        showPage('pg-lobby');
         setActiveMode('video');
+      } else {
+        // No pendingAction was set (e.g. permission re-requested directly).
+        // Safe default: land in the lobby rather than leaving the user
+        // stranded on the permission page with nowhere to go.
+        showPage('pg-lobby');
       }
     })
     .catch((err) => {
@@ -2385,21 +2421,7 @@ const profile = await fetchUserProfile(user.id);
   });
 
   $('btn-continue-guest')?.addEventListener('click', () => {
-    const name = ($('guest-name')?.value || '').trim();
-    S.authToken   = null;
-    S.username    = null;
-    S.userId      = null;
-    S.accountData = null;
-    S.userLinks   = [];
-    S.crockroachScore = null;
-    S.isGuest     = true;
-    S.guestName   = name.slice(0, 24) || `Guest_${Math.floor(1000 + Math.random() * 9000)}`;
-    updateProgressText();
-    localStorage.removeItem('mortalive_token');
-    localStorage.removeItem('mortalive_username');
-    localStorage.removeItem('mortalive_user_id');
-    localStorage.setItem('mortalive_guest_name', S.guestName);
-    enterLobby();
+    continueAsGuest($('guest-name')?.value);
   });
 
   const guestInput = $('guest-name');
@@ -2782,9 +2804,13 @@ function initLandingActions() {
     if (loggedIn) {
       enterLobby();
     } else {
-      showPage('pg-auth');
-      $('tab-login')?.click();
-      $('login-email')?.focus?.();
+      // FIX: previously forced pg-auth defaulting to the Login tab, which
+      // meant every anonymous first-time visitor had to notice the Guest
+      // tab, click it, then click "Continue as guest" — three extra clicks
+      // and a full page just to reach a panel whose own copy says "instant
+      // access, no account needed." Go straight there instead. Login/signup
+      // is still one click away from the lobby's identity row.
+      continueAsGuest();
     }
   }
 
@@ -3026,6 +3052,8 @@ function initChatControls() {
 
     if (on) {
       panel.classList.remove('visible');
+      const _feedsToggle = document.getElementById('video-feeds');
+      if (_feedsToggle) _feedsToggle.classList.remove('is-connected');
       $('btn-toggle-video')?.classList.remove('active');
       return;
     }
@@ -3634,6 +3662,8 @@ async function startWebRTC() {
     }
     const panel = $('video-panel');
     if (panel) panel.classList.remove('visible');
+    const _feedsErr = document.getElementById('video-feeds');
+    if (_feedsErr) _feedsErr.classList.remove('is-connected');
   }
 }
 
@@ -3836,6 +3866,8 @@ function stopSyntheticVideo() {
   }
   const panel = $('video-panel');
   if (panel) panel.classList.remove('visible', 'has-remote');
+  const _feedsStopSyn = document.getElementById('video-feeds');
+  if (_feedsStopSyn) _feedsStopSyn.classList.remove('is-connected');
   S.syntheticVideoId = null;
   S.syntheticVideoStartTime = null;
   // P1 FIX: Clear the synthetic room ID so the subsequent real-user search phase
@@ -4059,6 +4091,8 @@ function startBotChat() {
   // Hide video panel — this is a text-only session.
   const panel = $('video-panel');
   if (panel) panel.classList.remove('visible');
+  const _feedsTxt = $('video-feeds');
+  if (_feedsTxt) _feedsTxt.classList.remove('is-connected');
 
   setCallStatus('connected', 'AI chat');
 
@@ -4157,7 +4191,16 @@ function beginChat() {
   const s = S.stranger || { name: 'Stranger', score: null, emoji: '👤', isGuest: true };
   setText('peer-ava', s.emoji);
   setText('peer-name', s.name);
-  
+
+  // ── Video name badges ──────────────────────────────────────────
+  // Remote badge: stranger's name. Local badge: logged-in username or "You".
+  const remoteNameEl = $('vid-name-remote-text');
+  if (remoteNameEl) remoteNameEl.textContent = s.name || 'Stranger';
+
+  const localName = S.username || S.guestName || 'You';
+  const localNameEl = $('vid-name-local-text');
+  if (localNameEl) localNameEl.textContent = localName;
+
   // V138: Interest match feedback
   let scoreText = s.isGuest || s.score === null ? 'Guest · connected' : `🧲 ${s.score} crokz score · connected`;
   if (S.interest && S.peerInterest) {
@@ -4171,7 +4214,8 @@ function beginChat() {
   syncTalkPeerFollowUI();
 
   const panel = $('video-panel');
-  
+  const feeds = $('video-feeds');
+
   applyVideoLayout();
   if (S.mode === 'video') {
     if (panel) {
@@ -4180,9 +4224,12 @@ function beginChat() {
       panel.style.visibility = 'visible';
       panel.style.opacity = '1';
     }
+    // Show the logo watermark and name badges once video is live
+    if (feeds) feeds.classList.add('is-connected');
     $('btn-toggle-video')?.classList.add('active');
   } else {
     if (panel) panel.classList.remove('visible');
+    if (feeds) feeds.classList.remove('is-connected');
     $('btn-toggle-video')?.classList.remove('active');
   }
 
