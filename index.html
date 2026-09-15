@@ -10734,6 +10734,57 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 }
 </style>
 
+
+<style id="mortalive-feed-portrait-overflow-fix">
+/* Portrait feed overflow safety: keep cards/media inside the viewport. */
+@media (max-width: 767px) {
+  #feed-posts {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: clip;
+    box-sizing: border-box;
+  }
+
+  #feed-posts > .post-card,
+  #feed-posts > .feed-reels-shelf {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  #feed-posts .post-card *,
+  #feed-posts .feed-reels-shelf * {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  #feed-posts img,
+  #feed-posts video,
+  #feed-posts canvas,
+  #feed-posts iframe {
+    max-width: 100%;
+  }
+
+  #feed-posts .post-card img,
+  #feed-posts .post-card video,
+  #feed-posts .feed-reels-shelf img,
+  #feed-posts .feed-reels-shelf video {
+    width: 100%;
+    height: auto;
+  }
+
+  #feed-posts .post-card,
+  #feed-posts .feed-reels-shelf,
+  #feed-posts .post-card > *,
+  #feed-posts .feed-reels-shelf > * {
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+}
+</style>
+
 </head>
 <body class="di2-on-landing">
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
