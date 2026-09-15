@@ -3908,7 +3908,7 @@ body.mortalive-progress-open .sakura-topbar {
 </style>
 <style id="mortalive-profile-redesign-css">
 /* ================= MORTALIVE PROFILE REDESIGN ================= */
-#pg-profile{background:radial-gradient(circle at 12% 0%,rgba(26,110,245,.07),transparent 34%),radial-gradient(circle at 88% 8%,rgba(124,58,237,.06),transparent 32%),var(--surface);overflow:hidden}
+#pg-profile{background:var(--surface);overflow:hidden}
 #pg-profile .profile-wrap{width:min(1120px,calc(100% - 22px));padding:14px 0 84px;display:flex;flex-direction:column;gap:12px;min-height:calc(100dvh - 30px)}
 .modern-profile-card,.profile-section-card{border:1px solid rgba(0,0,0,.075);background:rgba(255,255,255,.96);backdrop-filter:blur(22px) saturate(145%);-webkit-backdrop-filter:blur(22px) saturate(145%);box-shadow:0 10px 40px rgba(13,17,23,.07)}
 .modern-profile-card{position:relative;overflow:visible;border-radius:26px}
@@ -10030,62 +10030,12 @@ body.vid-in-fs .fs-next-btn{
 <style id="mortalive-ambient-topbar-patch">
 
 /* ═══════════════════════════════════════════════════════════════════
-   LAYER 0 — AMBIENT BACKDROP
-   body::before is a full-viewport-width fixed band that sits just
-   below the topbar pill (z-index 998 < topbar 1000).
-   It projects each section's dominant colour into the "gap zone"
-   (0 → 110px from top) so the backdrop-filter on the pill samples
-   the right hue rather than always sampling white body background.
-   Transition gives the YouTube-ambient cross-fade feel.
+   LAYER 0 — removed.
+   This used to paint a soft colour-tinted band under the topbar on
+   every page (blue/lavender "glow"). Dropped for a flat, clean
+   backdrop — the pill's own subtle border/shadow is enough to read
+   as a nav bar without a decorative light wash behind it.
 ═══════════════════════════════════════════════════════════════════ */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0 0 auto;
-  height: 110px;
-  z-index: 998;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    #ffffff 55%,
-    rgba(255,255,255,0) 100%
-  );
-  transition: background 380ms cubic-bezier(.4,0,.2,1);
-}
-
-body:has(#pg-messages.active)::before {
-  background: linear-gradient(
-    180deg,
-    #060a12 45%,
-    rgba(6,10,18,.60) 75%,
-    rgba(6,10,18,0) 100%
-  );
-}
-
-body:has(#pg-profile.active)::before {
-  background: linear-gradient(
-    180deg,
-    rgba(240,243,255,1) 45%,
-    rgba(240,243,255,.55) 75%,
-    rgba(240,243,255,0) 100%
-  );
-}
-
-body:has(#pg-feed.active)::before {
-  background: linear-gradient(
-    180deg,
-    #ffffff 55%,
-    rgba(255,255,255,0) 100%
-  );
-}
-
-body:has(#pg-lobby.active)::before {
-  background: linear-gradient(
-    180deg,
-    #f6f7f9 55%,
-    rgba(246,247,249,0) 100%
-  );
-}
 
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -10251,10 +10201,7 @@ body.mortalive-app-topbar-visible #pg-messages.active .messages-shell {
    LAYER 4 — SECTION–TOPBAR VISUAL COHESION
 ═══════════════════════════════════════════════════════════════════ */
 .mortalive-app-topbar-visible #pg-lobby.active {
-  background:
-    radial-gradient(ellipse 80% 180px at 50% 0px,
-      rgba(26,110,245,.055) 0%, transparent 100%),
-    var(--surface);
+  background: var(--surface);
 }
 
 .mortalive-app-topbar-visible #pg-feed .feed-left {
@@ -10268,12 +10215,7 @@ body.mortalive-app-topbar-visible #pg-messages.active .messages-shell {
   padding-top: 20px;
 }
 .mortalive-app-topbar-visible #pg-profile.active {
-  background:
-    radial-gradient(ellipse 65% 200px at 50% 0px,
-      rgba(26,110,245,.06) 0%, transparent 100%),
-    radial-gradient(circle at 12% 0%, rgba(26,110,245,.07), transparent 34%),
-    radial-gradient(circle at 88% 8%, rgba(124,58,237,.06), transparent 32%),
-    var(--surface);
+  background: var(--surface);
 }
 
 .mortalive-app-topbar-visible #pg-messages .messages-sidebar {
