@@ -6616,6 +6616,114 @@ function canonicalProfileTargetId(post, fallback = '') {
   return post?.author?.account_id || post?.user_id || fallback || '';
 }
 
+
+
+/* ── Archive media demand telemetry / Phase 1 ─────────────────────────────
+ * The browser reports coarse delivery/consumption signals to the Worker.
+ * This is intentionally separate from live Supabase engagement. It does not
+ * decide ranking or R2 eviction yet; it builds the demand history required by
+ * the future hot-storage controller.
+ */
+const _archiveMediaTelemetrySeen = new Set();
+const _archiveMediaTelemetryQueue = [];
+let _archiveMediaTelemetryFlushTimer = null;
+let _archiveMediaTelemetryObserver = null;
+
+function archiveMediaTelemetryPostId(el) {
+  return el?.closest?.('[data-post-id]')?.getAttribute('data-post-id') || '';
+}
+
+function isArchiveMediaElement(el) {
+  const mediaId = el?.getAttribute?.('data-media-id') || '';
+  if (!mediaId) return false;
+  const postId = archiveMediaTelemetryPostId(el);
+  if (!postId) return false;
+  return isArchivePostId(postId);
+}
+
+function queueArchiveMediaTelemetry(eventType, el) {
+  if (!isArchiveMediaElement(el)) return;
+  const mediaId = String(el.getAttribute('data-media-id') || '');
+  const postId = archiveMediaTelemetryPostId(el);
+  if (!mediaId || !postId) return;
+
+  const dedupeKey = `${eventType}|${postId}|${mediaId}`;
+  if (eventType !== 'media_loaded' && _archiveMediaTelemetrySeen.has(dedupeKey)) return;
+  if (eventType !== 'media_loaded') _archiveMediaTelemetrySeen.add(dedupeKey);
+
+  _archiveMediaTelemetryQueue.push({
+    media_id: mediaId,
+    post_id: postId,
+    event_type: eventType,
+    ts: Date.now()
+  });
+
+  if (_archiveMediaTelemetryQueue.length >= 20) {
+    flushArchiveMediaTelemetry();
+  } else if (!_archiveMediaTelemetryFlushTimer) {
+    _archiveMediaTelemetryFlushTimer = window.setTimeout(() => {
+      _archiveMediaTelemetryFlushTimer = null;
+      flushArchiveMediaTelemetry();
+    }, 1500);
+  }
+}
+
+async function flushArchiveMediaTelemetry() {
+  if (!_archiveMediaTelemetryQueue.length) return;
+  const events = _archiveMediaTelemetryQueue.splice(0, 40);
+  try {
+    const endpoint = `${MORTALIVE_MEDIA_WORKER_URL}/api/media-telemetry`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ events }),
+      cache: 'no-store',
+      credentials: 'omit',
+      keepalive: true
+    });
+    if (!response.ok) throw new Error(`Telemetry request failed: ${response.status}`);
+  } catch (error) {
+    // Telemetry is strictly non-blocking. Drop failed batches rather than
+    // allowing an unavailable telemetry service to affect Feed rendering.
+    console.warn('[Archive Media Telemetry] batch failed:', error?.message || error);
+  }
+}
+
+function initArchiveMediaTelemetry(root = document) {
+  const scope = root && root.querySelectorAll ? root : document;
+  const mediaNodes = Array.from(scope.querySelectorAll('[data-media-id]'));
+    if (!mediaNodes.length) return;
+
+  if (!_archiveMediaTelemetryObserver && 'IntersectionObserver' in window) {
+    _archiveMediaTelemetryObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting || entry.intersectionRatio < 0.5) return;
+        const el = entry.target;
+        queueArchiveMediaTelemetry('impression', el);
+        if (!el.dataset.mortaliveDwellTracked) {
+          el.dataset.mortaliveDwellTracked = '1';
+          window.setTimeout(() => {
+            if (document.contains(el)) {
+              const rect = el.getBoundingClientRect();
+              const visible = rect.bottom > 0 && rect.top < window.innerHeight;
+              if (visible) queueArchiveMediaTelemetry('dwell_2s', el);
+            }
+          }, 2000);
+        }
+      });
+    }, { threshold: [0.5] });
+  }
+
+  mediaNodes.forEach(el => {
+    if (!isArchiveMediaElement(el) || el.dataset.mortaliveTelemetryBound === '1') return;
+    el.dataset.mortaliveTelemetryBound = '1';
+    queueArchiveMediaTelemetry('media_call', el);
+    const loadedEvent = el.tagName === 'VIDEO' ? 'loadeddata' : 'load';
+    el.addEventListener(loadedEvent, () => queueArchiveMediaTelemetry('media_loaded', el), { once: true, passive: true });
+    _archiveMediaTelemetryObserver?.observe(el);
+  });
+}
+
 async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
   const endpoint =
     `${MORTALIVE_MEDIA_WORKER_URL}/api/archive-feed?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`;
@@ -6795,6 +6903,7 @@ async function fetchFeedPage(reset = false) {
     }
 
     renderFeedPosts();
+    initArchiveMediaTelemetry($('feed-posts'));
     renderFeedSidebars();
     hydrateTrendingHashtags().catch(() => {});
   } catch (e) {
@@ -7900,6 +8009,7 @@ function getPostMedia(post) {
   if (Array.isArray(post?.post_meta?.media) && post.post_meta.media.length) {
     return post.post_meta.media
       .map((m, i) => ({
+        mediaId: m.media_id ? String(m.media_id) : '',
         type: m.type === 'video' ? 'video' : 'image',
         url: m.url ? feedAvatarUrl(m.url) : getMediaUrl(m.media_id),
         position: Number.isFinite(m.position) ? m.position : i
@@ -7909,7 +8019,7 @@ function getPostMedia(post) {
   }
   const url = feedAvatarUrl(post?.media_url || '');
   if (!url) return [];
-  return [{ type: detectMediaType(post?.media_type, post?.media_url), url, position: 0 }];
+  return [{ mediaId: '', type: detectMediaType(post?.media_type, post?.media_url), url, position: 0 }];
 }
 
 // Media markup for a feed/profile post card: single image, single video, or
@@ -7921,10 +8031,10 @@ function feedMediaMarkup(post) {
   if (media.length > 1) return feedCarouselMarkup(media, post);
   const item = media[0];
   if (item.type === 'video') {
-    return `<video class="feed-post-video" src="${sanitizeHTML(item.url)}" controls playsinline preload="metadata"></video>`;
+    return `<video class="feed-post-video" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" controls playsinline preload="metadata"></video>`;
   }
   const display = post?.author?.display_name || post?.author?.username || 'member';
-  return `<img class="feed-post-media js-photo-open" src="${sanitizeHTML(item.url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(item.url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">`;
+  return `<img class="feed-post-media js-photo-open" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(item.url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">`;
 }
 
 // Ordered multi-media strip (mixed image/video, arrow + dot navigation).
@@ -7934,9 +8044,9 @@ function feedMediaMarkup(post) {
 function feedCarouselMarkup(media, post) {
   const slides = media.map((m, i) => {
     if (m.type === 'video') {
-      return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><video src="${sanitizeHTML(m.url)}" controls playsinline preload="metadata"></video></div>`;
+      return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><video data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" controls playsinline preload="metadata"></video></div>`;
     }
-    return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><img class="js-photo-open" src="${sanitizeHTML(m.url)}" alt="" loading="lazy" data-photo-url="${sanitizeHTML(m.url)}" data-profile-owner="${sanitizeHTML(post?.user_id || '')}"></div>`;
+    return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><img class="js-photo-open" data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" alt="" loading="lazy" data-photo-url="${sanitizeHTML(m.url)}" data-profile-owner="${sanitizeHTML(post?.user_id || '')}"></div>`;
   }).join('');
   const arrows = media.length > 1 ? `
     <button type="button" class="feed-carousel-arrow prev" data-carousel-dir="-1" aria-label="Previous">‹</button>
@@ -9433,6 +9543,22 @@ function enforceSingleProfileTabPanel(preferred = 'posts') {
 
 // V113 PROFILE SECTION SEPARATION / VERTICAL STREAM GUARD
 // Posts = mixed vertical stream; Photos = photos only; Talk Activity = Stats only.
+
+
+
+// Keep archive telemetry attached to Profile media as Profile cards are rebuilt.
+if (!document.documentElement.dataset.mortaliveArchiveMediaTelemetryProfile) {
+  document.documentElement.dataset.mortaliveArchiveMediaTelemetryProfile = '1';
+  const profileTelemetryWatch = new MutationObserver(() => {
+    const profileStrip = $('profile-post-strip');
+    if (profileStrip) initArchiveMediaTelemetry(profileStrip);
+  });
+  const startProfileTelemetryWatch = () => {
+    if (document.body) profileTelemetryWatch.observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startProfileTelemetryWatch, { once: true });
+  else startProfileTelemetryWatch();
+}
 
 function renderProfilePosts(posts = _profilePosts) {
   const strip = $('profile-post-strip');
