@@ -1319,6 +1319,53 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 .perm-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
 /* ── Lobby page ─────────────────────────────────────── */
+/* ── pg-lobby ambient backdrop ─────────────────────────────────────
+   The lobby card stays at its comfortable, readable width — stretching
+   a form-like card edge-to-edge on a wide monitor would just make labels
+   and buttons awkwardly long, not better. What was missing is that the
+   REST of the page had zero visual treatment: flat white, full stop. On
+   a wide desktop viewport that reads as an unfinished half-page rather
+   than one deliberate screen. This adds two soft, blurred brand-color
+   glows anchored to opposite corners so the whole viewport feels
+   composed — while the interactive card itself is completely unchanged. */
+#pg-lobby {
+  position: relative;
+  isolation: isolate;
+}
+#pg-lobby::before,
+#pg-lobby::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+  filter: blur(90px);
+}
+#pg-lobby::before {
+  top: -14%;
+  left: -10%;
+  width: 52vw;
+  height: 52vw;
+  max-width: 640px;
+  max-height: 640px;
+  background: radial-gradient(circle, rgba(26,110,245,.14) 0%, rgba(26,110,245,0) 72%);
+}
+#pg-lobby::after {
+  bottom: -18%;
+  right: -12%;
+  width: 46vw;
+  height: 46vw;
+  max-width: 560px;
+  max-height: 560px;
+  background: radial-gradient(circle, rgba(124,58,237,.13) 0%, rgba(124,58,237,0) 72%);
+}
+@media (max-width: 720px) {
+  /* Smaller viewports already feel full with the card alone — keep the
+     glows present but modest so they don't compete with content. */
+  #pg-lobby::before { width: 80vw; height: 80vw; opacity: .7; }
+  #pg-lobby::after  { width: 70vw; height: 70vw; opacity: .7; }
+}
+
 .lobby-card { width: min(740px, calc(100% - 24px)); padding: 28px; }
 .lobby-head {
   display: flex;
@@ -1715,29 +1762,111 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
   margin-top: 0;
 }
 
+/* ── Per-feed name badges ────────────────────────────────────
+   Sit at the bottom of each video wrapper.
+   Remote (stranger) badge: bottom-left, slightly prominent.
+   Local (you) badge: bottom-right, more muted. */
+.vid-name-badge {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  background: rgba(10,12,20,.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: calc(100% - 20px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.2s;
+}
+.vid-name-badge-local {
+  left: auto;
+  right: 10px;
+  opacity: .75;
+  font-size: 11px;
+}
+
+/* ── Mortalive logo watermark ──────────────────────────────
+   Centered at the top of the video-feeds grid, above both
+   tiles. Mirrors how Omegle branded its video layout.
+   Kept subtle — doesn't obscure faces. */
+.vid-logo-watermark {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  border-radius: var(--r-full);
+  background: rgba(10,12,20,.52);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,.10);
+  pointer-events: none;
+  z-index: 4;
+  /* Only visible when video is live — JS adds .is-connected to video-feeds */
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.video-feeds.is-connected .vid-logo-watermark,
+.video-feeds.vid-active .vid-logo-watermark {
+  opacity: 1;
+}
+.vid-logo-img {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.vid-logo-wordmark {
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(255,255,255,.85);
+  letter-spacing: .04em;
+  text-transform: lowercase;
+}
+
 .video-controls {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 .vc-btn {
-  height: 38px;
-  padding: 0 14px;
-  border-radius: 6px;
+  height: 36px;
+  padding: 0 13px;
+  border-radius: var(--r-full);
   border: 1.5px solid var(--border-strong);
-  background: #fff;
-  color: var(--on-surface-3);
+  background: rgba(255,255,255,.92);
+  backdrop-filter: blur(8px);
+  color: var(--on-surface-2);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  gap: 6px;
+  font-size: 12.5px;
   font-weight: 700;
   white-space: nowrap;
   transition: all var(--dur-fast);
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
 }
-.vc-btn:hover,
+.vc-btn:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0,0,0,.12); }
+.vc-btn:active { transform: translateY(0); box-shadow: none; }
 .vc-btn.active { border-color: var(--primary); color: var(--primary); background: var(--primary-alpha); }
 .vc-btn.off    { border-color: rgba(220,38,38,.26); color: var(--danger); background: rgba(220,38,38,.06); }
+.vc-ico { width: 15px; height: 15px; flex-shrink: 0; }
 
 #btn-skip-fs { display: none; }
 
@@ -1796,20 +1925,43 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
   border-radius: 16px 16px 4px 16px;
 }
 .msg-time { font-size: 10px; color: var(--on-surface-3); margin-top: 4px; text-align: right; }
-.chat-input { margin-top: 10px; display: flex; gap: 8px; }
+.chat-input {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-full);
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.chat-input:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(26,110,245,.10);
+}
 .chat-input input {
   flex: 1;
-  padding: 13px 16px;
-  border-radius: var(--r-md);
-  border: 1.5px solid var(--border-strong);
-  background: var(--surface);
+  padding: 8px 10px;
+  border-radius: var(--r-full);
+  border: none;
+  background: transparent;
   color: var(--on-surface);
   font-size: 14px;
   outline: none;
-  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
 }
-.chat-input input:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(26,110,245,.10); }
-.send-btn { width: 50px; border-radius: var(--r-md); padding: 0; font-size: 16px; }
+.chat-input input::placeholder { color: var(--on-surface-3); }
+.send-btn {
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  border-radius: 50%;
+  padding: 0;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+.send-btn svg { width: 16px; height: 16px; }
 
 /* ── Fullscreen bottom bar (v12 — app.js driven) ── */
 .fs-controls {
@@ -2275,6 +2427,13 @@ body.mortalive-app-topbar-visible .app-topbar-spacer {
 .landing-cta .consent-text a {
   color: #5bc0be;
   text-shadow: none;
+}
+.landing-cta-note {
+  font-size: 12px;
+  color: rgba(255,255,255,.72);
+  text-shadow: 0 1px 3px rgba(0,0,0,.6);
+  margin-top: 4px;
+  line-height: 1.5;
 }
 
 /* ── Checkbox group (signup terms) ─────────────────── */
@@ -10780,9 +10939,9 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
     <!-- CTA -->
     <div class="landing-cta">
       <button type="button" class="btn btn-primary landing-continue" id="btn-enter" disabled aria-disabled="true">
-        Continue
+        Start chatting →
       </button>
-<label class="consent-toggle" for="landing-consent">
+      <label class="consent-toggle" for="landing-consent">
         <input id="landing-consent" type="checkbox" aria-label="Agree to terms and privacy policy">
         <span class="consent-box" aria-hidden="true"></span>
         <span class="consent-text">
@@ -10791,6 +10950,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
           <a href="privacy.html">privacy</a> policy.
         </span>
       </label>
+      <p class="landing-cta-note">No sign-up required — jump straight in as a guest. You can create an account any time from the lobby.</p>
     </div>
   </div><!-- /landing-hero -->
 
@@ -11100,7 +11260,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   <div class="wrap u-flex-center">
     <div class="card perm-card">
       <div class="u-mb-16">
-        <button class="icon-btn setup-back" type="button" data-target="pg-auth">← Back</button>
+        <button class="icon-btn setup-back" type="button" data-target="pg-lobby">← Back</button>
       </div>
       <div class="perm-inner">
         <div class="perm-video-wrap">
@@ -11288,9 +11448,21 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
           </div>
           <div class="video-wrapper remote">
             <video id="vid-remote" autoplay playsinline></video>
+            <div class="vid-name-badge" id="vid-name-remote">
+              <span id="vid-name-remote-text">Stranger</span>
+            </div>
           </div>
           <div class="video-wrapper local">
             <video id="vid-local" autoplay playsinline muted></video>
+            <div class="vid-name-badge vid-name-badge-local" id="vid-name-local">
+              <span id="vid-name-local-text">You</span>
+            </div>
+          </div>
+          <!-- Mortalive watermark — floats over both feeds, top-center -->
+          <div class="vid-logo-watermark" id="vid-logo-watermark" aria-hidden="true">
+            <img src="https://res.cloudinary.com/yvjzeilj/image/upload/v1786110689/IMG_20260807_180515_ymdcdi.png"
+                 alt="" class="vid-logo-img" draggable="false">
+            <span class="vid-logo-wordmark">mortalive</span>
           </div>
           <div class="quality" id="quality-bar">
             <span class="qdot" id="qual-dot"></span>
@@ -11301,10 +11473,22 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
           </div>
         </div>
         <div class="video-controls">
-          <button class="vc-btn" id="vc-mic" title="Mute microphone">🎤 Mic</button>
-          <button class="vc-btn" id="vc-cam" title="Toggle camera">📷 Cam</button>
-          <button class="vc-btn" id="vc-flip" title="Flip camera">🔄 Flip</button>
-          <button class="vc-btn" id="vc-fs" title="Fullscreen">⛶ Full</button>
+          <button class="vc-btn" id="vc-mic" title="Mute microphone">
+            <svg class="vc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+            <span>Mic</span>
+          </button>
+          <button class="vc-btn" id="vc-cam" title="Toggle camera">
+            <svg class="vc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+            <span>Cam</span>
+          </button>
+          <button class="vc-btn" id="vc-flip" title="Flip camera">
+            <svg class="vc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+            <span>Flip</span>
+          </button>
+          <button class="vc-btn" id="vc-fs" title="Fullscreen">
+            <svg class="vc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+            <span>Full</span>
+          </button>
         </div>
         <div class="fs-controls" id="fs-controls">
           <div class="fs-emoji-btns">
@@ -11327,7 +11511,9 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
         <div class="chat-messages" id="chat-msgs"></div>
         <div class="chat-input">
           <input id="cin" type="text" placeholder="Say something…" maxlength="500" autocomplete="off">
-          <button class="btn btn-primary send-btn" id="btn-send">➤</button>
+          <button class="btn btn-primary send-btn" id="btn-send" aria-label="Send message">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
         </div>
       </div>
 
