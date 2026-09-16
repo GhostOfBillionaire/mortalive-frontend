@@ -8211,10 +8211,10 @@ function feedMediaMarkup(post) {
   if (media.length > 1) return feedCarouselMarkup(media, post);
   const item = media[0];
   if (item.type === 'video') {
-    return `<video class="feed-post-video" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" controls playsinline preload="metadata"></video>`;
+    return `<div class="feed-media-shell" data-media-id="${sanitizeHTML(item.mediaId || '')}" data-media-url="${sanitizeHTML(item.url)}"><video class="feed-post-video" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" controls playsinline preload="metadata"></video></div>`;
   }
   const display = post?.author?.display_name || post?.author?.username || 'member';
-  return `<img class="feed-post-media js-photo-open" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(item.url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">`;
+  return `<div class="feed-media-shell" data-media-id="${sanitizeHTML(item.mediaId || '')}" data-media-url="${sanitizeHTML(item.url)}"><img class="feed-post-media js-photo-open" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="eager" decoding="async" data-photo-url="${sanitizeHTML(item.url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}"></div>`;
 }
 
 // Ordered multi-media strip (mixed image/video, arrow + dot navigation).
@@ -8223,10 +8223,11 @@ function feedMediaMarkup(post) {
 // clicking a playing video shouldn't be hijacked into opening the viewer.
 function feedCarouselMarkup(media, post) {
   const slides = media.map((m, i) => {
+    const loading = i === 0 ? 'eager' : 'lazy';
     if (m.type === 'video') {
-      return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><video class="feed-carousel-media" data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" controls playsinline preload="metadata"></video></div>`;
+      return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}" data-media-id="${sanitizeHTML(m.mediaId || '')}"><video class="feed-carousel-media" data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" controls playsinline preload="metadata"></video></div>`;
     }
-    return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><img class="js-photo-open feed-carousel-media" data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" alt="" loading="lazy" decoding="async" data-photo-url="${sanitizeHTML(m.url)}" data-profile-owner="${sanitizeHTML(post?.user_id || '')}"></div>`;
+    return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}" data-media-id="${sanitizeHTML(m.mediaId || '')}"><img class="js-photo-open feed-carousel-media" data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" alt="" loading="${loading}" decoding="async" data-photo-url="${sanitizeHTML(m.url)}" data-profile-owner="${sanitizeHTML(post?.user_id || '')}"></div>`;
   }).join('');
   const arrows = media.length > 1 ? `
     <button type="button" class="feed-carousel-arrow prev" data-carousel-dir="-1" aria-label="Previous">‹</button>
@@ -8260,6 +8261,45 @@ if (!document.documentElement.dataset.mortaliveCarouselBound) {
       if (i !== next) s.querySelector('video')?.pause();
     });
     dots.forEach((d, i) => d.classList.toggle('active', i === next));
+  }, true);
+}
+
+// Archive-media hydration guard: failed image/video requests should not collapse
+// a Feed card or make a carousel appear empty. Retry once, then surface a compact
+// in-card state while preserving the original media_id for diagnostics/telemetry.
+if (!document.documentElement.dataset.mortaliveMediaHydrationGuardBound) {
+  document.documentElement.dataset.mortaliveMediaHydrationGuardBound = '1';
+  document.addEventListener('error', (event) => {
+    const el = event.target;
+    if (!(el instanceof HTMLImageElement || el instanceof HTMLVideoElement)) return;
+    const mediaId = el.getAttribute('data-media-id') || el.closest('[data-media-id]')?.getAttribute('data-media-id') || '';
+    if (!/^med_[a-zA-Z0-9_-]{6,120}$/.test(mediaId)) return;
+    const currentUrl = el.getAttribute('src') || '';
+    if (!currentUrl || el.dataset.hydrationRetried === '1') {
+      const host = el.closest('.feed-media-shell, .feed-carousel-slide');
+      if (host && !host.querySelector('.feed-media-hydration-error')) {
+        const note = document.createElement('div');
+        note.className = 'feed-media-hydration-error';
+        note.textContent = 'Media unavailable — tap to retry';
+        note.dataset.mediaId = mediaId;
+        note.addEventListener('click', () => {
+          const retryUrl = `${MORTALIVE_MEDIA_WORKER_URL}/media/${encodeURIComponent(mediaId)}?retry=${Date.now()}`;
+          delete el.dataset.hydrationRetried;
+          el.src = retryUrl;
+          note.remove();
+        });
+        host.appendChild(note);
+      }
+      return;
+    }
+    el.dataset.hydrationRetried = '1';
+    const retryUrl = `${MORTALIVE_MEDIA_WORKER_URL}/media/${encodeURIComponent(mediaId)}?retry=${Date.now()}`;
+    try {
+      el.src = retryUrl;
+      if (el instanceof HTMLVideoElement) {
+        el.load();
+      }
+    } catch (_) {}
   }, true);
 }
 
@@ -18801,4 +18841,20 @@ body.di2-msg .di2-bot-go { background:#2b7fff; }
     return createdPost;
   };
 
+})();
+
+
+/* Archive media hydration shell: preserve card geometry while a media request retries. */
+(function injectArchiveMediaHydrationStyles(){
+  if (document.getElementById('mortalive-media-hydration-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'mortalive-media-hydration-styles';
+  style.textContent = `
+    #pg-feed .feed-media-shell { position: relative; width: 100%; min-width: 0; max-width: 100%; overflow: hidden; background: #0d1117; }
+    #pg-feed .feed-media-shell > img, #pg-feed .feed-media-shell > video { display:block; width:100%; max-width:100%; height:auto; }
+    #pg-feed .feed-carousel-slide { min-width:0; max-width:100%; overflow:hidden; }
+    #pg-feed .feed-carousel-slide > img, #pg-feed .feed-carousel-slide > video { display:block; width:100%; max-width:100%; height:auto; object-fit:contain; }
+    #pg-feed .feed-media-hydration-error { min-height:180px; display:grid; place-items:center; padding:28px 18px; color:rgba(255,255,255,.82); background:#10151d; font:500 13px/1.4 Inter,system-ui,sans-serif; cursor:pointer; text-align:center; }
+  `;
+  document.head.appendChild(style);
 })();
