@@ -6630,7 +6630,9 @@ let _archiveMediaTelemetryFlushTimer = null;
 let _archiveMediaTelemetryObserver = null;
 
 function archiveMediaTelemetryPostId(el) {
-  return el?.closest?.('[data-post-id]')?.getAttribute('data-post-id') || '';
+  return el?.closest?.('[data-post-id]')?.getAttribute('data-post-id') ||
+    el?.closest?.('[data-reel-post-id]')?.getAttribute('data-reel-post-id') ||
+    el?.closest?.('[data-carousel-post-id]')?.getAttribute('data-carousel-post-id') || '';
 }
 
 function isArchiveMediaElement(el) {
@@ -6758,6 +6760,13 @@ function initArchiveMediaTelemetry(root = document) {
   };
 
   scan(scope);
+
+  // Flush the initial media_call batch immediately after the current render
+  // pass so telemetry is visible in Network without waiting for the normal
+  // debounce window. Later mutations continue to use the bounded timer.
+  if (_archiveMediaTelemetryQueue.length) {
+    window.setTimeout(() => flushArchiveMediaTelemetry(), 0);
+  }
 
   if (!scope.__mortaliveArchiveTelemetryMutationObserver && 'MutationObserver' in window) {
     const mutationObserver = new MutationObserver((mutations) => {
