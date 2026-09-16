@@ -6707,9 +6707,31 @@ if (!window.__mortaliveArchiveTelemetryLifecycleBound) {
 
 function initArchiveMediaTelemetry(root = document) {
   const scope = root && root.querySelectorAll ? root : document;
-  const mediaNodes = Array.from(scope.querySelectorAll('[data-media-id]'));
-    if (!mediaNodes.length) return;
+  if (!scope) return;
 
+  const bindMediaNode = (el) => {
+    if (!el || !el.getAttribute) return;
+    if (!isArchiveMediaElement(el)) return;
+    if (el.dataset.mortaliveTelemetryBound === '1') return;
+
+    el.dataset.mortaliveTelemetryBound = '1';
+    queueArchiveMediaTelemetry('media_call', el);
+
+    const loadedEvent = el.tagName === 'VIDEO' ? 'loadedmetadata' : 'load';
+    el.addEventListener(
+      loadedEvent,
+      () => queueArchiveMediaTelemetry('media_loaded', el),
+      { once: true, passive: true }
+    );
+
+    if (_archiveMediaTelemetryObserver) {
+      _archiveMediaTelemetryObserver.observe(el);
+    }
+  };
+
+  // One document/root observer is enough. Feed cards are repeatedly replaced
+  // by renderFeedPosts(), so we must bind media nodes that appear after the
+  // initial render as well as nodes already present.
   if (!_archiveMediaTelemetryObserver && 'IntersectionObserver' in window) {
     _archiveMediaTelemetryObserver = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
@@ -6719,25 +6741,35 @@ function initArchiveMediaTelemetry(root = document) {
         if (!el.dataset.mortaliveDwellTracked) {
           el.dataset.mortaliveDwellTracked = '1';
           window.setTimeout(() => {
-            if (document.contains(el)) {
-              const rect = el.getBoundingClientRect();
-              const visible = rect.bottom > 0 && rect.top < window.innerHeight;
-              if (visible) queueArchiveMediaTelemetry('dwell_2s', el);
-            }
+            if (!document.contains(el)) return;
+            const rect = el.getBoundingClientRect();
+            const visible = rect.bottom > 0 && rect.top < window.innerHeight;
+            if (visible) queueArchiveMediaTelemetry('dwell_2s', el);
           }, 2000);
         }
       });
     }, { threshold: [0.5] });
   }
 
-  mediaNodes.forEach(el => {
-    if (!isArchiveMediaElement(el) || el.dataset.mortaliveTelemetryBound === '1') return;
-    el.dataset.mortaliveTelemetryBound = '1';
-    queueArchiveMediaTelemetry('media_call', el);
-    const loadedEvent = el.tagName === 'VIDEO' ? 'loadedmetadata' : 'load';
-    el.addEventListener(loadedEvent, () => queueArchiveMediaTelemetry('media_loaded', el), { once: true, passive: true });
-    _archiveMediaTelemetryObserver?.observe(el);
-  });
+  const scan = (node) => {
+    if (!node || !node.querySelectorAll) return;
+    if (node.matches?.('[data-media-id]')) bindMediaNode(node);
+    node.querySelectorAll('[data-media-id]').forEach(bindMediaNode);
+  };
+
+  scan(scope);
+
+  if (!scope.__mortaliveArchiveTelemetryMutationObserver && 'MutationObserver' in window) {
+    const mutationObserver = new MutationObserver((mutations) => {
+      mutations.forEach(mutation => {
+        mutation.addedNodes.forEach(node => {
+          if (node.nodeType === 1) scan(node);
+        });
+      });
+    });
+    mutationObserver.observe(scope, { childList: true, subtree: true });
+    scope.__mortaliveArchiveTelemetryMutationObserver = mutationObserver;
+  }
 }
 
 
@@ -8092,20 +8124,42 @@ function getMediaUrl(mediaId) {
 // resolved through getMediaUrl()) so callers never need to know which one
 // they got.
 function getPostMedia(post) {
-  if (Array.isArray(post?.post_meta?.media) && post.post_meta.media.length) {
-    return post.post_meta.media
-      .map((m, i) => ({
-        mediaId: m.media_id ? String(m.media_id) : '',
-        type: m.type === 'video' ? 'video' : 'image',
-        url: m.url ? feedAvatarUrl(m.url) : getMediaUrl(m.media_id),
-        position: Number.isFinite(m.position) ? m.position : i
-      }))
+  // Archive/API responses may carry media[] either as an array or as a JSON
+  // string. Normalize both forms before rendering so carousel hydration does
+  // not depend on the Worker having pre-built browser URLs.
+  let rawMedia = post?.post_meta?.media;
+  if (typeof rawMedia === 'string') {
+    try { rawMedia = JSON.parse(rawMedia); } catch (_) { rawMedia = null; }
+  }
+
+  if (Array.isArray(rawMedia) && rawMedia.length) {
+    return rawMedia
+      .map((m, i) => {
+        const mediaId = m?.media_id ? String(m.media_id) : (m?.mediaId ? String(m.mediaId) : '');
+        const explicitUrl = typeof m?.url === 'string' ? m.url.trim() : '';
+        // Prefer the secure media gateway whenever a media_id exists. This is
+        // the hydration seam for archive carousels and single archive media.
+        const url = mediaId ? getMediaUrl(mediaId) : feedAvatarUrl(explicitUrl);
+        return {
+          mediaId,
+          type: String(m?.type || '').toLowerCase() === 'video' || String(m?.media_type || '').toLowerCase() === 'video' ? 'video' : 'image',
+          url,
+          position: Number.isFinite(Number(m?.position)) ? Number(m.position) : i
+        };
+      })
       .filter(m => m.url)
       .sort((a, b) => a.position - b.position);
   }
-  const url = feedAvatarUrl(post?.media_url || '');
+
+  const mediaId = post?.media_id ? String(post.media_id) : '';
+  const url = mediaId ? getMediaUrl(mediaId) : feedAvatarUrl(post?.media_url || '');
   if (!url) return [];
-  return [{ mediaId: '', type: detectMediaType(post?.media_type, post?.media_url), url, position: 0 }];
+  return [{
+    mediaId,
+    type: detectMediaType(post?.media_type, post?.media_url),
+    url,
+    position: 0
+  }];
 }
 
 // Media markup for a feed/profile post card: single image, single video, or
@@ -8117,7 +8171,7 @@ function feedMediaMarkup(post) {
   if (media.length > 1) return feedCarouselMarkup(media, post);
   const item = media[0];
   if (item.type === 'video') {
-    return `<video class="feed-post-video" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" controls playsinline preload="none"></video>`;
+    return `<video class="feed-post-video" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" controls playsinline preload="metadata"></video>`;
   }
   const display = post?.author?.display_name || post?.author?.username || 'member';
   return `<img class="feed-post-media js-photo-open" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" data-photo-url="${sanitizeHTML(item.url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">`;
@@ -8130,9 +8184,9 @@ function feedMediaMarkup(post) {
 function feedCarouselMarkup(media, post) {
   const slides = media.map((m, i) => {
     if (m.type === 'video') {
-      return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><video data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" controls playsinline preload="none"></video></div>`;
+      return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><video class="feed-carousel-media" data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" controls playsinline preload="metadata"></video></div>`;
     }
-    return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><img class="js-photo-open" data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" alt="" loading="lazy" data-photo-url="${sanitizeHTML(m.url)}" data-profile-owner="${sanitizeHTML(post?.user_id || '')}"></div>`;
+    return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}"><img class="js-photo-open feed-carousel-media" data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" alt="" loading="lazy" decoding="async" data-photo-url="${sanitizeHTML(m.url)}" data-profile-owner="${sanitizeHTML(post?.user_id || '')}"></div>`;
   }).join('');
   const arrows = media.length > 1 ? `
     <button type="button" class="feed-carousel-arrow prev" data-carousel-dir="-1" aria-label="Previous">‹</button>
@@ -8201,9 +8255,9 @@ function buildFeedPostCardHTML(post) {
   const engagement = engagementFor(post.id);
   const durationSeconds = Number(post?.post_meta?.duration_seconds) || 0;
   const bodyHTML = post.post_type === 'video' && postMedia.length
-    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card js-photo-open" data-post-id="${sanitizeHTML(post.id)}"><video class="feed-video-thumb" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-video-play-btn">▶</span>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
+    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card js-photo-open" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-video-play-btn">▶</span>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
     : post.post_type === 'reel' && postMedia.length
-      ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
+      ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
       : postMedia.length
         ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>${feedMediaMarkup(post)}`
         : post?.post_meta?.kind ? renderStructuredFeedPost(post) : `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>`;
@@ -8240,7 +8294,7 @@ function renderFeedReelsShelfHTML(reels) {
     const caption = String(post.content || '').trim();
     return `
       <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open Quid ${i + 1}">
-        <video class="reel-thumb-bg" src="${sanitizeHTML(media[0]?.url || '')}" muted playsinline preload="metadata"></video>
+        <video class="reel-thumb-bg" data-media-id="${sanitizeHTML(media[0]?.mediaId || '')}" src="${sanitizeHTML(media[0]?.url || '')}" muted playsinline preload="metadata"></video>
         <span class="reel-thumb-play">▶</span>
         ${duration > 0 ? `<span class="reel-thumb-duration">${formatVideoDuration(duration)}</span>` : ''}
         ${caption ? `<span class="reel-thumb-views">${sanitizeHTML(caption.slice(0, 28))}${caption.length > 28 ? '…' : ''}</span>` : ''}
