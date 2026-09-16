@@ -6851,8 +6851,27 @@ function initFeedPerformance(root = $('feed-posts')) {
 }
 
 async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
+  const archiveSeenIds = Array.from(
+    new Set(
+      (_feedPosts || [])
+        .filter(post => post?.source === 'archive')
+        .map(post => String(post?.id || '').trim())
+        .filter(id => /^post_[A-Za-z0-9_-]{6,160}$/.test(id))
+    )
+  ).slice(0, 800);
+
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    random: '1'
+  });
+
+  if (archiveSeenIds.length) {
+    params.set('exclude', archiveSeenIds.join(','));
+  }
+
   const endpoint =
-    `${MORTALIVE_MEDIA_WORKER_URL}/api/archive-feed?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`;
+    `${MORTALIVE_MEDIA_WORKER_URL}/api/archive-feed?${params.toString()}`;
 
   try {
     const response = await fetch(endpoint, {
@@ -6980,12 +6999,21 @@ async function fetchFeedPage(reset = false) {
       }));
     }
 
+    /*
+     * Archive order is deliberately randomized by the Worker. Never re-sort
+     * the result by created_at here or refreshes would collapse back into the
+     * same chronological archive sequence. Mix live + archive candidates with
+     * a light Fisher-Yates pass so each refresh gets a different composition.
+     */
     const incoming = [
       ...archivePosts,
       ...mappedLive
-    ].filter(Boolean).sort((a, b) =>
-      Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0)
-    );
+    ].filter(Boolean);
+
+    for (let i = incoming.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [incoming[i], incoming[j]] = [incoming[j], incoming[i]];
+    }
 
     const seen = new Set();
     const combined = [
@@ -6996,9 +7024,12 @@ async function fetchFeedPage(reset = false) {
       if (!post.id || seen.has(key)) return false;
       seen.add(key);
       return true;
-    }).sort((a, b) =>
-      Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0)
-    );
+    });
+
+    for (let i = combined.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [combined[i], combined[j]] = [combined[j], combined[i]];
+    }
 
     const pagePosts = combined.slice(0, FEED_PAGE_SIZE);
     _feedMergeBuffer = combined.slice(FEED_PAGE_SIZE);
