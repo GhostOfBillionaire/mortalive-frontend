@@ -10879,6 +10879,103 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 }
 </style>
 
+
+<style id="mortalive-feed-intrinsic-width-final-fix">
+/* Final mobile feed sizing fix. The root conflict was the CSS Grid item's
+   automatic min-content width: once a real media asset loaded, .feed-centre
+   could refuse to shrink and expand the entire page horizontally. */
+#pg-feed .wrap,
+#pg-feed .feed-layout,
+#pg-feed .feed-centre,
+#pg-feed .feed-left,
+#pg-feed .feed-right,
+#pg-feed .post-card,
+#pg-feed .post-body,
+#pg-feed .post-body > *,
+#pg-feed .feed-carousel,
+#pg-feed .feed-carousel-track,
+#pg-feed .feed-carousel-slide,
+#pg-feed .feed-carousel-slide.active,
+#pg-feed .feed-video-card,
+#pg-feed .feed-reel-card {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+#pg-feed .feed-centre {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+#pg-feed .feed-layout {
+  width: 100%;
+}
+
+#pg-feed .post-card {
+  width: 100%;
+  overflow: hidden;
+}
+
+#pg-feed .post-body {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+#pg-feed .feed-carousel,
+#pg-feed .feed-carousel-track,
+#pg-feed .feed-carousel-slide.active {
+  width: 100%;
+  overflow: hidden;
+}
+
+#pg-feed .feed-post-media,
+#pg-feed .feed-post-video,
+#pg-feed .feed-video-thumb,
+#pg-feed .feed-carousel-slide img,
+#pg-feed .feed-carousel-slide video {
+  display: block;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: min(78vh, 720px);
+  min-width: 0 !important;
+  min-height: 0;
+  object-fit: contain !important;
+  object-position: center center;
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+
+@media (max-width: 720px) {
+  #pg-feed,
+  #pg-feed .wrap,
+  #pg-feed .feed-layout,
+  #pg-feed .feed-centre,
+  #feed-posts {
+    min-width: 0 !important;
+    width: 100%;
+    max-width: 100% !important;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+
+  #pg-feed .feed-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  #pg-feed .feed-centre {
+    justify-self: stretch;
+  }
+
+  #feed-posts > .post-card,
+  #feed-posts > .feed-reels-shelf {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+</style>
 </head>
 <body class="di2-on-landing">
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -12497,7 +12594,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260916-feed-telemetry-v5"></script>
+<script src="app.js?v=20260916-feed-layout-telemetry-v7"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
