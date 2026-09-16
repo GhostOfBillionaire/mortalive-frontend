@@ -10785,6 +10785,100 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 }
 </style>
 
+
+<style id="mortalive-feed-media-hydration-layout-fix">
+/* Feed media sizing: never let intrinsic media dimensions widen the page. */
+#pg-feed .post-card,
+#pg-feed .post-body,
+#pg-feed .post-body > *,
+#pg-feed .feed-carousel,
+#pg-feed .feed-carousel-track,
+#pg-feed .feed-carousel-slide,
+#pg-feed .feed-video-card,
+#pg-feed .feed-reel-card {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+#pg-feed .feed-post-media,
+#pg-feed .feed-post-video,
+#pg-feed .feed-video-thumb,
+#pg-feed .feed-reel-card video,
+#pg-feed .reel-thumb-bg,
+#pg-feed .feed-carousel-slide img,
+#pg-feed .feed-carousel-slide video {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  object-fit: contain;
+  object-position: center;
+  box-sizing: border-box;
+}
+
+/* The media gets the available card width, but its natural height is preserved.
+   This removes the old cover-crop behavior from Feed media. */
+#pg-feed .feed-post-media,
+#pg-feed .feed-post-video,
+#pg-feed .feed-video-thumb,
+#pg-feed .feed-carousel-slide img,
+#pg-feed .feed-carousel-slide video {
+  max-height: min(72vh, 720px);
+}
+
+#pg-feed .feed-video-card {
+  height: auto;
+  aspect-ratio: auto;
+  overflow: hidden;
+  background: #0d1117;
+}
+
+#pg-feed .feed-carousel {
+  width: 100%;
+  overflow: hidden;
+}
+
+#pg-feed .feed-carousel-slide.active {
+  width: 100%;
+}
+
+#pg-feed .feed-carousel-slide img,
+#pg-feed .feed-carousel-slide video {
+  margin-inline: auto;
+}
+
+@media (max-width: 767px) {
+  #pg-feed,
+  #pg-feed .feed-wrap,
+  #pg-feed .feed-main,
+  #feed-posts {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  #pg-feed .post-card {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  #pg-feed .post-body {
+    width: 100%;
+    overflow-x: clip;
+  }
+
+  #pg-feed .feed-post-media,
+  #pg-feed .feed-post-video,
+  #pg-feed .feed-video-thumb,
+  #pg-feed .feed-carousel-slide img,
+  #pg-feed .feed-carousel-slide video {
+    max-height: 68vh;
+  }
+}
+</style>
+
 </head>
 <body class="di2-on-landing">
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
@@ -12403,7 +12497,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260916-feed-telemetry-v4"></script>
+<script src="app.js?v=20260916-feed-telemetry-v5"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
