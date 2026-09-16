@@ -8267,6 +8267,28 @@ if (!document.documentElement.dataset.mortaliveCarouselBound) {
 // Archive-media hydration guard: failed image/video requests should not collapse
 // a Feed card or make a carousel appear empty. Retry once, then surface a compact
 // in-card state while preserving the original media_id for diagnostics/telemetry.
+// Feed video interaction: normal post videos stay in the Feed and use the
+// existing custom play surface. Never route these clicks into the post viewer.
+if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
+  document.documentElement.dataset.mortaliveFeedVideoBound = '1';
+  document.addEventListener('click', (event) => {
+    const card = event.target.closest?.('.feed-video-card');
+    if (!card) return;
+    const video = card.querySelector('.feed-video-thumb');
+    if (!video) return;
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      if (video.paused) {
+        const playResult = video.play();
+        if (playResult?.catch) playResult.catch(() => {});
+      } else {
+        video.pause();
+      }
+    } catch (_) {}
+  }, true);
+}
+
 if (!document.documentElement.dataset.mortaliveMediaHydrationGuardBound) {
   document.documentElement.dataset.mortaliveMediaHydrationGuardBound = '1';
   document.addEventListener('error', (event) => {
@@ -8335,7 +8357,7 @@ function buildFeedPostCardHTML(post) {
   const engagement = engagementFor(post.id);
   const durationSeconds = Number(post?.post_meta?.duration_seconds) || 0;
   const bodyHTML = post.post_type === 'video' && postMedia.length
-    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card js-photo-open" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-video-play-btn">▶</span>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
+    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-video-play-btn">▶</span>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
     : post.post_type === 'reel' && postMedia.length
       ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
       : postMedia.length
@@ -8618,6 +8640,8 @@ const postPhotoRouterRoot = document.documentElement;
 if (!postPhotoRouterRoot.dataset.mortalivePostPhotoRouterBound) {
   postPhotoRouterRoot.dataset.mortalivePostPhotoRouterBound = '1';
   document.addEventListener('click', (event) => {
+    const mediaTarget = event.target.closest?.('.feed-video-card, .feed-video-thumb');
+    if (mediaTarget) return;
     const photo = event.target.closest?.('.js-photo-open');
     if (!photo) return;
     const postCard = photo.closest?.('#pg-feed .post-card[data-post-id], #pg-feed .profile-post-card[data-post-id], .profile-post-card[data-post-id]');
@@ -9388,7 +9412,7 @@ function initFeedPage() {
       return;
     }
 
-    const viewerIgnored = event.target.closest('[data-feed-action], [data-open-profile], a, input, textarea, select, option, label, .comments-section');
+    const viewerIgnored = event.target.closest('[data-feed-action], [data-open-profile], a, input, textarea, select, option, label, .comments-section, .feed-video-card, .feed-video-thumb');
     const postCard = event.target.closest('.post-card, .profile-post-card');
     if (postCard && !viewerIgnored) {
       const postId = postCard.dataset.postId;
@@ -13857,10 +13881,22 @@ document.addEventListener('click', (event) => {
     const host=$('msg-request-center');
     if(!host || !S.userId || S.isGuest || !sb) return;
     try {
-      const {data:requests,error}=await sb.from('message_requests')
+      let requestResult = await sb.from('message_requests')
         .select('id,sender_id,recipient_id,room_id,message,status,created_at')
         .eq('recipient_id',S.userId).eq('status','pending')
         .order('created_at',{ascending:false}).limit(20);
+
+      // Some deployed databases still use the pre-group-invite message_requests
+      // schema without room_id. Retry with the production-safe base columns so a
+      // missing optional column does not break the entire request center.
+      if (requestResult.error && /column .*room_id.*does not exist/i.test(requestResult.error.message || '')) {
+        requestResult = await sb.from('message_requests')
+          .select('id,sender_id,recipient_id,message,status,created_at')
+          .eq('recipient_id',S.userId).eq('status','pending')
+          .order('created_at',{ascending:false}).limit(20);
+      }
+
+      const {data:requests,error}=requestResult;
       if(error) throw error;
       const rows=requests||[];
       const senderIds=[...new Set(rows.map(r=>r.sender_id).filter(Boolean))];
@@ -13870,7 +13906,7 @@ document.addEventListener('click', (event) => {
         if(e)throw e; profiles=data||[];
       }
       const pmap=new Map(profiles.map(p=>[String(p.id),p]));
-      const groupIds=[...new Set(rows.map(r=>r.room_id).filter(Boolean).map(String))];
+      const groupIds=[];
       let groups=[];
       if(groupIds.length){
         const {data,error:e}=await sb.from('message_rooms').select('room_id,name,type').in('room_id',groupIds);
