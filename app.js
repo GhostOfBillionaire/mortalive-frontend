@@ -6495,6 +6495,120 @@ let _commentCache = new Map();
 let _commentLoading = new Set();
 const _MINUTE = 60_000, _HOUR = 3_600_000, _DAY = 86_400_000, _WEEK = 604_800_000;
 
+// ═══════════════════════════════════════════════════════════════════
+// AI-AUTHORED CONTENT — provenance reading + labelling (audit Part 6)
+// ═══════════════════════════════════════════════════════════════════
+//
+// SOURCE OF TRUTH (audit 6.2): the badge renders from the row's own
+// `author_type` column and nothing else. Not from post_meta (which the human
+// composer writes freely, client-side, so it can be forged by anyone), not
+// from a username pattern, not from the author's profile. A BEFORE INSERT
+// trigger in the database clamps author_type to 'human' for every write that
+// arrives through the publishable key, so the only thing that can set 'ai' is
+// the backend agent API acting on an authenticated agent key.
+//
+// WHY THE COLUMN LIST IS PROBED RATHER THAN HARD-CODED:
+// If the Part 3 migration has not been applied yet, asking PostgREST for a
+// column that does not exist fails the whole query with a 400 — which would
+// take the entire feed down, not just the badge. So the column list starts as
+// the exact legacy list and is only widened once a single cheap probe proves
+// the columns are really there. The feed renders correctly either way: before
+// the migration every row reads as human (which is true), after it the badges
+// appear. There is no deployment order in which this breaks the feed.
+
+const POST_COLUMNS_BASE =
+  'id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta';
+const POST_PROVENANCE_COLUMNS = 'author_type,agent_id';
+const COMMENT_COLUMNS_BASE = 'id,post_id,user_id,content,parent_id,created_at';
+
+let _provenanceColumnsAvailable = null;   // null = not yet probed
+let _provenanceProbePromise = null;
+
+async function probeProvenanceColumns() {
+  if (_provenanceColumnsAvailable !== null) return _provenanceColumnsAvailable;
+  if (_provenanceProbePromise) return _provenanceProbePromise;
+  if (!sb) return false;
+
+  _provenanceProbePromise = (async () => {
+    try {
+      const { error } = await sb.from('posts').select('id,author_type').limit(1);
+      _provenanceColumnsAvailable = !error;
+      if (error) {
+        console.info('[Feed] provenance columns not present yet — AI labelling stays dormant until the agent migration is applied.');
+      }
+    } catch (_) {
+      _provenanceColumnsAvailable = false;
+    } finally {
+      _provenanceProbePromise = null;
+    }
+    return _provenanceColumnsAvailable;
+  })();
+
+  return _provenanceProbePromise;
+}
+
+function postSelectColumns() {
+  return _provenanceColumnsAvailable
+    ? `${POST_COLUMNS_BASE},${POST_PROVENANCE_COLUMNS}`
+    : POST_COLUMNS_BASE;
+}
+
+function commentSelectColumns() {
+  return _provenanceColumnsAvailable
+    ? `${COMMENT_COLUMNS_BASE},${POST_PROVENANCE_COLUMNS}`
+    : COMMENT_COLUMNS_BASE;
+}
+
+/** True only for rows the server itself marked as agent-authored. */
+function isAiAuthored(row) {
+  return row?.author_type === 'ai';
+}
+
+/**
+ * The AI label.
+ *
+ * Deliberately distinct from the archive/synthetic content already in the feed
+ * (audit 1.9): archive posts are read-only demo content served from the media
+ * worker and are described to users as "synthetic interactions". An agent post
+ * is live, writable, commentable content authored by a real registered party
+ * that happens not to be a person. Conflating the two would misinform people
+ * about both, so this badge uses its own word — "AI" — its own colour, and its
+ * own shape, and never borrows the "synthetic" vocabulary.
+ *
+ * Accessibility (audit 6.3): the visible text already reads "AI", and the
+ * title/aria-label spell out what that means for screen readers rather than
+ * leaving an unlabelled glyph.
+ */
+function aiAuthorBadge(row, variant = 'inline') {
+  if (!isAiAuthored(row)) return '';
+  const label = 'Posted by an AI agent, not a person';
+  return `<span class="ai-badge ai-badge-${variant}" role="img" aria-label="${label}" title="${label}"><span class="ai-badge-dot" aria-hidden="true"></span>AI</span>`;
+}
+
+/** Plain-text equivalent, for the few places that render into textContent. */
+function aiAuthorSuffix(row) {
+  return isAiAuthored(row) ? ' · AI agent' : '';
+}
+
+// Optional viewer preference (audit 6.4 — explicitly optional scope, not a
+// compliance requirement; the badge alone satisfies "must be marked AI").
+// Default off: hiding agent content by default would make the labelling moot.
+let _hideAiPosts = false;
+try { _hideAiPosts = localStorage.getItem('mortalive_hide_ai_posts') === '1'; } catch (_) {}
+
+function setHideAiPosts(next) {
+  _hideAiPosts = !!next;
+  try { localStorage.setItem('mortalive_hide_ai_posts', _hideAiPosts ? '1' : '0'); } catch (_) {}
+  const toggle = document.getElementById('feed-ai-toggle');
+  if (toggle) {
+    toggle.classList.toggle('active', _hideAiPosts);
+    toggle.setAttribute('aria-pressed', _hideAiPosts ? 'true' : 'false');
+    toggle.textContent = _hideAiPosts ? 'AI hidden' : 'AI shown';
+  }
+  if (typeof renderFeedPosts === 'function') renderFeedPosts();
+}
+
+
 function feedRelTime(iso) {
   const ts = Date.parse(iso ?? '');
   if (!Number.isFinite(ts)) return 'Just now';
@@ -6936,6 +7050,11 @@ async function fetchFeedPage(reset = false) {
   _feedLoading = true;
   if (loadMore) loadMore.disabled = true;
 
+  // One cheap probe, once per session, before the first query is built. This
+  // is what lets postSelectColumns() ask for author_type only when the column
+  // actually exists — see the note above probeProvenanceColumns().
+  await probeProvenanceColumns();
+
   try {
     // Each source has an independent cursor. The two requests intentionally
     // start together so the archive path is visible in Network whenever the
@@ -6951,7 +7070,7 @@ async function fetchFeedPage(reset = false) {
       try {
         let query = sb
           .from('posts')
-          .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
+          .select(postSelectColumns())
           .order('created_at', { ascending: false })
           .range(_feedLiveOffset, _feedLiveOffset + FEED_PAGE_SIZE - 1);
 
@@ -7082,8 +7201,12 @@ async function fetchFeedPage(reset = false) {
 }
 
 function filteredFeedPosts() {
-  if (_feedFilter === 'mine') return _feedPosts.filter(post => post.user_id === S.userId);
-  return _feedPosts;
+  const base = _feedFilter === 'mine'
+    ? _feedPosts.filter(post => post.user_id === S.userId)
+    : _feedPosts;
+  // Optional viewer preference (audit 6.4). Off by default — the badge is what
+  // satisfies "must be marked AI"; hiding is a convenience on top of it.
+  return _hideAiPosts ? base.filter(post => !isAiAuthored(post)) : base;
 }
 
 
@@ -7211,7 +7334,7 @@ async function loadPostComments(postId, force = false) {
   try {
     const { data, error } = await sb
       .from('post_comments')
-      .select('id,post_id,user_id,content,parent_id,created_at')
+      .select(commentSelectColumns())
       .eq('post_id', postId)
       .order('created_at', { ascending: true })
       .limit(100);
@@ -7254,10 +7377,10 @@ function renderPostComments(postId, comments) {
     ${comments.map(comment => {
       const author = comment.author || {};
       const mine = comment.user_id === S.userId;
-      return `<div class="comment-item">
+      return `<div class="comment-item${isAiAuthored(comment) ? ' is-ai-authored' : ''}">
         <div class="comment-item-avatar">${feedAvatarLetter(author.display_name || author.username || 'Member')}</div>
         <div class="comment-bubble">
-          <div class="comment-author">${sanitizeHTML(author.display_name || author.username || 'Member')} <span class="comment-author-time">· ${sanitizeHTML(feedRelTime(comment.created_at))}</span></div>
+          <div class="comment-author">${sanitizeHTML(author.display_name || author.username || 'Member')}${aiAuthorBadge(comment, 'sm')} <span class="comment-author-time">· ${sanitizeHTML(feedRelTime(comment.created_at))}</span></div>
           <div class="comment-text">${sanitizeHTML(comment.content || '')}</div>
           ${mine ? `<div class="comment-actions"><button class="comment-action" type="button" data-feed-action="delete-comment" data-post-id="${sanitizeHTML(postId)}" data-comment-id="${sanitizeHTML(comment.id)}">Delete</button></div>` : ''}
         </div>
@@ -7297,7 +7420,7 @@ async function createPostComment(postId, content) {
       post_id: postId,
       user_id: S.userId,
       content: text
-    }).select('id,post_id,user_id,content,parent_id,created_at').single();
+    }).select(commentSelectColumns()).single();
     if (error) throw error;
     const author = feedProfileFor(S.userId) || {
       username: S.username || 'You',
@@ -7539,15 +7662,15 @@ async function openFeedProfileOverlay(userId) {
       </div>
       <div class="feed-profile-section" data-profile-panel="posts">
         <div class="feed-profile-posts">${textPosts.length ? textPosts.map(post => `
-          <article class="feed-profile-post">
-            <div class="feed-profile-post-time">${sanitizeHTML(formatPostTime(post.created_at))}</div>
+          <article class="feed-profile-post${isAiAuthored(post) ? ' is-ai-authored' : ''}">
+            <div class="feed-profile-post-time">${sanitizeHTML(formatPostTime(post.created_at))}${aiAuthorBadge(post, 'sm')}</div>
             <div class="feed-profile-post-text">${renderHashtagRichText(String(post.content || '').trim())}</div>
           </article>`).join('') : '<div style="padding:12px 0;color:var(--on-surface-3);font-size:12.5px;">No posts yet.</div>'}</div>
       </div>
       <div class="feed-profile-section" data-profile-panel="photos" style="display:none;">
         <div class="feed-profile-posts">${photoPosts.length ? photoPosts.map(post => `
-          <article class="feed-profile-post">
-            <div class="feed-profile-post-time">${sanitizeHTML(formatPostTime(post.created_at))}</div>
+          <article class="feed-profile-post${isAiAuthored(post) ? ' is-ai-authored' : ''}">
+            <div class="feed-profile-post-time">${sanitizeHTML(formatPostTime(post.created_at))}${aiAuthorBadge(post, 'sm')}</div>
             <div class="feed-profile-post-text">${renderHashtagRichText(String(post.content || '').trim())}</div>
             <img src="${sanitizeHTML(post.media_url)}" alt="Photo shared by ${sanitizeHTML(name)}" loading="lazy">
           </article>`).join('') : '<div style="padding:12px 0;color:var(--on-surface-3);font-size:12.5px;">No photos yet.</div>'}</div>
@@ -8364,11 +8487,11 @@ function buildFeedPostCardHTML(post) {
         ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>${feedMediaMarkup(post)}`
         : post?.post_meta?.kind ? renderStructuredFeedPost(post) : `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>`;
   return `
-      <article class="post-card" data-post-id="${sanitizeHTML(post.id)}" data-post-owner="${sanitizeHTML(post.user_id || '')}" data-post-type="${sanitizeHTML(post.post_type || 'text')}">
+      <article class="post-card${isAiAuthored(post) ? ' is-ai-authored' : ''}" data-post-id="${sanitizeHTML(post.id)}" data-post-owner="${sanitizeHTML(post.user_id || '')}" data-post-type="${sanitizeHTML(post.post_type || 'text')}" data-author-type="${isAiAuthored(post) ? 'ai' : 'human'}">
         <div class="post-header">
           ${avatarMarkup}
           <div class="post-meta">
-            <div class="post-author"><button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(canonicalProfileTargetId(post))}">${sanitizeHTML(display)} ${badge}</button></div>
+            <div class="post-author"><button type="button" class="post-author-link" data-open-profile="${sanitizeHTML(canonicalProfileTargetId(post))}">${sanitizeHTML(display)} ${badge}</button>${aiAuthorBadge(post)}</div>
             <div class="post-time">@${sanitizeHTML(username)} · ${sanitizeHTML(feedRelTime(post.created_at))} · ${sanitizeHTML(typeLabel)}</div>
           </div>
           ${mine ? `<button class="post-more-btn" type="button" data-feed-action="delete" data-post-id="${sanitizeHTML(post.id)}" title="Delete post" aria-label="Delete post">⋯</button>` : ''}
@@ -8512,7 +8635,7 @@ function postViewerCommentRows(comments = []) {
         ${buildPostViewerAvatar(author, 34)}
         <div class="mortalive-post-viewer-comment-copy">
           <div class="mortalive-post-viewer-comment-head">
-            <strong>${sanitizeHTML(display)}</strong>
+            <strong>${sanitizeHTML(display)}</strong>${aiAuthorBadge(comment, 'sm')}
             <span>${sanitizeHTML(feedRelTime(comment.created_at))}</span>
           </div>
           <div class="mortalive-post-viewer-comment-text">${sanitizeHTML(comment.content || '')}</div>
@@ -8555,10 +8678,12 @@ function postViewerRender(post, comments = _commentCache.get(post?.id) || []) {
   if (mediaHost) mediaHost.innerHTML = isTextPost ? '' : postViewerMediaMarkup(post);
   if (textHost) textHost.innerHTML = isTextPost ? renderHashtagRichText(String(post.content || '').trim()) : '';
   if (avatarHost) avatarHost.innerHTML = buildPostViewerAvatar(author, 42);
-  if (nameEl) nameEl.textContent = display;
+  // innerHTML rather than textContent here specifically so the AI badge can
+  // sit beside the name. sanitizeHTML() still escapes the name itself.
+  if (nameEl) nameEl.innerHTML = `${sanitizeHTML(display)}${aiAuthorBadge(post)}`;
   if (handleEl) handleEl.textContent = `@${username}${badge ? ` · ${badge}` : ''}`;
   if (captionEl) {
-    captionEl.innerHTML = captionText ? `<div class="mortalive-post-viewer-caption-author">${sanitizeHTML(display)}</div><div class="mortalive-post-viewer-caption-text">${renderHashtagRichText(captionText)}</div>` : '';
+    captionEl.innerHTML = captionText ? `<div class="mortalive-post-viewer-caption-author">${sanitizeHTML(display)}${aiAuthorBadge(post, 'sm')}</div><div class="mortalive-post-viewer-caption-text">${renderHashtagRichText(captionText)}</div>` : '';
     captionEl.style.display = isTextPost ? 'none' : (captionText ? '' : 'none');
   }
   // Text/poll/Q&A posts (post_type 'text') and reels keep their exact prior
@@ -9093,7 +9218,7 @@ async function submitFeedTextPost() {
       }
     }
 
-    const { data: createdPost, error } = await sb.from('posts').insert(payload).select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta').single();
+    const { data: createdPost, error } = await sb.from('posts').insert(payload).select(postSelectColumns()).single();
     if (error) throw error;
     if (kind === 'qna' && structured.correctOptionId) {
       const { error: answerKeyError } = await sb.from('post_qna_keys').insert({
@@ -9268,6 +9393,20 @@ async function deleteFeedPost(postId) {
 }
 
 function initFeedPage() {
+  // The hashtag-filter view is a separate IIFE and reads these off window so
+  // both renderers use one definition of "is this AI" (audit 6.2).
+  window.aiAuthorBadge = aiAuthorBadge;
+  window.isAiAuthored  = isAiAuthored;
+
+  const aiToggle = $('feed-ai-toggle');
+  if (aiToggle && !aiToggle.dataset.bound) {
+    aiToggle.dataset.bound = '1';
+    aiToggle.classList.toggle('active', _hideAiPosts);
+    aiToggle.setAttribute('aria-pressed', _hideAiPosts ? 'true' : 'false');
+    aiToggle.textContent = _hideAiPosts ? 'AI hidden' : 'AI shown';
+    aiToggle.addEventListener('click', () => setHideAiPosts(!_hideAiPosts));
+  }
+
   if (!document.body.dataset.profileNavigationBound) {
     document.body.dataset.profileNavigationBound = '1';
     document.addEventListener('click', (event) => {
@@ -9613,7 +9752,7 @@ async function fetchProfilePosts(userId = S.userId) {
     try {
       const { data, error } = await sb
         .from('posts')
-        .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
+        .select(postSelectColumns())
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(POSTS_PAGE_SIZE);
@@ -9887,10 +10026,10 @@ function renderProfilePosts(posts = _profilePosts) {
     const bodyContent = structured ? structured : `${content}${photo}`;
 
     return `
-      <article class="profile-post-card" data-post-id="${sanitizeHTML(post.id)}" data-post-owner="${sanitizeHTML(post.user_id || _profilePostsOwner?.id || S.userId || '')}" data-post-type="${sanitizeHTML(post.post_type || 'text')}">
+      <article class="profile-post-card${isAiAuthored(post) ? ' is-ai-authored' : ''}" data-post-id="${sanitizeHTML(post.id)}" data-post-owner="${sanitizeHTML(post.user_id || _profilePostsOwner?.id || S.userId || '')}" data-post-type="${sanitizeHTML(post.post_type || 'text')}" data-author-type="${isAiAuthored(post) ? 'ai' : 'human'}">
         <div class="profile-post-header">
           <div class="profile-post-mini-avatar" style="background:linear-gradient(135deg,#1a6ef5,#7c3aed)">${initial}</div>
-          <div class="profile-post-author"><button type="button" class="profile-author-link" data-open-profile="${sanitizeHTML(post.author?.account_id || post.user_id || _profilePostsOwner?.id || S.userId || '')}">${sanitizeHTML(ownerName)}</button></div>
+          <div class="profile-post-author"><button type="button" class="profile-author-link" data-open-profile="${sanitizeHTML(post.author?.account_id || post.user_id || _profilePostsOwner?.id || S.userId || '')}">${sanitizeHTML(ownerName)}</button>${aiAuthorBadge(post, 'sm')}</div>
           <div class="profile-post-time">${time}</div>
         </div>
         <div class="profile-post-body">
@@ -10396,7 +10535,7 @@ function initProfilePostComposer() {
 
       const { data, error: postError } = await sb.from('posts')
         .insert(payload)
-        .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
+        .select(postSelectColumns())
         .single();
 
       if (postError) throw postError;
@@ -14757,7 +14896,7 @@ document.addEventListener('click', (event) => {
     try {
       const { data: posts, error } = await sb
         .from('posts')
-        .select('id,user_id,content,post_type,visibility,created_at,updated_at,media_url,media_type,media_size,post_meta')
+        .select(postSelectColumns())
         .eq('visibility', 'public')
         .ilike('content', `%#${_hashFilter}%`)
         .order('created_at', { ascending: false })
@@ -14849,11 +14988,18 @@ document.addEventListener('click', (event) => {
     const postId   = san(post.id || '');
     const liked    = !!eng.liked;
     const isMine   = post.user_id === S.userId;
+    // This filtered view is a separate module (its own IIFE) from the main
+    // feed renderer, so it cannot see aiAuthorBadge lexically. It reads the
+    // same helper off window, driven by the same trusted author_type column,
+    // rather than reimplementing the rule — one rule, one place (audit 6.2).
+    const aiBadge  = typeof window.aiAuthorBadge === 'function' ? window.aiAuthorBadge(post) : '';
+    const isAi     = post?.author_type === 'ai';
 
     return `
-      <article class="post-card"
+      <article class="post-card${isAi ? ' is-ai-authored' : ''}"
         data-post-id="${postId}"
         data-post-owner="${ownerId}"
+        data-author-type="${isAi ? 'ai' : 'human'}"
         data-post-type="${san(post.post_type || 'text')}">
 
         <div class="post-header">
@@ -14866,7 +15012,7 @@ document.addEventListener('click', (event) => {
             <div class="post-author">
               <button type="button" class="post-author-link" data-open-profile="${ownerId}">
                 ${display} ${badge}
-              </button>
+              </button>${aiBadge}
             </div>
             <div class="post-time">@${username} · ${relTime(post.created_at)}</div>
           </div>
