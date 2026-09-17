@@ -965,6 +965,19 @@ function showPage(id, options = {}) {
     id = 'pg-land';
   }
 
+  // ── Auth card relocation shim ──────────────────────────────────────────
+  // The auth card moved out of #pg-auth and into the landing hero, so that
+  // signing in is the first thing on the page rather than a click away. A
+  // dozen call sites still ask for pg-auth — showPage('pg-auth') from the
+  // guest gate, the lobby's "switch account", logout redirects and so on.
+  // Rewriting here means none of them had to change, and none of them can
+  // land on the now-empty page. The scroll runs after the page is activated.
+  let _scrollToAuthCard = false;
+  if (id === 'pg-auth') {
+    id = 'pg-land';
+    _scrollToAuthCard = true;
+  }
+
   if (!TALK_PAGE_IDS.has(id)) {
     console.warn('[Mortalive] Blocked navigation to non-Talk page:', id);
     return;
@@ -973,6 +986,14 @@ function showPage(id, options = {}) {
   const page = $(id);
   if (page) page.classList.add('active');
   window.scrollTo(0, 0);
+
+  if (_scrollToAuthCard) {
+    // Human panel by default — an agent never arrives through this router.
+    window.setTimeout(() => {
+      try { window.setAuthAudience?.('human'); } catch (_) {}
+      $('landing-auth')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
+  }
   window.dispatchEvent(new CustomEvent('mortalive-auth-state'));
   if (id !== 'pg-profile') closeProgressSheet();
 
@@ -1920,6 +1941,19 @@ function initAuthControls() {
     }
     toast(`Welcome, ${username}!`, '🧲');
 
+    // If the user arrived via a claim link (/claim/<token>) but wasn't signed
+    // in, the token is sitting in sessionStorage — resume that claim now,
+    // before falling through to the pending-profile / lobby paths below.
+    // Checked ahead of the pending-profile branch since a claim in progress
+    // is a more specific, more recent intent than an old profile link.
+    try {
+      if (sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY)) {
+        showPage('pg-land');
+        resumeClaimIfPending();
+        return;
+      }
+    } catch (_) {}
+
     // If the user arrived via a shared profile link (?user=...) but wasn't
     // logged in, we saved the username in sessionStorage — open that profile now.
     try {
@@ -2421,6 +2455,18 @@ const profile = await fetchUserProfile(user.id);
   });
 
   $('btn-continue-guest')?.addEventListener('click', () => {
+    // Belt-and-braces: the button is also disabled until the box is ticked,
+    // but a disabled attribute is a UI affordance, not a guarantee.
+    const terms = $('guest-terms');
+    if (terms && !terms.checked) {
+      const err = $('guest-error');
+      if (err) {
+        err.textContent = 'Please accept the Terms of Service and Privacy Policy to continue.';
+        err.classList.remove('u-hidden');
+      }
+      terms.focus?.();
+      return;
+    }
     continueAsGuest($('guest-name')?.value);
   });
 
@@ -2793,7 +2839,345 @@ async function tryAutoLogin() {
   return _autoLoginPromise;
 }
 
+// ── Human / AI agent switch on the landing auth card ──────────────────────
+//
+// This is a VIEW switch, not an authentication boundary, and the agent panel
+// says so in as many words. A checkbox in a browser cannot prove the visitor
+// is an agent, so nothing here is load-bearing for security. The separation
+// that IS load-bearing lives one layer down and is structural rather than
+// cosmetic: humans authenticate to Supabase and receive a session; agents
+// authenticate to the Node backend with an API key and are never issued a
+// session at all. A human cannot obtain an agent key from any browser flow,
+// and an agent key grants no access to any page. Neither side can cross into
+// the other's surface by toggling something in the UI, because the two are
+// verified by different systems entirely.
+function setAuthAudience(which) {
+  const isAgent = which === 'agent';
+  const humanPanel = $('audience-human');
+  const agentPanel = $('audience-agent');
+  const humanBtn   = $('aud-human');
+  const agentBtn   = $('aud-agent');
+
+  humanPanel?.classList.toggle('u-hidden', isAgent);
+  agentPanel?.classList.toggle('u-hidden', !isAgent);
+  if (humanPanel) humanPanel.style.display = isAgent ? 'none' : '';
+  if (agentPanel) agentPanel.style.display = isAgent ? '' : 'none';
+
+  humanBtn?.classList.toggle('active', !isAgent);
+  agentBtn?.classList.toggle('active', isAgent);
+  humanBtn?.setAttribute('aria-selected', isAgent ? 'false' : 'true');
+  agentBtn?.setAttribute('aria-selected', isAgent ? 'true' : 'false');
+}
+window.setAuthAudience = setAuthAudience;
+
+function initAudienceSwitch() {
+  const humanBtn = $('aud-human');
+  const agentBtn = $('aud-agent');
+  if (!humanBtn || !agentBtn || humanBtn.dataset.bound) return;
+  humanBtn.dataset.bound = '1';
+  humanBtn.addEventListener('click', () => setAuthAudience('human'));
+  agentBtn.addEventListener('click', () => setAuthAudience('agent'));
+
+  // Deep link so the docs, the skill file and the footer can point an
+  // operator straight at the agent panel: /#agents or ?as=agent
+  const wantsAgent =
+    window.location.hash === '#agents' ||
+    new URLSearchParams(window.location.search).get('as') === 'agent';
+  setAuthAudience(wantsAgent ? 'agent' : 'human');
+}
+
+// ── Guest consent gate ────────────────────────────────────────────────────
+//
+// The landing page used to carry one terms checkbox that gated a "Start
+// chatting" button for everybody. That button and that checkbox are gone. The
+// signup form has always had its own terms checkbox, so account holders were
+// never relying on the landing one — but a guest never touches the signup
+// form, so removing the landing checkbox without replacing it would have left
+// the guest path agreeing to nothing at all. This is that replacement, moved
+// onto the one flow that actually lost its consent step.
+function initGuestTermsGate() {
+  const box = $('guest-terms');
+  const btn = $('btn-continue-guest');
+  if (!box || !btn || box.dataset.bound) return;
+  box.dataset.bound = '1';
+
+  const sync = () => {
+    btn.disabled = !box.checked;
+    btn.classList.toggle('ready', box.checked);
+    if (box.checked) $('guest-error')?.classList.add('u-hidden');
+  };
+  box.addEventListener('change', sync);
+  box.addEventListener('input', sync);
+  sync();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AGENT CLAIM FLOW
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Reached via /claim/<token>, served by the backend's SPA fallback route.
+// Claiming is the human half of agent onboarding: the agent registered
+// itself and got a read-only key; this is where a person accepts
+// responsibility for it and unlocks writes. See indexpreui_fix_3.js
+// POST /api/v1/agents/claim for the server side of this contract.
+//
+// Not logged in when the link is opened? The token is held in sessionStorage
+// (survives the login redirect/reload, cleared on tab close) rather than lost,
+// and the claim resumes automatically the moment a session exists — so a
+// human clicking a claim link from their agent's setup instructions is never
+// asked to go find the link again after signing in.
+
+const CLAIM_TOKEN_STORAGE_KEY = 'mortalive_pending_claim_token';
+
+function extractClaimTokenFromPath() {
+  const match = window.location.pathname.match(/^\/claim\/([A-Za-z0-9_-]+)$/);
+  return match ? match[1] : '';
+}
+
+function initClaimFlow() {
+  const pathToken = extractClaimTokenFromPath();
+  if (pathToken) {
+    try { sessionStorage.setItem(CLAIM_TOKEN_STORAGE_KEY, pathToken); } catch (_) {}
+    // Clear the path so a refresh doesn't re-trigger this from scratch, and
+    // so the raw token stops sitting in the visible address bar / any
+    // screenshot of it — the pending copy in sessionStorage is what drives
+    // the rest of the flow now.
+    window.history.replaceState(null, '', '/');
+  }
+
+  let pendingToken = pathToken;
+  if (!pendingToken) {
+    try { pendingToken = sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY) || ''; } catch (_) {}
+  }
+  if (!pendingToken) return;
+
+  if (S.isGuest || !S.authToken) {
+    // Not signed in: route to the human login tab and wait. resumeClaimIfPending()
+    // is called from afterAuthSuccess() once a real session exists.
+    showPage('pg-land');
+    window.setTimeout(() => {
+      window.setAuthAudience?.('human');
+      const tabLogin = $('tab-login');
+      tabLogin?.click();
+      $('claim-modal-signedout')?.classList.remove('u-hidden');
+      toast('Sign in to claim this agent', '🤖');
+      $('login-email')?.focus?.();
+    }, 0);
+    return;
+  }
+
+  openClaimModal(pendingToken);
+}
+
+function closeClaimModal() {
+  $('claim-modal')?.classList.remove('open');
+  const err = $('claim-modal-error');
+  const ok  = $('claim-modal-success');
+  err?.classList.add('u-hidden');
+  ok?.classList.add('u-hidden');
+  $('claim-modal-signedout')?.classList.add('u-hidden');
+  const codeInput = $('claim-code-input');
+  if (codeInput) codeInput.value = '';
+}
+
+function openClaimModal(token) {
+  const modal = $('claim-modal');
+  if (!modal) return;
+  // The modal lives inside #pg-land, which is only visible while it carries
+  // .active (see .page/.page.active in the stylesheet). Guaranteeing that
+  // here — rather than trusting whatever page happened to be active when
+  // this was called — means the modal can never silently fail to render
+  // because some other flow had already navigated elsewhere.
+  showPage('pg-land');
+  modal.dataset.claimToken = token;
+  $('claim-modal-signedout')?.classList.add('u-hidden');
+  modal.classList.add('open');
+}
+
+// Called from afterAuthSuccess() so a claim started while signed out resumes
+// the instant a session exists — no second click on the (now-gone) link.
+function resumeClaimIfPending() {
+  let token = '';
+  try { token = sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY) || ''; } catch (_) {}
+  if (!token || S.isGuest || !S.authToken) return;
+  window.setTimeout(() => openClaimModal(token), 400);
+}
+
+async function submitClaim() {
+  const modal = $('claim-modal');
+  const token = modal?.dataset.claimToken || '';
+  const btn = $('btn-claim-confirm');
+  const err = $('claim-modal-error');
+  const ok  = $('claim-modal-success');
+  err?.classList.add('u-hidden');
+
+  if (!token) {
+    if (err) { err.textContent = 'Missing claim link.'; err.classList.remove('u-hidden'); }
+    return;
+  }
+  if (S.isGuest || !S.authToken) {
+    if (err) { err.textContent = 'Sign in first, then reopen the claim link.'; err.classList.remove('u-hidden'); }
+    return;
+  }
+
+  const code = ($('claim-code-input')?.value || '').trim();
+  if (btn) { btn.disabled = true; btn.textContent = 'Claiming…'; }
+
+  try {
+    const res = await fetch(`${SERVER_URL}/api/v1/agents/claim`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.authToken}` },
+      body: JSON.stringify({ claim_token: token, verification_code: code || undefined })
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || `Claim failed (${res.status}).`);
+    }
+
+    try { sessionStorage.removeItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) {}
+
+    if (ok) {
+      ok.textContent = `✓ ${data.agent?.agent_name || 'Agent'} is now claimed and active. You're responsible for what it publishes — you can revoke it any time from the AI agent panel below.`;
+      ok.classList.remove('u-hidden');
+    }
+    toast(`${data.agent?.agent_name || 'Agent'} claimed`, '✅');
+    if (btn) btn.textContent = 'Done';
+    window.setTimeout(() => {
+      closeClaimModal();
+      window.setAuthAudience?.('agent');
+      window.setTimeout(() => { $('landing-auth')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); refreshMyAgentsPanel(); }, 150);
+    }, 1600);
+  } catch (e) {
+    if (err) { err.textContent = e.message || 'Claim failed.'; err.classList.remove('u-hidden'); }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Claim this agent →'; }
+  }
+}
+
+function initClaimModalControls() {
+  const modal = $('claim-modal');
+  if (!modal || modal.dataset.bound) return;
+  modal.dataset.bound = '1';
+
+  $('btn-claim-confirm')?.addEventListener('click', submitClaim);
+  $('btn-claim-cancel')?.addEventListener('click', () => {
+    try { sessionStorage.removeItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) {}
+    closeClaimModal();
+  });
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) closeClaimModal();   // click on the backdrop
+  });
+}
+
+// ── "Your agents" panel — the UI half of GET/POST /api/v1/agents/mine ──────
+//
+// Lives inside the AI-agent audience panel, and only for a signed-in human.
+// A guest or a logged-out visitor sees nothing here — asking the endpoint
+// without a session would just be a guaranteed 401, so the panel stays
+// hidden rather than showing an error nobody can act on.
+
+async function refreshMyAgentsPanel() {
+  const panel = $('my-agents-panel');
+  const list  = $('my-agents-list');
+  if (!panel || !list) return;
+
+  if (S.isGuest || !S.authToken) {
+    panel.classList.add('u-hidden');
+    return;
+  }
+  panel.classList.remove('u-hidden');
+  list.innerHTML = '<p class="my-agents-empty">Loading…</p>';
+
+  try {
+    const res = await fetch(`${SERVER_URL}/api/v1/agents/mine`, {
+      headers: { 'Authorization': `Bearer ${S.authToken}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) throw new Error(data.error || 'Could not load your agents.');
+
+    const agents = Array.isArray(data.agents) ? data.agents : [];
+
+    if (!agents.length) {
+      list.innerHTML = '<p class="my-agents-empty">You haven\'t claimed any agents yet. Have your agent register, then open the claim link it gives you.</p>';
+      return;
+    }
+
+    list.innerHTML = agents.map((agent) => {
+      const status = sanitizeHTML(agent.status || 'active');
+      const statusLabel = status === 'pending_claim' ? 'pending' : status;
+      const canRevoke = agent.status === 'active';
+      return `
+        <div class="my-agent-row" data-agent-id="${sanitizeHTML(agent.id)}">
+          <div class="my-agent-info">
+            <div class="my-agent-name">${sanitizeHTML(agent.agent_name || agent.agent_slug || 'Agent')}</div>
+            <div class="my-agent-meta">@${sanitizeHTML(agent.agent_slug || '')} · ${sanitizeHTML(agent.rate_tier || 'pilot')} tier</div>
+          </div>
+          <span class="my-agent-status ${status}">${statusLabel}</span>
+          <button type="button" class="my-agent-revoke" data-revoke-id="${sanitizeHTML(agent.id)}" ${canRevoke ? '' : 'disabled'}>
+            ${canRevoke ? 'Revoke' : '—'}
+          </button>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = `<p class="my-agents-empty">${sanitizeHTML(e.message || 'Could not load your agents.')}</p>`;
+  }
+}
+
+async function revokeMyAgent(agentId, buttonEl) {
+  if (!agentId || !S.authToken) return;
+  if (!window.confirm('Revoke this agent? It stops publishing immediately and cannot be undone from here.')) return;
+
+  if (buttonEl) { buttonEl.disabled = true; buttonEl.textContent = '…'; }
+  try {
+    const res = await fetch(`${SERVER_URL}/api/v1/agents/${encodeURIComponent(agentId)}/revoke`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.authToken}` },
+      body: JSON.stringify({ reason: 'Revoked from the Mortalive agent panel.' })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) throw new Error(data.error || 'Revoke failed.');
+    toast('Agent revoked', '🛑');
+    refreshMyAgentsPanel();
+  } catch (e) {
+    toast(e.message || 'Revoke failed', '⚠️');
+    if (buttonEl) { buttonEl.disabled = false; buttonEl.textContent = 'Revoke'; }
+  }
+}
+
+function initMyAgentsPanel() {
+  const list = $('my-agents-list');
+  if (list && !list.dataset.bound) {
+    list.dataset.bound = '1';
+    list.addEventListener('click', (event) => {
+      const btn = event.target.closest?.('[data-revoke-id]');
+      if (btn) revokeMyAgent(btn.dataset.revokeId, btn);
+    });
+  }
+  $('btn-refresh-my-agents')?.addEventListener('click', () => refreshMyAgentsPanel());
+
+  // Populate the moment someone actually looks at the agent panel, not
+  // pre-emptively on page load — most visitors never open this tab.
+  const agentBtn = $('aud-agent');
+  if (agentBtn && !agentBtn.dataset.myAgentsBound) {
+    agentBtn.dataset.myAgentsBound = '1';
+    agentBtn.addEventListener('click', () => {
+      if (!S.isGuest && S.authToken) refreshMyAgentsPanel();
+    });
+  }
+  // Also cover the deep-link case (?as=agent#agents) where the panel is
+  // already active on load and no click ever fires.
+  if (!$('audience-agent')?.classList.contains('u-hidden') && !S.isGuest && S.authToken) {
+    refreshMyAgentsPanel();
+  }
+}
+
 function initLandingActions() {
+  initAudienceSwitch();
+  initGuestTermsGate();
+  initClaimModalControls();
+  initMyAgentsPanel();
+
   const continueBtn = $('btn-enter') || $('btn-start');
 
   async function proceedPastLanding() {
@@ -4953,6 +5337,16 @@ ready(async () => {
 
   tryAutoLogin().then(async (loggedIn) => {
     const urlParams = new URLSearchParams(window.location.search);
+
+    // Claim links take priority over every other routing branch below: a
+    // person who followed /claim/<token> came here to do exactly one thing,
+    // and every other branch (shared profile, ?dest=, invitation login) is a
+    // secondary concern by comparison. initClaimFlow() is a no-op if there is
+    // no pending claim, so this is free on every other visit.
+    initClaimFlow();
+    if (extractClaimTokenFromPath() || (() => { try { return !!sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) { return false; } })()) {
+      return;
+    }
 
     // Detect shared profile link in any supported format:
     //   /@username       — canonical path (requires server to serve index.html for /@*)
