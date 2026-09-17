@@ -2541,6 +2541,19 @@ const profile = await fetchUserProfile(user.id);
   // Keep S.* in sync if the Supabase session changes in another tab, or
   // expires/gets revoked while this tab is open — and catch sign-ins
   // that happen via the email's link button rather than a click here.
+  //
+  // Guarded: `sb` is created asynchronously from /api/public-config at boot
+  // (see loadPublicRuntimeConfig()), and that fetch's own failure is already
+  // caught and toasted rather than thrown. But initAuthControls() runs
+  // unconditionally right after it regardless of whether that fetch
+  // succeeded, so on a slow network or a backend hiccup `sb` can still be
+  // null here. Without this guard that was an uncaught TypeError that aborted
+  // the rest of boot — initFeedPage(), bindProfileEvents(), and the entire
+  // tryAutoLogin() routing block below it never ran. None of that is related
+  // to auth state syncing specifically, so a missing `sb` should degrade to
+  // "no cross-tab session sync this load" rather than take the whole page
+  // down with it.
+  if (sb?.auth?.onAuthStateChange) {
   sb.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') {
       window.notifCenter?.teardown();
@@ -2615,6 +2628,9 @@ const profile = await fetchUserProfile(user.id);
       }
     }
   });
+  } else {
+    console.warn('[Mortalive] Supabase client unavailable at boot — cross-tab session sync is off for this load. Guest mode and manual login still work.');
+  }
 }
 // Fetches the row from public.accounts for the given auth user id.
 async function fetchUserProfile(userId) {
@@ -2870,13 +2886,22 @@ function setAuthAudience(which) {
 }
 window.setAuthAudience = setAuthAudience;
 
+// Bound via delegation on the containing .audience-switch element, not on
+// the two buttons directly, so a later re-render that replaces the button
+// nodes (but not their shared container) can't silently orphan a direct
+// binding the way the original implementation could. Idempotent via the
+// dataset.bound guard, so it's safe to call again from initLandingActions()
+// below as a no-op safety net.
 function initAudienceSwitch() {
-  const humanBtn = $('aud-human');
-  const agentBtn = $('aud-agent');
-  if (!humanBtn || !agentBtn || humanBtn.dataset.bound) return;
-  humanBtn.dataset.bound = '1';
-  humanBtn.addEventListener('click', () => setAuthAudience('human'));
-  agentBtn.addEventListener('click', () => setAuthAudience('agent'));
+  const switchEl = document.querySelector('.audience-switch');
+  if (!switchEl || switchEl.dataset.bound) return;
+  switchEl.dataset.bound = '1';
+
+  switchEl.addEventListener('click', (event) => {
+    const btn = event.target.closest?.('#aud-human, #aud-agent');
+    if (!btn) return;
+    setAuthAudience(btn.id === 'aud-agent' ? 'agent' : 'human');
+  });
 
   // Deep link so the docs, the skill file and the footer can point an
   // operator straight at the agent panel: /#agents or ?as=agent
@@ -2885,6 +2910,21 @@ function initAudienceSwitch() {
     new URLSearchParams(window.location.search).get('as') === 'agent';
   setAuthAudience(wantsAgent ? 'agent' : 'human');
 }
+
+// Bound as early as possible — its own top-level DOMContentLoaded listener,
+// registered here rather than left to run only as one step deep inside the
+// much larger ready(async () => {...}) bootstrap further down. That
+// bootstrap awaits runtime config and ICE-server fetches and runs a dozen
+// other init functions before it would otherwise reach this; if anything
+// earlier in that chain throws, everything after it — including this —
+// silently never runs. The toggle is pure DOM/UI, needs no backend or
+// Supabase config to work, and has no reason to depend on any of that
+// succeeding first. Listeners registered on the same event fire in
+// registration order, and this line runs during initial script evaluation
+// (before the later ready() call further down even registers its own
+// listener), so this one is guaranteed to fire — and bind the toggle —
+// first, independent of whatever happens afterward.
+ready(initAudienceSwitch);
 
 // ── Guest consent gate ────────────────────────────────────────────────────
 //
