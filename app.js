@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-08-31-v194-mobile-minimal-topisland'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-18-v195-mobile-messages-open-fix'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -6547,10 +6547,23 @@ function createContactConvItem(contact) {
       <div class="messages-conv-preview">${escapeHtml(preview)}</div>
     </div>`;
 
-  item.addEventListener('click', () => {
+  item.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
     document.querySelectorAll('.messages-conv-item').forEach(i => i.classList.remove('active'));
     item.classList.add('active');
-    loadDirectThread(contact);
+
+    // Always open the real DB-backed DM thread. The previous mobile-only
+    // renderer could change state without loading/opening the room, which
+    // made a tapped conversation appear unresponsive on phone.
+    try {
+      await openDbConversation(contact.id, 'direct');
+    } catch (err) {
+      console.warn('[Messages] conversation open failed:', err?.message || err);
+      // Keep the mobile UI responsive even if message hydration fails.
+      loadDirectThread(contact);
+      msgToast(err?.message || 'Could not open this conversation.', '⚠️');
+    }
   });
 
   return item;
@@ -6574,10 +6587,18 @@ function createConvItem(id, name, emoji, meta, isGroup = false) {
       <div class="messages-conv-preview">${escapeHtml(meta)}</div>
     </div>`;
 
-  item.addEventListener('click', () => {
+  item.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
     document.querySelectorAll('.messages-conv-item').forEach(i => i.classList.remove('active'));
     item.classList.add('active');
-    loadGroupThread(id);
+    try {
+      await openDbConversation(id, 'group');
+    } catch (err) {
+      console.warn('[Messages] group open failed:', err?.message || err);
+      loadGroupThread(id);
+      msgToast(err?.message || 'Could not open this group.', '⚠️');
+    }
   });
   return item;
 }
@@ -14976,9 +14997,14 @@ document.addEventListener('click', (event) => {
 
     e.preventDefault();
     e.stopImmediatePropagation();
+    item.classList.add('active');
     try {
       await openDbConversation(roomId, group ? 'group' : 'direct');
     } catch (err) {
+      // Even if DB hydration fails, switch to the visible second-pane/thread
+      // so the tap never looks like a dead click on mobile.
+      if (group) loadGroupThread(roomId);
+      else loadDirectThread(contact);
       msgToast(err?.message || 'Could not open conversation.', '⚠️');
     }
   }, true);
