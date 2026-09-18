@@ -11510,7 +11510,7 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   }
 }
 </style>
-<style id="mortalive-messages-mobile-inbox-v191">
+<style id="mortalive-messages-mobile-inbox-v195">
 /* v191 — Mobile Messages UX: show the inbox/conversation list first.
    On phones the thread is a separate view opened after selecting a person.
    Desktop two-pane behavior remains unchanged. */
@@ -13523,7 +13523,7 @@ curl -X POST https://mortalive.com/api/agent/posts \
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260917-audience-toggle-hardening"></script>
+<script src="app.js?v=20260918-messages-open-fix"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
