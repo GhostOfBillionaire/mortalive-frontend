@@ -11510,6 +11510,138 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
   }
 }
 </style>
+<style id="mortalive-messages-mobile-inbox-v191">
+/* v191 — Mobile Messages UX: show the inbox/conversation list first.
+   On phones the thread is a separate view opened after selecting a person.
+   Desktop two-pane behavior remains unchanged. */
+@media (max-width: 720px){
+  #pg-messages.active .messages-shell{
+    height: 100% !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    overflow: hidden !important;
+    flex-direction: column !important;
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+  }
+
+  /* Inbox is the default mobile view. */
+  #pg-messages.active .messages-sidebar{
+    display: flex !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    border-right: 0 !important;
+    border-bottom: 0 !important;
+    overflow: hidden !important;
+  }
+
+  #pg-messages.active .messages-main{
+    display: none !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    overflow: hidden !important;
+  }
+
+  /* Selecting a person switches to the thread; Back returns to the inbox. */
+  #pg-messages.active .messages-shell.thread-open .messages-sidebar{
+    display: none !important;
+  }
+  #pg-messages.active .messages-shell.thread-open .messages-main{
+    display: flex !important;
+  }
+
+  #pg-messages .messages-sidebar-header{
+    padding: 14px 16px 10px !important;
+    flex: 0 0 auto !important;
+  }
+
+  #pg-messages .messages-title{
+    font-size: 24px !important;
+  }
+
+  #pg-messages .messages-search-wrap{
+    margin: 0 14px 10px !important;
+    flex: 0 0 auto !important;
+  }
+
+  #pg-messages .messages-conv-list{
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 4px 10px calc(10px + env(safe-area-inset-bottom)) !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #pg-messages .messages-conv-item{
+    min-height: 68px !important;
+    padding: 10px 8px !important;
+    margin-bottom: 2px !important;
+    border-radius: 12px !important;
+  }
+
+  #pg-messages .messages-conv-ava{
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px !important;
+    min-height: 48px !important;
+    flex: 0 0 48px !important;
+    border-radius: 50% !important;
+    overflow: hidden !important;
+    aspect-ratio: 1 / 1 !important;
+  }
+
+  #pg-messages .messages-conv-ava img{
+    width: 100% !important;
+    height: 100% !important;
+    display: block !important;
+    object-fit: cover !important;
+    border-radius: 50% !important;
+  }
+
+  #pg-messages .messages-conv-meta{
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+  }
+
+  #pg-messages .messages-conv-name-row{
+    min-width: 0 !important;
+    gap: 8px !important;
+  }
+
+  #pg-messages .messages-conv-name{
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  #pg-messages .messages-conv-preview{
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  #pg-messages .messages-conv-time{
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+  }
+
+  #pg-messages .messages-list-empty{
+    margin: 18px 4px !important;
+  }
+
+  #pg-messages.active .messages-shell.thread-open .messages-main{
+    padding-bottom: env(safe-area-inset-bottom) !important;
+  }
+}
+</style>
 </head>
 <body class="di2-on-landing">
 <!-- ═══════════════════ MORTALIVE STARTUP SPLASH ═══════════════════ -->
