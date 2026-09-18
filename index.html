@@ -4344,10 +4344,30 @@ body.mortalive-progress-open .sakura-topbar {
 
 /* ── Identity: avatar + name + actions, NO cover overlap ── */
 .profile-identity{position:relative;padding:8px 20px 16px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:center;z-index:10}
-.profile-avatar-shell{position:relative;z-index:3;width:90px;height:90px;padding:3px;border-radius:26px;background:rgba(255,255,255,.94);box-shadow:0 6px 20px rgba(0,0,0,.13)}
-.profile-avatar-modern{width:100%;height:100%;border-radius:22px;display:grid;place-items:center;font-size:38px;font-weight:900;color:#fff;background:linear-gradient(135deg,var(--primary),var(--secondary));border:1px solid rgba(255,255,255,.38)}
+.profile-avatar-shell{position:relative;z-index:3;width:90px;height:90px;padding:3px;border-radius:50%;background:rgba(255,255,255,.94);box-shadow:0 6px 20px rgba(0,0,0,.13);overflow:hidden}
+.profile-avatar-modern{width:100%;height:100%;border-radius:50%;display:grid;place-items:center;font-size:38px;font-weight:900;color:#fff;background:linear-gradient(135deg,var(--primary),var(--secondary));border:1px solid rgba(255,255,255,.38);overflow:hidden}
+.profile-avatar-modern img{width:100%;height:100%;display:block;object-fit:cover;object-position:center;border-radius:50%}
 .profile-live-dot{position:absolute;right:2px;bottom:2px;width:14px;height:14px;border-radius:50%;background:var(--success);border:3px solid #fff}
 .profile-identity-copy{min-width:0}
+
+.avatar-crop-modal{position:fixed;inset:0;z-index:10050;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(8,10,14,.68);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.avatar-crop-modal.active{display:flex}
+.avatar-crop-backdrop{position:absolute;inset:0}
+.avatar-crop-dialog{position:relative;z-index:1;width:min(92vw,430px);padding:18px;border-radius:24px;background:#fff;border:1px solid var(--border-strong);box-shadow:0 24px 80px rgba(0,0,0,.24)}
+.avatar-crop-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.avatar-crop-head h2{font-size:18px;line-height:1.2;font-weight:900;letter-spacing:-.02em}
+.avatar-crop-head p{margin-top:5px;color:var(--on-surface-3);font-size:11.5px;line-height:1.45}
+.avatar-crop-close{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);color:var(--on-surface);font-size:22px;line-height:1}
+.avatar-crop-stage{width:min(78vw,320px);aspect-ratio:1;margin:2px auto 14px;border-radius:50%;overflow:hidden;background:#101216;box-shadow:0 0 0 1px rgba(0,0,0,.08),0 12px 30px rgba(0,0,0,.12)}
+#avatar-crop-canvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#avatar-crop-canvas:active{cursor:grabbing}
+.avatar-crop-controls{display:flex;align-items:center;gap:10px;padding:0 4px 14px;color:var(--on-surface-3);font-size:17px}
+.avatar-crop-controls input{flex:1;accent-color:var(--primary);cursor:pointer}
+.avatar-crop-actions{display:flex;justify-content:flex-end;gap:8px}
+.avatar-crop-btn{min-height:40px;padding:9px 15px;border-radius:999px;font-size:12px;font-weight:800}
+.avatar-crop-btn.secondary{background:var(--surface-2);color:var(--on-surface);border:1px solid var(--border)}
+.avatar-crop-btn.primary{background:linear-gradient(145deg,var(--primary),var(--secondary));color:#fff;box-shadow:0 6px 16px rgba(26,110,245,.22)}
+body.avatar-crop-open{overflow:hidden}
 .profile-name-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .profile-name-modern{font-size:24px;line-height:1.05;letter-spacing:-.05em;font-weight:900}
 .profile-handle-modern{margin-top:3px;color:var(--on-surface-3);font-size:13px}
@@ -4425,8 +4445,8 @@ body.mortalive-progress-open .sakura-topbar {
 @media(max-width:840px){
   #pg-profile .profile-wrap{width:min(100%,calc(100% - 12px));padding-top:7px}
   .profile-identity{grid-template-columns:auto minmax(0,1fr);align-items:center;gap:12px;padding-inline:14px}
-  .profile-avatar-shell{width:76px;height:76px;border-radius:22px}
-  .profile-avatar-modern{border-radius:18px;font-size:30px}
+  .profile-avatar-shell{width:76px;height:76px;border-radius:50%}
+  .profile-avatar-modern{border-radius:50%;font-size:30px}
   .profile-action-primary,.profile-action-secondary{flex:1}
   .profile-bio-row{padding:0 14px 12px}
   .profile-info-row{padding:0 14px 14px}
@@ -4848,11 +4868,18 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
   padding:18px 18px 0;
 }
 #pg-feed .post-avatar{
-  width:42px; height:42px; border-radius:50%; flex-shrink:0;
+  width:42px; height:42px; min-width:42px; min-height:42px;
+  aspect-ratio:1 / 1; flex:0 0 42px; align-self:flex-start;
+  position:relative; overflow:hidden; border-radius:50%;
   background:linear-gradient(135deg, var(--primary), var(--secondary));
   display:grid; place-items:center; font-size:18px;
   border:2px solid rgba(255,255,255,.9);
   box-shadow:0 0 0 2px var(--primary-alpha);
+}
+#pg-feed .post-avatar img{
+  width:100%; height:100%; min-width:0; min-height:0;
+  display:block; object-fit:cover; object-position:center;
+  aspect-ratio:1 / 1; border-radius:50%;
 }
 #pg-feed .post-meta{ flex:1; min-width:0; }
 #pg-feed .post-author{ font-size:14px; font-weight:700; display:flex; align-items:center; gap:6px; }
