@@ -6582,6 +6582,11 @@ function createConvItem(id, name, emoji, meta, isGroup = false) {
   return item;
 }
 
+function setMessagesMobileThreadState(isOpen) {
+  const shell = $('pg-messages')?.querySelector('.messages-shell');
+  if (shell) shell.classList.toggle('thread-open', !!isOpen);
+}
+
 function loadDirectThread(contact) {
   const empty = $('msg-thread-empty');
   const active = $('msg-thread-active');
@@ -6619,6 +6624,7 @@ function loadDirectThread(contact) {
 
   empty.style.display = 'none';
   active.style.display = 'flex';
+  setMessagesMobileThreadState(true);
 
   renderDirectMessages(contact.id);
   $('msg-composer-input')?.focus();
@@ -6646,6 +6652,7 @@ function loadGroupThread(groupId) {
 
   empty.style.display = 'none';
   active.style.display = 'flex';
+  setMessagesMobileThreadState(true);
 
   renderMessages(groupId);
   $('msg-composer-input')?.focus();
@@ -6692,6 +6699,7 @@ function renderMessages(convId) {
 }
 
 function closeThread() {
+  setMessagesMobileThreadState(false);
   const empty = $('msg-thread-empty');
   const active = $('msg-thread-active');
   if (empty) empty.style.display = 'flex';
@@ -11119,13 +11127,285 @@ function applyProfileAvatar(url, name) {
   avatar.appendChild(img);
 }
 
+/*
+ * Profile-avatar cropper
+ * ─────────────────────────────────────────────────────────────────────────
+ * The original selected file is NEVER sent to storage. The user gets a
+ * circular crop frame, can drag the image and zoom it, and only the resulting
+ * 512×512 cropped avatar is uploaded. This keeps profile photos small and
+ * prevents the full-size source image from being stored as the avatar.
+ */
+let _avatarCropState = null;
+
+function ensureAvatarCropModal() {
+  let modal = $('avatar-crop-modal');
+  if (modal) return modal;
+
+  modal = document.createElement('div');
+  modal.id = 'avatar-crop-modal';
+  modal.className = 'avatar-crop-modal';
+  modal.setAttribute('aria-hidden', 'true');
+  modal.innerHTML = `
+    <div class="avatar-crop-backdrop" data-avatar-crop-cancel></div>
+    <section class="avatar-crop-dialog" role="dialog" aria-modal="true" aria-labelledby="avatar-crop-title">
+      <div class="avatar-crop-head">
+        <div>
+          <h2 id="avatar-crop-title">Crop profile photo</h2>
+          <p>Drag to position · Use the slider to zoom</p>
+        </div>
+        <button type="button" class="avatar-crop-close" data-avatar-crop-cancel aria-label="Close cropper">×</button>
+      </div>
+      <div class="avatar-crop-stage">
+        <canvas id="avatar-crop-canvas" width="320" height="320" aria-label="Circular profile photo crop area"></canvas>
+      </div>
+      <div class="avatar-crop-controls">
+        <span aria-hidden="true">−</span>
+        <input id="avatar-crop-zoom" type="range" min="1" max="3" step="0.01" value="1" aria-label="Zoom profile photo">
+        <span aria-hidden="true">+</span>
+      </div>
+      <div class="avatar-crop-actions">
+        <button type="button" class="avatar-crop-btn secondary" data-avatar-crop-cancel>Cancel</button>
+        <button type="button" class="avatar-crop-btn primary" id="avatar-crop-save">Use photo</button>
+      </div>
+    </section>
+  `;
+  document.body.appendChild(modal);
+
+  modal.querySelectorAll('[data-avatar-crop-cancel]').forEach((el) => {
+    el.addEventListener('click', () => closeAvatarCrop(false));
+  });
+  $('avatar-crop-save')?.addEventListener('click', async () => {
+    try {
+      const cropped = await renderAvatarCropBlob();
+      closeAvatarCrop(false);
+      if (cropped) document.dispatchEvent(new CustomEvent('mortalive-avatar-cropped', { detail: { blob: cropped } }));
+    } catch (e) {
+      console.warn('[Profile] crop failed:', e);
+      toast(e?.message || 'Could not crop that photo.', '⚠️');
+    }
+  });
+  $('avatar-crop-zoom')?.addEventListener('input', (e) => {
+    if (!_avatarCropState) return;
+    _avatarCropState.zoom = Number(e.target.value) || 1;
+    drawAvatarCrop();
+  });
+
+  const canvas = $('avatar-crop-canvas');
+  if (canvas) {
+    const start = (e) => {
+      if (!_avatarCropState) return;
+      e.preventDefault();
+      const point = avatarCropPoint(e, canvas);
+      _avatarCropState.dragging = true;
+      _avatarCropState.lastX = point.x;
+      _avatarCropState.lastY = point.y;
+      canvas.setPointerCapture?.(e.pointerId);
+    };
+    const move = (e) => {
+      if (!_avatarCropState?.dragging) return;
+      e.preventDefault();
+      const point = avatarCropPoint(e, canvas);
+      const dx = point.x - _avatarCropState.lastX;
+      const dy = point.y - _avatarCropState.lastY;
+      _avatarCropState.offsetX += dx;
+      _avatarCropState.offsetY += dy;
+      _avatarCropState.lastX = point.x;
+      _avatarCropState.lastY = point.y;
+      clampAvatarCropOffset();
+      drawAvatarCrop();
+    };
+    const end = (e) => {
+      if (_avatarCropState) _avatarCropState.dragging = false;
+      try { canvas.releasePointerCapture?.(e.pointerId); } catch (_) {}
+    };
+    canvas.addEventListener('pointerdown', start);
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', end);
+    canvas.addEventListener('pointercancel', end);
+    canvas.addEventListener('wheel', (e) => {
+      if (!_avatarCropState) return;
+      e.preventDefault();
+      const zoom = Number(_avatarCropState.zoom) || 1;
+      _avatarCropState.zoom = Math.max(1, Math.min(3, zoom + (e.deltaY < 0 ? 0.06 : -0.06)));
+      if ($('avatar-crop-zoom')) $('avatar-crop-zoom').value = String(_avatarCropState.zoom);
+      clampAvatarCropOffset();
+      drawAvatarCrop();
+    }, { passive: false });
+  }
+
+  return modal;
+}
+
+function avatarCropPoint(e, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / Math.max(1, rect.width);
+  const scaleY = canvas.height / Math.max(1, rect.height);
+  return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+}
+
+function clampAvatarCropOffset() {
+  if (!_avatarCropState) return;
+  const s = _avatarCropState;
+  const scale = s.baseScale * s.zoom;
+  const drawW = s.image.width * scale;
+  const drawH = s.image.height * scale;
+  const maxX = Math.max(0, (s.canvasSize - drawW) / 2);
+  const maxY = Math.max(0, (s.canvasSize - drawH) / 2);
+  const minX = Math.min(0, (s.canvasSize - drawW) / 2);
+  const minY = Math.min(0, (s.canvasSize - drawH) / 2);
+  s.offsetX = Math.max(minX, Math.min(maxX, s.offsetX));
+  s.offsetY = Math.max(minY, Math.min(maxY, s.offsetY));
+}
+
+function drawAvatarCrop() {
+  const s = _avatarCropState;
+  const canvas = $('avatar-crop-canvas');
+  if (!s || !canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const size = s.canvasSize;
+  const scale = s.baseScale * s.zoom;
+  const drawW = s.image.width * scale;
+  const drawH = s.image.height * scale;
+  const x = (size - drawW) / 2 + s.offsetX;
+  const y = (size - drawH) / 2 + s.offsetY;
+
+  ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = '#101216';
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2 - 2, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.drawImage(s.image, x, y, drawW, drawH);
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2 - 2, 0, Math.PI * 2);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(255,255,255,.92)';
+  ctx.stroke();
+}
+
+function openAvatarCrop(file) {
+  validatePhotoFile(file);
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      try {
+        URL.revokeObjectURL(objectUrl);
+        const modal = ensureAvatarCropModal();
+        const canvasSize = 320;
+        const baseScale = canvasSize / Math.min(image.width, image.height);
+        _avatarCropState = {
+          image,
+          canvasSize,
+          baseScale,
+          zoom: 1,
+          offsetX: 0,
+          offsetY: 0,
+          dragging: false,
+          lastX: 0,
+          lastY: 0,
+          resolve,
+          reject
+        };
+        if ($('avatar-crop-zoom')) $('avatar-crop-zoom').value = '1';
+        modal.classList.add('active');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('avatar-crop-open');
+        clampAvatarCropOffset();
+        drawAvatarCrop();
+      } catch (e) {
+        reject(e);
+      }
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Could not read that image.'));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function closeAvatarCrop(resolveValue = false) {
+  const s = _avatarCropState;
+  const modal = $('avatar-crop-modal');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.setAttribute('aria-hidden', 'true');
+  }
+  document.body.classList.remove('avatar-crop-open');
+  _avatarCropState = null;
+  if (s?.resolve) s.resolve(resolveValue || null);
+}
+
+async function renderAvatarCropBlob() {
+  const s = _avatarCropState;
+  if (!s) return null;
+  const output = document.createElement('canvas');
+  output.width = 512;
+  output.height = 512;
+  const ctx = output.getContext('2d');
+  if (!ctx) throw new Error('Your browser cannot create the cropped image.');
+
+  const scale = s.baseScale * s.zoom * (512 / s.canvasSize);
+  const drawW = s.image.width * scale;
+  const drawH = s.image.height * scale;
+  const x = (512 - drawW) / 2 + s.offsetX * (512 / s.canvasSize);
+  const y = (512 - drawH) / 2 + s.offsetY * (512 / s.canvasSize);
+
+  ctx.clearRect(0, 0, 512, 512);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(256, 256, 255, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.drawImage(s.image, x, y, drawW, drawH);
+  ctx.restore();
+
+  const blob = await new Promise((resolve) => {
+    output.toBlob((value) => resolve(value), 'image/webp', 0.9);
+  });
+  if (blob) return blob;
+
+  return await new Promise((resolve) => {
+    output.toBlob((value) => resolve(value), 'image/png');
+  });
+}
+
+async function prepareCroppedAvatarFile(file) {
+  const blob = await new Promise((resolve, reject) => {
+    let settled = false;
+    document.addEventListener('mortalive-avatar-cropped', (e) => {
+      if (settled) return;
+      settled = true;
+      resolve(e.detail?.blob || null);
+    }, { once: true });
+    openAvatarCrop(file).catch((error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
+  });
+  if (!blob) return null;
+  const type = blob.type === 'image/png' ? 'image/png' : 'image/webp';
+  const ext = type === 'image/png' ? 'png' : 'webp';
+  const cropped = new File([blob], `profile-avatar-${Date.now()}.${ext}`, { type, lastModified: Date.now() });
+  return cropped;
+}
+
 async function changeProfilePhoto() {
   if (S.isGuest || !S.userId || !sb) { toast('Sign in to change your profile photo.', '🔒'); return; }
   const input = $('profile-avatar-input');
   const file = input?.files?.[0];
   if (!file) return;
   try {
-    const media = await uploadPhotoFile(file, 'avatar');
+    const croppedFile = await prepareCroppedAvatarFile(file);
+    if (!croppedFile) return;
+    const media = await uploadPhotoFile(croppedFile, 'avatar');
     const { error } = await sb.from('accounts').update({ avatar_url: media.url, updated_at: new Date().toISOString() }).eq('id', S.userId);
     if (error) throw error;
     S.accountData = { ...(S.accountData || {}), avatar_url: media.url };
