@@ -14985,6 +14985,16 @@ document.addEventListener('click', (event) => {
   window.dbRenderConversationList = dbRenderConversationList;
   window.openRandomUserMessageModal = openRandomUserMessageModal;
   window.closeRandomUserMessageModal = closeRandomUserMessageModal;
+  // Called from createContactConvItem/createConvItem's own click handlers
+  // (outside this IIFE) as their primary path, before those handlers ever
+  // run in practice a document-level capture listener below already wins
+  // the click via stopImmediatePropagation() and calls this correctly —
+  // but without this export, if that listener is ever removed or changed,
+  // those two call sites throw ReferenceError and silently fall back to
+  // the old unreliable loadDirectThread/loadGroupThread path with no clear
+  // signal why. Exporting closes that landmine the same way the seven
+  // functions above already are.
+  window.openDbConversation = openDbConversation;
 
   // Route conversation item clicks to DB-backed rooms.
   document.addEventListener('click', async e => {
