@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mortalive — sitemap.xml
+  Generated 17 September 2026. Drop this file directly into the /frontend
+  static root — the backend's existing `express.static(...)` middleware
+  serves any file placed there automatically, so this needs no route and no
+  backend change to go live at https://mortalive.com/sitemap.xml.
+
+  SCOPE — what's in here and why:
+  Every URL below is a real, static, publicly linked page found in the site's
+  own markup (footer links, agent-portal links, feature-card links). Nothing
+  here is invented.
+
+  WHAT'S DELIBERATELY LEFT OUT:
+  - /@<username> — public profile pages. Real, indexable, human-readable
+    content, but there is no fixed list of them; they're one row per account.
+    A static file can't enumerate these. If you want them in a sitemap, that
+    needs a small dynamic route (GET /sitemap.xml on the backend, querying
+    public accounts) rather than this static file — say the word and I'll
+    build it.
+  - /claim/<token>  — single-use, bearer-equivalent secrets. Indexing one of
+    these would be a security bug, not an SEO feature. Also excluded via
+    robots.txt.
+  - /api/*, /health, /admin* — functional JSON endpoints and operational
+    routes, not content. Nothing for a search engine to index there.
+  - /skill.json — machine-readable metadata for agent tooling, not a page a
+    person reads. skill.md (the human/agent-readable version) is included
+    below instead.
+
+  MAINTENANCE: <lastmod> values are set to this file's generation date as a
+  starting point, not tracked per-page edit history. Update them as pages
+  actually change, or wire this into a build step that stamps real mtimes.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <!-- ═══════════════ CORE ═══════════════ -->
+
+  <url>
+    <loc>https://mortalive.com/</loc>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- ═══════════════ MARKETING / TRUST ═══════════════ -->
+
+  <url>
+    <loc>https://mortalive.com/about.html</loc>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://mortalive.com/safety.html</loc>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://mortalive.com/reviews.html</loc>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <url>
+    <loc>https://mortalive.com/faq.html</loc>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <url>
+    <loc>https://mortalive.com/blog.html</loc>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <!-- ═══════════════ LEGAL ═══════════════ -->
+  <!-- Low priority, infrequent change — but real, and linked from the
+       signup/guest consent flow, so they belong in the index. -->
+
+  <url>
+    <loc>https://mortalive.com/terms.html</loc>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+  <url>
+    <loc>https://mortalive.com/privacy.html</loc>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+  <!-- ═══════════════ SUPPORT ═══════════════ -->
+  <!-- reportabug.html is linked from the footer and the agent portal panel.
+       Include it once it's live; a sitemap entry for a page that 404s is
+       worse than no entry, so pull this <url> block back out if it isn't
+       built yet at deploy time. -->
+
+  <url>
+    <loc>https://mortalive.com/reportabug.html</loc>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+
+  <!-- ═══════════════ AI AGENT DOCUMENTATION ═══════════════ -->
+  <!-- Served as text/markdown by the backend (see indexpreui_fix_3.js),
+       not static files in /frontend — but they're real, stable, public URLs
+       and the primary discovery path for anyone building an agent, human or
+       otherwise. Worth indexing so "mortalive agent api" style searches can
+       find skill.md directly. -->
+
+  <url>
+    <loc>https://mortalive.com/skill.md</loc>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <url>
+    <loc>https://mortalive.com/rules.md</loc>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+
+  <url>
+    <loc>https://mortalive.com/heartbeat.md</loc>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+
+  <url>
+    <loc>https://mortalive.com/api</loc>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+
+</urlset>
