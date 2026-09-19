@@ -7369,6 +7369,7 @@ function initArchiveMediaTelemetry(root = document) {
 let _feedPerformanceObserver = null;
 let _feedPerformanceRoot = null;
 let _feedPerformanceBound = false;
+let _feedAutoplayObserver = null;
 
 // Global sound preference for in-feed video autoplay, the way Reels-style
 // feeds work: one shared on/off state that carries across every video as
@@ -7418,24 +7419,6 @@ function initFeedPerformance(root = $('feed-posts')) {
           video.dataset.mortaliveNearViewport = '1';
           // Let the browser decide whether to fetch; do not force autoplay.
           if (video.preload === 'none') video.preload = 'metadata';
-
-          // Autoplay/pause-on-scroll applies only to standard in-feed video
-          // posts (.feed-video-thumb) — the reels shelf uses its own
-          // always-visible preview + full-viewer model and isn't touched
-          // here. 0.5 (half the card visible) is deliberately higher than
-          // the 0.10 "keep it warm" threshold above, so a video barely
-          // peeking into view doesn't start playing yet.
-          if (video.classList.contains('feed-video-thumb')) {
-            if (entry.intersectionRatio >= 0.5) {
-              if (video.paused) {
-                video.muted = !_feedSoundEnabled;
-                const playResult = video.play();
-                if (playResult?.catch) playResult.catch(() => {});
-              }
-            } else if (!video.paused) {
-              video.pause();
-            }
-          }
         } else {
           video.dataset.mortaliveNearViewport = '0';
           if (!video.paused) video.pause();
@@ -7450,6 +7433,34 @@ function initFeedPerformance(root = $('feed-posts')) {
     _feedPerformanceObserver.observe(card);
   });
 
+  // Separate observer, deliberately not sharing the 600px rootMargin above:
+  // that margin exists to pre-warm video metadata well before a card is
+  // actually on screen, which is exactly wrong for deciding when to start
+  // playing it — it would autoplay (and apply the sound preference) while
+  // the video is still off-screen. This one uses the real viewport (no
+  // margin) and fires at the lowest possible threshold, so playback starts
+  // the instant any part of the video is actually visible, and stops the
+  // instant none of it is.
+  if (!_feedAutoplayObserver) {
+    _feedAutoplayObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const video = entry.target;
+        if (entry.isIntersecting) {
+          if (video.paused) {
+            video.muted = !_feedSoundEnabled;
+            const playResult = video.play();
+            if (playResult?.catch) playResult.catch(() => {});
+          }
+        } else if (!video.paused) {
+          video.pause();
+        }
+      });
+    }, { threshold: [0], rootMargin: '0px' });
+  }
+  root.querySelectorAll(':scope > .post-card .feed-video-thumb').forEach((video) => {
+    _feedAutoplayObserver.observe(video);
+  });
+
   if (!_feedPerformanceBound) {
     _feedPerformanceBound = true;
     const mutationObserver = new MutationObserver(() => {
@@ -7458,6 +7469,12 @@ function initFeedPerformance(root = $('feed-posts')) {
         if (!card.dataset.mortalivePerfObserved) {
           card.dataset.mortalivePerfObserved = '1';
           _feedPerformanceObserver.observe(card);
+        }
+      });
+      _feedPerformanceRoot.querySelectorAll(':scope > .post-card .feed-video-thumb').forEach((video) => {
+        if (!video.dataset.mortaliveAutoplayObserved) {
+          video.dataset.mortaliveAutoplayObserved = '1';
+          _feedAutoplayObserver.observe(video);
         }
       });
     });
@@ -9009,7 +9026,7 @@ function buildFeedPostCardHTML(post) {
   const engagement = engagementFor(post.id);
   const durationSeconds = Number(post?.post_meta?.duration_seconds) || 0;
   const bodyHTML = post.post_type === 'video' && postMedia.length
-    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-video-play-btn">▶</span><button type="button" class="feed-video-mute-btn" aria-label="${_feedSoundEnabled ? 'Mute' : 'Unmute'}">${_feedSoundEnabled ? '🔊' : '🔇'}</button>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
+    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><button type="button" class="feed-video-mute-btn" aria-label="${_feedSoundEnabled ? 'Mute' : 'Unmute'}">${_feedSoundEnabled ? '🔊' : '🔇'}</button>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
     : post.post_type === 'reel' && postMedia.length
       ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
       : postMedia.length
