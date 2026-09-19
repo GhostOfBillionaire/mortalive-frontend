@@ -5392,9 +5392,22 @@ ready(async () => {
     //   /@username       — canonical path (requires server to serve index.html for /@*)
     //   /#@username      — hash fallback (no server config needed)
     //   /?user=username  — legacy query param
+    // The hash form must actually start with #@ — a bare hash like #agents,
+    // #feed, #login, #messages etc. is a page-routing hash (handled below,
+    // or elsewhere) and must NOT fall through here. The previous version
+    // used hash.replace(/^#@/, '') and treated whatever was left as a
+    // candidate username even when nothing was stripped, so any bare-hash
+    // link (e.g. the agent-portal link, /?as=agent#agents) was misread as
+    // a shared-profile link for the (nonexistent) user "#agents" — hence
+    // the "Sign in to view @#agents's profile" popup, and, since that path
+    // calls showPage('pg-auth'), the audience toggle also got silently
+    // reset to 'human' as that page's own side effect. Matching on the
+    // literal #@ prefix instead means only a genuine shared-profile link
+    // produces a hashUsername at all.
     const pathMatch = window.location.pathname.match(/^\/@([^/]+)$/);
     const pathUsername = pathMatch ? decodeURIComponent(pathMatch[1]).replace(/^@/, '') : '';
-    const hashUsername = (window.location.hash || '').replace(/^#@/, '').trim();
+    const hashProfileMatch = (window.location.hash || '').match(/^#@([^/?#]+)/);
+    const hashUsername = hashProfileMatch ? decodeURIComponent(hashProfileMatch[1]).trim() : '';
     const sharedUsername = (pathUsername || hashUsername || urlParams.get('user') || '').trim().replace(/^@/, '');
 
     if (loggedIn) {
