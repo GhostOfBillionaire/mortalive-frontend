@@ -4503,9 +4503,21 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
   background:linear-gradient(145deg,var(--primary),var(--secondary)); color:#fff;
   display:grid; place-items:center; font-size:18px; padding-left:3px;
   box-shadow:0 6px 20px rgba(0,0,0,.35);
-  transition:transform var(--dur-fast) var(--ease-out);
+  transition:transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
 }
 #pg-feed .feed-video-card:hover .feed-video-play-btn{ transform:translate(-50%,-50%) scale(1.08); }
+#pg-feed .feed-video-card.is-playing .feed-video-play-btn{
+  opacity:0; pointer-events:none;
+}
+#pg-feed .feed-video-mute-btn{
+  position:absolute; right:10px; bottom:10px; z-index:2;
+  width:30px; height:30px; border-radius:50%; border:none;
+  background:rgba(10,12,16,.55); color:#fff; font-size:14px;
+  display:grid; place-items:center; cursor:pointer;
+  backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+  transition:background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+#pg-feed .feed-video-mute-btn:hover{ background:rgba(10,12,16,.75); transform:scale(1.06); }
 #pg-feed .feed-video-duration{
   position:absolute; bottom:8px; right:8px; padding:2px 7px; border-radius:5px;
   background:rgba(0,0,0,.72); color:#fff; font-size:11.5px; font-weight:800; letter-spacing:.01em;
