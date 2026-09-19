@@ -7454,15 +7454,67 @@ function initFeedPerformance(root = $('feed-posts')) {
   // margin) and fires at the lowest possible threshold, so playback starts
   // the instant any part of the video is actually visible, and stops the
   // instant none of it is.
+  //
+  // MUTE HANDLING — this is load-bearing, not stylistic:
+  // Every browser's autoplay policy allows a script (no click, no tap — an
+  // IntersectionObserver callback is script) to start a video playing ONLY
+  // if it is muted at the moment play() is called. Starting one un-muted
+  // from script is rejected outright with a NotAllowedError. The previous
+  // version set `video.muted = !_feedSoundEnabled` — i.e. UN-muted — right
+  // before calling play() whenever the viewer had sound turned on, which is
+  // exactly the one case that policy blocks. The rejection was real but
+  // invisible: `playResult.catch(() => {})` swallowed it with no console
+  // trace, so the video simply never started, and the failure mode looked
+  // identical to "autoplay isn't wired up" even though it was — every
+  // scroll-triggered attempt was being silently refused by the browser
+  // itself. A real tap always worked because a click IS a user gesture, and
+  // a gesture satisfies the policy regardless of muted state — which is why
+  // "tap starts it, scrolling into view doesn't" was the exact symptom this
+  // produces, not a coincidence.
+  //
+  // Fix: ALWAYS start muted — that's unconditionally allowed — and apply the
+  // viewer's sound preference only after play() has actually resolved.
+  // Un-muting an element that is already playing is a plain property write,
+  // not a new "start playback" request, so it is never subject to this
+  // restriction; setFeedSoundEnabled() already relies on that same fact when
+  // the viewer taps the mute button mid-playback.
   if (!_feedAutoplayObserver) {
     _feedAutoplayObserver = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         const video = entry.target;
         if (entry.isIntersecting) {
           if (video.paused) {
-            video.muted = !_feedSoundEnabled;
+            video.muted = true;
             const playResult = video.play();
-            if (playResult?.catch) playResult.catch(() => {});
+            if (playResult?.then) {
+              playResult
+                .then(() => {
+                  // Only apply the sound preference once playback has
+                  // genuinely started, and only if this is still the
+                  // current state (the viewer could have scrolled past —
+                  // and the pause below could have already fired — before
+                  // this promise settled).
+                  if (_feedSoundEnabled && !video.paused) video.muted = false;
+                })
+                .catch(() => {
+                  // Playback was refused or interrupted (rapid scroll
+                  // triggering pause() before play() settled is the normal
+                  // case, per the MDN-documented play()/pause() race —
+                  // nothing to recover here, the pause() branch below
+                  // already leaves the video in the correct state).
+                });
+            } else if (_feedSoundEnabled) {
+              // Extremely old browsers: play() returns undefined rather
+              // than a Promise. No async gate to wait on in that case.
+              video.muted = false;
+            }
+          } else if (_feedSoundEnabled && video.muted) {
+            // Already playing (re-intersecting, or the preference changed
+            // while this video was active) and the viewer wants sound —
+            // apply it immediately; this is the same safe, already-playing
+            // un-mute as above, just without waiting on a play() promise
+            // that isn't pending.
+            video.muted = false;
           }
         } else if (!video.paused) {
           video.pause();
