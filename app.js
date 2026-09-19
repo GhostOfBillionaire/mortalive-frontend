@@ -8925,6 +8925,22 @@ if (!document.documentElement.dataset.mortaliveCarouselBound) {
 // existing custom play surface. Never route these clicks into the post viewer.
 if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
   document.documentElement.dataset.mortaliveFeedVideoBound = '1';
+
+  // Brief play/pause glyph flash on manual tap only — not on autoplay, so
+  // videos entering view via scroll don't flash an icon on every one of
+  // them. Purely visual feedback that a tap registered; mirrors the
+  // short-form-video convention of a fading glyph instead of a persistent
+  // button. Any in-flight fade-out from a rapid double-tap is cleared
+  // first so it can't stack or flicker.
+  function flashVideoToggleGlyph(card, glyph) {
+    const el = card.querySelector('.feed-video-toggle-glyph');
+    if (!el) return;
+    el.textContent = glyph;
+    clearTimeout(card._mortaliveGlyphTimer);
+    el.classList.add('show');
+    card._mortaliveGlyphTimer = setTimeout(() => el.classList.remove('show'), 500);
+  }
+
   document.addEventListener('click', (event) => {
     const card = event.target.closest?.('.feed-video-card');
     if (!card) return;
@@ -8946,8 +8962,10 @@ if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
         video.muted = !_feedSoundEnabled;
         const playResult = video.play();
         if (playResult?.catch) playResult.catch(() => {});
+        flashVideoToggleGlyph(card, '▶');
       } else {
         video.pause();
+        flashVideoToggleGlyph(card, '⏸');
       }
     } catch (_) {}
   }, true);
@@ -8968,6 +8986,17 @@ if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
     const video = event.target;
     if (!(video instanceof HTMLVideoElement) || !video.classList?.contains('feed-video-thumb')) return;
     video.closest('.feed-video-card')?.classList.remove('is-playing');
+  }, true);
+
+  // Thin progress bar at the bottom edge — passive position/duration
+  // feedback with no extra clickable chrome. timeupdate doesn't bubble
+  // either, same capture-phase delegation as play/pause above.
+  document.addEventListener('timeupdate', (event) => {
+    const video = event.target;
+    if (!(video instanceof HTMLVideoElement) || !video.classList?.contains('feed-video-thumb')) return;
+    if (!video.duration) return;
+    const fill = video.closest('.feed-video-card')?.querySelector('.feed-video-progress-fill');
+    if (fill) fill.style.width = ((video.currentTime / video.duration) * 100).toFixed(2) + '%';
   }, true);
 }
 
@@ -9039,7 +9068,7 @@ function buildFeedPostCardHTML(post) {
   const engagement = engagementFor(post.id);
   const durationSeconds = Number(post?.post_meta?.duration_seconds) || 0;
   const bodyHTML = post.post_type === 'video' && postMedia.length
-    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><button type="button" class="feed-video-mute-btn" aria-label="${_feedSoundEnabled ? 'Mute' : 'Unmute'}">${_feedSoundEnabled ? '🔊' : '🔇'}</button>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
+    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-video-toggle-glyph">▶</span><div class="feed-video-progress"><div class="feed-video-progress-fill"></div></div><button type="button" class="feed-video-mute-btn" aria-label="${_feedSoundEnabled ? 'Mute' : 'Unmute'}">${_feedSoundEnabled ? '🔊' : '🔇'}</button>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
     : post.post_type === 'reel' && postMedia.length
       ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
       : postMedia.length
