@@ -7370,6 +7370,26 @@ let _feedPerformanceObserver = null;
 let _feedPerformanceRoot = null;
 let _feedPerformanceBound = false;
 
+// Global sound preference for in-feed video autoplay, the way Reels-style
+// feeds work: one shared on/off state that carries across every video as
+// you scroll, rather than each video resetting to muted on its own. Videos
+// always start out muted regardless (autoplay requires it), and this is
+// what a manual play or the mute icon then apply.
+let _feedSoundEnabled = false;
+try { _feedSoundEnabled = localStorage.getItem('mortalive_feed_sound') === '1'; } catch (_) {}
+
+function setFeedSoundEnabled(enabled) {
+  _feedSoundEnabled = !!enabled;
+  try { localStorage.setItem('mortalive_feed_sound', _feedSoundEnabled ? '1' : '0'); } catch (_) {}
+  document.querySelectorAll('.feed-video-mute-btn').forEach((btn) => {
+    btn.textContent = _feedSoundEnabled ? '🔊' : '🔇';
+    btn.setAttribute('aria-label', _feedSoundEnabled ? 'Mute' : 'Unmute');
+  });
+  document.querySelectorAll('#feed-posts .feed-video-thumb').forEach((video) => {
+    if (!video.paused) video.muted = !_feedSoundEnabled;
+  });
+}
+
 function applyFeedPerformanceStyles() {
   if (document.getElementById('mortalive-feed-performance-style')) return;
   const style = document.createElement('style');
@@ -7398,6 +7418,24 @@ function initFeedPerformance(root = $('feed-posts')) {
           video.dataset.mortaliveNearViewport = '1';
           // Let the browser decide whether to fetch; do not force autoplay.
           if (video.preload === 'none') video.preload = 'metadata';
+
+          // Autoplay/pause-on-scroll applies only to standard in-feed video
+          // posts (.feed-video-thumb) — the reels shelf uses its own
+          // always-visible preview + full-viewer model and isn't touched
+          // here. 0.5 (half the card visible) is deliberately higher than
+          // the 0.10 "keep it warm" threshold above, so a video barely
+          // peeking into view doesn't start playing yet.
+          if (video.classList.contains('feed-video-thumb')) {
+            if (entry.intersectionRatio >= 0.5) {
+              if (video.paused) {
+                video.muted = !_feedSoundEnabled;
+                const playResult = video.play();
+                if (playResult?.catch) playResult.catch(() => {});
+              }
+            } else if (!video.paused) {
+              video.pause();
+            }
+          }
         } else {
           video.dataset.mortaliveNearViewport = '0';
           if (!video.paused) video.pause();
@@ -8860,18 +8898,46 @@ if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
   document.addEventListener('click', (event) => {
     const card = event.target.closest?.('.feed-video-card');
     if (!card) return;
+
+    const muteBtn = event.target.closest?.('.feed-video-mute-btn');
+    if (muteBtn) {
+      event.preventDefault();
+      event.stopPropagation();
+      setFeedSoundEnabled(!_feedSoundEnabled);
+      return;
+    }
+
     const video = card.querySelector('.feed-video-thumb');
     if (!video) return;
     event.preventDefault();
     event.stopPropagation();
     try {
       if (video.paused) {
+        video.muted = !_feedSoundEnabled;
         const playResult = video.play();
         if (playResult?.catch) playResult.catch(() => {});
       } else {
         video.pause();
       }
     } catch (_) {}
+  }, true);
+
+  // The ▶ overlay should disappear the instant a video is actually
+  // playing, and come back the instant it's paused — regardless of what
+  // caused that (a manual click above, autoplay-on-scroll, or auto-pause
+  // as the card leaves the viewport). Listening for the video's own
+  // play/pause events, rather than only reacting inside the click handler,
+  // covers all three causes with one rule instead of three copies of it.
+  // play/pause don't bubble, but a capture-phase listener still sees them.
+  document.addEventListener('play', (event) => {
+    const video = event.target;
+    if (!(video instanceof HTMLVideoElement) || !video.classList?.contains('feed-video-thumb')) return;
+    video.closest('.feed-video-card')?.classList.add('is-playing');
+  }, true);
+  document.addEventListener('pause', (event) => {
+    const video = event.target;
+    if (!(video instanceof HTMLVideoElement) || !video.classList?.contains('feed-video-thumb')) return;
+    video.closest('.feed-video-card')?.classList.remove('is-playing');
   }, true);
 }
 
@@ -8943,7 +9009,7 @@ function buildFeedPostCardHTML(post) {
   const engagement = engagementFor(post.id);
   const durationSeconds = Number(post?.post_meta?.duration_seconds) || 0;
   const bodyHTML = post.post_type === 'video' && postMedia.length
-    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-video-play-btn">▶</span>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
+    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-video-play-btn">▶</span><button type="button" class="feed-video-mute-btn" aria-label="${_feedSoundEnabled ? 'Mute' : 'Unmute'}">${_feedSoundEnabled ? '🔊' : '🔇'}</button>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
     : post.post_type === 'reel' && postMedia.length
       ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
       : postMedia.length
