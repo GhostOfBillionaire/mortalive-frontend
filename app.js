@@ -8984,15 +8984,6 @@ if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
   // short-form-video convention of a fading glyph instead of a persistent
   // button. Any in-flight fade-out from a rapid double-tap is cleared
   // first so it can't stack or flicker.
-  function flashVideoToggleGlyph(card, glyph) {
-    const el = card.querySelector('.feed-video-toggle-glyph');
-    if (!el) return;
-    el.textContent = glyph;
-    clearTimeout(card._mortaliveGlyphTimer);
-    el.classList.add('show');
-    card._mortaliveGlyphTimer = setTimeout(() => el.classList.remove('show'), 500);
-  }
-
   document.addEventListener('click', (event) => {
     const card = event.target.closest?.('.feed-video-card');
     if (!card) return;
@@ -9009,18 +9000,14 @@ if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
     if (!video) return;
     event.preventDefault();
     event.stopPropagation();
-    try {
-      if (video.paused) {
-        video.muted = !_feedSoundEnabled;
-        const playResult = video.play();
-        if (playResult?.catch) playResult.catch(() => {});
-        flashVideoToggleGlyph(card, '▶');
-      } else {
-        video.pause();
-        flashVideoToggleGlyph(card, '⏸');
-      }
-    } catch (_) {}
+
+    const postId = card.dataset.postId || card.closest('[data-post-id]')?.dataset.postId;
+    const post = postId ? getPostByIdForViewer(postId) : null;
+    if (!post) return;
+
+    openReelViewer(post, collectFeedVideoPosts(_feedPosts));
   }, true);
+
 
   // The ▶ overlay should disappear the instant a video is actually
   // playing, and come back the instant it's paused — regardless of what
@@ -13346,6 +13333,20 @@ function collectAvailableReels(source = _profilePosts) {
   return Array.from(byId.values());
 }
 
+// Everything with playable video — regular in-feed 'video' posts AND short-
+// form 'reel' posts — in feed order. This is what backs the full-screen
+// swipeable viewer when a regular feed video is tapped, so swiping moves
+// through every video in the timeline the way X/Twitter's video viewer does,
+// not just the short-form Quid shelf. collectAvailableReels() above is left
+// completely untouched — the Reels grid/shelf still uses only that, unchanged.
+function collectFeedVideoPosts(source = _feedPosts) {
+  const pool = Array.isArray(source)
+    ? source.filter(p => (p?.post_type === 'video' || p?.post_type === 'reel') && getPostMedia(p).length)
+    : [];
+  const byId = new Map(pool.map(p => [p.id, p]));
+  return Array.from(byId.values());
+}
+
 // A reel opened from the main feed must swipe through the feed's own reels,
 // not the viewer's profile posts — this was previously hardcoded to
 // _profilePosts regardless of where the click came from. Pick the source
@@ -13483,14 +13484,21 @@ function ensureReelViewer() {
   viewer.setAttribute('aria-hidden','true');
   viewer.innerHTML = `
     <div class="rv-progress"><div class="rv-progress-fill"></div></div>
-    <div class="rv-topbar"><div class="rv-topbar-title">Reels</div><button class="rv-topbar-btn" type="button" data-reel-close aria-label="Close">×</button></div>
-    <div class="rv-video-wrap">
-      <video id="rv-video" playsinline preload="metadata"></video>
+    <div class="rv-topbar"><div class="rv-topbar-title" id="rv-topbar-title">Reels</div><button class="rv-topbar-btn" type="button" data-reel-close aria-label="Close">×</button></div>
+    <div class="rv-video-wrap" id="rv-video-wrap">
+      <div class="rv-stage" id="rv-stage">
+        <video class="rv-video-slot" data-slot="0" playsinline preload="metadata"></video>
+        <div class="rv-video-skeleton" data-skeleton-for="0"></div>
+        <video class="rv-video-slot" data-slot="1" playsinline preload="metadata"></video>
+        <div class="rv-video-skeleton" data-skeleton-for="1"></div>
+      </div>
       <button class="rv-tap-area" type="button" aria-label="Play or pause"></button>
       <div class="rv-pause-flash">▶</div>
-      <button class="rv-nav-btn rv-nav-prev" type="button" data-reel-prev aria-label="Previous reel">‹</button>
-      <button class="rv-nav-btn rv-nav-next" type="button" data-reel-next aria-label="Next reel">›</button>
+      <button class="rv-nav-btn rv-nav-prev" type="button" data-reel-prev aria-label="Previous">‹</button>
+      <button class="rv-nav-btn rv-nav-next" type="button" data-reel-next aria-label="Next">›</button>
       <button class="rv-mute-badge" type="button" data-reel-mute aria-label="Toggle mute">🔇</button>
+      <div class="rv-counter" id="rv-counter"></div>
+      <div class="rv-swipe-hint" id="rv-swipe-hint"><span class="rv-swipe-hint-arrow">↑</span><span class="rv-swipe-hint-text">Swipe for next</span></div>
       <div class="rv-sidebar">
         <button class="rv-action-btn" type="button" data-reel-action="like"><span class="rv-action-icon">♡</span><span class="rv-action-label">Like</span></button>
         <button class="rv-action-btn" type="button" data-reel-action="comment"><span class="rv-action-icon">💬</span><span class="rv-action-label">Comment</span></button>
@@ -13502,7 +13510,6 @@ function ensureReelViewer() {
         <div class="rv-caption" id="rv-caption"></div>
         <div class="rv-duration-badge" id="rv-duration"></div>
       </div>
-      <div class="rv-loading" id="rv-loading"><div class="rv-loading-spinner"></div></div>
       <div class="rv-comments-sheet" id="rv-comments-sheet">
         <div class="rv-comments-handle"></div><div class="rv-comments-title" id="rv-comments-title">Comments</div>
         <div class="rv-comments-list" id="rv-comments-list"></div>
@@ -13510,99 +13517,322 @@ function ensureReelViewer() {
       </div>
     </div>`;
   document.body.appendChild(viewer);
-  let current = [];
-  let index = 0;
 
-  const render = async () => {
-    current = Array.isArray(viewer._mortaliveReelCollection) ? viewer._mortaliveReelCollection : current;
-    index = Number.isInteger(viewer._mortaliveReelIndex) ? viewer._mortaliveReelIndex : index;
-    const post = current[index];
-    if (!post) return;
-    const video = $('rv-video');
-    const loading = $('rv-loading');
-    loading?.classList.add('show');
+  // ── State ────────────────────────────────────────────────────────────
+  let current = [];       // the active collection, in feed order
+  let index = 0;           // index into `current` of the post on screen
+  let activeSlot = 0;      // which of the two physical <video> elements (0/1) is showing current[index]
+  const slots = Array.from(viewer.querySelectorAll('.rv-video-slot'));
+  const skeletons = Array.from(viewer.querySelectorAll('.rv-video-skeleton'));
+  let dragging = false, dragLocked = false, dragStartY = 0, dragY = 0, dragDirection = 0, dragPointerId = null;
+
+  const activeVideo      = () => slots[activeSlot];
+  const inactiveVideo    = () => slots[1 - activeSlot];
+  const activeSkeleton   = () => skeletons[activeSlot];
+  const inactiveSkeleton = () => skeletons[1 - activeSlot];
+  const stageHeight      = () => viewer.clientHeight || window.innerHeight;
+
+  function setSlotY(video, skeleton, y, withTransition) {
+    const t = `translate(-50%, ${y}px)`;
+    video.style.transform = t;
+    video.classList.toggle('rv-slot-transition', !!withTransition);
+    if (skeleton) {
+      skeleton.style.transform = t;
+      skeleton.classList.toggle('rv-slot-transition', !!withTransition);
+    }
+  }
+  const showSkeleton = (skeleton, show) => skeleton?.classList.toggle('show', !!show);
+
+  // Loads a post's video into one physical slot. If `autoplay` is set,
+  // playback starts the instant the source is assigned — this is the fix for
+  // the original bug where the first frame waited on an unrelated comments
+  // fetch. Always starts muted regardless of the sound preference, for the
+  // same reason as the feed's own autoplay fix: a script-initiated play() on
+  // an un-muted element is rejected outright by every browser's autoplay
+  // policy, and the empty catch() that used to sit here made that rejection
+  // invisible. The preference is applied only after play() actually resolves.
+  function loadInto(slotIndex, post, { autoplay }) {
+    const video = slots[slotIndex];
+    const skeleton = skeletons[slotIndex];
     video.pause();
+    video.onloadeddata = null;
+    video.onplaying = null;
+    if (!post) {
+      video.removeAttribute('src');
+      video.load();
+      showSkeleton(skeleton, false);
+      return;
+    }
+    showSkeleton(skeleton, true);
+    video.muted = true;
     video.src = getPostMedia(post)[0]?.url || '';
     video.load();
+    const clear = () => showSkeleton(skeleton, false);
+    video.onloadeddata = clear;
+    video.onplaying = clear;
+    if (autoplay) {
+      const p = video.play();
+      if (p?.then) {
+        p.then(() => { if (_feedSoundEnabled && slotIndex === activeSlot) video.muted = false; })
+         .catch(() => {});
+      }
+    }
+  }
+
+  function updateNavAndCounter() {
+    viewer.querySelector('[data-reel-prev]').disabled = index <= 0;
+    viewer.querySelector('[data-reel-next]').disabled = index >= current.length - 1;
+    const counter = $('rv-counter');
+    if (counter) {
+      counter.dataset.count = String(current.length);
+      counter.dataset.many = current.length > 12 ? 'true' : 'false';
+      counter.innerHTML = current.map((_, i) => `<span class="rv-dot${i === index ? ' active' : ''}"></span>`).join('');
+    }
+    const title = $('rv-topbar-title');
+    if (title) title.textContent = current[index]?.post_type === 'reel' ? 'Reels' : 'Videos';
+  }
+
+  // Metadata for the post now on screen. Synchronous fields (author, caption,
+  // like state — all already held locally) update immediately; comments and
+  // follow-state are network calls that resolve independently and paint in
+  // whenever they're ready, exactly the same non-blocking shape the main
+  // feed already uses, rather than holding up anything else while they load.
+  async function renderMeta() {
+    const post = current[index];
+    if (!post) return;
     const author = getPostViewerAuthor(post);
     const avatar = $('rv-author-avatar');
-    if (avatar) {
-      avatar.innerHTML = buildPostViewerAvatar(author, 40);
-    }
+    if (avatar) avatar.innerHTML = buildPostViewerAvatar(author, 40);
     $('rv-author-name').textContent = author.display_name || author.username || 'Member';
     $('rv-author-handle').textContent = `@${author.username || 'member'}`;
     $('rv-caption').innerHTML = renderHashtagRichText(String(post.content || '').trim());
-    $('rv-duration').textContent = post.media_size ? `${Math.max(1, Math.round(post.media_size / 1024 / 1024))} MB` : 'Reel';
+    $('rv-duration').textContent = post.media_size
+      ? `${Math.max(1, Math.round(post.media_size / 1024 / 1024))} MB`
+      : (post.post_type === 'reel' ? 'Reel' : 'Video');
+
     const eng = engagementFor(post.id);
     const likeBtn = viewer.querySelector('[data-reel-action="like"]');
     likeBtn?.classList.toggle('liked', !!eng.liked);
     likeBtn?.querySelector('.rv-action-icon')?.replaceChildren(document.createTextNode(eng.liked ? '♥' : '♡'));
+
+    $('rv-comments-sheet')?.classList.remove('open');
+    updateNavAndCounter();
+
+    // Fire-and-forget on purpose. If the viewer has already moved to a
+    // different post by the time either resolves, the result is discarded
+    // rather than painted over whatever is now on screen.
+    const forPostId = post.id;
+    paintFollowState(post, forPostId);
+    paintComments(post.id, forPostId);
+  }
+
+  async function paintFollowState(post, forPostId) {
     const followBtn = viewer.querySelector('[data-reel-action="follow"]');
-    if (followBtn) {
-      const followTargetId = canonicalProfileTargetId(post);
-      const canFollow = !!followTargetId && followTargetId !== S.userId;
-      const fd = canFollow ? await fetchFollowData(followTargetId) : {isFollowing:false};
-      followBtn.style.display = canFollow ? 'flex' : 'none';
-      followBtn.querySelector('.rv-action-icon').textContent = fd.isFollowing ? '✓' : '＋';
-      followBtn.querySelector('.rv-action-label').textContent = fd.isFollowing ? 'Following' : 'Follow';
-      followBtn.dataset.followState = fd.isFollowing ? '1' : '0';
-    }
-    const comments = await loadPostComments(post.id);
+    if (!followBtn) return;
+    const followTargetId = canonicalProfileTargetId(post);
+    const canFollow = !!followTargetId && followTargetId !== S.userId;
+    if (!canFollow) { followBtn.style.display = 'none'; return; }
+    let fd;
+    try { fd = await fetchFollowData(followTargetId); } catch (_) { return; }
+    if (current[index]?.id !== forPostId) return;
+    followBtn.style.display = 'flex';
+    followBtn.querySelector('.rv-action-icon').textContent = fd.isFollowing ? '✓' : '＋';
+    followBtn.querySelector('.rv-action-label').textContent = fd.isFollowing ? 'Following' : 'Follow';
+    followBtn.dataset.followState = fd.isFollowing ? '1' : '0';
+  }
+
+  async function paintComments(postId, forPostId) {
+    let comments;
+    try { comments = await loadPostComments(postId); } catch (_) { comments = []; }
+    if (current[index]?.id !== forPostId) return;
     $('rv-comments-title').textContent = `${comments.length} comments`;
-    $('rv-comments-list').innerHTML = postViewerCommentRows(comments).replaceAll('mortalive-post-viewer-comment','rv-comment-item').replaceAll('mortalive-post-viewer-comment-copy','rv-comment-body').replaceAll('mortalive-post-viewer-comment-head','rv-comment-author').replaceAll('mortalive-post-viewer-comment-text','rv-comment-text');
-    $('rv-comments-sheet').classList.remove('open');
-    video.onloadeddata = () => loading?.classList.remove('show');
-    video.ontimeupdate = () => {
-      const pct = video.duration ? (video.currentTime / video.duration) * 100 : 0;
-      viewer.querySelector('.rv-progress-fill').style.width = `${pct}%`;
+    $('rv-comments-list').innerHTML = postViewerCommentRows(comments)
+      .replaceAll('mortalive-post-viewer-comment', 'rv-comment-item')
+      .replaceAll('mortalive-post-viewer-comment-copy', 'rv-comment-body')
+      .replaceAll('mortalive-post-viewer-comment-head', 'rv-comment-author')
+      .replaceAll('mortalive-post-viewer-comment-text', 'rv-comment-text');
+  }
+
+  // Preloads the neighbour in `direction` (-1 = next, +1 = prev) into
+  // whichever slot is currently inactive, parked just off-screen and paused,
+  // so a swipe or button press has it ready to slide straight in rather than
+  // starting a fresh fetch at the moment of the gesture — the same idea as
+  // the feed prefetching a card's metadata before it scrolls into view.
+  function preloadNeighbor(direction) {
+    const neighbor = current[index + (direction === -1 ? 1 : -1)];
+    loadInto(1 - activeSlot, neighbor, { autoplay: false });
+    setSlotY(inactiveVideo(), inactiveSkeleton(), direction === -1 ? stageHeight() : -stageHeight(), false);
+  }
+
+  function activateIndex(newIndex, { instant = false } = {}) {
+    index = Math.max(0, Math.min(current.length - 1, newIndex));
+    viewer._mortaliveReelIndex = index;
+    loadInto(activeSlot, current[index], { autoplay: true });
+    setSlotY(activeVideo(), activeSkeleton(), 0, !instant);
+    renderMeta();
+    preloadNeighbor(-1); // default expectation: forward is the common swipe direction
+  }
+
+  // Completes a navigation in `direction` (-1 = next, +1 = prev): slides the
+  // current slot fully off-screen and the preloaded neighbour into place,
+  // then swaps which physical slot is "active". Used by a committed swipe
+  // and by the prev/next buttons alike, so both paths animate identically.
+  function commitTo(direction, { animate = true } = {}) {
+    const targetIndex = index + (direction === -1 ? 1 : -1);
+    if (targetIndex < 0 || targetIndex > current.length - 1) { if (!animate) return; cancelDrag(); return; }
+    const h = stageHeight();
+    setSlotY(activeVideo(), activeSkeleton(), direction === -1 ? -h : h, animate);
+    setSlotY(inactiveVideo(), inactiveSkeleton(), 0, animate);
+    const outgoing = activeVideo();
+    const finish = () => {
+      outgoing.pause();
+      activeSlot = 1 - activeSlot;
+      index = targetIndex;
+      viewer._mortaliveReelIndex = index;
+      const p = activeVideo().play();
+      if (p?.then) p.then(() => { if (_feedSoundEnabled) activeVideo().muted = false; }).catch(() => {});
+      renderMeta();
+      preloadNeighbor(-1);
     };
-    video.onended = () => {
-      if (index < current.length - 1) { index += 1; viewer._mortaliveReelIndex=index; render(); } else video.currentTime = 0;
-    };
-    try { await video.play(); } catch (_) {}
-    viewer.querySelector('[data-reel-prev]').disabled = index <= 0;
-    viewer.querySelector('[data-reel-next]').disabled = index >= current.length - 1;
+    if (animate) window.setTimeout(finish, 320);
+    else finish();
+  }
+
+  function cancelDrag() {
+    const h = stageHeight();
+    setSlotY(activeVideo(), activeSkeleton(), 0, true);
+    setSlotY(inactiveVideo(), inactiveSkeleton(), dragDirection === -1 ? h : -h, true);
+  }
+
+  // ── Pointer-driven swipe ────────────────────────────────────────────
+  // Pointer Events unify touch and mouse: the same code is a finger swipe on
+  // a phone and a mouse drag on desktop, layered on top of the existing
+  // prev/next buttons rather than replacing them. A short dead-zone (10px)
+  // before the drag "locks" lets a plain tap still fall through to the
+  // tap-area's own play/pause handler below instead of being eaten here.
+  const wrap = $('rv-video-wrap');
+  wrap.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('[data-reel-prev],[data-reel-next],[data-reel-close],[data-reel-mute],[data-reel-action],.rv-comments-sheet')) return;
+    dragging = true; dragLocked = false; dragDirection = 0; dragY = 0;
+    dragStartY = e.clientY; dragPointerId = e.pointerId;
+    try { wrap.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  wrap.addEventListener('pointermove', (e) => {
+    if (!dragging || e.pointerId !== dragPointerId) return;
+    const dy = e.clientY - dragStartY;
+    if (!dragLocked) {
+      if (Math.abs(dy) < 10) return;
+      const dir = dy < 0 ? -1 : 1;
+      if (!current[index + (dir === -1 ? 1 : -1)]) { dragging = false; return; } // no neighbour that way — ignore
+      dragLocked = true;
+      dragDirection = dir;
+      // The inactive slot defaults to holding "next". Dragging down asks for
+      // "prev" instead, so swap what it's preloaded with now that direction
+      // is known.
+      if (dragDirection === 1) preloadNeighbor(1);
+    }
+    dragY = dy;
+    const h = stageHeight();
+    setSlotY(activeVideo(), activeSkeleton(), dragY, false);
+    setSlotY(inactiveVideo(), inactiveSkeleton(), dragY + (dragDirection === -1 ? h : -h), false);
+  });
+  const endDrag = (e) => {
+    if (!dragging || (dragPointerId !== null && e.pointerId !== dragPointerId)) return;
+    dragging = false;
+    dragPointerId = null;
+    if (!dragLocked) return; // a tap, not a drag — .rv-tap-area's click handler covers it
+    if (Math.abs(dragY) > stageHeight() * 0.18) commitTo(dragDirection, { animate: true });
+    else cancelDrag();
+  };
+  wrap.addEventListener('pointerup', endDrag);
+  wrap.addEventListener('pointercancel', endDrag);
+
+  // ── Close, buttons, tap-to-pause, mute, like/comment/follow/share, send ──
+  const closeViewer = () => {
+    viewer.classList.remove('open');
+    viewer.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    slots.forEach((v) => { v.pause(); v.removeAttribute('src'); v.load(); });
+    activeSlot = 0;
   };
 
-  viewer._mortaliveRenderReel = render;
   viewer.addEventListener('click', async (e) => {
-    if (e.target.closest('[data-reel-close]')) { viewer.classList.remove('open'); viewer.setAttribute('aria-hidden','true'); document.body.style.overflow=''; return; }
-    if (e.target.closest('[data-reel-prev]')) { if (index>0){ index--; viewer._mortaliveReelIndex=index; render(); } return; }
-    if (e.target.closest('[data-reel-next]')) { if(index<current.length-1){ index++; viewer._mortaliveReelIndex=index; render(); } return; }
+    if (e.target.closest('[data-reel-close]')) { closeViewer(); return; }
+    if (e.target.closest('[data-reel-prev]')) { commitTo(1); return; }
+    if (e.target.closest('[data-reel-next]')) { commitTo(-1); return; }
     if (e.target.closest('.rv-tap-area')) {
-      const v=$('rv-video'); if(v.paused){ try{await v.play();}catch(_){}} else v.pause();
+      const v = activeVideo();
+      if (v.paused) { try { await v.play(); } catch (_) {} } else v.pause();
       return;
     }
     if (e.target.closest('[data-reel-mute]')) {
-      const v=$('rv-video'); v.muted=!v.muted; e.target.textContent=v.muted?'🔇':'🔊'; return;
+      const v = activeVideo();
+      v.muted = !v.muted;
+      _feedSoundEnabled = !v.muted;
+      try { localStorage.setItem('mortalive_feed_sound', _feedSoundEnabled ? '1' : '0'); } catch (_) {}
+      e.target.textContent = v.muted ? '🔇' : '🔊';
+      return;
     }
-    const action=e.target.closest('[data-reel-action]'); if(!action) return;
-    current = Array.isArray(viewer._mortaliveReelCollection) ? viewer._mortaliveReelCollection : current; index = Number.isInteger(viewer._mortaliveReelIndex) ? viewer._mortaliveReelIndex : index; const post=current[index];
+    const action = e.target.closest('[data-reel-action]');
+    if (!action) return;
+    const post = current[index];
     if (!post) return;
-    if (action.dataset.reelAction==='like'){ await togglePostLike(post.id); render(); }
-    if (action.dataset.reelAction==='comment'){ $('rv-comments-sheet').classList.toggle('open'); }
-    if (action.dataset.reelAction==='share'){
-      const url=`${location.origin}${location.pathname}#feed-post-${encodeURIComponent(post.id)}`;
-      navigator.clipboard?.writeText(url).then(()=>toast('Reel link copied','📋')).catch(()=>toast(url,'🔗'));
+    if (action.dataset.reelAction === 'like') { await togglePostLike(post.id); renderMeta(); }
+    if (action.dataset.reelAction === 'comment') { $('rv-comments-sheet').classList.toggle('open'); }
+    if (action.dataset.reelAction === 'share') {
+      const url = `${location.origin}${location.pathname}#feed-post-${encodeURIComponent(post.id)}`;
+      navigator.clipboard?.writeText(url).then(() => toast('Link copied', '📋')).catch(() => toast(url, '🔗'));
     }
-    if (action.dataset.reelAction==='follow'){
+    if (action.dataset.reelAction === 'follow') {
       const followTargetId = canonicalProfileTargetId(post);
       if (!followTargetId || followTargetId === S.userId) return;
-      const fd=await fetchFollowData(followTargetId); const next=!fd.isFollowing;
-      try{ await toggleFollow(followTargetId,next); render(); toast(next?'Following!':'Unfollowed',next?'✓':'➖'); }catch(err){toast(err?.message||'Could not update follow.','⚠️');}
+      const fd = await fetchFollowData(followTargetId);
+      const next = !fd.isFollowing;
+      try {
+        await toggleFollow(followTargetId, next);
+        renderMeta();
+        toast(next ? 'Following!' : 'Unfollowed', next ? '✓' : '➖');
+      } catch (err) {
+        toast(err?.message || 'Could not update follow.', '⚠️');
+      }
     }
   });
-  $('rv-comment-send')?.addEventListener('click', async ()=>{
-    const post=current[index], input=$('rv-comment-input'); const content=input?.value?.trim();
-    if(!post||!content) return;
-    input.value='';
-    await createPostComment(post.id,content);
-    await render();
-  });
-  viewer.querySelector('[data-reel-close]')?.addEventListener('click',()=>{viewer.classList.remove('open');viewer.setAttribute('aria-hidden','true');document.body.style.overflow='';});
-  return viewer;
 
-  // Unreachable? kept below intentionally no
+  $('rv-comment-send')?.addEventListener('click', async () => {
+    const post = current[index], input = $('rv-comment-input');
+    const content = input?.value?.trim();
+    if (!post || !content) return;
+    input.value = '';
+    await createPostComment(post.id, content);
+    paintComments(post.id, post.id);
+  });
+
+  viewer.querySelector('[data-reel-close]')?.addEventListener('click', closeViewer);
+
+  // Video-element-level events, bound once per physical slot rather than
+  // once per post — checked against `activeSlot` so an event firing on the
+  // slot that's merely preloading in the background never touches the UI.
+  slots.forEach((video, slotIndex) => {
+    video.addEventListener('timeupdate', () => {
+      if (slotIndex !== activeSlot || !video.duration) return;
+      const pct = (video.currentTime / video.duration) * 100;
+      const fill = viewer.querySelector('.rv-progress-fill');
+      if (fill) fill.style.width = `${pct}%`;
+    });
+    video.addEventListener('ended', () => {
+      if (slotIndex !== activeSlot) return;
+      if (index < current.length - 1) commitTo(-1, { animate: true });
+      else video.currentTime = 0;
+    });
+  });
+
+  viewer._mortaliveSetCollection = (collection) => { current = Array.isArray(collection) ? collection : []; };
+  viewer._mortaliveActivate = (instant) => activateIndex(
+    Number.isInteger(viewer._mortaliveReelIndex) ? viewer._mortaliveReelIndex : 0,
+    { instant }
+  );
+
+  return viewer;
 }
 function openReelViewer(post, collection = []) {
   if (S.isGuest || !S.userId) { toast('Sign in to view reels', '🔒'); return; }
@@ -13610,13 +13840,26 @@ function openReelViewer(post, collection = []) {
   const all = Array.isArray(collection) && collection.length ? collection : [post];
   const ids = all.map(p => p.id);
   const start = Math.max(0, ids.indexOf(post.id));
-  viewer._mortaliveReelCollection = all;
+  viewer._mortaliveSetCollection(all);
   viewer._mortaliveReelIndex = start;
-  // trigger renderer stored on the viewer
-  viewer._mortaliveRenderReel?.();
+  viewer._mortaliveActivate(true); // instant — no slide animation on open, just the viewer's own fade-in
   viewer.classList.add('open');
   viewer.setAttribute('aria-hidden','false');
   document.body.style.overflow='hidden';
+
+  // Swipe hint — shown once ever, and only when there's something to swipe
+  // to. Re-inserting the node (rather than toggling a class) is what forces
+  // its CSS animation to replay, since a class toggle on a node that never
+  // left the DOM doesn't restart a `forwards`-filled keyframe animation.
+  if (all.length > 1) {
+    let seen = false;
+    try { seen = localStorage.getItem('mortalive_reel_swipe_hint_seen') === '1'; } catch (_) {}
+    if (!seen) {
+      const hint = $('rv-swipe-hint');
+      if (hint) hint.replaceWith(hint.cloneNode(true));
+      try { localStorage.setItem('mortalive_reel_swipe_hint_seen', '1'); } catch (_) {}
+    }
+  }
 }
 function bindReelNavigationClicks() {
   // delegated grid/feed opening
