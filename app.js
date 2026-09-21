@@ -2978,11 +2978,11 @@ function initClaimFlow() {
   const pathToken = extractClaimTokenFromPath();
   if (pathToken) {
     try { sessionStorage.setItem(CLAIM_TOKEN_STORAGE_KEY, pathToken); } catch (_) {}
-    // Clear the path so a refresh doesn't re-trigger this from scratch, and
-    // so the raw token stops sitting in the visible address bar / any
-    // screenshot of it — the pending copy in sessionStorage is what drives
-    // the rest of the flow now.
-    window.history.replaceState(null, '', '/');
+    try { document.documentElement.dataset.mortaliveClaimMode = '1'; } catch (_) {}
+    // Keep /claim/<token> visible while the human completes the flow.
+    // Previously this immediately rewrote the URL to '/', which made it much
+    // harder to understand why the claim surface was active and interacted
+    // badly with the landing-page startup/routing state.
   }
 
   let pendingToken = pathToken;
@@ -2991,17 +2991,19 @@ function initClaimFlow() {
   }
   if (!pendingToken) return;
 
+  try { document.documentElement.dataset.mortaliveClaimMode = '1'; } catch (_) {}
+
   if (S.isGuest || !S.authToken) {
-    // Not signed in: route to the human login tab and wait. resumeClaimIfPending()
-    // is called from afterAuthSuccess() once a real session exists.
+    // Not signed in: keep the normal landing card fully interactive.
+    // The visitor may choose Login, Sign up, Guest, or AI agent. The claim
+    // token remains in sessionStorage and resumeClaimIfPending() will reopen
+    // the claim modal immediately after a real human session exists.
     showPage('pg-land');
     window.setTimeout(() => {
       window.setAuthAudience?.('human');
-      const tabLogin = $('tab-login');
-      tabLogin?.click();
       $('claim-modal-signedout')?.classList.remove('u-hidden');
+      $('tab-login')?.focus?.();
       toast('Sign in to claim this agent', '🤖');
-      $('login-email')?.focus?.();
     }, 0);
     return;
   }
@@ -5318,6 +5320,12 @@ function finishStartupSplash() {
     }
   }, true); // capture phase — fires before any bubbling handler can swallow the event
 })();
+
+// Claim/auth UI must be interactive even if a runtime-config or ICE request is
+// slow, unavailable, or fails. These are pure DOM handlers and intentionally
+// bootstrap before any awaited network work below.
+ready(initAudienceSwitch);
+ready(initAuthTabFallback);
 
 ready(async () => {
   // Load public runtime configuration before binding auth/feed/profile controls.
