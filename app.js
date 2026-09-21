@@ -1941,13 +1941,12 @@ function initAuthControls() {
     }
     toast(`Welcome, ${username}!`, '🧲');
 
-    // If the user arrived via a claim link (/claim/<token>) but wasn't signed
-    // in, the token is sitting in sessionStorage — resume that claim now,
-    // before falling through to the pending-profile / lobby paths below.
-    // Checked ahead of the pending-profile branch since a claim in progress
-    // is a more specific, more recent intent than an old profile link.
+    // If the user arrived via the active /claim/<token> URL but wasn't signed
+    // in, resume that claim immediately after authentication. A token in
+    // sessionStorage by itself is NOT enough; normal root visits must never
+    // trigger the claim popup.
     try {
-      if (sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY)) {
+      if (extractClaimTokenFromPath()) {
         showPage('pg-land');
         resumeClaimIfPending();
         return;
@@ -2989,29 +2988,58 @@ function extractClaimTokenFromPath() {
 }
 
 function initClaimFlow() {
+  // A claim popup is an ENTRY-POINT action, not a persistent session state.
+  // It must be triggered by the actual /claim/<token> URL. A stale token in
+  // sessionStorage must never make a normal visit to https://mortalive.com/
+  // reopen the claim popup later.
   const pathToken = extractClaimTokenFromPath();
-  if (pathToken) {
-    try { sessionStorage.setItem(CLAIM_TOKEN_STORAGE_KEY, pathToken); } catch (_) {}
-    try { document.documentElement.dataset.mortaliveClaimMode = '1'; } catch (_) {}
-    // Keep /claim/<token> visible while the human completes the flow.
-    // Previously this immediately rewrote the URL to '/', which made it much
-    // harder to understand why the claim surface was active and interacted
-    // badly with the landing-page startup/routing state.
+
+  if (!pathToken) {
+    try { sessionStorage.removeItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) {}
+    try { delete document.documentElement.dataset.mortaliveClaimMode; } catch (_) {}
+    return;
   }
 
-  let pendingToken = pathToken;
-  if (!pendingToken) {
-    try { pendingToken = sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY) || ''; } catch (_) {}
-  }
-  if (!pendingToken) return;
-
+  try { sessionStorage.setItem(CLAIM_TOKEN_STORAGE_KEY, pathToken); } catch (_) {}
   try { document.documentElement.dataset.mortaliveClaimMode = '1'; } catch (_) {}
 
   if (S.isGuest || !S.authToken) {
-    // Not signed in: keep the normal landing card fully interactive.
-    // The visitor may choose Login, Sign up, Guest, or AI agent. The claim
-    // token remains in sessionStorage and resumeClaimIfPending() will reopen
-    // the claim modal immediately after a real human session exists.
+    // During a fresh claim-link navigation the UI state can briefly lag behind
+    // the persisted authenticated session. When Mortalive already has its
+    // access token in this browser, show the profile-aware popup immediately
+    // instead of briefly routing the signed-in user into Login. submitClaim()
+    // will run the normal auth recovery before sending the claim request.
+    let hasPersistedSession = false;
+    try {
+      hasPersistedSession = !!localStorage.getItem('mortalive_token');
+      if (!hasPersistedSession) {
+        for (let i = 0; i < localStorage.length; i += 1) {
+          const key = localStorage.key(i) || '';
+          if (!key.startsWith('sb-') || !key.includes('-auth-token')) continue;
+          const raw = localStorage.getItem(key);
+          if (!raw) continue;
+          const parsed = JSON.parse(raw);
+          if (parsed?.access_token || parsed?.currentSession?.access_token) {
+            hasPersistedSession = true;
+            break;
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (hasPersistedSession) {
+      showPage('pg-land');
+      openClaimModal(pathToken);
+      if (!S.authToken) {
+        try { tryAutoLogin(); } catch (_) {}
+      }
+      return;
+    }
+
+    // Truly signed out: keep the normal landing card fully interactive. The
+    // visitor may choose Login, Sign up, Guest, or AI agent. The claim token
+    // remains in sessionStorage and resumeClaimIfPending() may resume the claim
+    // after authentication, but only while the claim URL is still active.
     showPage('pg-land');
     window.setTimeout(() => {
       window.setAuthAudience?.('human');
@@ -3022,7 +3050,7 @@ function initClaimFlow() {
     return;
   }
 
-  openClaimModal(pendingToken);
+  openClaimModal(pathToken);
 }
 
 function closeClaimModal() {
@@ -3050,14 +3078,19 @@ function openClaimModal(token) {
   // Make the active browser session explicit in the claim UI. The profile
   // identity is taken from the authenticated session/profile already loaded
   // in THIS window, never from the claim URL or agent data.
+  const storedUsername = (() => {
+    try { return localStorage.getItem('mortalive_username') || ''; } catch (_) { return ''; }
+  })();
   const profileName =
     S.accountData?.display_name ||
     S.accountData?.username ||
     S.username ||
+    storedUsername ||
     'your profile';
   const profileHandle =
     S.accountData?.username ||
     S.username ||
+    storedUsername ||
     '';
   const nameEl = $('claim-profile-name');
   const handleEl = $('claim-profile-handle');
@@ -3074,10 +3107,12 @@ function openClaimModal(token) {
 // Called from afterAuthSuccess() so a claim started while signed out resumes
 // the instant a session exists — no second click on the (now-gone) link.
 function resumeClaimIfPending() {
-  let token = '';
-  try { token = sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY) || ''; } catch (_) {}
-  if (!token || S.isGuest || !S.authToken) return;
-  window.setTimeout(() => openClaimModal(token), 400);
+  // Resumption is allowed only while the browser is still on the claim URL.
+  // This prevents a token left in sessionStorage from turning an ordinary
+  // root visit into an unexpected claim popup.
+  const pathToken = extractClaimTokenFromPath();
+  if (!pathToken || S.isGuest || !S.authToken) return;
+  window.setTimeout(() => openClaimModal(pathToken), 400);
 }
 
 async function submitClaim() {
@@ -3093,7 +3128,13 @@ async function submitClaim() {
     return;
   }
   if (S.isGuest || !S.authToken) {
-    if (err) { err.textContent = 'Sign in first, then reopen the claim link.'; err.classList.remove('u-hidden'); }
+    // The claim modal can render as soon as a persisted Mortalive session is
+    // detected, even while app startup is still hydrating S.authToken.
+    // Re-run the normal auth recovery here before rejecting the action.
+    try { await tryAutoLogin(); } catch (_) {}
+  }
+  if (S.isGuest || !S.authToken) {
+    if (err) { err.textContent = 'Sign in first, then confirm the claim link.'; err.classList.remove('u-hidden'); }
     return;
   }
 
@@ -5427,10 +5468,7 @@ ready(async () => {
     // claim-link navigation where the auth storage/client is still settling,
     // while leaving ordinary visits on the existing fast path.
     const claimRoutePresent = !!extractClaimTokenFromPath();
-    const claimTokenPresent = (() => {
-      try { return !!sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) { return false; }
-    })();
-    if (!loggedIn && (claimRoutePresent || claimTokenPresent)) {
+    if (!loggedIn && claimRoutePresent) {
       await new Promise((resolve) => window.setTimeout(resolve, 300));
       loggedIn = await tryAutoLogin();
     }
@@ -5441,7 +5479,7 @@ ready(async () => {
     // secondary concern by comparison. initClaimFlow() is a no-op if there is
     // no pending claim, so this is free on every other visit.
     initClaimFlow();
-    if (extractClaimTokenFromPath() || (() => { try { return !!sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) { return false; } })()) {
+    if (extractClaimTokenFromPath()) {
       return;
     }
 
