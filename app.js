@@ -2811,41 +2811,12 @@ async function tryAutoLogin() {
 
       const claimRoutePresent = !!extractClaimTokenFromPath();
       if (claimRoutePresent) {
-        const quickUsername =
-          localStorage.getItem('mortalive_username') ||
-          user.user_metadata?.username ||
-          user.email?.split('@')[0] ||
-          'User';
-        S.username = quickUsername;
-        S.crockroachScore = Number(user.user_metadata?.crockroach_score) || 0;
-
-        // Hydrate the richer profile in the background; the claim UI should
-        // never wait on it. Once it lands, the visible profile identity updates.
-        Promise.all([
-          fetchUserProfile(user.id),
-          fetchUserLinks(user.id)
-        ]).then(([profile, links]) => {
-          S.accountData = profile;
-          S.userLinks = links;
-          S.username =
-            profile?.username ||
-            user.user_metadata?.username ||
-            S.username ||
-            user.email?.split('@')[0] ||
-            'User';
-          S.crockroachScore =
-            profile?.crockroach_score ??
-            profile?.crockroachScore ??
-            S.crockroachScore ?? 0;
-          localStorage.setItem('mortalive_username', S.username);
-          try { updateIdentityDisplay(); } catch (_) {}
-          try { renderClaimInfoIntoPage(_claimInfo?.data || null); } catch (_) {}
-        }).catch((profileError) => {
-          console.warn('[Profile] background claim hydration warning:', profileError);
+        // Claim entry needs only the current human identity. Use the verified
+        // Supabase user + a minimal accounts query instead of waiting for the
+        // application's full profile/link hydration pipeline.
+        hydrateClaimProfileFast(user).catch((profileError) => {
+          console.warn('[Agent claim] background profile hydration warning:', profileError);
         });
-
-        localStorage.setItem('mortalive_username', S.username);
-        try { updateIdentityDisplay(); } catch (_) {}
         return true;
       }
 
@@ -3024,7 +2995,12 @@ function initGuestTermsGate() {
 // asked to go find the link again after signing in.
 
 const CLAIM_TOKEN_STORAGE_KEY = 'mortalive_pending_claim_token';
-const CLAIM_INFO_TIMEOUT_MS = 8000;
+// Claim hydration is deliberately independent from the normal app hydration.
+// Supabase is the fast source of truth for the safe agent context; Render is
+// retained only as a fallback for deployments where the RPC has not reached
+// the client yet. No claim page is allowed to spin indefinitely.
+const CLAIM_INFO_RPC_TIMEOUT_MS = 3500;
+const CLAIM_INFO_HTTP_TIMEOUT_MS = 4500;
 let _claimInfo = null;
 let _claimInfoPromise = null;
 
@@ -3041,33 +3017,70 @@ async function fetchClaimInfo(token, { force = false } = {}) {
   if (_claimInfoPromise && !force) return _claimInfoPromise;
 
   _claimInfoPromise = (async () => {
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeoutId = controller
-      ? window.setTimeout(() => controller.abort(), CLAIM_INFO_TIMEOUT_MS)
-      : null;
-    try {
-      const res = await fetch(`${SERVER_URL}/api/v1/agents/claim-info/${encodeURIComponent(value)}`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-        cache: 'no-store',
-        credentials: 'omit',
-        signal: controller?.signal
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.success || !data?.agent) {
-        throw new Error(data?.error || `Could not load agent information (${res.status}).`);
+    // Primary path: query the sanitized claim RPC directly through the
+    // already-initialized Supabase client. This removes Render cold-start,
+    // CORS and backend hydration latency from the claim-entry screen.
+    if (sb?.rpc) {
+      try {
+        const rpcResult = await Promise.race([
+          sb.rpc('get_agent_claim_info', { p_claim_token: value }),
+          new Promise((_, reject) =>
+            window.setTimeout(() => reject(new Error('Supabase claim lookup timeout')), CLAIM_INFO_RPC_TIMEOUT_MS)
+          )
+        ]);
+        const data = rpcResult?.data;
+        const rpcError = rpcResult?.error;
+        if (!rpcError && data?.success && data?.agent) {
+          _claimInfo = { token: value, data };
+          return data;
+        }
+        if (rpcError) {
+          console.warn('[Agent claim] Supabase claim-info RPC failed:', rpcError.message || rpcError);
+        }
+      } catch (error) {
+        console.warn('[Agent claim] Supabase claim-info RPC unavailable:', error?.message || error);
       }
-      _claimInfo = { token: value, data };
-      return data;
-    } catch (error) {
-      const timedOut = error?.name === 'AbortError';
-      console.warn('[Agent claim] context lookup failed:', timedOut ? `timed out after ${CLAIM_INFO_TIMEOUT_MS}ms` : (error?.message || error));
-      return null;
-    } finally {
-      if (timeoutId) window.clearTimeout(timeoutId);
-      _claimInfoPromise = null;
     }
-  })();
+
+    // Fallback path: preserve the existing server endpoint so older deployed
+    // databases/clients can still render the claim page during migration.
+    const urls = [];
+    try {
+      if (window.location.origin) urls.push(`${window.location.origin}/api/v1/agents/claim-info/${encodeURIComponent(value)}`);
+    } catch (_) {}
+    urls.push(`${SERVER_URL.replace(/\/$/, '')}/api/v1/agents/claim-info/${encodeURIComponent(value)}`);
+
+    for (const url of [...new Set(urls)]) {
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timeoutId = controller
+        ? window.setTimeout(() => controller.abort(), CLAIM_INFO_HTTP_TIMEOUT_MS)
+        : null;
+      try {
+        const res = await fetch(url, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+          cache: 'no-store',
+          credentials: 'omit',
+          signal: controller?.signal
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data?.success && data?.agent) {
+          _claimInfo = { token: value, data };
+          return data;
+        }
+        console.warn('[Agent claim] HTTP claim-info lookup failed:', res.status, data?.error || 'unknown error');
+      } catch (error) {
+        const timedOut = error?.name === 'AbortError';
+        console.warn('[Agent claim] HTTP claim-info lookup failed:', timedOut ? `timed out after ${CLAIM_INFO_HTTP_TIMEOUT_MS}ms` : (error?.message || error));
+      } finally {
+        if (timeoutId) window.clearTimeout(timeoutId);
+      }
+    }
+
+    return null;
+  })().finally(() => {
+    _claimInfoPromise = null;
+  });
 
   return _claimInfoPromise;
 }
@@ -3087,6 +3100,50 @@ function claimProfileIdentity() {
     storedUsername ||
     '';
   return { displayName, username };
+}
+
+async function hydrateClaimProfileFast(user) {
+  const currentUser = user || null;
+  if (!currentUser?.id) return false;
+
+  // Establish an immediate fallback identity from the verified Supabase user.
+  // This is visible before the richer profile hydration finishes.
+  let username = '';
+  try { username = localStorage.getItem('mortalive_username') || ''; } catch (_) {}
+  S.username = username || currentUser.user_metadata?.username || currentUser.email?.split('@')[0] || 'User';
+  S.isGuest = false;
+  S.userId = currentUser.id;
+
+  if (!sb) {
+    try { renderClaimInfoIntoPage(_claimInfo?.data || null); } catch (_) {}
+    return false;
+  }
+
+  try {
+    // The claim surface only needs these three fields. Do not wait for links,
+    // score, posts or the full profile hydration pipeline.
+    const { data, error } = await sb
+      .from('accounts')
+      .select('username,display_name,crockroach_score')
+      .eq('id', currentUser.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data) {
+      S.accountData = { ...(S.accountData || {}), ...data };
+      S.username = data.username || S.username;
+      S.crockroachScore = data.crockroach_score ?? S.crockroachScore ?? 0;
+      try { localStorage.setItem('mortalive_username', S.username); } catch (_) {}
+    }
+
+    try { updateIdentityDisplay(); } catch (_) {}
+    try { renderClaimInfoIntoPage(_claimInfo?.data || null); } catch (_) {}
+    return true;
+  } catch (error) {
+    console.warn('[Agent claim] fast Supabase profile hydration failed:', error?.message || error);
+    try { renderClaimInfoIntoPage(_claimInfo?.data || null); } catch (_) {}
+    return false;
+  }
 }
 
 function formatClaimExpiry(iso) {
@@ -3178,6 +3235,9 @@ function renderClaimInfoIntoPage(data) {
 async function showAgentClaimPage(token) {
   document.documentElement.dataset.mortaliveClaimAuth = '1';
   showPage('pg-agent-claim');
+  // Paint the known browser identity immediately; the agent information is
+  // hydrated independently from Supabase below.
+  try { renderClaimInfoIntoPage(_claimInfo?.data || null); } catch (_) {}
   const data = await fetchClaimInfo(token);
   if (data) {
     renderClaimInfoIntoPage(data);
