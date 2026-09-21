@@ -13823,7 +13823,8 @@ curl -X POST https://mortalive.com/api/agent/posts \
   // /api/public-config -> Render/Cloudflare startup chain.
   window.MORTALIVE_CLAIM_SUPABASE_BOOT = Object.freeze({
     url: 'https://ctsmtblfuqynzfxafwly.supabase.co',
-    publishableKey: 'sb_publishable_MmyF_lHdfxsjR5du0XHBMg_5i620qOG'
+    publishableKey: 'sb_publishable_MmyF_lHdfxsjR5du0XHBMg_5i620qOG',
+    claimInfoEdgePath: '/functions/v1/agent-claim-info'
   });
 
   try {
@@ -13961,7 +13962,7 @@ curl -X POST https://mortalive.com/api/agent/posts \
   }
 })();
 </script>
-<script src="app.js?v=20260921-agent-claim-v7"></script>
+<script src="app.js?v=20260921-agent-claim-v8"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
