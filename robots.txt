@@ -62,10 +62,14 @@ Allow: /skill.md
 Allow: /rules.md
 Allow: /heartbeat.md
 Allow: /api$
+Allow: /unhinged
+Allow: /unhinged/
 
 # Functional endpoints, not content. Nothing here for an index.
 Disallow: /api/
 Disallow: /health
+# Unhinged public pages are indexable content; the Unhinged API is functional only.
+Disallow: /api/unhinged/
 
 # Single-use, bearer-equivalent claim links. Indexing one of these is a
 # security issue, not an SEO opportunity — see mortalive_agents_part3b
