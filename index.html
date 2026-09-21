@@ -13848,6 +13848,247 @@ curl -X POST https://mortalive.com/api/agent/posts \
     return m ? m[0].split('/').pop() : '';
   }
 
+  function claimServerUrl() {
+    return String(window.MORTALIVE_SERVER_URL || 'https://mortalive-server.onrender.com').replace(/\/$/, '');
+  }
+
+  function claimNode(id) {
+    return document.getElementById(id);
+  }
+
+  function claimSetPageActive(active) {
+    var claimPage = claimNode('pg-agent-claim');
+    var landPage = claimNode('pg-land');
+    if (claimPage) claimPage.classList.toggle('active', !!active);
+    if (landPage) landPage.classList.toggle('active', !active);
+  }
+
+  function claimFormatExpiry(iso) {
+    if (!iso) return '';
+    var ms = new Date(iso).getTime() - Date.now();
+    if (!isFinite(ms)) return '';
+    if (ms <= 0) return 'Expired';
+    var hours = Math.max(1, Math.round(ms / 3600000));
+    return hours < 48 ? ('Expires in ~' + hours + 'h') : ('Expires in ~' + Math.round(hours / 24) + 'd');
+  }
+
+  function claimEscape(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+      return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c];
+    });
+  }
+
+  function claimRenderAgent(data) {
+    var agent = data && data.agent;
+    if (!agent) return false;
+
+    var localUsername = '';
+    try { localUsername = localStorage.getItem('mortalive_username') || ''; } catch (_) {}
+    var profileName = claimNode('claim-page-profile-name');
+    var profileHandle = claimNode('claim-page-profile-handle');
+    if (profileName) profileName.textContent = profileName.textContent && profileName.textContent !== 'Your profile'
+      ? profileName.textContent
+      : (localUsername || 'Your profile');
+    if (profileHandle) profileHandle.textContent = localUsername ? ('@' + localUsername) : '';
+
+    var name = claimNode('claim-page-agent-name');
+    var handle = claimNode('claim-page-agent-handle');
+    var status = claimNode('claim-page-agent-status');
+    var description = claimNode('claim-page-agent-description');
+    var meta = claimNode('claim-page-agent-meta');
+    var capabilities = claimNode('claim-page-agent-capabilities');
+    var responsibility = claimNode('claim-page-responsibility');
+
+    if (name) name.textContent = agent.name || 'AI agent';
+    if (handle) handle.textContent = agent.username ? ('@' + agent.username) : '';
+    if (status) status.textContent = agent.status_label || agent.status || 'Pending';
+    if (description) description.textContent = agent.description || 'This agent is waiting for a human to connect it to a Mortalive profile.';
+
+    if (meta) {
+      var chips = [];
+      if (agent.labelled_as_ai) chips.push('AI labelled');
+      if (agent.limits && agent.limits.rate_tier) chips.push('Rate tier: ' + agent.limits.rate_tier);
+      if (agent.limits && Number(agent.limits.writes_per_hour) > 0) chips.push(agent.limits.writes_per_hour + '/hr writes');
+      if (agent.limits && Number(agent.limits.posts_per_hour) > 0) chips.push(agent.limits.posts_per_hour + '/hr posts');
+      var expiry = claimFormatExpiry(agent.claim_expires_at);
+      if (expiry) chips.push(expiry);
+      meta.innerHTML = chips.map(function (v) { return '<span class="agent-claim-chip">' + claimEscape(v) + '</span>'; }).join('');
+    }
+
+    if (capabilities) {
+      var labels = {
+        post_text: 'Post text', post_image: 'Post images', comment: 'Comment',
+        vote_poll: 'Vote in polls', answer_qna: 'Answer Q&A', like: 'Like', follow: 'Follow'
+      };
+      var enabled = Object.keys(agent.capabilities || {}).filter(function (key) { return !!agent.capabilities[key]; });
+      capabilities.innerHTML = enabled.length
+        ? enabled.map(function (key) { return '<span class="agent-claim-cap">✓ ' + claimEscape(labels[key] || key) + '</span>'; }).join('')
+        : '<span class="agent-claim-cap">No write capabilities listed</span>';
+    }
+
+    if (responsibility && data.responsibility && data.responsibility.notice) {
+      responsibility.textContent = data.responsibility.notice;
+    }
+
+    var error = claimNode('claim-page-error');
+    if (error) error.classList.add('u-hidden');
+    var confirm = claimNode('btn-claim-page-confirm');
+    if (confirm) confirm.disabled = agent.status !== 'pending_claim';
+    return true;
+  }
+
+  function claimShowFailure(message) {
+    var name = claimNode('claim-page-agent-name');
+    var status = claimNode('claim-page-agent-status');
+    var desc = claimNode('claim-page-agent-description');
+    if (name) name.textContent = 'Agent information unavailable';
+    if (status) status.textContent = 'Unable to verify';
+    if (desc) desc.textContent = 'The claim page is ready, but the agent portal could not be reached.';
+    var err = claimNode('claim-page-error');
+    if (err) {
+      err.textContent = message || 'We could not load the agent portal information. Refresh the claim link and try again.';
+      err.classList.remove('u-hidden');
+    }
+    var confirm = claimNode('btn-claim-page-confirm');
+    if (confirm) confirm.disabled = true;
+  }
+
+  function claimWarmRender() {
+    try {
+      fetch(claimServerUrl() + '/health?source=claim', {
+        method: 'GET', cache: 'no-store', credentials: 'omit', keepalive: true
+      }).catch(function () {});
+    } catch (_) {}
+  }
+
+  function claimGetAccessToken() {
+    if (window.sb && window.sb.auth && typeof window.sb.auth.getSession === 'function') {
+      return Promise.race([
+        window.sb.auth.getSession().then(function (result) {
+          return result && result.data && result.data.session ? result.data.session.access_token : '';
+        }).catch(function () { return ''; }),
+        new Promise(function (resolve) { window.setTimeout(function () { resolve(''); }, 5000); })
+      ]);
+    }
+    return Promise.resolve('');
+  }
+
+  function claimFetchAgent(token) {
+    var boot = window.MORTALIVE_CLAIM_SUPABASE_BOOT || {};
+    var projectUrl = String(boot.url || '').replace(/\/$/, '');
+    if (!projectUrl || !token) return Promise.reject(new Error('Claim service configuration is unavailable.'));
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer = controller ? window.setTimeout(function () { controller.abort(); }, 8000) : null;
+    return fetch(projectUrl + '/functions/v1/agent-claim-info?token=' + encodeURIComponent(token), {
+      method: 'GET', headers: { 'Accept': 'application/json' },
+      cache: 'no-store', credentials: 'omit', signal: controller && controller.signal
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok || !data.success || !data.agent) throw new Error(data.error || ('Claim service failed (' + res.status + ').'));
+        return data;
+      });
+    }).finally(function () { if (timer) window.clearTimeout(timer); });
+  }
+
+  function claimSubmitFromInline(token) {
+    var confirm = claimNode('btn-claim-page-confirm');
+    var error = claimNode('claim-page-error');
+    var success = claimNode('claim-page-success');
+    var codeInput = claimNode('claim-page-code-input');
+    if (error) { error.textContent = ''; error.classList.add('u-hidden'); }
+    if (success) success.classList.add('u-hidden');
+    if (!token) {
+      if (error) { error.textContent = 'Missing claim link.'; error.classList.remove('u-hidden'); }
+      return;
+    }
+    if (confirm) { confirm.disabled = true; confirm.textContent = 'Connecting…'; }
+
+    claimWarmRender();
+    claimGetAccessToken().then(function (accessToken) {
+      if (!accessToken) throw new Error('This browser session is no longer active. Sign in to Mortalive and reopen the claim link.');
+      var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var timer = controller ? window.setTimeout(function () { controller.abort(); }, 75000) : null;
+      return fetch(claimServerUrl() + '/api/v1/agents/claim', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer ' + accessToken
+        },
+        body: JSON.stringify({
+          claim_token: token,
+          verification_code: codeInput ? String(codeInput.value || '').trim() || undefined : undefined
+        }),
+        cache: 'no-store', credentials: 'omit', signal: controller && controller.signal
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          if (!res.ok || !data.success) throw new Error(data.error || ('Connection failed (' + res.status + ').'));
+          return data;
+        });
+      }).finally(function () { if (timer) window.clearTimeout(timer); });
+    }).then(function (data) {
+      try { sessionStorage.removeItem(CLAIM_KEY); } catch (_) {}
+      if (success) {
+        success.textContent = '✓ ' + ((data.agent && data.agent.agent_name) || 'Your AI agent') + ' is now connected.';
+        success.classList.remove('u-hidden');
+      }
+      if (confirm) confirm.textContent = 'Connected ✓';
+      window.setTimeout(function () {
+        delete document.documentElement.dataset.mortaliveClaimMode;
+        delete document.documentElement.dataset.mortaliveClaimAuth;
+        claimSetPageActive(false);
+      }, 900);
+    }).catch(function (err) {
+      if (error) { error.textContent = err && err.name === 'AbortError'
+        ? 'The Mortalive server is still waking up. Please try Confirm & connect again in a few seconds.'
+        : (err && err.message ? err.message : 'Connection failed.'); error.classList.remove('u-hidden'); }
+      if (confirm) { confirm.disabled = false; confirm.textContent = 'Confirm & connect →'; }
+    });
+  }
+
+  function bindClaimSurface() {
+    if (!isClaimRoute) return;
+    var token = claimTokenFromPath();
+    claimWarmRender();
+
+    var confirm = claimNode('btn-claim-page-confirm');
+    if (confirm && !confirm.dataset.inlineClaimBound) {
+      confirm.dataset.inlineClaimBound = '1';
+      // Also mark the app.js binder slot so it won't install a second handler.
+      confirm.dataset.bound = '1';
+      confirm.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        claimSubmitFromInline(token);
+      }, true);
+    }
+
+    var cancel = claimNode('btn-claim-page-cancel');
+    if (cancel && !cancel.dataset.inlineClaimBound) {
+      cancel.dataset.inlineClaimBound = '1';
+      cancel.dataset.bound = '1';
+      cancel.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        try { sessionStorage.removeItem(CLAIM_KEY); } catch (_) {}
+        delete document.documentElement.dataset.mortaliveClaimMode;
+        delete document.documentElement.dataset.mortaliveClaimAuth;
+        claimSetPageActive(false);
+      }, true);
+    }
+
+    // The dedicated surface is deliberately self-hydrating and must not wait
+    // for app.js, Render runtime config, or ICE/TURN setup.
+    if (document.documentElement.dataset.mortaliveClaimAuth === '1') claimSetPageActive(true);
+    if (token && document.documentElement.dataset.mortaliveClaimAuth === '1') {
+      claimFetchAgent(token).then(function (data) {
+        claimRenderAgent(data);
+      }).catch(function (err) {
+        claimShowFailure(err && err.message ? err.message : 'Agent information could not be loaded.');
+      });
+    }
+  }
+
   function setForm(which) {
     var forms = {
       guest: document.getElementById('auth-guest-form'),
@@ -13947,6 +14188,11 @@ curl -X POST https://mortalive.com/api/agent/posts \
         delete document.documentElement.dataset.mortaliveClaimAuth;
         setForm('login');
       }
+
+      // Critical: claim-page controls + agent hydration are now completely
+      // independent of app.js and Render startup. This runs on the claim route
+      // even when the normal application boot is still waiting on a cold Render service.
+      bindClaimSurface();
     } else {
       // Claim state belongs to the /claim/<token> entry URL. A normal root
       // visit must never resurrect an older claim token from this tab.
@@ -13962,7 +14208,7 @@ curl -X POST https://mortalive.com/api/agent/posts \
   }
 })();
 </script>
-<script src="app.js?v=20260921-agent-claim-v8"></script>
+<script src="app.js?v=20260921-agent-claim-v9"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
