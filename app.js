@@ -1948,8 +1948,7 @@ function initAuthControls() {
     // trigger the claim popup.
     try {
       if (extractClaimTokenFromPath()) {
-        showPage('pg-land');
-        resumeClaimIfPending();
+        showAgentClaimPage(extractClaimTokenFromPath());
         return;
       }
     } catch (_) {}
@@ -2799,6 +2798,9 @@ async function tryAutoLogin() {
       }
 
       // Commit authenticated state BEFORE any optional profile/UI work.
+      // For an active /claim/<token> navigation, this is the only state the
+      // claim surface needs. Do not make that surface wait for secondary
+      // profile queries that may be slow on a cold backend/database connection.
       S.authToken = accessToken;
       S.userId = user.id;
       S.isGuest = false;
@@ -2806,6 +2808,46 @@ async function tryAutoLogin() {
       localStorage.setItem('mortalive_token', S.authToken);
       localStorage.setItem('mortalive_user_id', S.userId);
       localStorage.removeItem('mortalive_guest_name');
+
+      const claimRoutePresent = !!extractClaimTokenFromPath();
+      if (claimRoutePresent) {
+        const quickUsername =
+          localStorage.getItem('mortalive_username') ||
+          user.user_metadata?.username ||
+          user.email?.split('@')[0] ||
+          'User';
+        S.username = quickUsername;
+        S.crockroachScore = Number(user.user_metadata?.crockroach_score) || 0;
+
+        // Hydrate the richer profile in the background; the claim UI should
+        // never wait on it. Once it lands, the visible profile identity updates.
+        Promise.all([
+          fetchUserProfile(user.id),
+          fetchUserLinks(user.id)
+        ]).then(([profile, links]) => {
+          S.accountData = profile;
+          S.userLinks = links;
+          S.username =
+            profile?.username ||
+            user.user_metadata?.username ||
+            S.username ||
+            user.email?.split('@')[0] ||
+            'User';
+          S.crockroachScore =
+            profile?.crockroach_score ??
+            profile?.crockroachScore ??
+            S.crockroachScore ?? 0;
+          localStorage.setItem('mortalive_username', S.username);
+          try { updateIdentityDisplay(); } catch (_) {}
+          try { renderClaimInfoIntoPage(_claimInfo?.data || null); } catch (_) {}
+        }).catch((profileError) => {
+          console.warn('[Profile] background claim hydration warning:', profileError);
+        });
+
+        localStorage.setItem('mortalive_username', S.username);
+        try { updateIdentityDisplay(); } catch (_) {}
+        return true;
+      }
 
       // Profile enrichment is best-effort. It must never invalidate Auth.
       try {
@@ -2982,6 +3024,7 @@ function initGuestTermsGate() {
 // asked to go find the link again after signing in.
 
 const CLAIM_TOKEN_STORAGE_KEY = 'mortalive_pending_claim_token';
+const CLAIM_INFO_TIMEOUT_MS = 8000;
 let _claimInfo = null;
 let _claimInfoPromise = null;
 
@@ -2998,11 +3041,17 @@ async function fetchClaimInfo(token, { force = false } = {}) {
   if (_claimInfoPromise && !force) return _claimInfoPromise;
 
   _claimInfoPromise = (async () => {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller
+      ? window.setTimeout(() => controller.abort(), CLAIM_INFO_TIMEOUT_MS)
+      : null;
     try {
       const res = await fetch(`${SERVER_URL}/api/v1/agents/claim-info/${encodeURIComponent(value)}`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
-        cache: 'no-store'
+        cache: 'no-store',
+        credentials: 'omit',
+        signal: controller?.signal
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.success || !data?.agent) {
@@ -3011,9 +3060,11 @@ async function fetchClaimInfo(token, { force = false } = {}) {
       _claimInfo = { token: value, data };
       return data;
     } catch (error) {
-      console.warn('[Agent claim] context lookup failed:', error?.message || error);
+      const timedOut = error?.name === 'AbortError';
+      console.warn('[Agent claim] context lookup failed:', timedOut ? `timed out after ${CLAIM_INFO_TIMEOUT_MS}ms` : (error?.message || error));
       return null;
     } finally {
+      if (timeoutId) window.clearTimeout(timeoutId);
       _claimInfoPromise = null;
     }
   })();
@@ -5615,6 +5666,19 @@ ready(async () => {
   // active from boot ensures the direct buttons work on every profile load.
   bindProfileEvents();
 
+  // Claim entry is intentionally rendered before the general authentication
+  // routing finishes. This is important on a warm/signed-in browser: a slow
+  // profile or backend request must not make the user stare at the normal
+  // landing page or a blank loading state for tens of seconds. The auth check
+  // below still decides whether the dedicated surface remains or falls back to
+  // the signed-out landing flow.
+  const claimRoutePresentEarly = !!extractClaimTokenFromPath();
+  if (claimRoutePresentEarly) {
+    try { initClaimFlow(); } catch (error) {
+      console.warn('[Agent claim] early claim routing warning:', error?.message || error);
+    }
+  }
+
   // Initial routing waits for the real Supabase session result.
   // The landing checkmark only gates the Continue button; it is not auth state.
   const fromInvitationWithLogin = window.location.hash === '#login';
@@ -5625,24 +5689,19 @@ ready(async () => {
   tryAutoLogin().then(async (loggedIn) => {
     const urlParams = new URLSearchParams(window.location.search);
 
-    // A claim link is the one case where an authenticated browser session
-    // matters immediately. Give Supabase one short second chance before the
-    // router is allowed to classify the visitor as Guest. This covers a fresh
-    // claim-link navigation where the auth storage/client is still settling,
-    // while leaving ordinary visits on the existing fast path.
     const claimRoutePresent = !!extractClaimTokenFromPath();
-    if (!loggedIn && claimRoutePresent) {
-      await new Promise((resolve) => window.setTimeout(resolve, 300));
-      loggedIn = await tryAutoLogin();
-    }
 
-    // Claim links take priority over every other routing branch below: a
-    // person who followed /claim/<token> came here to do exactly one thing,
-    // and every other branch (shared profile, ?dest=, invitation login) is a
-    // secondary concern by comparison. initClaimFlow() is a no-op if there is
-    // no pending claim, so this is free on every other visit.
-    initClaimFlow();
-    if (extractClaimTokenFromPath()) {
+    // The dedicated claim surface was already started above. Once the real auth
+    // check completes, keep it only when the browser session is valid; otherwise
+    // fall back to the signed-out landing flow while preserving the agent context.
+    if (claimRoutePresent) {
+      if (loggedIn) {
+        showAgentClaimPage(extractClaimTokenFromPath());
+      } else {
+        showPage('pg-land');
+        fetchClaimInfo(extractClaimTokenFromPath()).then(renderClaimInfoIntoLanding).catch(() => {});
+        window.setAuthAudience?.('human');
+      }
       return;
     }
 
