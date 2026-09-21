@@ -7348,30 +7348,84 @@ body.mortalive-app-topbar-visible .profile-tabs-bar {
   width: 0%;
 }
 
-/* Video area */
+/* Video area — two stacked, independently-positioned slots rather than one
+   element. Only one is ever the visible "active" video; the other sits
+   preloaded just off-screen so a swipe has something to slide in instantly
+   instead of starting a fresh load at the moment of the gesture. */
 .rv-video-wrap {
   position: relative;
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
+  touch-action: none; /* the wrap itself owns the vertical gesture via JS */
+}
+
+.rv-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   overflow: hidden;
 }
 
-#rv-video {
+.rv-video-slot {
   /* Portrait video fills height; landscape videos get black bars */
+  position: absolute;
+  top: 0;
+  left: 50%;
   height: 100%;
   width: auto;
   max-width: 100%;
   object-fit: contain;
   display: block;
   background: #000;
+  transform: translate(-50%, 100%); /* parked off-screen until JS positions it */
+  will-change: transform;
+}
+/* Applied only during an animated transition (a committed swipe, a
+   button press, or a cancelled drag snapping back) — never while a drag is
+   actively following the pointer 1:1, where any transition would introduce
+   lag between finger and video. */
+.rv-video-slot.rv-slot-transition {
+  transition: transform 0.32s cubic-bezier(.22,.61,.36,1);
+}
+
+/* Per-slot skeleton — sits exactly over its video and shares its position,
+   so it moves together with the slot during a drag/slide rather than
+   floating independently. Shown while that slot's video has no playable
+   frame yet; replaces the old single global spinner overlay. */
+.rv-video-skeleton {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  transform: translate(-50%, 100%);
+  background: linear-gradient(180deg, #16171d 0%, #0c0d11 100%);
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+  transition: opacity 0.18s ease;
+}
+.rv-video-skeleton.rv-slot-transition { transition: opacity 0.18s ease, transform 0.32s cubic-bezier(.22,.61,.36,1); }
+.rv-video-skeleton.show { opacity: 1; }
+.rv-video-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.06) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: rvShimmer 1.4s ease-in-out infinite;
+}
+@keyframes rvShimmer {
+  0%   { background-position: 140% 0; }
+  100% { background-position: -40% 0; }
 }
 
 /* On mobile, cover to fill the screen (portrait only) */
 @media (max-width: 600px) and (orientation: portrait) {
-  #rv-video {
+  .rv-video-slot, .rv-video-skeleton {
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -7672,29 +7726,9 @@ body.mortalive-app-topbar-visible .profile-tabs-bar {
   text-transform: uppercase;
 }
 
-/* Loading spinner inside viewer */
-.rv-loading {
-  position: absolute;
-  inset: 0;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 7;
-  background: rgba(0,0,0,0.6);
-}
-.rv-loading.show { display: flex; }
-.rv-loading-spinner {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 3px solid rgba(255,255,255,0.2);
-  border-top-color: #fff;
-  animation: spin 0.8s linear infinite;
-}
-
 /* Desktop: constrain to centre column with side black bars */
 @media (min-width: 800px) {
-  #rv-video {
+  .rv-video-slot, .rv-video-skeleton {
     max-height: 100vh;
     max-width: min(56vh, 420px); /* 9:16 = 56.25vh */
   }
