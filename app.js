@@ -2999,8 +2999,9 @@ const CLAIM_TOKEN_STORAGE_KEY = 'mortalive_pending_claim_token';
 // Supabase is the fast source of truth for the safe agent context; Render is
 // retained only as a fallback for deployments where the RPC has not reached
 // the client yet. No claim page is allowed to spin indefinitely.
-const CLAIM_INFO_RPC_TIMEOUT_MS = 3500;
-const CLAIM_INFO_HTTP_TIMEOUT_MS = 4500;
+const CLAIM_INFO_TOTAL_TIMEOUT_MS = 5000;
+const CLAIM_INFO_ENDPOINT_TIMEOUT_MS = 4500;
+const CLAIM_INFO_RPC_TIMEOUT_MS = 4500;
 let _claimInfo = null;
 let _claimInfoPromise = null;
 
@@ -3009,6 +3010,47 @@ function extractClaimTokenFromPath() {
   return match ? match[1] : '';
 }
 
+function claimInfoTimeout(ms, label = 'Claim information request timed out') {
+  return new Promise((_, reject) => {
+    window.setTimeout(() => reject(new Error(label)), ms);
+  });
+}
+
+async function fetchClaimInfoHttp(url) {
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller
+    ? window.setTimeout(() => controller.abort(), CLAIM_INFO_ENDPOINT_TIMEOUT_MS)
+    : null;
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      cache: 'no-store',
+      credentials: 'omit',
+      signal: controller?.signal
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.success || !data?.agent) {
+      throw new Error(data?.error || `Claim information request failed (${res.status})`);
+    }
+    return data;
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  }
+}
+
+async function fetchClaimInfoRpc(value) {
+  if (!sb?.rpc) throw new Error('Supabase client not ready');
+  const result = await Promise.race([
+    sb.rpc('get_agent_claim_info', { p_claim_token: value }),
+    claimInfoTimeout(CLAIM_INFO_RPC_TIMEOUT_MS, 'Supabase claim lookup timed out')
+  ]);
+  const data = result?.data;
+  const rpcError = result?.error;
+  if (rpcError) throw rpcError;
+  if (!data?.success || !data?.agent) throw new Error(data?.error || 'Supabase claim information unavailable');
+  return data;
+}
 
 async function fetchClaimInfo(token, { force = false } = {}) {
   const value = String(token || '').trim();
@@ -3017,67 +3059,38 @@ async function fetchClaimInfo(token, { force = false } = {}) {
   if (_claimInfoPromise && !force) return _claimInfoPromise;
 
   _claimInfoPromise = (async () => {
-    // Primary path: query the sanitized claim RPC directly through the
-    // already-initialized Supabase client. This removes Render cold-start,
-    // CORS and backend hydration latency from the claim-entry screen.
-    if (sb?.rpc) {
-      try {
-        const rpcResult = await Promise.race([
-          sb.rpc('get_agent_claim_info', { p_claim_token: value }),
-          new Promise((_, reject) =>
-            window.setTimeout(() => reject(new Error('Supabase claim lookup timeout')), CLAIM_INFO_RPC_TIMEOUT_MS)
-          )
-        ]);
-        const data = rpcResult?.data;
-        const rpcError = rpcResult?.error;
-        if (!rpcError && data?.success && data?.agent) {
-          _claimInfo = { token: value, data };
-          return data;
-        }
-        if (rpcError) {
-          console.warn('[Agent claim] Supabase claim-info RPC failed:', rpcError.message || rpcError);
-        }
-      } catch (error) {
-        console.warn('[Agent claim] Supabase claim-info RPC unavailable:', error?.message || error);
-      }
-    }
+    const candidates = [];
 
-    // Fallback path: preserve the existing server endpoint so older deployed
-    // databases/clients can still render the claim page during migration.
-    const urls = [];
+    // Primary: same-origin backend. This route queries the same Supabase
+    // database with the server's DB client, so claim hydration never depends
+    // on the large Mortalivе startup sequence or on a browser Supabase client
+    // existing yet.
     try {
-      if (window.location.origin) urls.push(`${window.location.origin}/api/v1/agents/claim-info/${encodeURIComponent(value)}`);
+      candidates.push(fetchClaimInfoHttp(
+        `${window.location.origin}/api/v1/agents/claim-info/${encodeURIComponent(value)}`
+      ));
     } catch (_) {}
-    urls.push(`${SERVER_URL.replace(/\/$/, '')}/api/v1/agents/claim-info/${encodeURIComponent(value)}`);
 
-    for (const url of [...new Set(urls)]) {
-      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timeoutId = controller
-        ? window.setTimeout(() => controller.abort(), CLAIM_INFO_HTTP_TIMEOUT_MS)
-        : null;
-      try {
-        const res = await fetch(url, {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' },
-          cache: 'no-store',
-          credentials: 'omit',
-          signal: controller?.signal
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data?.success && data?.agent) {
-          _claimInfo = { token: value, data };
-          return data;
-        }
-        console.warn('[Agent claim] HTTP claim-info lookup failed:', res.status, data?.error || 'unknown error');
-      } catch (error) {
-        const timedOut = error?.name === 'AbortError';
-        console.warn('[Agent claim] HTTP claim-info lookup failed:', timedOut ? `timed out after ${CLAIM_INFO_HTTP_TIMEOUT_MS}ms` : (error?.message || error));
-      } finally {
-        if (timeoutId) window.clearTimeout(timeoutId);
-      }
+    // Secondary: direct Supabase RPC. When the client is already ready this
+    // gives the claim page a browser-to-Supabase path as requested. It races
+    // the backend rather than waiting behind it.
+    if (sb?.rpc) {
+      candidates.push(fetchClaimInfoRpc(value));
     }
 
-    return null;
+    if (!candidates.length) return null;
+
+    try {
+      const data = await Promise.race([
+        Promise.any(candidates),
+        claimInfoTimeout(CLAIM_INFO_TOTAL_TIMEOUT_MS, `Claim information did not load within ${CLAIM_INFO_TOTAL_TIMEOUT_MS / 1000}s`)
+      ]);
+      _claimInfo = { token: value, data };
+      return data;
+    } catch (error) {
+      console.warn('[Agent claim] all claim-info hydration paths failed:', error?.message || error);
+      return null;
+    }
   })().finally(() => {
     _claimInfoPromise = null;
   });
@@ -5670,6 +5683,30 @@ function finishStartupSplash() {
   }, true); // capture phase — fires before any bubbling handler can swallow the event
 })();
 
+// Claim URLs get their own entry bootstrap. Do this BEFORE the normal
+// startup block so claim hydration never waits for runtime config, ICE/TURN,
+// feed, notifications, or other unrelated app work.
+ready(() => {
+  const token = extractClaimTokenFromPath();
+  if (!token) return;
+
+  // A browser that already has Mortalive's persisted access token gets the
+  // dedicated connection surface immediately. A genuinely signed-out browser
+  // keeps the normal landing/auth surface; its agent context still hydrates in
+  // parallel so the login card can identify what is being connected.
+  const hasStoredMortaliveSession = !!S.authToken;
+  try {
+    if (hasStoredMortaliveSession) {
+      showAgentClaimPage(token);
+    } else {
+      showPage('pg-land');
+      fetchClaimInfo(token).then(renderClaimInfoIntoLanding).catch(() => {});
+    }
+  } catch (error) {
+    console.warn('[Agent claim] immediate entry bootstrap warning:', error?.message || error);
+  }
+});
+
 // Claim/auth UI must be interactive even if a runtime-config or ICE request is
 // slow, unavailable, or fails. These are pure DOM handlers and intentionally
 // bootstrap before any awaited network work below.
@@ -5733,7 +5770,7 @@ ready(async () => {
   // below still decides whether the dedicated surface remains or falls back to
   // the signed-out landing flow.
   const claimRoutePresentEarly = !!extractClaimTokenFromPath();
-  if (claimRoutePresentEarly) {
+  if (claimRoutePresentEarly && !$('pg-agent-claim')?.classList.contains('active')) {
     try { initClaimFlow(); } catch (error) {
       console.warn('[Agent claim] early claim routing warning:', error?.message || error);
     }
