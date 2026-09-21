@@ -13817,6 +13817,27 @@ curl -X POST https://mortalive.com/api/agent/posts \
 (function MortaliveClaimBoot() {
   'use strict';
 
+  // Direct claim hydration bootstrap. This uses only the Supabase project URL
+  // and publishable key (both are intentionally safe for frontend use). It
+  // exists specifically so /claim/<token> does not depend on the normal
+  // /api/public-config -> Render/Cloudflare startup chain.
+  window.MORTALIVE_CLAIM_SUPABASE_BOOT = Object.freeze({
+    url: 'https://ctsmtblfuqynzfxafwly.supabase.co',
+    publishableKey: 'sb_publishable_MmyF_lHdfxsjR5du0XHBMg_5i620qOG'
+  });
+
+  try {
+    if (!window.sb && window.supabase?.createClient) {
+      window.sb = window.supabase.createClient(
+        window.MORTALIVE_CLAIM_SUPABASE_BOOT.url,
+        window.MORTALIVE_CLAIM_SUPABASE_BOOT.publishableKey,
+        { auth: { detectSessionInUrl: true } }
+      );
+    }
+  } catch (error) {
+    console.warn('[Agent claim] direct Supabase client bootstrap failed:', error?.message || error);
+  }
+
   var CLAIM_RE = /^\/claim\/[A-Za-z0-9_-]+$/;
   var CLAIM_KEY = 'mortalive_pending_claim_token';
   var isClaimRoute = CLAIM_RE.test(window.location.pathname);
@@ -13940,7 +13961,7 @@ curl -X POST https://mortalive.com/api/agent/posts \
   }
 })();
 </script>
-<script src="app.js?v=20260921-agent-claim-v6"></script>
+<script src="app.js?v=20260921-agent-claim-v7"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
