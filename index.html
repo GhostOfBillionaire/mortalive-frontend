@@ -13720,6 +13720,11 @@ curl -X POST https://mortalive.com/api/agent/posts \
       // An existing session stays on its current authenticated surface until
       // app.js opens the profile-aware connection popup.
       if (!hasStoredSession) setForm('login');
+    } else {
+      // Claim state belongs to the /claim/<token> entry URL. A normal root
+      // visit must never resurrect an older claim token from this tab.
+      try { sessionStorage.removeItem(CLAIM_KEY); } catch (_) {}
+      try { delete document.documentElement.dataset.mortaliveClaimMode; } catch (_) {}
     }
   }
 
@@ -13730,7 +13735,7 @@ curl -X POST https://mortalive.com/api/agent/posts \
   }
 })();
 </script>
-<script src="app.js?v=20260921-claim-flow-fix"></script>
+<script src="app.js?v=20260921-claim-flow-fix-v2"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
