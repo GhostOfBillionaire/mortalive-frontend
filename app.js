@@ -2764,25 +2764,42 @@ async function tryAutoLogin() {
 
   _autoLoginPromise = (async () => {
     try {
-      // Supabase Auth is the only authentication authority.
+      // Recover the authenticated browser identity from either authority that
+      // Mortalive may currently have available:
+      //   1) Supabase's persisted session
+      //   2) Mortalive's persisted access token
+      // A claim-link navigation must never turn an already-authenticated
+      // browser into Guest merely because one of those stores restored a
+      // fraction of a second later than the other.
       const { data: sessionData, error: sessionError } =
         await sb.auth.getSession();
-      const session = sessionData?.session;
 
-      if (sessionError || !session?.access_token || !session.user?.id) {
-        throw new Error(sessionError?.message || 'no valid Supabase session');
+      const sessionToken = sessionData?.session?.access_token || '';
+      const cachedToken = localStorage.getItem('mortalive_token') || '';
+      const candidateTokens = Array.from(new Set([sessionToken, cachedToken].filter(Boolean)));
+
+      let user = null;
+      let accessToken = '';
+      let lastAuthError = sessionError?.message || 'no valid authenticated session';
+
+      for (const candidate of candidateTokens) {
+        const { data: userData, error: userError } =
+          await sb.auth.getUser(candidate);
+        const candidateUser = userData?.user;
+        if (!userError && candidateUser?.id) {
+          user = candidateUser;
+          accessToken = candidate;
+          break;
+        }
+        lastAuthError = userError?.message || lastAuthError;
       }
 
-      const { data: userData, error: userError } =
-        await sb.auth.getUser(session.access_token);
-      const user = userData?.user;
-
-      if (userError || !user || user.id !== session.user.id) {
-        throw new Error(userError?.message || 'invalid Supabase session');
+      if (!user?.id || !accessToken) {
+        throw new Error(lastAuthError);
       }
 
       // Commit authenticated state BEFORE any optional profile/UI work.
-      S.authToken = session.access_token;
+      S.authToken = accessToken;
       S.userId = user.id;
       S.isGuest = false;
 
@@ -2821,8 +2838,6 @@ async function tryAutoLogin() {
         syncAuthProgress(crockroachScore);
         updateIdentityDisplay();
         updateProgressText();
-        // Pre-paint the feed sidebar avatar before any page routing runs,
-        // so the photo is present on first navigate rather than after a delay.
         syncFeedSidebar();
       } catch (uiError) {
         console.warn('[Auth] UI hydration warning:', uiError);
@@ -2830,10 +2845,9 @@ async function tryAutoLogin() {
 
       return true;
     } catch (e) {
-      // Only a genuinely missing/invalid Supabase session may produce Guest.
-      console.warn('[Auth] No valid Supabase session:', e?.message || e);
+      // Only a genuinely missing/invalid authenticated identity may produce Guest.
+      console.warn('[Auth] No valid Supabase/Mortalive session:', e?.message || e);
 
-      // Clear the cached promise so future clicks can genuinely retry
       _autoLoginPromise = null;
 
       S.authToken = null;
@@ -3032,6 +3046,27 @@ function openClaimModal(token) {
   // because some other flow had already navigated elsewhere.
   showPage('pg-land');
   modal.dataset.claimToken = token;
+
+  // Make the active browser session explicit in the claim UI. The profile
+  // identity is taken from the authenticated session/profile already loaded
+  // in THIS window, never from the claim URL or agent data.
+  const profileName =
+    S.accountData?.display_name ||
+    S.accountData?.username ||
+    S.username ||
+    'your profile';
+  const profileHandle =
+    S.accountData?.username ||
+    S.username ||
+    '';
+  const nameEl = $('claim-profile-name');
+  const handleEl = $('claim-profile-handle');
+  if (nameEl) nameEl.textContent = profileName;
+  if (handleEl) {
+    handleEl.textContent = profileHandle ? `@${profileHandle}` : '';
+    handleEl.classList.toggle('u-hidden', !profileHandle);
+  }
+
   $('claim-modal-signedout')?.classList.add('u-hidden');
   modal.classList.add('open');
 }
@@ -3063,7 +3098,7 @@ async function submitClaim() {
   }
 
   const code = ($('claim-code-input')?.value || '').trim();
-  if (btn) { btn.disabled = true; btn.textContent = 'Claiming…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
 
   try {
     const res = await fetch(`${SERVER_URL}/api/v1/agents/claim`, {
@@ -3093,7 +3128,7 @@ async function submitClaim() {
   } catch (e) {
     if (err) { err.textContent = e.message || 'Claim failed.'; err.classList.remove('u-hidden'); }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Claim this agent →'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Confirm & connect →'; }
   }
 }
 
@@ -5385,6 +5420,20 @@ ready(async () => {
 
   tryAutoLogin().then(async (loggedIn) => {
     const urlParams = new URLSearchParams(window.location.search);
+
+    // A claim link is the one case where an authenticated browser session
+    // matters immediately. Give Supabase one short second chance before the
+    // router is allowed to classify the visitor as Guest. This covers a fresh
+    // claim-link navigation where the auth storage/client is still settling,
+    // while leaving ordinary visits on the existing fast path.
+    const claimRoutePresent = !!extractClaimTokenFromPath();
+    const claimTokenPresent = (() => {
+      try { return !!sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) { return false; }
+    })();
+    if (!loggedIn && (claimRoutePresent || claimTokenPresent)) {
+      await new Promise((resolve) => window.setTimeout(resolve, 300));
+      loggedIn = await tryAutoLogin();
+    }
 
     // Claim links take priority over every other routing branch below: a
     // person who followed /claim/<token> came here to do exactly one thing,
