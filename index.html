@@ -13612,7 +13612,98 @@ curl -X POST https://mortalive.com/api/agent/posts \
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Runtime config + app.js are loaded after the public server URL declaration above.
      Sensitive Supabase/TURN/server credentials are kept out of this HTML. -->
-<script src="app.js?v=20260918-messages-open-fix"></script>
+<script>
+(function MortaliveClaimBoot() {
+  'use strict';
+
+  var CLAIM_RE = /^\/claim\/[A-Za-z0-9_-]+$/;
+  var CLAIM_KEY = 'mortalive_pending_claim_token';
+  var isClaimRoute = CLAIM_RE.test(window.location.pathname);
+
+  function claimTokenFromPath() {
+    var m = window.location.pathname.match(CLAIM_RE);
+    return m ? m[0].split('/').pop() : '';
+  }
+
+  function setForm(which) {
+    var forms = {
+      guest: document.getElementById('auth-guest-form'),
+      login: document.getElementById('auth-login-form'),
+      signup: document.getElementById('auth-signup-form')
+    };
+    var tabs = {
+      guest: document.getElementById('tab-guest'),
+      login: document.getElementById('tab-login'),
+      signup: document.getElementById('tab-signup')
+    };
+
+    Object.keys(forms).forEach(function (key) {
+      var form = forms[key];
+      if (!form) return;
+      var visible = key === which;
+      form.classList.toggle('u-hidden', !visible);
+      form.style.display = visible ? '' : 'none';
+    });
+    Object.keys(tabs).forEach(function (key) {
+      var tab = tabs[key];
+      if (tab) tab.classList.toggle('active', key === which);
+    });
+  }
+
+  function setAudience(isAgent) {
+    var humanPanel = document.getElementById('audience-human');
+    var agentPanel = document.getElementById('audience-agent');
+    var humanBtn = document.getElementById('aud-human');
+    var agentBtn = document.getElementById('aud-agent');
+    if (humanPanel) { humanPanel.classList.toggle('u-hidden', isAgent); humanPanel.style.display = isAgent ? 'none' : ''; }
+    if (agentPanel) { agentPanel.classList.toggle('u-hidden', !isAgent); agentPanel.style.display = isAgent ? '' : 'none'; }
+    if (humanBtn) { humanBtn.classList.toggle('active', !isAgent); humanBtn.setAttribute('aria-selected', isAgent ? 'false' : 'true'); }
+    if (agentBtn) { agentBtn.classList.toggle('active', isAgent); agentBtn.setAttribute('aria-selected', isAgent ? 'true' : 'false'); }
+  }
+
+  function bind() {
+    if (document.documentElement.dataset.mortaliveClaimBootBound === '1') return;
+    document.documentElement.dataset.mortaliveClaimBootBound = '1';
+
+    document.addEventListener('click', function (event) {
+      var audience = event.target && event.target.closest && event.target.closest('#aud-human, #aud-agent');
+      if (audience) {
+        event.preventDefault();
+        setAudience(audience.id === 'aud-agent');
+        return;
+      }
+
+      var authTab = event.target && event.target.closest && event.target.closest('#tab-guest, #tab-login, #tab-signup');
+      if (authTab) {
+        event.preventDefault();
+        var which = authTab.id === 'tab-guest' ? 'guest' : (authTab.id === 'tab-signup' ? 'signup' : 'login');
+        setForm(which);
+      }
+    }, true);
+
+    if (isClaimRoute) {
+      var token = claimTokenFromPath();
+      if (token) {
+        try { sessionStorage.setItem(CLAIM_KEY, token); } catch (_) {}
+        document.documentElement.dataset.mortaliveClaimMode = '1';
+      }
+
+      // Never force the visitor into Guest on a claim route. Keep the normal
+      // landing controls available immediately; Login/Signup remain one tap
+      // away and the AI-agent panel is still reachable.
+      setAudience(false);
+      setForm('login');
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bind, { once: true });
+  } else {
+    bind();
+  }
+})();
+</script>
+<script src="app.js?v=20260921-claim-flow-fix"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
