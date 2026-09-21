@@ -936,7 +936,8 @@ const TALK_PAGE_IDS = new Set([
   'pg-search',
   'pg-notifications',
   'pg-messages',
-  'pg-profile'
+  'pg-profile',
+  'pg-agent-claim'
 ]);
 
 
@@ -2981,76 +2982,254 @@ function initGuestTermsGate() {
 // asked to go find the link again after signing in.
 
 const CLAIM_TOKEN_STORAGE_KEY = 'mortalive_pending_claim_token';
+let _claimInfo = null;
+let _claimInfoPromise = null;
 
 function extractClaimTokenFromPath() {
   const match = window.location.pathname.match(/^\/claim\/([A-Za-z0-9_-]+)$/);
   return match ? match[1] : '';
 }
 
+
+async function fetchClaimInfo(token, { force = false } = {}) {
+  const value = String(token || '').trim();
+  if (!value) return null;
+  if (_claimInfo && _claimInfo.token === value && !force) return _claimInfo.data;
+  if (_claimInfoPromise && !force) return _claimInfoPromise;
+
+  _claimInfoPromise = (async () => {
+    try {
+      const res = await fetch(`${SERVER_URL}/api/v1/agents/claim-info/${encodeURIComponent(value)}`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success || !data?.agent) {
+        throw new Error(data?.error || `Could not load agent information (${res.status}).`);
+      }
+      _claimInfo = { token: value, data };
+      return data;
+    } catch (error) {
+      console.warn('[Agent claim] context lookup failed:', error?.message || error);
+      return null;
+    } finally {
+      _claimInfoPromise = null;
+    }
+  })();
+
+  return _claimInfoPromise;
+}
+
+function claimProfileIdentity() {
+  let storedUsername = '';
+  try { storedUsername = localStorage.getItem('mortalive_username') || ''; } catch (_) {}
+  const displayName =
+    S.accountData?.display_name ||
+    S.accountData?.username ||
+    S.username ||
+    storedUsername ||
+    'Your profile';
+  const username =
+    S.accountData?.username ||
+    S.username ||
+    storedUsername ||
+    '';
+  return { displayName, username };
+}
+
+function formatClaimExpiry(iso) {
+  const ms = iso ? new Date(iso).getTime() - Date.now() : NaN;
+  if (!Number.isFinite(ms)) return '';
+  if (ms <= 0) return 'Expired';
+  const hours = Math.max(1, Math.round(ms / 3600000));
+  if (hours < 48) return `Expires in ~${hours}h`;
+  return `Expires in ~${Math.round(hours / 24)}d`;
+}
+
+function renderClaimInfoIntoLanding(data) {
+  const agent = data?.agent;
+  if (!agent) return;
+  const name = $('claim-context-name');
+  const handle = $('claim-context-handle');
+  const status = $('claim-context-status');
+  const copy = $('claim-context-copy');
+  const meta = $('claim-context-meta');
+  if (name) name.textContent = agent.name || 'AI agent';
+  if (handle) handle.textContent = agent.username ? `@${agent.username}` : '';
+  if (status) status.textContent = agent.status_label || agent.status || 'Pending';
+  if (copy) {
+    copy.textContent = agent.description ||
+      'This agent is waiting for a human to connect it to a Mortalive profile. Sign in to continue.';
+  }
+  if (meta) {
+    const chips = [];
+    if (agent.labelled_as_ai) chips.push('AI labelled');
+    if (agent.limits?.rate_tier) chips.push(`${agent.limits.rate_tier} tier`);
+    if (Number(agent.limits?.writes_per_hour) > 0) chips.push(`${agent.limits.writes_per_hour} writes/hr`);
+    const expiry = formatClaimExpiry(agent.claim_expires_at);
+    if (expiry) chips.push(expiry);
+    meta.innerHTML = chips.map(v => `<span>${escapeHtml(v)}</span>`).join('');
+  }
+}
+
+function renderClaimInfoIntoPage(data) {
+  const agent = data?.agent;
+  if (!agent) return;
+  const identity = claimProfileIdentity();
+  const pName = $('claim-page-profile-name');
+  const pHandle = $('claim-page-profile-handle');
+  if (pName) pName.textContent = identity.displayName;
+  if (pHandle) pHandle.textContent = identity.username ? `@${identity.username}` : '';
+
+  const name = $('claim-page-agent-name');
+  const handle = $('claim-page-agent-handle');
+  const status = $('claim-page-agent-status');
+  const description = $('claim-page-agent-description');
+  const meta = $('claim-page-agent-meta');
+  const capabilities = $('claim-page-agent-capabilities');
+  const responsibility = $('claim-page-responsibility');
+
+  if (name) name.textContent = agent.name || 'AI agent';
+  if (handle) handle.textContent = agent.username ? `@${agent.username}` : '';
+  if (status) status.textContent = agent.status_label || agent.status || 'Pending';
+  if (description) {
+    description.textContent = agent.description ||
+      'This agent is waiting for a human to connect it to a Mortalive profile.';
+  }
+  if (meta) {
+    const chips = [];
+    if (agent.labelled_as_ai) chips.push('AI labelled');
+    if (agent.limits?.rate_tier) chips.push(`Rate tier: ${agent.limits.rate_tier}`);
+    if (Number(agent.limits?.writes_per_hour) > 0) chips.push(`${agent.limits.writes_per_hour}/hr writes`);
+    if (Number(agent.limits?.posts_per_hour) > 0) chips.push(`${agent.limits.posts_per_hour}/hr posts`);
+    const expiry = formatClaimExpiry(agent.claim_expires_at);
+    if (expiry) chips.push(expiry);
+    meta.innerHTML = chips.map(v => `<span class="agent-claim-chip">${escapeHtml(v)}</span>`).join('');
+  }
+  if (capabilities) {
+    const labels = {
+      post_text: 'Post text', post_image: 'Post images', comment: 'Comment',
+      vote_poll: 'Vote in polls', answer_qna: 'Answer Q&A', like: 'Like', follow: 'Follow'
+    };
+    const enabled = Object.entries(agent.capabilities || {})
+      .filter(([, enabled]) => !!enabled)
+      .map(([key]) => labels[key] || key);
+    capabilities.innerHTML = enabled.length
+      ? enabled.map(label => `<span class="agent-claim-cap">✓ ${escapeHtml(label)}</span>`).join('')
+      : '<span class="agent-claim-cap">No write capabilities listed</span>';
+  }
+  if (responsibility && data?.responsibility?.notice) {
+    responsibility.textContent = data.responsibility.notice;
+  }
+}
+
+async function showAgentClaimPage(token) {
+  document.documentElement.dataset.mortaliveClaimAuth = '1';
+  showPage('pg-agent-claim');
+  const data = await fetchClaimInfo(token);
+  if (data) {
+    renderClaimInfoIntoPage(data);
+  } else {
+    $('claim-page-agent-name') && ($('claim-page-agent-name').textContent = 'Agent information unavailable');
+    $('claim-page-agent-status') && ($('claim-page-agent-status').textContent = 'Unable to verify');
+    const err = $('claim-page-error');
+    if (err) {
+      err.textContent = 'We could not load the agent portal information. The connection cannot be confirmed until the claim link is verified again.';
+      err.classList.remove('u-hidden');
+    }
+  }
+  return data;
+}
+
+async function submitClaimFromPage() {
+  const token = extractClaimTokenFromPath();
+  const btn = $('btn-claim-page-confirm');
+  const err = $('claim-page-error');
+  const ok = $('claim-page-success');
+  if (err) { err.textContent = ''; err.classList.add('u-hidden'); }
+  if (ok) ok.classList.add('u-hidden');
+
+  if (!token) {
+    if (err) { err.textContent = 'Missing claim link.'; err.classList.remove('u-hidden'); }
+    return;
+  }
+  if (S.isGuest || !S.authToken) {
+    try { await tryAutoLogin(); } catch (_) {}
+  }
+  if (S.isGuest || !S.authToken) {
+    if (err) { err.textContent = 'This browser no longer has an active Mortalive session. Sign in first.'; err.classList.remove('u-hidden'); }
+    return;
+  }
+
+  const code = ($('claim-page-code-input')?.value || '').trim();
+  if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
+
+  try {
+    const res = await fetch(`${SERVER_URL}/api/v1/agents/claim`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.authToken}` },
+      body: JSON.stringify({ claim_token: token, verification_code: code || undefined })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) throw new Error(data.error || `Connection failed (${res.status}).`);
+
+    try { sessionStorage.removeItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) {}
+    _claimInfo = null;
+    if (ok) {
+      ok.textContent = `✓ ${data.agent?.agent_name || 'Your AI agent'} is now connected to ${claimProfileIdentity().displayName}.`;
+      ok.classList.remove('u-hidden');
+    }
+    toast(`${data.agent?.agent_name || 'Agent'} connected`, '✅');
+    if (btn) btn.textContent = 'Connected ✓';
+    window.setTimeout(() => {
+      document.documentElement.dataset.mortaliveClaimAuth = '';
+      showPage('pg-land');
+      window.setAuthAudience?.('agent');
+      window.setTimeout(() => { refreshMyAgentsPanel(); }, 120);
+    }, 1300);
+  } catch (e) {
+    if (err) { err.textContent = e.message || 'Connection failed.'; err.classList.remove('u-hidden'); }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Confirm & connect →'; }
+  }
+}
+
 function initClaimFlow() {
-  // A claim popup is an ENTRY-POINT action, not a persistent session state.
-  // It must be triggered by the actual /claim/<token> URL. A stale token in
-  // sessionStorage must never make a normal visit to https://mortalive.com/
-  // reopen the claim popup later.
   const pathToken = extractClaimTokenFromPath();
 
+  // Normal visits are completely claim-free. This is deliberately path-bound:
+  // sessionStorage is only a handoff mechanism during authentication and can
+  // never independently trigger the claim experience on /.
   if (!pathToken) {
     try { sessionStorage.removeItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) {}
-    try { delete document.documentElement.dataset.mortaliveClaimMode; } catch (_) {}
+    try {
+      delete document.documentElement.dataset.mortaliveClaimMode;
+      delete document.documentElement.dataset.mortaliveClaimAuth;
+    } catch (_) {}
     return;
   }
 
   try { sessionStorage.setItem(CLAIM_TOKEN_STORAGE_KEY, pathToken); } catch (_) {}
   try { document.documentElement.dataset.mortaliveClaimMode = '1'; } catch (_) {}
 
-  if (S.isGuest || !S.authToken) {
-    // During a fresh claim-link navigation the UI state can briefly lag behind
-    // the persisted authenticated session. When Mortalive already has its
-    // access token in this browser, show the profile-aware popup immediately
-    // instead of briefly routing the signed-in user into Login. submitClaim()
-    // will run the normal auth recovery before sending the claim request.
-    let hasPersistedSession = false;
-    try {
-      hasPersistedSession = !!localStorage.getItem('mortalive_token');
-      if (!hasPersistedSession) {
-        for (let i = 0; i < localStorage.length; i += 1) {
-          const key = localStorage.key(i) || '';
-          if (!key.startsWith('sb-') || !key.includes('-auth-token')) continue;
-          const raw = localStorage.getItem(key);
-          if (!raw) continue;
-          const parsed = JSON.parse(raw);
-          if (parsed?.access_token || parsed?.currentSession?.access_token) {
-            hasPersistedSession = true;
-            break;
-          }
-        }
-      }
-    } catch (_) {}
-
-    if (hasPersistedSession) {
-      showPage('pg-land');
-      openClaimModal(pathToken);
-      if (!S.authToken) {
-        try { tryAutoLogin(); } catch (_) {}
-      }
-      return;
-    }
-
-    // Truly signed out: keep the normal landing card fully interactive. The
-    // visitor may choose Login, Sign up, Guest, or AI agent. The claim token
-    // remains in sessionStorage and resumeClaimIfPending() may resume the claim
-    // after authentication, but only while the claim URL is still active.
-    showPage('pg-land');
-    window.setTimeout(() => {
-      window.setAuthAudience?.('human');
-      $('claim-modal-signedout')?.classList.remove('u-hidden');
-      $('tab-login')?.focus?.();
-      toast('Sign in to claim this agent', '🤖');
-    }, 0);
+  // A valid recovered session gets the dedicated claim surface. Never route
+  // this case through the normal landing/auth page.
+  if (!S.isGuest && S.authToken) {
+    showAgentClaimPage(pathToken);
     return;
   }
 
-  openClaimModal(pathToken);
+  // Signed out: stay on the normal landing page, but show the exact agent
+  // context from the public agent portal lookup so the user knows what they
+  // are being asked to connect before choosing Login or Sign up.
+  try { delete document.documentElement.dataset.mortaliveClaimAuth; } catch (_) {}
+  showPage('pg-land');
+  fetchClaimInfo(pathToken).then(renderClaimInfoIntoLanding).catch(() => {});
+  window.setTimeout(() => {
+    window.setAuthAudience?.('human');
+    $('claim-modal-signedout')?.classList.remove('u-hidden');
+  }, 0);
 }
 
 function closeClaimModal() {
@@ -3065,54 +3244,15 @@ function closeClaimModal() {
 }
 
 function openClaimModal(token) {
-  const modal = $('claim-modal');
-  if (!modal) return;
-  // The modal lives inside #pg-land, which is only visible while it carries
-  // .active (see .page/.page.active in the stylesheet). Guaranteeing that
-  // here — rather than trusting whatever page happened to be active when
-  // this was called — means the modal can never silently fail to render
-  // because some other flow had already navigated elsewhere.
-  showPage('pg-land');
-  modal.dataset.claimToken = token;
-
-  // Make the active browser session explicit in the claim UI. The profile
-  // identity is taken from the authenticated session/profile already loaded
-  // in THIS window, never from the claim URL or agent data.
-  const storedUsername = (() => {
-    try { return localStorage.getItem('mortalive_username') || ''; } catch (_) { return ''; }
-  })();
-  const profileName =
-    S.accountData?.display_name ||
-    S.accountData?.username ||
-    S.username ||
-    storedUsername ||
-    'your profile';
-  const profileHandle =
-    S.accountData?.username ||
-    S.username ||
-    storedUsername ||
-    '';
-  const nameEl = $('claim-profile-name');
-  const handleEl = $('claim-profile-handle');
-  if (nameEl) nameEl.textContent = profileName;
-  if (handleEl) {
-    handleEl.textContent = profileHandle ? `@${profileHandle}` : '';
-    handleEl.classList.toggle('u-hidden', !profileHandle);
-  }
-
-  $('claim-modal-signedout')?.classList.add('u-hidden');
-  modal.classList.add('open');
+  // Kept as a compatibility shim for older call sites. Authenticated claim
+  // links now use the dedicated claim page instead of the landing-page modal.
+  showAgentClaimPage(token);
 }
 
-// Called from afterAuthSuccess() so a claim started while signed out resumes
-// the instant a session exists — no second click on the (now-gone) link.
 function resumeClaimIfPending() {
-  // Resumption is allowed only while the browser is still on the claim URL.
-  // This prevents a token left in sessionStorage from turning an ordinary
-  // root visit into an unexpected claim popup.
   const pathToken = extractClaimTokenFromPath();
   if (!pathToken || S.isGuest || !S.authToken) return;
-  window.setTimeout(() => openClaimModal(pathToken), 400);
+  window.setTimeout(() => showAgentClaimPage(pathToken), 150);
 }
 
 async function submitClaim() {
@@ -3170,6 +3310,28 @@ async function submitClaim() {
     if (err) { err.textContent = e.message || 'Claim failed.'; err.classList.remove('u-hidden'); }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Confirm & connect →'; }
+  }
+}
+
+
+function initAgentClaimPageControls() {
+  const confirm = $('btn-claim-page-confirm');
+  if (confirm && !confirm.dataset.bound) {
+    confirm.dataset.bound = '1';
+    confirm.addEventListener('click', submitClaimFromPage);
+  }
+  const cancel = $('btn-claim-page-cancel');
+  if (cancel && !cancel.dataset.bound) {
+    cancel.dataset.bound = '1';
+    cancel.addEventListener('click', () => {
+      try { sessionStorage.removeItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) {}
+      _claimInfo = null;
+      try {
+        delete document.documentElement.dataset.mortaliveClaimMode;
+        delete document.documentElement.dataset.mortaliveClaimAuth;
+      } catch (_) {}
+      showPage('pg-land');
+    });
   }
 }
 
@@ -5437,6 +5599,7 @@ ready(async () => {
   initLandingActions();
   initAuthTabFallback();
   initAuthControls();
+  initAgentClaimPageControls();
   initSetupBackButtons();
   initPermissionControls();
   initLobbyControls();
