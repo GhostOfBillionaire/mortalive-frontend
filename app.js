@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-21-v197-agent-claim-direct-supabase'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-21-v198-agent-claim-edge-hydration'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -3002,6 +3002,7 @@ const CLAIM_TOKEN_STORAGE_KEY = 'mortalive_pending_claim_token';
 const CLAIM_INFO_TOTAL_TIMEOUT_MS = 5000;
 const CLAIM_INFO_ENDPOINT_TIMEOUT_MS = 4500;
 const CLAIM_INFO_RPC_TIMEOUT_MS = 4500;
+const CLAIM_INFO_EDGE_TIMEOUT_MS = 3500;
 let _claimInfo = null;
 let _claimInfoPromise = null;
 
@@ -3014,6 +3015,34 @@ function claimInfoTimeout(ms, label = 'Claim information request timed out') {
   return new Promise((_, reject) => {
     window.setTimeout(() => reject(new Error(label)), ms);
   });
+}
+
+async function fetchClaimInfoEdge(value) {
+  const boot = window.MORTALIVE_CLAIM_SUPABASE_BOOT || {};
+  const projectUrl = String(boot.url || '').replace(/\/$/, '');
+  if (!projectUrl) throw new Error('Supabase claim service configuration is unavailable');
+
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller
+    ? window.setTimeout(() => controller.abort(), CLAIM_INFO_EDGE_TIMEOUT_MS)
+    : null;
+  try {
+    const url = `${projectUrl}/functions/v1/agent-claim-info?token=${encodeURIComponent(value)}`;
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      cache: 'no-store',
+      credentials: 'omit',
+      signal: controller?.signal
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.success || !data?.agent) {
+      throw new Error(data?.error || `Supabase claim service failed (${res.status})`);
+    }
+    return data;
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  }
 }
 
 async function fetchClaimInfoHttp(url) {
@@ -3095,41 +3124,38 @@ async function fetchClaimInfo(token, { force = false } = {}) {
   _claimInfoPromise = (async () => {
     const candidates = [];
 
-    // Primary: same-origin backend. This route queries the same Supabase
-    // database with the server's DB client, so claim hydration never depends
-    // on the large Mortalivе startup sequence or on a browser Supabase client
-    // existing yet.
+    // First choice: dedicated Supabase Edge Function. This is independent of
+    // Render cold starts and independent of the site's normal /api/public-config
+    // startup path. The claim token is enough to retrieve safe, non-credential
+    // agent context.
+    try { candidates.push(fetchClaimInfoEdge(value)); } catch (_) {}
+
+    // Second choice: direct Supabase PostgREST RPC. Keep this as a redundant
+    // direct-to-Supabase path in case Edge Functions are temporarily delayed.
+    try { candidates.push(fetchClaimInfoSupabaseRest(value)); } catch (_) {}
+
+    // Third choice: same-origin backend. Useful when the browser is already
+    // talking to a warm Render instance, but never required for claim hydration.
     try {
       candidates.push(fetchClaimInfoHttp(
         `${window.location.origin}/api/v1/agents/claim-info/${encodeURIComponent(value)}`
       ));
     } catch (_) {}
 
-    // Primary browser-to-Supabase path: this does not depend on the normal
-    // /api/public-config startup route, Cloudflare API routing, or the local
-    // Supabase client having finished initialization. The publishable key is
-    // intentionally public; the RPC itself exposes only safe claim context.
-    try {
-      candidates.push(fetchClaimInfoSupabaseRest(value));
-    } catch (_) {}
-
-    // Secondary: direct Supabase SDK RPC when the client is already ready.
-    if (sb?.rpc) {
-      candidates.push(fetchClaimInfoRpc(value));
-    }
-
-    if (!candidates.length) return null;
+    // Fourth choice: SDK RPC when the normal client is already available.
+    if (sb?.rpc) candidates.push(fetchClaimInfoRpc(value));
 
     try {
-      console.log('[Agent claim] starting claim hydration', value.slice(0, 18) + '…');
+      console.log('[Agent claim] starting independent claim hydration', value.slice(0, 18) + '…');
       const data = await Promise.race([
         Promise.any(candidates),
-        claimInfoTimeout(CLAIM_INFO_TOTAL_TIMEOUT_MS, `Claim information did not load within ${CLAIM_INFO_TOTAL_TIMEOUT_MS / 1000}s`)
+        claimInfoTimeout(CLAIM_INFO_TOTAL_TIMEOUT_MS,
+          `Claim information did not load within ${CLAIM_INFO_TOTAL_TIMEOUT_MS / 1000}s`)
       ]);
       _claimInfo = { token: value, data };
       return data;
     } catch (error) {
-      console.warn('[Agent claim] all claim-info hydration paths failed:', error?.message || error);
+      console.warn('[Agent claim] all independent hydration paths failed:', error?.message || error);
       return null;
     }
   })().finally(() => {
