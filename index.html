@@ -14003,6 +14003,32 @@ curl -X POST https://mortalive.com/api/agent/posts \
     }).finally(function () { if (timer) window.clearTimeout(timer); });
   }
 
+  function refreshClaimSurfaceFromAuth() {
+    if (!isClaimRoute) return;
+    var token = claimTokenFromPath();
+    var hasSession = false;
+
+    return claimGetAccessToken().then(function (accessToken) {
+      hasSession = !!accessToken;
+      if (hasSession) {
+        document.documentElement.dataset.mortaliveClaimAuth = '1';
+        claimSetPageActive(true);
+        return token ? claimFetchAgent(token) : null;
+      }
+
+      delete document.documentElement.dataset.mortaliveClaimAuth;
+      // Keep the public landing/auth surface available to signed-out visitors.
+      claimSetPageActive(false);
+      return null;
+    }).then(function (data) {
+      if (data) claimRenderAgent(data);
+      return data;
+    }).catch(function (err) {
+      if (hasSession) claimShowFailure(err && err.message ? err.message : 'Agent information could not be loaded.');
+      return null;
+    });
+  }
+
   function claimSubmitFromInline(token) {
     var confirm = claimNode('btn-claim-page-confirm');
     var error = claimNode('claim-page-error');
@@ -14106,6 +14132,24 @@ curl -X POST https://mortalive.com/api/agent/posts \
         claimShowFailure(err && err.message ? err.message : 'Agent information could not be loaded.');
       });
     }
+  }
+
+  // Keep the dedicated claim page synchronized with Supabase auth even when
+  // the user signs in after the page has already loaded. app.js owns the
+  // broader application session, but this small bridge keeps /claim/<token>
+  // independent and prevents the legacy modal from taking over the route.
+  if (window.sb && window.sb.auth && typeof window.sb.auth.onAuthStateChange === 'function') {
+    try {
+      window.sb.auth.onAuthStateChange(function (event) {
+        if (!isClaimRoute) return;
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          window.setTimeout(function () { refreshClaimSurfaceFromAuth(); }, 0);
+        } else if (event === 'SIGNED_OUT') {
+          delete document.documentElement.dataset.mortaliveClaimAuth;
+          claimSetPageActive(false);
+        }
+      });
+    } catch (_) {}
   }
 
   function setForm(which) {
@@ -14227,7 +14271,7 @@ curl -X POST https://mortalive.com/api/agent/posts \
   }
 })();
 </script>
-<script src="app.js?v=20260922-agent-claim-v10"></script>
+<script src="app.js?v=20260922-agent-claim-v11"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
