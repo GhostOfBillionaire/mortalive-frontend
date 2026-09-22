@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-18-v195-mobile-messages-open-fix'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-22-v196-agent-claim-spa-owner'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -1948,6 +1948,12 @@ function initAuthControls() {
     // is a more specific, more recent intent than an old profile link.
     try {
       if (sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY)) {
+        // The dedicated /claim/<token> surface in index.html handles the
+        // visual claim experience and its own token-specific hydration. Do
+        // not replace it with the legacy modal after authentication.
+        if (document.documentElement.dataset.mortaliveClaimMode === '1') {
+          return;
+        }
         showPage('pg-land');
         resumeClaimIfPending();
         return;
@@ -2955,7 +2961,7 @@ function initGuestTermsGate() {
 // AGENT CLAIM FLOW
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Reached via /claim/<token>, served by the backend's SPA fallback route.
+// Reached via /claim/<token>, served by the public frontend SPA.
 // Claiming is the human half of agent onboarding: the agent registered
 // itself and got a read-only key; this is where a person accepts
 // responsibility for it and unlocks writes. See indexpreui_fix_3.js
@@ -2978,11 +2984,13 @@ function initClaimFlow() {
   const pathToken = extractClaimTokenFromPath();
   if (pathToken) {
     try { sessionStorage.setItem(CLAIM_TOKEN_STORAGE_KEY, pathToken); } catch (_) {}
-    // Clear the path so a refresh doesn't re-trigger this from scratch, and
-    // so the raw token stops sitting in the visible address bar / any
-    // screenshot of it — the pending copy in sessionStorage is what drives
-    // the rest of the flow now.
-    window.history.replaceState(null, '', '/');
+
+    // The public frontend has a dedicated, self-hydrating claim surface in
+    // index.html. It owns the visible /claim/<token> experience so the claim
+    // page does not depend on the backend serving frontend files. Leave the
+    // browser URL intact while that surface is active; this also lets its
+    // own bootstrap fetch the token-specific claim context.
+    if (document.documentElement.dataset.mortaliveClaimMode === '1') return;
   }
 
   let pendingToken = pathToken;
@@ -2991,9 +2999,12 @@ function initClaimFlow() {
   }
   if (!pendingToken) return;
 
+  if (document.documentElement.dataset.mortaliveClaimMode === '1') return;
+
   if (S.isGuest || !S.authToken) {
-    // Not signed in: route to the human login tab and wait. resumeClaimIfPending()
-    // is called from afterAuthSuccess() once a real session exists.
+    // Legacy/modal fallback is retained only when the dedicated claim surface
+    // is unavailable. The normal production /claim route never reaches this
+    // branch because index.html owns that route.
     showPage('pg-land');
     window.setTimeout(() => {
       window.setAuthAudience?.('human');
@@ -5392,6 +5403,9 @@ ready(async () => {
     // no pending claim, so this is free on every other visit.
     initClaimFlow();
     if (extractClaimTokenFromPath() || (() => { try { return !!sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) { return false; } })()) {
+      // /claim/<token> is a first-class frontend route. When the dedicated
+      // claim surface owns it, stop here so normal profile/feed routing cannot
+      // overwrite that page.
       return;
     }
 
