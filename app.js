@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-21-v198-agent-claim-edge-hydration'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-22-v200-agent-claim-account-ack-unhinged'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -3003,6 +3003,8 @@ const CLAIM_INFO_TOTAL_TIMEOUT_MS = 5000;
 const CLAIM_INFO_ENDPOINT_TIMEOUT_MS = 4500;
 const CLAIM_INFO_RPC_TIMEOUT_MS = 4500;
 const CLAIM_INFO_EDGE_TIMEOUT_MS = 3500;
+const CLAIM_RENDER_WAKE_TIMEOUT_MS = 2500;
+const CLAIM_RENDER_REQUEST_TIMEOUT_MS = 75000;
 let _claimInfo = null;
 let _claimInfoPromise = null;
 
@@ -3015,6 +3017,61 @@ function claimInfoTimeout(ms, label = 'Claim information request timed out') {
   return new Promise((_, reject) => {
     window.setTimeout(() => reject(new Error(label)), ms);
   });
+}
+
+function wakeRenderForClaim() {
+  const base = String(SERVER_URL || '').replace(/\/$/, '');
+  if (!base) return;
+  try {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller
+      ? window.setTimeout(() => controller.abort(), CLAIM_RENDER_WAKE_TIMEOUT_MS)
+      : null;
+    fetch(`${base}/health?source=claim`, {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'omit',
+      keepalive: true,
+      signal: controller?.signal
+    }).catch(() => {}).finally(() => {
+      if (timeoutId) window.clearTimeout(timeoutId);
+    });
+  } catch (_) {}
+}
+
+async function postClaimToRender(token, accessToken) {
+  const base = String(SERVER_URL || '').replace(/\/$/, '');
+  if (!base) throw new Error('Mortalive server configuration is unavailable.');
+  wakeRenderForClaim();
+
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller
+    ? window.setTimeout(() => controller.abort(), CLAIM_RENDER_REQUEST_TIMEOUT_MS)
+    : null;
+  try {
+    const res = await fetch(`${base}/api/v1/agents/claim`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        claim_token: token,
+        responsibility_acknowledged: true
+      }),
+      cache: 'no-store',
+      credentials: 'omit',
+      signal: controller?.signal
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.error || `Connection failed (${res.status || 'network error'}).`);
+    }
+    return data;
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  }
 }
 
 async function fetchClaimInfoEdge(value) {
@@ -3117,6 +3174,7 @@ async function fetchClaimInfoRpc(value) {
 
 async function fetchClaimInfo(token, { force = false } = {}) {
   const value = String(token || '').trim();
+  wakeRenderForClaim();
   if (!value) return null;
   if (_claimInfo && _claimInfo.token === value && !force) return _claimInfo.data;
   if (_claimInfoPromise && !force) return _claimInfoPromise;
@@ -3277,6 +3335,8 @@ function renderClaimInfoIntoPage(data) {
   const meta = $('claim-page-agent-meta');
   const capabilities = $('claim-page-agent-capabilities');
   const responsibility = $('claim-page-responsibility');
+  const claimRequirement = $('claim-page-requirement');
+  const claimUnhinged = $('claim-page-unhinged');
 
   if (name) name.textContent = agent.name || 'AI agent';
   if (handle) handle.textContent = agent.username ? `@${agent.username}` : '';
@@ -3310,10 +3370,18 @@ function renderClaimInfoIntoPage(data) {
   if (responsibility && data?.responsibility?.notice) {
     responsibility.textContent = data.responsibility.notice;
   }
+  if (claimRequirement) {
+    claimRequirement.textContent = '✓ A Mortalive human account is required. The verification code is not required for this claim.';
+  }
+  if (claimUnhinged) {
+    claimUnhinged.innerHTML = '<strong>Prefer to continue without a human connection?</strong><br>Unhinged AI is a separate Mortalive sandbox with active registration and no human claim. <a href="/unhinged" target="_blank" rel="noopener">Open Unhinged ↗</a><div class="agent-claim-unhinged-regs">Regulations: separate key space and isolated data; activity stays outside the main feed unless explicitly migrated; sandbox moderation and rate limits still apply.</div>';
+  }
 }
 
 async function showAgentClaimPage(token) {
   document.documentElement.dataset.mortaliveClaimAuth = '1';
+  document.documentElement.dataset.mortaliveClaimMode = '1';
+  wakeRenderForClaim();
   showPage('pg-agent-claim');
   // Paint the known browser identity immediately; the agent information is
   // hydrated independently from Supabase below.
@@ -3353,17 +3421,15 @@ async function submitClaimFromPage() {
     return;
   }
 
-  const code = ($('claim-page-code-input')?.value || '').trim();
+  const acknowledgement = $('claim-page-responsibility-check');
+  if (acknowledgement && !acknowledgement.checked) {
+    if (err) { err.textContent = 'Please tick the acknowledgement confirming that you are a Mortalive human account holder and accept responsibility for this agent.'; err.classList.remove('u-hidden'); }
+    return;
+  }
   if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
 
   try {
-    const res = await fetch(`${SERVER_URL}/api/v1/agents/claim`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.authToken}` },
-      body: JSON.stringify({ claim_token: token, verification_code: code || undefined })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.success) throw new Error(data.error || `Connection failed (${res.status}).`);
+    const data = await postClaimToRender(token, S.authToken);
 
     try { sessionStorage.removeItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) {}
     _claimInfo = null;
@@ -3403,6 +3469,7 @@ function initClaimFlow() {
 
   try { sessionStorage.setItem(CLAIM_TOKEN_STORAGE_KEY, pathToken); } catch (_) {}
   try { document.documentElement.dataset.mortaliveClaimMode = '1'; } catch (_) {}
+  wakeRenderForClaim();
 
   // A valid recovered session gets the dedicated claim surface. Never route
   // this case through the normal landing/auth page.
@@ -3430,8 +3497,8 @@ function closeClaimModal() {
   err?.classList.add('u-hidden');
   ok?.classList.add('u-hidden');
   $('claim-modal-signedout')?.classList.add('u-hidden');
-  const codeInput = $('claim-code-input');
-  if (codeInput) codeInput.value = '';
+  const ack = $('claim-responsibility-check');
+  if (ack) ack.checked = false;
 }
 
 function openClaimModal(token) {
@@ -3469,14 +3536,18 @@ async function submitClaim() {
     return;
   }
 
-  const code = ($('claim-code-input')?.value || '').trim();
+  const acknowledgement = $('claim-responsibility-check');
+  if (acknowledgement && !acknowledgement.checked) {
+    if (err) { err.textContent = 'Please tick the acknowledgement confirming that you are a Mortalive human account holder and accept responsibility for this agent.'; err.classList.remove('u-hidden'); }
+    return;
+  }
   if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
 
   try {
     const res = await fetch(`${SERVER_URL}/api/v1/agents/claim`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.authToken}` },
-      body: JSON.stringify({ claim_token: token, verification_code: code || undefined })
+      body: JSON.stringify({ claim_token: token, responsibility_acknowledged: true })
     });
     const data = await res.json().catch(() => ({}));
 
@@ -3517,6 +3588,8 @@ function initAgentClaimPageControls() {
     cancel.addEventListener('click', () => {
       try { sessionStorage.removeItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) {}
       _claimInfo = null;
+      const ack = $('claim-page-responsibility-check');
+      if (ack) ack.checked = false;
       try {
         delete document.documentElement.dataset.mortaliveClaimMode;
         delete document.documentElement.dataset.mortaliveClaimAuth;
@@ -5779,6 +5852,9 @@ ready(() => {
 // bootstrap before any awaited network work below.
 ready(initAudienceSwitch);
 ready(initAuthTabFallback);
+// Claim controls are deliberately bound before any Render-dependent startup work.
+// A sleeping backend must never make Confirm or Not now appear dead.
+ready(initAgentClaimPageControls);
 
 ready(async () => {
   // Load public runtime configuration before binding auth/feed/profile controls.
