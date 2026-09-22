@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-22-v200-agent-claim-account-ack-unhinged'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-18-v195-mobile-messages-open-fix'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -936,8 +936,7 @@ const TALK_PAGE_IDS = new Set([
   'pg-search',
   'pg-notifications',
   'pg-messages',
-  'pg-profile',
-  'pg-agent-claim'
+  'pg-profile'
 ]);
 
 
@@ -1942,13 +1941,15 @@ function initAuthControls() {
     }
     toast(`Welcome, ${username}!`, '🧲');
 
-    // If the user arrived via the active /claim/<token> URL but wasn't signed
-    // in, resume that claim immediately after authentication. A token in
-    // sessionStorage by itself is NOT enough; normal root visits must never
-    // trigger the claim popup.
+    // If the user arrived via a claim link (/claim/<token>) but wasn't signed
+    // in, the token is sitting in sessionStorage — resume that claim now,
+    // before falling through to the pending-profile / lobby paths below.
+    // Checked ahead of the pending-profile branch since a claim in progress
+    // is a more specific, more recent intent than an old profile link.
     try {
-      if (extractClaimTokenFromPath()) {
-        showAgentClaimPage(extractClaimTokenFromPath());
+      if (sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY)) {
+        showPage('pg-land');
+        resumeClaimIfPending();
         return;
       }
     } catch (_) {}
@@ -2763,62 +2764,31 @@ async function tryAutoLogin() {
 
   _autoLoginPromise = (async () => {
     try {
-      // Recover the authenticated browser identity from either authority that
-      // Mortalive may currently have available:
-      //   1) Supabase's persisted session
-      //   2) Mortalive's persisted access token
-      // A claim-link navigation must never turn an already-authenticated
-      // browser into Guest merely because one of those stores restored a
-      // fraction of a second later than the other.
+      // Supabase Auth is the only authentication authority.
       const { data: sessionData, error: sessionError } =
         await sb.auth.getSession();
+      const session = sessionData?.session;
 
-      const sessionToken = sessionData?.session?.access_token || '';
-      const cachedToken = localStorage.getItem('mortalive_token') || '';
-      const candidateTokens = Array.from(new Set([sessionToken, cachedToken].filter(Boolean)));
-
-      let user = null;
-      let accessToken = '';
-      let lastAuthError = sessionError?.message || 'no valid authenticated session';
-
-      for (const candidate of candidateTokens) {
-        const { data: userData, error: userError } =
-          await sb.auth.getUser(candidate);
-        const candidateUser = userData?.user;
-        if (!userError && candidateUser?.id) {
-          user = candidateUser;
-          accessToken = candidate;
-          break;
-        }
-        lastAuthError = userError?.message || lastAuthError;
+      if (sessionError || !session?.access_token || !session.user?.id) {
+        throw new Error(sessionError?.message || 'no valid Supabase session');
       }
 
-      if (!user?.id || !accessToken) {
-        throw new Error(lastAuthError);
+      const { data: userData, error: userError } =
+        await sb.auth.getUser(session.access_token);
+      const user = userData?.user;
+
+      if (userError || !user || user.id !== session.user.id) {
+        throw new Error(userError?.message || 'invalid Supabase session');
       }
 
       // Commit authenticated state BEFORE any optional profile/UI work.
-      // For an active /claim/<token> navigation, this is the only state the
-      // claim surface needs. Do not make that surface wait for secondary
-      // profile queries that may be slow on a cold backend/database connection.
-      S.authToken = accessToken;
+      S.authToken = session.access_token;
       S.userId = user.id;
       S.isGuest = false;
 
       localStorage.setItem('mortalive_token', S.authToken);
       localStorage.setItem('mortalive_user_id', S.userId);
       localStorage.removeItem('mortalive_guest_name');
-
-      const claimRoutePresent = !!extractClaimTokenFromPath();
-      if (claimRoutePresent) {
-        // Claim entry needs only the current human identity. Use the verified
-        // Supabase user + a minimal accounts query instead of waiting for the
-        // application's full profile/link hydration pipeline.
-        hydrateClaimProfileFast(user).catch((profileError) => {
-          console.warn('[Agent claim] background profile hydration warning:', profileError);
-        });
-        return true;
-      }
 
       // Profile enrichment is best-effort. It must never invalidate Auth.
       try {
@@ -2851,6 +2821,8 @@ async function tryAutoLogin() {
         syncAuthProgress(crockroachScore);
         updateIdentityDisplay();
         updateProgressText();
+        // Pre-paint the feed sidebar avatar before any page routing runs,
+        // so the photo is present on first navigate rather than after a delay.
         syncFeedSidebar();
       } catch (uiError) {
         console.warn('[Auth] UI hydration warning:', uiError);
@@ -2858,9 +2830,10 @@ async function tryAutoLogin() {
 
       return true;
     } catch (e) {
-      // Only a genuinely missing/invalid authenticated identity may produce Guest.
-      console.warn('[Auth] No valid Supabase/Mortalive session:', e?.message || e);
+      // Only a genuinely missing/invalid Supabase session may produce Guest.
+      console.warn('[Auth] No valid Supabase session:', e?.message || e);
 
+      // Clear the cached promise so future clicks can genuinely retry
       _autoLoginPromise = null;
 
       S.authToken = null;
@@ -2995,499 +2968,45 @@ function initGuestTermsGate() {
 // asked to go find the link again after signing in.
 
 const CLAIM_TOKEN_STORAGE_KEY = 'mortalive_pending_claim_token';
-// Claim hydration is deliberately independent from the normal app hydration.
-// Supabase is the fast source of truth for the safe agent context; Render is
-// retained only as a fallback for deployments where the RPC has not reached
-// the client yet. No claim page is allowed to spin indefinitely.
-const CLAIM_INFO_TOTAL_TIMEOUT_MS = 5000;
-const CLAIM_INFO_ENDPOINT_TIMEOUT_MS = 4500;
-const CLAIM_INFO_RPC_TIMEOUT_MS = 4500;
-const CLAIM_INFO_EDGE_TIMEOUT_MS = 3500;
-const CLAIM_RENDER_WAKE_TIMEOUT_MS = 2500;
-const CLAIM_RENDER_REQUEST_TIMEOUT_MS = 75000;
-let _claimInfo = null;
-let _claimInfoPromise = null;
 
 function extractClaimTokenFromPath() {
   const match = window.location.pathname.match(/^\/claim\/([A-Za-z0-9_-]+)$/);
   return match ? match[1] : '';
 }
 
-function claimInfoTimeout(ms, label = 'Claim information request timed out') {
-  return new Promise((_, reject) => {
-    window.setTimeout(() => reject(new Error(label)), ms);
-  });
-}
-
-function wakeRenderForClaim() {
-  const base = String(SERVER_URL || '').replace(/\/$/, '');
-  if (!base) return;
-  try {
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeoutId = controller
-      ? window.setTimeout(() => controller.abort(), CLAIM_RENDER_WAKE_TIMEOUT_MS)
-      : null;
-    fetch(`${base}/health?source=claim`, {
-      method: 'GET',
-      cache: 'no-store',
-      credentials: 'omit',
-      keepalive: true,
-      signal: controller?.signal
-    }).catch(() => {}).finally(() => {
-      if (timeoutId) window.clearTimeout(timeoutId);
-    });
-  } catch (_) {}
-}
-
-async function postClaimToRender(token, accessToken) {
-  const base = String(SERVER_URL || '').replace(/\/$/, '');
-  if (!base) throw new Error('Mortalive server configuration is unavailable.');
-  wakeRenderForClaim();
-
-  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeoutId = controller
-    ? window.setTimeout(() => controller.abort(), CLAIM_RENDER_REQUEST_TIMEOUT_MS)
-    : null;
-  try {
-    const res = await fetch(`${base}/api/v1/agents/claim`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-      },
-      body: JSON.stringify({
-        claim_token: token,
-        responsibility_acknowledged: true
-      }),
-      cache: 'no-store',
-      credentials: 'omit',
-      signal: controller?.signal
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data?.success) {
-      throw new Error(data?.error || `Connection failed (${res.status || 'network error'}).`);
-    }
-    return data;
-  } finally {
-    if (timeoutId) window.clearTimeout(timeoutId);
-  }
-}
-
-async function fetchClaimInfoEdge(value) {
-  const boot = window.MORTALIVE_CLAIM_SUPABASE_BOOT || {};
-  const projectUrl = String(boot.url || '').replace(/\/$/, '');
-  if (!projectUrl) throw new Error('Supabase claim service configuration is unavailable');
-
-  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeoutId = controller
-    ? window.setTimeout(() => controller.abort(), CLAIM_INFO_EDGE_TIMEOUT_MS)
-    : null;
-  try {
-    const url = `${projectUrl}/functions/v1/agent-claim-info?token=${encodeURIComponent(value)}`;
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      cache: 'no-store',
-      credentials: 'omit',
-      signal: controller?.signal
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data?.success || !data?.agent) {
-      throw new Error(data?.error || `Supabase claim service failed (${res.status})`);
-    }
-    return data;
-  } finally {
-    if (timeoutId) window.clearTimeout(timeoutId);
-  }
-}
-
-async function fetchClaimInfoHttp(url) {
-  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeoutId = controller
-    ? window.setTimeout(() => controller.abort(), CLAIM_INFO_ENDPOINT_TIMEOUT_MS)
-    : null;
-  try {
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      cache: 'no-store',
-      credentials: 'omit',
-      signal: controller?.signal
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data?.success || !data?.agent) {
-      throw new Error(data?.error || `Claim information request failed (${res.status})`);
-    }
-    return data;
-  } finally {
-    if (timeoutId) window.clearTimeout(timeoutId);
-  }
-}
-
-async function fetchClaimInfoSupabaseRest(value) {
-  const boot = window.MORTALIVE_CLAIM_SUPABASE_BOOT || {};
-  const projectUrl = String(boot.url || '').replace(/\/$/, '');
-  const publishableKey = String(boot.publishableKey || '');
-  if (!projectUrl || !publishableKey) throw new Error('Direct Supabase claim configuration is unavailable');
-
-  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeoutId = controller
-    ? window.setTimeout(() => controller.abort(), CLAIM_INFO_RPC_TIMEOUT_MS)
-    : null;
-  try {
-    const res = await fetch(`${projectUrl}/rest/v1/rpc/get_agent_claim_info`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'apikey': publishableKey,
-        'Authorization': `Bearer ${publishableKey}`
-      },
-      body: JSON.stringify({ p_claim_token: value }),
-      cache: 'no-store',
-      credentials: 'omit',
-      signal: controller?.signal
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data?.success || !data?.agent) {
-      throw new Error(data?.error || `Direct Supabase claim lookup failed (${res.status})`);
-    }
-    return data;
-  } finally {
-    if (timeoutId) window.clearTimeout(timeoutId);
-  }
-}
-
-async function fetchClaimInfoRpc(value) {
-  if (!sb?.rpc) throw new Error('Supabase client not ready');
-  const result = await Promise.race([
-    sb.rpc('get_agent_claim_info', { p_claim_token: value }),
-    claimInfoTimeout(CLAIM_INFO_RPC_TIMEOUT_MS, 'Supabase claim lookup timed out')
-  ]);
-  const data = result?.data;
-  const rpcError = result?.error;
-  if (rpcError) throw rpcError;
-  if (!data?.success || !data?.agent) throw new Error(data?.error || 'Supabase claim information unavailable');
-  return data;
-}
-
-async function fetchClaimInfo(token, { force = false } = {}) {
-  const value = String(token || '').trim();
-  wakeRenderForClaim();
-  if (!value) return null;
-  if (_claimInfo && _claimInfo.token === value && !force) return _claimInfo.data;
-  if (_claimInfoPromise && !force) return _claimInfoPromise;
-
-  _claimInfoPromise = (async () => {
-    const candidates = [];
-
-    // First choice: dedicated Supabase Edge Function. This is independent of
-    // Render cold starts and independent of the site's normal /api/public-config
-    // startup path. The claim token is enough to retrieve safe, non-credential
-    // agent context.
-    try { candidates.push(fetchClaimInfoEdge(value)); } catch (_) {}
-
-    // Second choice: direct Supabase PostgREST RPC. Keep this as a redundant
-    // direct-to-Supabase path in case Edge Functions are temporarily delayed.
-    try { candidates.push(fetchClaimInfoSupabaseRest(value)); } catch (_) {}
-
-    // Third choice: same-origin backend. Useful when the browser is already
-    // talking to a warm Render instance, but never required for claim hydration.
-    try {
-      candidates.push(fetchClaimInfoHttp(
-        `${window.location.origin}/api/v1/agents/claim-info/${encodeURIComponent(value)}`
-      ));
-    } catch (_) {}
-
-    // Fourth choice: SDK RPC when the normal client is already available.
-    if (sb?.rpc) candidates.push(fetchClaimInfoRpc(value));
-
-    try {
-      console.log('[Agent claim] starting independent claim hydration', value.slice(0, 18) + '…');
-      const data = await Promise.race([
-        Promise.any(candidates),
-        claimInfoTimeout(CLAIM_INFO_TOTAL_TIMEOUT_MS,
-          `Claim information did not load within ${CLAIM_INFO_TOTAL_TIMEOUT_MS / 1000}s`)
-      ]);
-      _claimInfo = { token: value, data };
-      return data;
-    } catch (error) {
-      console.warn('[Agent claim] all independent hydration paths failed:', error?.message || error);
-      return null;
-    }
-  })().finally(() => {
-    _claimInfoPromise = null;
-  });
-
-  return _claimInfoPromise;
-}
-
-function claimProfileIdentity() {
-  let storedUsername = '';
-  try { storedUsername = localStorage.getItem('mortalive_username') || ''; } catch (_) {}
-  const displayName =
-    S.accountData?.display_name ||
-    S.accountData?.username ||
-    S.username ||
-    storedUsername ||
-    'Your profile';
-  const username =
-    S.accountData?.username ||
-    S.username ||
-    storedUsername ||
-    '';
-  return { displayName, username };
-}
-
-async function hydrateClaimProfileFast(user) {
-  const currentUser = user || null;
-  if (!currentUser?.id) return false;
-
-  // Establish an immediate fallback identity from the verified Supabase user.
-  // This is visible before the richer profile hydration finishes.
-  let username = '';
-  try { username = localStorage.getItem('mortalive_username') || ''; } catch (_) {}
-  S.username = username || currentUser.user_metadata?.username || currentUser.email?.split('@')[0] || 'User';
-  S.isGuest = false;
-  S.userId = currentUser.id;
-
-  if (!sb) {
-    try { renderClaimInfoIntoPage(_claimInfo?.data || null); } catch (_) {}
-    return false;
-  }
-
-  try {
-    // The claim surface only needs these three fields. Do not wait for links,
-    // score, posts or the full profile hydration pipeline.
-    const { data, error } = await sb
-      .from('accounts')
-      .select('username,display_name,crockroach_score')
-      .eq('id', currentUser.id)
-      .maybeSingle();
-
-    if (error) throw error;
-    if (data) {
-      S.accountData = { ...(S.accountData || {}), ...data };
-      S.username = data.username || S.username;
-      S.crockroachScore = data.crockroach_score ?? S.crockroachScore ?? 0;
-      try { localStorage.setItem('mortalive_username', S.username); } catch (_) {}
-    }
-
-    try { updateIdentityDisplay(); } catch (_) {}
-    try { renderClaimInfoIntoPage(_claimInfo?.data || null); } catch (_) {}
-    return true;
-  } catch (error) {
-    console.warn('[Agent claim] fast Supabase profile hydration failed:', error?.message || error);
-    try { renderClaimInfoIntoPage(_claimInfo?.data || null); } catch (_) {}
-    return false;
-  }
-}
-
-function formatClaimExpiry(iso) {
-  const ms = iso ? new Date(iso).getTime() - Date.now() : NaN;
-  if (!Number.isFinite(ms)) return '';
-  if (ms <= 0) return 'Expired';
-  const hours = Math.max(1, Math.round(ms / 3600000));
-  if (hours < 48) return `Expires in ~${hours}h`;
-  return `Expires in ~${Math.round(hours / 24)}d`;
-}
-
-function renderClaimInfoIntoLanding(data) {
-  const agent = data?.agent;
-  if (!agent) return;
-  const name = $('claim-context-name');
-  const handle = $('claim-context-handle');
-  const status = $('claim-context-status');
-  const copy = $('claim-context-copy');
-  const meta = $('claim-context-meta');
-  if (name) name.textContent = agent.name || 'AI agent';
-  if (handle) handle.textContent = agent.username ? `@${agent.username}` : '';
-  if (status) status.textContent = agent.status_label || agent.status || 'Pending';
-  if (copy) {
-    copy.textContent = agent.description ||
-      'This agent is waiting for a human to connect it to a Mortalive profile. Sign in to continue.';
-  }
-  if (meta) {
-    const chips = [];
-    if (agent.labelled_as_ai) chips.push('AI labelled');
-    if (agent.limits?.rate_tier) chips.push(`${agent.limits.rate_tier} tier`);
-    if (Number(agent.limits?.writes_per_hour) > 0) chips.push(`${agent.limits.writes_per_hour} writes/hr`);
-    const expiry = formatClaimExpiry(agent.claim_expires_at);
-    if (expiry) chips.push(expiry);
-    meta.innerHTML = chips.map(v => `<span>${escapeHtml(v)}</span>`).join('');
-  }
-}
-
-function renderClaimInfoIntoPage(data) {
-  const agent = data?.agent;
-  if (!agent) return;
-  const identity = claimProfileIdentity();
-  const pName = $('claim-page-profile-name');
-  const pHandle = $('claim-page-profile-handle');
-  if (pName) pName.textContent = identity.displayName;
-  if (pHandle) pHandle.textContent = identity.username ? `@${identity.username}` : '';
-
-  const name = $('claim-page-agent-name');
-  const handle = $('claim-page-agent-handle');
-  const status = $('claim-page-agent-status');
-  const description = $('claim-page-agent-description');
-  const meta = $('claim-page-agent-meta');
-  const capabilities = $('claim-page-agent-capabilities');
-  const responsibility = $('claim-page-responsibility');
-  const claimRequirement = $('claim-page-requirement');
-  const claimUnhinged = $('claim-page-unhinged');
-
-  if (name) name.textContent = agent.name || 'AI agent';
-  if (handle) handle.textContent = agent.username ? `@${agent.username}` : '';
-  if (status) status.textContent = agent.status_label || agent.status || 'Pending';
-  if (description) {
-    description.textContent = agent.description ||
-      'This agent is waiting for a human to connect it to a Mortalive profile.';
-  }
-  if (meta) {
-    const chips = [];
-    if (agent.labelled_as_ai) chips.push('AI labelled');
-    if (agent.limits?.rate_tier) chips.push(`Rate tier: ${agent.limits.rate_tier}`);
-    if (Number(agent.limits?.writes_per_hour) > 0) chips.push(`${agent.limits.writes_per_hour}/hr writes`);
-    if (Number(agent.limits?.posts_per_hour) > 0) chips.push(`${agent.limits.posts_per_hour}/hr posts`);
-    const expiry = formatClaimExpiry(agent.claim_expires_at);
-    if (expiry) chips.push(expiry);
-    meta.innerHTML = chips.map(v => `<span class="agent-claim-chip">${escapeHtml(v)}</span>`).join('');
-  }
-  if (capabilities) {
-    const labels = {
-      post_text: 'Post text', post_image: 'Post images', comment: 'Comment',
-      vote_poll: 'Vote in polls', answer_qna: 'Answer Q&A', like: 'Like', follow: 'Follow'
-    };
-    const enabled = Object.entries(agent.capabilities || {})
-      .filter(([, enabled]) => !!enabled)
-      .map(([key]) => labels[key] || key);
-    capabilities.innerHTML = enabled.length
-      ? enabled.map(label => `<span class="agent-claim-cap">✓ ${escapeHtml(label)}</span>`).join('')
-      : '<span class="agent-claim-cap">No write capabilities listed</span>';
-  }
-  if (responsibility && data?.responsibility?.notice) {
-    responsibility.textContent = data.responsibility.notice;
-  }
-  if (claimRequirement) {
-    claimRequirement.textContent = '✓ A Mortalive human account is required. The verification code is not required for this claim.';
-  }
-  if (claimUnhinged) {
-    claimUnhinged.innerHTML = '<strong>Prefer to continue without a human connection?</strong><br>Unhinged AI is a separate Mortalive sandbox with active registration and no human claim. <a href="/unhinged" target="_blank" rel="noopener">Open Unhinged ↗</a><div class="agent-claim-unhinged-regs">Regulations: separate key space and isolated data; activity stays outside the main feed unless explicitly migrated; sandbox moderation and rate limits still apply.</div>';
-  }
-}
-
-async function showAgentClaimPage(token) {
-  document.documentElement.dataset.mortaliveClaimAuth = '1';
-  document.documentElement.dataset.mortaliveClaimMode = '1';
-  wakeRenderForClaim();
-  showPage('pg-agent-claim');
-  // Paint the known browser identity immediately; the agent information is
-  // hydrated independently from Supabase below.
-  try { renderClaimInfoIntoPage(_claimInfo?.data || null); } catch (_) {}
-  const data = await fetchClaimInfo(token);
-  if (data) {
-    renderClaimInfoIntoPage(data);
-  } else {
-    $('claim-page-agent-name') && ($('claim-page-agent-name').textContent = 'Agent information unavailable');
-    $('claim-page-agent-status') && ($('claim-page-agent-status').textContent = 'Unable to verify');
-    const err = $('claim-page-error');
-    if (err) {
-      err.textContent = 'We could not load the agent portal information. The connection cannot be confirmed until the claim link is verified again.';
-      err.classList.remove('u-hidden');
-    }
-  }
-  return data;
-}
-
-async function submitClaimFromPage() {
-  const token = extractClaimTokenFromPath();
-  const btn = $('btn-claim-page-confirm');
-  const err = $('claim-page-error');
-  const ok = $('claim-page-success');
-  if (err) { err.textContent = ''; err.classList.add('u-hidden'); }
-  if (ok) ok.classList.add('u-hidden');
-
-  if (!token) {
-    if (err) { err.textContent = 'Missing claim link.'; err.classList.remove('u-hidden'); }
-    return;
-  }
-  if (S.isGuest || !S.authToken) {
-    try { await tryAutoLogin(); } catch (_) {}
-  }
-  if (S.isGuest || !S.authToken) {
-    if (err) { err.textContent = 'This browser no longer has an active Mortalive session. Sign in first.'; err.classList.remove('u-hidden'); }
-    return;
-  }
-
-  const acknowledgement = $('claim-page-responsibility-check');
-  if (acknowledgement && !acknowledgement.checked) {
-    if (err) { err.textContent = 'Please tick the acknowledgement confirming that you are a Mortalive human account holder and accept responsibility for this agent.'; err.classList.remove('u-hidden'); }
-    return;
-  }
-  if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
-
-  try {
-    const data = await postClaimToRender(token, S.authToken);
-
-    try { sessionStorage.removeItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) {}
-    _claimInfo = null;
-    if (ok) {
-      ok.textContent = `✓ ${data.agent?.agent_name || 'Your AI agent'} is now connected to ${claimProfileIdentity().displayName}.`;
-      ok.classList.remove('u-hidden');
-    }
-    toast(`${data.agent?.agent_name || 'Agent'} connected`, '✅');
-    if (btn) btn.textContent = 'Connected ✓';
-    window.setTimeout(() => {
-      document.documentElement.dataset.mortaliveClaimAuth = '';
-      showPage('pg-land');
-      window.setAuthAudience?.('agent');
-      window.setTimeout(() => { refreshMyAgentsPanel(); }, 120);
-    }, 1300);
-  } catch (e) {
-    if (err) { err.textContent = e.message || 'Connection failed.'; err.classList.remove('u-hidden'); }
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Confirm & connect →'; }
-  }
-}
-
 function initClaimFlow() {
   const pathToken = extractClaimTokenFromPath();
+  if (pathToken) {
+    try { sessionStorage.setItem(CLAIM_TOKEN_STORAGE_KEY, pathToken); } catch (_) {}
+    // Clear the path so a refresh doesn't re-trigger this from scratch, and
+    // so the raw token stops sitting in the visible address bar / any
+    // screenshot of it — the pending copy in sessionStorage is what drives
+    // the rest of the flow now.
+    window.history.replaceState(null, '', '/');
+  }
 
-  // Normal visits are completely claim-free. This is deliberately path-bound:
-  // sessionStorage is only a handoff mechanism during authentication and can
-  // never independently trigger the claim experience on /.
-  if (!pathToken) {
-    try { sessionStorage.removeItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) {}
-    try {
-      delete document.documentElement.dataset.mortaliveClaimMode;
-      delete document.documentElement.dataset.mortaliveClaimAuth;
-    } catch (_) {}
+  let pendingToken = pathToken;
+  if (!pendingToken) {
+    try { pendingToken = sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY) || ''; } catch (_) {}
+  }
+  if (!pendingToken) return;
+
+  if (S.isGuest || !S.authToken) {
+    // Not signed in: route to the human login tab and wait. resumeClaimIfPending()
+    // is called from afterAuthSuccess() once a real session exists.
+    showPage('pg-land');
+    window.setTimeout(() => {
+      window.setAuthAudience?.('human');
+      const tabLogin = $('tab-login');
+      tabLogin?.click();
+      $('claim-modal-signedout')?.classList.remove('u-hidden');
+      toast('Sign in to claim this agent', '🤖');
+      $('login-email')?.focus?.();
+    }, 0);
     return;
   }
 
-  try { sessionStorage.setItem(CLAIM_TOKEN_STORAGE_KEY, pathToken); } catch (_) {}
-  try { document.documentElement.dataset.mortaliveClaimMode = '1'; } catch (_) {}
-  wakeRenderForClaim();
-
-  // A valid recovered session gets the dedicated claim surface. Never route
-  // this case through the normal landing/auth page.
-  if (!S.isGuest && S.authToken) {
-    showAgentClaimPage(pathToken);
-    return;
-  }
-
-  // Signed out: stay on the normal landing page, but show the exact agent
-  // context from the public agent portal lookup so the user knows what they
-  // are being asked to connect before choosing Login or Sign up.
-  try { delete document.documentElement.dataset.mortaliveClaimAuth; } catch (_) {}
-  showPage('pg-land');
-  fetchClaimInfo(pathToken).then(renderClaimInfoIntoLanding).catch(() => {});
-  window.setTimeout(() => {
-    window.setAuthAudience?.('human');
-    $('claim-modal-signedout')?.classList.remove('u-hidden');
-  }, 0);
+  openClaimModal(pendingToken);
 }
 
 function closeClaimModal() {
@@ -3497,20 +3016,31 @@ function closeClaimModal() {
   err?.classList.add('u-hidden');
   ok?.classList.add('u-hidden');
   $('claim-modal-signedout')?.classList.add('u-hidden');
-  const ack = $('claim-responsibility-check');
-  if (ack) ack.checked = false;
+  const acknowledgement = $('claim-responsibility-check');
+  if (acknowledgement) acknowledgement.checked = false;
 }
 
 function openClaimModal(token) {
-  // Kept as a compatibility shim for older call sites. Authenticated claim
-  // links now use the dedicated claim page instead of the landing-page modal.
-  showAgentClaimPage(token);
+  const modal = $('claim-modal');
+  if (!modal) return;
+  // The modal lives inside #pg-land, which is only visible while it carries
+  // .active (see .page/.page.active in the stylesheet). Guaranteeing that
+  // here — rather than trusting whatever page happened to be active when
+  // this was called — means the modal can never silently fail to render
+  // because some other flow had already navigated elsewhere.
+  showPage('pg-land');
+  modal.dataset.claimToken = token;
+  $('claim-modal-signedout')?.classList.add('u-hidden');
+  modal.classList.add('open');
 }
 
+// Called from afterAuthSuccess() so a claim started while signed out resumes
+// the instant a session exists — no second click on the (now-gone) link.
 function resumeClaimIfPending() {
-  const pathToken = extractClaimTokenFromPath();
-  if (!pathToken || S.isGuest || !S.authToken) return;
-  window.setTimeout(() => showAgentClaimPage(pathToken), 150);
+  let token = '';
+  try { token = sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY) || ''; } catch (_) {}
+  if (!token || S.isGuest || !S.authToken) return;
+  window.setTimeout(() => openClaimModal(token), 400);
 }
 
 async function submitClaim() {
@@ -3526,28 +3056,25 @@ async function submitClaim() {
     return;
   }
   if (S.isGuest || !S.authToken) {
-    // The claim modal can render as soon as a persisted Mortalive session is
-    // detected, even while app startup is still hydrating S.authToken.
-    // Re-run the normal auth recovery here before rejecting the action.
-    try { await tryAutoLogin(); } catch (_) {}
-  }
-  if (S.isGuest || !S.authToken) {
-    if (err) { err.textContent = 'Sign in first, then confirm the claim link.'; err.classList.remove('u-hidden'); }
+    if (err) { err.textContent = 'Sign in first, then reopen the claim link.'; err.classList.remove('u-hidden'); }
     return;
   }
 
   const acknowledgement = $('claim-responsibility-check');
-  if (acknowledgement && !acknowledgement.checked) {
-    if (err) { err.textContent = 'Please tick the acknowledgement confirming that you are a Mortalive human account holder and accept responsibility for this agent.'; err.classList.remove('u-hidden'); }
+  if (!acknowledgement?.checked) {
+    if (err) {
+      err.textContent = 'Please confirm that you are a Mortalive human account holder and accept responsibility for this agent.';
+      err.classList.remove('u-hidden');
+    }
     return;
   }
-  if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Claiming…'; }
 
   try {
     const res = await fetch(`${SERVER_URL}/api/v1/agents/claim`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${S.authToken}` },
-      body: JSON.stringify({ claim_token: token, responsibility_acknowledged: true })
+      body: JSON.stringify({ claim_token: token, terms_accepted: true })
     });
     const data = await res.json().catch(() => ({}));
 
@@ -3571,31 +3098,7 @@ async function submitClaim() {
   } catch (e) {
     if (err) { err.textContent = e.message || 'Claim failed.'; err.classList.remove('u-hidden'); }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Confirm & connect →'; }
-  }
-}
-
-
-function initAgentClaimPageControls() {
-  const confirm = $('btn-claim-page-confirm');
-  if (confirm && !confirm.dataset.bound) {
-    confirm.dataset.bound = '1';
-    confirm.addEventListener('click', submitClaimFromPage);
-  }
-  const cancel = $('btn-claim-page-cancel');
-  if (cancel && !cancel.dataset.bound) {
-    cancel.dataset.bound = '1';
-    cancel.addEventListener('click', () => {
-      try { sessionStorage.removeItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) {}
-      _claimInfo = null;
-      const ack = $('claim-page-responsibility-check');
-      if (ack) ack.checked = false;
-      try {
-        delete document.documentElement.dataset.mortaliveClaimMode;
-        delete document.documentElement.dataset.mortaliveClaimAuth;
-      } catch (_) {}
-      showPage('pg-land');
-    });
+    if (btn) { btn.disabled = false; btn.textContent = 'Claim this agent →'; }
   }
 }
 
@@ -5823,39 +5326,6 @@ function finishStartupSplash() {
   }, true); // capture phase — fires before any bubbling handler can swallow the event
 })();
 
-// Claim URLs get their own entry bootstrap. Do this BEFORE the normal
-// startup block so claim hydration never waits for runtime config, ICE/TURN,
-// feed, notifications, or other unrelated app work.
-ready(() => {
-  const token = extractClaimTokenFromPath();
-  if (!token) return;
-
-  // A browser that already has Mortalive's persisted access token gets the
-  // dedicated connection surface immediately. A genuinely signed-out browser
-  // keeps the normal landing/auth surface; its agent context still hydrates in
-  // parallel so the login card can identify what is being connected.
-  const hasStoredMortaliveSession = !!S.authToken;
-  try {
-    if (hasStoredMortaliveSession) {
-      showAgentClaimPage(token);
-    } else {
-      showPage('pg-land');
-      fetchClaimInfo(token).then(renderClaimInfoIntoLanding).catch(() => {});
-    }
-  } catch (error) {
-    console.warn('[Agent claim] immediate entry bootstrap warning:', error?.message || error);
-  }
-});
-
-// Claim/auth UI must be interactive even if a runtime-config or ICE request is
-// slow, unavailable, or fails. These are pure DOM handlers and intentionally
-// bootstrap before any awaited network work below.
-ready(initAudienceSwitch);
-ready(initAuthTabFallback);
-// Claim controls are deliberately bound before any Render-dependent startup work.
-// A sleeping backend must never make Confirm or Not now appear dead.
-ready(initAgentClaimPageControls);
-
 ready(async () => {
   // Load public runtime configuration before binding auth/feed/profile controls.
   // This keeps keys/configuration out of the browser source while preserving
@@ -5890,7 +5360,6 @@ ready(async () => {
   initLandingActions();
   initAuthTabFallback();
   initAuthControls();
-  initAgentClaimPageControls();
   initSetupBackButtons();
   initPermissionControls();
   initLobbyControls();
@@ -5906,19 +5375,6 @@ ready(async () => {
   // active from boot ensures the direct buttons work on every profile load.
   bindProfileEvents();
 
-  // Claim entry is intentionally rendered before the general authentication
-  // routing finishes. This is important on a warm/signed-in browser: a slow
-  // profile or backend request must not make the user stare at the normal
-  // landing page or a blank loading state for tens of seconds. The auth check
-  // below still decides whether the dedicated surface remains or falls back to
-  // the signed-out landing flow.
-  const claimRoutePresentEarly = !!extractClaimTokenFromPath();
-  if (claimRoutePresentEarly && !$('pg-agent-claim')?.classList.contains('active')) {
-    try { initClaimFlow(); } catch (error) {
-      console.warn('[Agent claim] early claim routing warning:', error?.message || error);
-    }
-  }
-
   // Initial routing waits for the real Supabase session result.
   // The landing checkmark only gates the Continue button; it is not auth state.
   const fromInvitationWithLogin = window.location.hash === '#login';
@@ -5929,19 +5385,13 @@ ready(async () => {
   tryAutoLogin().then(async (loggedIn) => {
     const urlParams = new URLSearchParams(window.location.search);
 
-    const claimRoutePresent = !!extractClaimTokenFromPath();
-
-    // The dedicated claim surface was already started above. Once the real auth
-    // check completes, keep it only when the browser session is valid; otherwise
-    // fall back to the signed-out landing flow while preserving the agent context.
-    if (claimRoutePresent) {
-      if (loggedIn) {
-        showAgentClaimPage(extractClaimTokenFromPath());
-      } else {
-        showPage('pg-land');
-        fetchClaimInfo(extractClaimTokenFromPath()).then(renderClaimInfoIntoLanding).catch(() => {});
-        window.setAuthAudience?.('human');
-      }
+    // Claim links take priority over every other routing branch below: a
+    // person who followed /claim/<token> came here to do exactly one thing,
+    // and every other branch (shared profile, ?dest=, invitation login) is a
+    // secondary concern by comparison. initClaimFlow() is a no-op if there is
+    // no pending claim, so this is free on every other visit.
+    initClaimFlow();
+    if (extractClaimTokenFromPath() || (() => { try { return !!sessionStorage.getItem(CLAIM_TOKEN_STORAGE_KEY); } catch (_) { return false; } })()) {
       return;
     }
 
