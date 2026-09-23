@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-23-v197-feed-density-poll-market'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-23-v198-feed-line-poll'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -5683,6 +5683,7 @@ let _feedQnaResponseCache = new Map();
 let _feedQnaCorrectCache = new Map();
 let _feedPollVoteCache = new Map();
 let _feedPollCountsCache = new Map();
+let _feedPollHistoryCache = new Map(); // post_id -> [{ optionId, createdAt }] for market-style line charts
 // V107: explicit poll duration state; default remains one day.
 let _feedPollDurationHours = 24;
 let _feedComposerMenuOpen = false;
@@ -8580,6 +8581,45 @@ async function hydrateQnaResponses(postIds = []) {
   }
 }
 
+
+async function hydratePollHistory(postIds = []) {
+  if (S.isGuest || !S.userId || !sb) return;
+  const ids = Array.from(new Set((postIds || []).filter(Boolean)));
+  if (!ids.length) return;
+
+  try {
+    const { data, error } = await sb
+      .from('post_poll_votes')
+      .select('post_id,option_id,created_at')
+      .in('post_id', ids)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    const grouped = new Map();
+    ids.forEach(id => grouped.set(id, []));
+    (data || []).forEach(row => {
+      if (!row?.post_id || !row?.option_id) return;
+      const createdAt = Date.parse(row.created_at || '');
+      if (!Number.isFinite(createdAt)) return;
+      if (!grouped.has(row.post_id)) grouped.set(row.post_id, []);
+      grouped.get(row.post_id).push({
+        optionId: String(row.option_id),
+        createdAt
+      });
+    });
+
+    grouped.forEach((events, postId) => _feedPollHistoryCache.set(postId, events));
+  } catch (e) {
+    // Some older poll-vote schemas/RLS policies may not expose created_at.
+    // The renderer gracefully falls back to a current-distribution line.
+    console.warn('[Poll] history hydration warning:', e?.message || e);
+    ids.forEach(id => {
+      if (!_feedPollHistoryCache.has(id)) _feedPollHistoryCache.set(id, []);
+    });
+  }
+}
+
 async function hydratePollResults(postIds = []) {
   if (S.isGuest || !S.userId || !sb) return;
   const ids = Array.from(new Set((postIds || []).filter(Boolean)));
@@ -8609,6 +8649,7 @@ async function hydratePollResults(postIds = []) {
     const { data, error } = await sb.rpc('get_poll_results_v2', { p_post_ids: ids });
     if (!error) {
       applyRows(data || []);
+      await hydratePollHistory(ids);
       return;
     }
     console.warn('[Poll] get_poll_results_v2 failed; trying legacy RPC:', error.message);
@@ -8620,6 +8661,7 @@ async function hydratePollResults(postIds = []) {
     const { data, error } = await sb.rpc('get_poll_results', { p_post_ids: ids });
     if (!error) {
       applyRows(data || []);
+      await hydratePollHistory(ids);
       return;
     }
     console.warn('[Poll] get_poll_results failed; using direct table fallback:', error.message);
@@ -8649,6 +8691,7 @@ async function hydratePollResults(postIds = []) {
     ids.forEach((id) => {
       if (!_feedPollCountsCache.has(id)) _feedPollCountsCache.set(id, new Map());
     });
+    await hydratePollHistory(ids);
   } catch (fallbackError) {
     console.warn('[Poll] results hydration warning:', fallbackError?.message || fallbackError);
     ids.forEach((id) => {
@@ -8827,32 +8870,102 @@ function renderStructuredFeedPost(post) {
       ? (expired ? 'Poll ended' : `Ends ${new Date(expiresAt).toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })}`)
       : '';
 
-    // Market-style visualization for Feed polls. The existing Supabase vote
-    // persistence and caches are unchanged; this is a presentation-only pass.
     const palette = ['blue', 'violet', 'teal', 'orange', 'green', 'pink'];
-    const graphRows = options.map((option, index) => {
+    const history = Array.isArray(_feedPollHistoryCache.get(post.id))
+      ? _feedPollHistoryCache.get(post.id)
+      : [];
+
+    // One chart type only: a Polymarket-style multi-series probability line chart.
+    // Each point is the option's vote share after a vote was cast.
+    const optionIds = options.map(option => String(option?.id || ''));
+    const startTs = Number.isFinite(Date.parse(post.created_at || '')) ? Date.parse(post.created_at) : Date.now();
+    const nowTs = Date.now();
+    const events = history
+      .filter(event => optionIds.includes(String(event.optionId)) && Number.isFinite(event.createdAt))
+      .slice()
+      .sort((a, b) => a.createdAt - b.createdAt);
+
+    const pointsByOption = new Map(optionIds.map(id => [id, [{ t: startTs, pct: 0 }]]));
+    const running = new Map(optionIds.map(id => [id, 0]));
+
+    events.forEach(event => {
+      const current = Number(running.get(event.optionId) || 0);
+      running.set(event.optionId, current + 1);
+      const total = Array.from(running.values()).reduce((sum, value) => sum + value, 0);
+      if (!total) return;
+      optionIds.forEach(id => {
+        const pct = (Number(running.get(id) || 0) / total) * 100;
+        pointsByOption.get(id).push({ t: event.createdAt, pct });
+      });
+    });
+
+    // Keep the chart useful even when created_at history is unavailable.
+    if (!events.length) {
+      optionIds.forEach(id => {
+        const count = Number(counts.get(id) || 0);
+        const pct = totalVotes ? (count / totalVotes) * 100 : 0;
+        pointsByOption.get(id).push({ t: nowTs, pct });
+      });
+    } else {
+      optionIds.forEach(id => {
+        const count = Number(counts.get(id) || 0);
+        const pct = totalVotes ? (count / totalVotes) * 100 : 0;
+        pointsByOption.get(id).push({ t: nowTs, pct });
+      });
+    }
+
+    const chartW = 560;
+    const chartH = 188;
+    const pad = { left: 34, right: 12, top: 12, bottom: 25 };
+    const plotW = chartW - pad.left - pad.right;
+    const plotH = chartH - pad.top - pad.bottom;
+    const minT = Math.min(startTs, ...events.map(event => event.createdAt), nowTs);
+    const maxT = Math.max(minT + 1, nowTs);
+
+    const xFor = (t) => pad.left + ((t - minT) / Math.max(1, maxT - minT)) * plotW;
+    const yFor = (pct) => pad.top + (1 - Math.max(0, Math.min(100, pct)) / 100) * plotH;
+
+    const pathFor = (points) => points.map((point, index) =>
+      `${index ? 'L' : 'M'}${xFor(point.t).toFixed(1)},${yFor(point.pct).toFixed(1)}`
+    ).join(' ');
+
+    const grid = [0, 25, 50, 75, 100].map(value => {
+      const y = yFor(value).toFixed(1);
+      return `<line x1="${pad.left}" y1="${y}" x2="${chartW - pad.right}" y2="${y}" class="poll-market-grid-line"/>
+              <text x="${pad.left - 7}" y="${Number(y) + 3}" text-anchor="end" class="poll-market-axis-label">${value}%</text>`;
+    }).join('');
+
+    const lines = options.map((option, index) => {
+      const optionId = String(option?.id || '');
+      const color = palette[index % palette.length];
+      const points = pointsByOption.get(optionId) || [{ t: startTs, pct: 0 }, { t: nowTs, pct: 0 }];
+      const last = points[points.length - 1] || points[0];
+      const safeLabel = sanitizeHTML(option?.label || '');
+      const pct = Math.round(Number(last.pct || 0));
+      return `
+        <path d="${pathFor(points)}" class="poll-market-line ${color}" vector-effect="non-scaling-stroke"/>
+        <circle cx="${xFor(last.t).toFixed(1)}" cy="${yFor(last.pct).toFixed(1)}" r="3.2" class="poll-market-line-dot ${color}"/>`;
+    }).join('');
+
+    const legend = options.map((option, index) => {
       const optionId = String(option?.id || '');
       const count = Number(counts.get(optionId) || 0);
       const pct = totalVotes ? Math.round((count / totalVotes) * 100) : 0;
+      const color = palette[index % palette.length];
       const selected = myVote === optionId;
       const disabled = (myVote || expired) ? ' aria-disabled="true"' : '';
-      const color = palette[index % palette.length];
-      return `<button type="button" class="poll-market-option${selected ? ' is-selected' : ''}" data-structured-kind="poll" data-structured-option="${sanitizeHTML(optionId)}" data-post-id="${sanitizeHTML(post.id)}"${disabled}>
-        <span class="poll-market-option-head">
-          <span class="poll-market-option-label"><span class="poll-market-dot ${color}"></span>${sanitizeHTML(option?.label || '')}</span>
-          <strong>${pct}%</strong>
-        </span>
-        <span class="poll-market-bar" aria-hidden="true"><span class="poll-market-bar-fill ${color}" style="width:${pct}%"></span></span>
-        <span class="poll-market-option-meta">${count} vote${count === 1 ? '' : 's'}${selected ? ' · Your vote' : ''}</span>
+      return `<button type="button"
+        class="poll-market-legend-option${selected ? ' is-selected' : ''}"
+        data-structured-kind="poll"
+        data-structured-option="${sanitizeHTML(optionId)}"
+        data-post-id="${sanitizeHTML(post.id)}"${disabled}>
+        <span class="poll-market-legend-left"><span class="poll-market-dot ${color}"></span><span>${sanitizeHTML(option?.label || '')}</span></span>
+        <span class="poll-market-legend-right">${pct}% <small>${count} vote${count === 1 ? '' : 's'}</small></span>
       </button>`;
     }).join('');
 
-    const summarySegments = options.map((option, index) => {
-      const optionId = String(option?.id || '');
-      const count = Number(counts.get(optionId) || 0);
-      const pct = totalVotes ? Math.max(0, Math.min(100, (count / totalVotes) * 100)) : 0;
-      return `<span class="poll-market-summary-segment ${palette[index % palette.length]}" style="width:${pct}%"></span>`;
-    }).join('');
+    const startLabel = new Date(minT).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+    const nowLabel = new Date(nowTs).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
 
     return `<div class="feed-structured-post poll-market-card" data-structured-kind="poll" data-structured-mode="mcq">
       <div class="poll-market-head">
@@ -8860,8 +8973,18 @@ function renderStructuredFeedPost(post) {
         ${expirationLabel ? `<span class="poll-market-duration">${sanitizeHTML(expirationLabel)}</span>` : ''}
       </div>
       <div class="poll-market-question">${renderHashtagRichText(post.content || '')}</div>
-      <div class="poll-market-summary" aria-hidden="true">${summarySegments || '<span class="poll-market-summary-segment empty" style="width:100%"></span>'}</div>
-      <div class="poll-market-chart" role="group" aria-label="Poll results">${graphRows}</div>
+
+      <div class="poll-market-chart-wrap">
+        <svg class="poll-market-chart" viewBox="0 0 ${chartW} ${chartH}" role="img" aria-label="Poll probability over time">
+          ${grid}
+          ${lines}
+          <text x="${pad.left}" y="${chartH - 5}" class="poll-market-axis-label">${sanitizeHTML(startLabel)}</text>
+          <text x="${chartW - pad.right}" y="${chartH - 5}" text-anchor="end" class="poll-market-axis-label">${sanitizeHTML(nowLabel)}</text>
+        </svg>
+      </div>
+
+      <div class="poll-market-legend">${legend}</div>
+
       <div class="poll-market-footer">
         <span>${totalVotes} vote${totalVotes === 1 ? '' : 's'}</span>
         <span>${myVote ? 'You voted' : expired ? 'Voting closed' : 'Choose an option'}</span>
@@ -10162,7 +10285,7 @@ function initFeedPage() {
   if (feedPostsRoot && !feedPostsRoot.dataset.pollCaptureBound) {
     feedPostsRoot.dataset.pollCaptureBound = '1';
     feedPostsRoot.addEventListener('click', (event) => {
-      const option = event.target.closest('.feed-structured-option[data-post-id][data-structured-option]');
+      const option = event.target.closest('.feed-structured-option[data-post-id][data-structured-option], .poll-market-legend-option[data-post-id][data-structured-option]');
       if (!option) return;
       event.preventDefault();
       event.stopPropagation();
@@ -10214,7 +10337,7 @@ function initFeedPage() {
       return;
     }
 
-    const structuredOption = event.target.closest('.feed-structured-option[data-post-id][data-structured-option]');
+    const structuredOption = event.target.closest('.feed-structured-option[data-post-id][data-structured-option], .poll-market-legend-option[data-post-id][data-structured-option]');
     if (structuredOption && !structuredOption.disabled) {
       event.preventDefault();
       event.stopPropagation();
