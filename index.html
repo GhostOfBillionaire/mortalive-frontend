@@ -12200,21 +12200,21 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 }
 </style>
 
-<style id="mortalive-feed-density-poll-market-v197">
+<style id="mortalive-feed-density-poll-line-v198">
 /* =====================================================================
-   v197 — Feed density pass + market-style poll visualization
-   Scope: Feed only. Talk/Profile/Messages remain unchanged.
+   v198 — Feed visual cleanup + single Polymarket-style line chart
    ===================================================================== */
 
-/* X-inspired charcoal canvas: the centre feed feels like a real timeline
-   instead of floating white cards in a large empty page. */
+/* The previous pass made the centre feel like a black panel inside the page.
+   Keep the X-inspired dark timeline, but flatten its shell so the posts feel
+   like one continuous feed rather than nested cards. */
 #pg-feed .feed-centre{
   min-width:0;
-  padding:0 12px 22px;
-  border-left:1px solid rgba(255,255,255,.08);
-  border-right:1px solid rgba(255,255,255,.08);
-  border-radius:18px;
-  background:linear-gradient(180deg,#181a1f 0%,#14161a 100%);
+  padding:0 10px 24px;
+  border-left:1px solid rgba(255,255,255,.07);
+  border-right:1px solid rgba(255,255,255,.07);
+  border-radius:0;
+  background:#181a1f;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.025);
 }
 
@@ -12222,266 +12222,201 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 #pg-feed .feed-tabs,
 #pg-feed .post-card,
 #pg-feed .feed-reels-shelf{
-  background:#101216;
+  background:#111318;
   border-color:rgba(255,255,255,.10);
-  box-shadow:0 1px 1px rgba(0,0,0,.18),0 8px 20px rgba(0,0,0,.10);
+  box-shadow:0 1px 1px rgba(0,0,0,.18);
 }
 
-#pg-feed .compose-card{
-  border-radius:16px;
-  padding:16px;
-  margin-bottom:10px;
-}
-#pg-feed .compose-avatar{
-  box-shadow:0 0 0 2px rgba(26,110,245,.25);
-}
-#pg-feed .compose-field{
-  background:#181b20;
-  border-color:rgba(255,255,255,.10);
-  color:#eef2f7;
-}
-#pg-feed .compose-field::placeholder{color:#808892;}
-#pg-feed .compose-field:focus{
-  background:#191c21;
-  border-color:rgba(26,110,245,.62);
-  box-shadow:0 0 0 3px rgba(26,110,245,.13);
-}
-#pg-feed .compose-type-btn{color:#8f98a3;}
-#pg-feed .compose-type-btn:hover{background:rgba(255,255,255,.06);color:#eef2f7;}
-#pg-feed .compose-type-btn.active{background:rgba(26,110,245,.16);color:#65a8ff;}
-#pg-feed .compose-type-separator{color:#3b4149;}
-#pg-feed .compose-tool,
-#pg-feed .poll-duration-btn{
-  background:#191c21;
-  border-color:rgba(255,255,255,.10);
-  color:#a8b0ba;
-}
-#pg-feed .compose-tool:hover,
-#pg-feed .poll-duration-btn:hover{
-  background:rgba(255,255,255,.07);
-  color:#fff;
-}
-#pg-feed .poll-duration-btn.active{
-  background:rgba(26,110,245,.18);
-  border-color:rgba(26,110,245,.42);
-  color:#72afff;
-}
+#pg-feed .post-card{border-radius:12px;margin-bottom:8px;}
+#pg-feed .post-card:hover{transform:none;box-shadow:0 6px 18px rgba(0,0,0,.18);}
+#pg-feed .compose-card{border-radius:12px;padding:14px;margin-bottom:8px;}
 
-#pg-feed .feed-tabs{
-  padding:4px;
-  margin-bottom:8px;
-  border-radius:12px;
-  box-shadow:none;
-}
-#pg-feed .feed-tab{color:#7f8791;}
-#pg-feed .feed-tab:hover{background:rgba(255,255,255,.05);color:#eef2f7;}
-#pg-feed .feed-tab.active{box-shadow:none;}
-#pg-feed .feed-ai-toggle{color:#8b949e;}
-
-#pg-feed .post-card{
-  border-radius:14px;
-  margin-bottom:8px;
-  transform:none;
-}
-#pg-feed .post-card:hover{
-  transform:none;
-  border-color:rgba(255,255,255,.16);
-  box-shadow:0 8px 24px rgba(0,0,0,.20);
-}
-#pg-feed .post-author,
-#pg-feed .post-text,
-#pg-feed .post-score-chip{color:#eef2f7;}
-#pg-feed .post-time,
-#pg-feed .post-score-chip{color:#838c97;}
-#pg-feed .post-score-chip{background:#191c21;border-color:rgba(255,255,255,.08);}
-#pg-feed .post-more-btn{color:#858e99;}
-#pg-feed .post-more-btn:hover{background:rgba(255,255,255,.06);color:#fff;}
-#pg-feed .post-body{color:#e8edf3;}
-#pg-feed .post-actions{border-top-color:rgba(255,255,255,.08);}
-#pg-feed .action-btn{color:#838c97;}
-#pg-feed .action-btn:hover{background:rgba(255,255,255,.06);color:#eef2f7;}
-#pg-feed .comments-section{border-top-color:rgba(255,255,255,.08);}
-#pg-feed .comment-input{background:#181b20;color:#eef2f7;border-color:rgba(255,255,255,.10);}
-
-/* Structured posts used by Q&A keep their existing behavior but inherit the
-   new charcoal feed surface so the whole timeline reads as one canvas. */
 #pg-feed .feed-structured-post{
-  background:#171a1f;
-  border-color:rgba(255,255,255,.10);
+  background:transparent;
+  border:0;
   color:#eef2f7;
-}
-#pg-feed .feed-structured-title{color:#7f8995;}
-#pg-feed .feed-structured-question{color:#f3f6f9;}
-#pg-feed .feed-structured-option{
-  background:#15181c;
-  border-color:rgba(255,255,255,.10);
-  color:#edf1f5;
-}
-#pg-feed .feed-structured-option:hover{
-  background:rgba(26,110,245,.12);
-  border-color:rgba(26,110,245,.48);
-  color:#fff;
+  padding:0;
+  margin-top:10px;
 }
 
-/* ── Polymarket-inspired poll chart ───────────────────────────────────── */
+/* ── One chart type only: probability line chart ─────────────── */
 #pg-feed .poll-market-card{
-  margin-top:14px;
-  padding:14px;
-  border-radius:16px;
-  background:linear-gradient(180deg,#15181d 0%,#111419 100%);
-  border:1px solid rgba(255,255,255,.10);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.025);
+  margin-top:10px;
+  padding:13px 14px 11px;
+  border-radius:13px;
+  background:#15181d;
+  border:1px solid rgba(255,255,255,.08);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.02);
 }
+
 #pg-feed .poll-market-head{
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:12px;
-  margin-bottom:10px;
+  margin-bottom:8px;
 }
 #pg-feed .poll-market-kind{
   display:flex;
   align-items:center;
   gap:7px;
   min-width:0;
-  color:#9da6b1;
+  color:#8e98a3;
   font-size:10px;
-  font-weight:900;
+  font-weight:800;
   text-transform:uppercase;
   letter-spacing:.08em;
 }
-#pg-feed .poll-market-kind-icon{font-size:14px;}
+#pg-feed .poll-market-kind-icon{font-size:13px;}
 #pg-feed .poll-market-live{
-  padding:3px 7px;
+  padding:2px 7px;
   border-radius:999px;
-  background:rgba(34,197,94,.11);
-  border:1px solid rgba(34,197,94,.18);
-  color:#8ce4ac;
+  color:#77d99d;
+  background:rgba(34,197,94,.10);
+  border:1px solid rgba(34,197,94,.16);
   font-size:9px;
-  letter-spacing:.04em;
 }
-#pg-feed .poll-market-card:has(.poll-market-live:empty){opacity:.98;}
+#pg-feed .poll-market-live.closed{
+  color:#a5adb7;
+  background:rgba(255,255,255,.05);
+  border-color:rgba(255,255,255,.08);
+}
 #pg-feed .poll-market-duration{
   flex:0 0 auto;
-  color:#737d89;
-  font-size:10px;
+  color:#717b87;
+  font-size:9.5px;
   white-space:nowrap;
 }
 #pg-feed .poll-market-question{
-  color:#f5f7fa;
-  font-size:15px;
+  color:#f4f7fa;
+  font-size:14.5px;
   line-height:1.45;
   font-weight:700;
   letter-spacing:-.01em;
 }
-#pg-feed .poll-market-summary{
-  display:flex;
-  width:100%;
-  height:9px;
-  margin:14px 0 12px;
+
+/* SVG chart */
+#pg-feed .poll-market-chart-wrap{
+  margin-top:10px;
+  border-radius:10px;
+  background:#111419;
+  border:1px solid rgba(255,255,255,.06);
   overflow:hidden;
-  border-radius:999px;
-  background:#20242a;
-  border:1px solid rgba(255,255,255,.05);
 }
-#pg-feed .poll-market-summary-segment{display:block;height:100%;min-width:0;}
-#pg-feed .poll-market-summary-segment.empty{background:#252a31;}
-#pg-feed .poll-market-chart{display:grid;gap:8px;}
-#pg-feed .poll-market-option{
+#pg-feed .poll-market-chart{
+  display:block;
   width:100%;
-  padding:0;
-  border:0;
-  text-align:left;
-  color:#eef2f6;
-  background:transparent;
-  cursor:pointer;
+  height:auto;
 }
-#pg-feed .poll-market-option[aria-disabled="true"]{cursor:default;}
-#pg-feed .poll-market-option-head{
+#pg-feed .poll-market-grid-line{
+  stroke:rgba(255,255,255,.08);
+  stroke-width:1;
+}
+#pg-feed .poll-market-axis-label{
+  fill:#6f7883;
+  font-size:9px;
+  font-family:Inter,system-ui,sans-serif;
+}
+#pg-feed .poll-market-line{
+  fill:none;
+  stroke-width:2.6;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+#pg-feed .poll-market-line-dot{
+  stroke:#15181d;
+  stroke-width:2;
+}
+#pg-feed .blue{stroke:#4f9cff;fill:#4f9cff;background:#4f9cff;}
+#pg-feed .violet{stroke:#9d7bff;fill:#9d7bff;background:#9d7bff;}
+#pg-feed .teal{stroke:#3bc7c0;fill:#3bc7c0;background:#3bc7c0;}
+#pg-feed .orange{stroke:#f0a45d;fill:#f0a45d;background:#f0a45d;}
+#pg-feed .green{stroke:#5bcf86;fill:#5bcf86;background:#5bcf86;}
+#pg-feed .pink{stroke:#e77fb1;fill:#e77fb1;background:#e77fb1;}
+
+/* Compact clickable legend = voting surface, not another graph. */
+#pg-feed .poll-market-legend{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:6px;
+  margin-top:9px;
+}
+#pg-feed .poll-market-legend-option{
+  min-width:0;
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:12px;
-  margin-bottom:5px;
-  font-size:12px;
+  gap:8px;
+  padding:8px 9px;
+  border-radius:9px;
+  border:1px solid rgba(255,255,255,.07);
+  background:#111419;
+  color:#dfe5eb;
+  text-align:left;
+  cursor:pointer;
 }
-#pg-feed .poll-market-option-label{
+#pg-feed .poll-market-legend-option:hover{
+  border-color:rgba(79,156,255,.42);
+  background:#171c23;
+}
+#pg-feed .poll-market-legend-option.is-selected{
+  border-color:rgba(79,156,255,.50);
+  background:rgba(79,156,255,.10);
+}
+#pg-feed .poll-market-legend-option[aria-disabled="true"]{cursor:default;}
+#pg-feed .poll-market-legend-left{
   display:flex;
   align-items:center;
   gap:7px;
   min-width:0;
   overflow:hidden;
+}
+#pg-feed .poll-market-legend-left > span:last-child{
+  overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
-}
-#pg-feed .poll-market-option-head strong{
-  flex:0 0 auto;
-  color:#f3f6f9;
-  font-size:12px;
+  font-size:11.5px;
+  font-weight:700;
 }
 #pg-feed .poll-market-dot{
   width:7px;
   height:7px;
+  min-width:7px;
   border-radius:50%;
-  flex:0 0 7px;
-  box-shadow:0 0 0 2px rgba(255,255,255,.03);
 }
-#pg-feed .poll-market-bar{
-  display:block;
-  width:100%;
-  height:8px;
-  overflow:hidden;
-  border-radius:999px;
-  background:#20242a;
+#pg-feed .poll-market-legend-right{
+  flex:0 0 auto;
+  font-size:11px;
+  font-weight:800;
+  color:#f2f5f8;
 }
-#pg-feed .poll-market-bar-fill{
-  display:block;
-  height:100%;
-  border-radius:inherit;
-  min-width:0;
-  transition:width .55s var(--ease-out);
-}
-#pg-feed .poll-market-option:hover .poll-market-bar{background:#252a31;}
-#pg-feed .poll-market-option:hover .poll-market-bar-fill{filter:brightness(1.1);}
-#pg-feed .poll-market-option.is-selected .poll-market-bar-fill{box-shadow:0 0 0 1px rgba(255,255,255,.18) inset;}
-#pg-feed .poll-market-option-meta{
-  display:block;
-  margin-top:4px;
-  color:#707a86;
-  font-size:9.5px;
-  line-height:1.35;
+#pg-feed .poll-market-legend-right small{
+  color:#6f7883;
+  font-size:9px;
+  font-weight:600;
 }
 #pg-feed .poll-market-footer{
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:10px;
-  margin-top:14px;
-  padding-top:10px;
+  margin-top:9px;
+  padding-top:8px;
   border-top:1px solid rgba(255,255,255,.07);
-  color:#7d8792;
-  font-size:10px;
+  color:#737e89;
+  font-size:9.5px;
 }
-#pg-feed .poll-market-footer span:last-child{color:#a7b0ba;}
+#pg-feed .poll-market-footer span:last-child{color:#aab3bd;}
 
-/* Stable six-option palette — deliberately muted so the chart still feels
-   like Mortalive instead of a rainbow dashboard. */
-#pg-feed .blue{background:#4f9cff;}
-#pg-feed .violet{background:#9d7bff;}
-#pg-feed .teal{background:#3bc7c0;}
-#pg-feed .orange{background:#f0a45d;}
-#pg-feed .green{background:#5bcf86;}
-#pg-feed .pink{background:#e77fb1;}
-
-@media (max-width: 720px){
+@media(max-width:720px){
   #pg-feed .feed-centre{
-    padding-inline:8px;
+    padding-inline:6px;
     border-left:0;
     border-right:0;
-    border-radius:14px;
   }
-  #pg-feed .poll-market-card{padding:13px;}
+  #pg-feed .poll-market-card{padding:12px;}
   #pg-feed .poll-market-question{font-size:14px;}
+  #pg-feed .poll-market-legend{grid-template-columns:1fr;}
 }
 </style>
 
