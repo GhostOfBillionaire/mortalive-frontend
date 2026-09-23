@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-22-v196-agent-claim-spa-owner'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-23-v197-feed-density-poll-market'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -8826,19 +8826,46 @@ function renderStructuredFeedPost(post) {
     const expirationLabel = Number.isFinite(expiresAt)
       ? (expired ? 'Poll ended' : `Ends ${new Date(expiresAt).toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })}`)
       : '';
-    return `<div class="feed-structured-post" data-structured-kind="poll" data-structured-mode="mcq">
-      <div class="feed-structured-title"><span>${icon}</span><span>${label}</span>${expirationLabel ? `<span class="feed-structured-duration">${sanitizeHTML(expirationLabel)}</span>` : ''}</div>
-      <div class="feed-structured-question">${renderHashtagRichText(post.content || '')}</div>
-      <div class="feed-structured-options">${options.map((option) => {
-        const optionId = String(option?.id || '');
-        const count = Number(counts.get(optionId) || 0);
-        const pct = totalVotes ? Math.round((count / totalVotes) * 100) : 0;
-        const selected = myVote === optionId;
-        const disabled = (myVote || expired) ? ' aria-disabled="true"' : '';
-        return `<button type="button" class="feed-structured-option${selected ? ' qna-selected' : ''}" data-structured-kind="poll" data-structured-option="${sanitizeHTML(optionId)}" data-post-id="${sanitizeHTML(post.id)}"${disabled}>`+
-          `<span>${sanitizeHTML(option?.label || '')}</span><span class="feed-structured-option-result">${totalVotes ? `${pct}%` : '›'}</span></button>`;
-      }).join('')}</div>
-      <div class="feed-structured-open-note">${totalVotes} vote${totalVotes === 1 ? '' : 's'}${myVote ? ' · You voted' : ''}${expired ? ' · Voting closed' : ''}</div>
+
+    // Market-style visualization for Feed polls. The existing Supabase vote
+    // persistence and caches are unchanged; this is a presentation-only pass.
+    const palette = ['blue', 'violet', 'teal', 'orange', 'green', 'pink'];
+    const graphRows = options.map((option, index) => {
+      const optionId = String(option?.id || '');
+      const count = Number(counts.get(optionId) || 0);
+      const pct = totalVotes ? Math.round((count / totalVotes) * 100) : 0;
+      const selected = myVote === optionId;
+      const disabled = (myVote || expired) ? ' aria-disabled="true"' : '';
+      const color = palette[index % palette.length];
+      return `<button type="button" class="poll-market-option${selected ? ' is-selected' : ''}" data-structured-kind="poll" data-structured-option="${sanitizeHTML(optionId)}" data-post-id="${sanitizeHTML(post.id)}"${disabled}>
+        <span class="poll-market-option-head">
+          <span class="poll-market-option-label"><span class="poll-market-dot ${color}"></span>${sanitizeHTML(option?.label || '')}</span>
+          <strong>${pct}%</strong>
+        </span>
+        <span class="poll-market-bar" aria-hidden="true"><span class="poll-market-bar-fill ${color}" style="width:${pct}%"></span></span>
+        <span class="poll-market-option-meta">${count} vote${count === 1 ? '' : 's'}${selected ? ' · Your vote' : ''}</span>
+      </button>`;
+    }).join('');
+
+    const summarySegments = options.map((option, index) => {
+      const optionId = String(option?.id || '');
+      const count = Number(counts.get(optionId) || 0);
+      const pct = totalVotes ? Math.max(0, Math.min(100, (count / totalVotes) * 100)) : 0;
+      return `<span class="poll-market-summary-segment ${palette[index % palette.length]}" style="width:${pct}%"></span>`;
+    }).join('');
+
+    return `<div class="feed-structured-post poll-market-card" data-structured-kind="poll" data-structured-mode="mcq">
+      <div class="poll-market-head">
+        <div class="poll-market-kind"><span class="poll-market-kind-icon">${icon}</span><span>${label}</span><span class="poll-market-live${expired ? ' closed' : ''}">${expired ? 'Closed' : 'Live'}</span></div>
+        ${expirationLabel ? `<span class="poll-market-duration">${sanitizeHTML(expirationLabel)}</span>` : ''}
+      </div>
+      <div class="poll-market-question">${renderHashtagRichText(post.content || '')}</div>
+      <div class="poll-market-summary" aria-hidden="true">${summarySegments || '<span class="poll-market-summary-segment empty" style="width:100%"></span>'}</div>
+      <div class="poll-market-chart" role="group" aria-label="Poll results">${graphRows}</div>
+      <div class="poll-market-footer">
+        <span>${totalVotes} vote${totalVotes === 1 ? '' : 's'}</span>
+        <span>${myVote ? 'You voted' : expired ? 'Voting closed' : 'Choose an option'}</span>
+      </div>
     </div>`;
   }
 
