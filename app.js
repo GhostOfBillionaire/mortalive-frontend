@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-24-v200-feed-page-bounded'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-24-v201-feed-loadmore-3-post-boundary'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -98,7 +98,7 @@ const MORTALIVE_MEDIA_WORKER_URL =
 // ─────────────────────────────────────────────────────────────────────────
 const ARCHIVE_BROWSER_PRELOAD_MAX = 0;
 const ARCHIVE_BROWSER_PRELOAD_RETENTION_MS = 45000;
-const FEED_NEXT_PAGE_FETCH_TRIGGER_PX = 200;
+const FEED_NEXT_PAGE_TRIGGER_POSTS = 3;
 const _archiveBrowserPreloads = new Map(); // mediaId -> { kind, node, timer }
 let _archiveBrowserPreloadBound = false;
 let _archiveBrowserPreloadRaf = 0;
@@ -9169,15 +9169,18 @@ function primeArchiveFeedLookahead() {
     const upcoming = lookahead.slice(1, ARCHIVE_BROWSER_PRELOAD_MAX + 1);
     primeArchiveBrowserHints(upcoming);
 
-    // Fetch the next Feed page only when the currently rendered page is at the
-    // bottom of the viewport. Do not advance pagination several screens early;
-    // the Feed should request the next set only as the viewer reaches the end
-    // of the current rendered section.
-    const lastCard = root.querySelector('[data-post-id]:last-of-type');
-    if (lastCard && _feedHasMore && !_feedLoading) {
-      const rect = lastCard.getBoundingClientRect();
-      const distanceToViewportBottom = rect.bottom - window.innerHeight;
-      if (distanceToViewportBottom <= FEED_NEXT_PAGE_FETCH_TRIGGER_PX) {
+    // Feed pagination is deliberately tied to the actual Load More boundary,
+    // not to a fixed pixel distance. The next page is requested only when the
+    // third-from-last rendered post reaches the viewport. In other words,
+    // there are at most three posts left before the existing Load More button.
+    const pageCards = Array.from(root.querySelectorAll('[data-post-id]'));
+    const loadMore = root.querySelector('#load-more-btn') || document.getElementById('load-more-btn');
+    const triggerIndex = pageCards.length - FEED_NEXT_PAGE_TRIGGER_POSTS;
+    const triggerCard = triggerIndex >= 0 ? pageCards[triggerIndex] : null;
+    if (loadMore && triggerCard && _feedHasMore && !_feedLoading) {
+      const rect = triggerCard.getBoundingClientRect();
+      const triggerReached = rect.top <= window.innerHeight && rect.bottom > 0;
+      if (triggerReached) {
         fetchFeedPage(false);
       }
     }
