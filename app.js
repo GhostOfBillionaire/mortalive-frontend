@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-22-v196-agent-claim-spa-owner'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-24-v197-predictive-feed-prewarm'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -87,6 +87,21 @@ const SERVER_URL =
 const MORTALIVE_MEDIA_WORKER_URL =
   window.MORTALIVE_MEDIA_WORKER_URL ||
   'https://mortalive-media-dev.pdrive777yhgtu.workers.dev';
+
+// ─────────────────────────────────────────────────────────────────────────
+// V197 — predictive Feed media preloading.
+// Server-side prewarming fills R2 ahead of the user via the Worker queue.
+// This browser layer separately primes the next few archive assets so the
+// browser/player can reuse the already-warm R2 response with minimal delay.
+// It is deliberately small and bounded: never more than 3 upcoming assets
+// are actively primed in the browser at once.
+// ─────────────────────────────────────────────────────────────────────────
+const ARCHIVE_BROWSER_PRELOAD_MAX = 3;
+const ARCHIVE_BROWSER_PRELOAD_RETENTION_MS = 45000;
+const _archiveBrowserPreloads = new Map(); // mediaId -> { kind, node, timer }
+let _archiveBrowserPreloadBound = false;
+let _archiveBrowserPreloadRaf = 0;
+let _archiveServerPreloadHints = new Map();
 
 // V128: Talk state machine — real-user first → 30-second priority → synthetic fallback → indefinite cycle.
 
@@ -7606,6 +7621,38 @@ async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
     const payload = await response.json();
     const rows = Array.isArray(payload?.posts) ? payload.posts : [];
 
+    const preloadItems = Array.isArray(payload?.preload?.items)
+      ? payload.preload.items
+      : [];
+
+    _archiveServerPreloadHints = new Map(
+      preloadItems
+        .map(item => {
+          const mediaId = String(item?.mediaId || item?.media_id || '').trim();
+          if (!/^med_[A-Za-z0-9_-]{6,120}$/.test(mediaId)) return null;
+          return [
+            mediaId,
+            {
+              type: String(item?.type || item?.media_type || '').toLowerCase() === 'video'
+                ? 'video'
+                : 'image'
+            }
+          ];
+        })
+        .filter(Boolean)
+    );
+
+    // Prime only the nearest few server-recommended assets. The Worker has
+    // already queued a larger R2 prewarm window; the browser should not
+    // duplicate that work or open dozens of simultaneous media requests.
+    if (_archiveServerPreloadHints.size) {
+      primeArchiveBrowserHints(
+        [..._archiveServerPreloadHints.entries()]
+          .slice(0, ARCHIVE_BROWSER_PRELOAD_MAX)
+          .map(([mediaId, meta]) => ({ mediaId, ...meta }))
+      );
+    }
+
     return {
       posts: rows.map((post) => ({
         ...post,
@@ -7615,7 +7662,13 @@ async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
           ? post.post_meta
           : {}
       })),
-      hasMore: Boolean(payload?.hasMore)
+      hasMore: Boolean(payload?.hasMore),
+      preload: {
+        mediaIds: Array.isArray(payload?.preload?.mediaIds)
+          ? payload.preload.mediaIds
+          : [],
+        items: preloadItems
+      }
     };
   } catch (error) {
     console.warn('[Archive Feed] hydration failed:', error?.message || error);
@@ -8879,6 +8932,208 @@ function detectMediaType(mediaType, url) {
 // getMediaUrl(mediaId) -> /media/<mediaId>. This is the one seam that will
 // change again once the Worker gateway is live; nothing else should build
 // this path itself.
+function archiveBrowserPreloadRoot() {
+  let root = document.getElementById('mortalive-archive-preload-root');
+  if (root) return root;
+
+  root = document.createElement('div');
+  root.id = 'mortalive-archive-preload-root';
+  root.setAttribute('aria-hidden', 'true');
+  root.style.position = 'fixed';
+  root.style.width = '1px';
+  root.style.height = '1px';
+  root.style.left = '-10000px';
+  root.style.top = '0';
+  root.style.overflow = 'hidden';
+  root.style.pointerEvents = 'none';
+  root.style.opacity = '0';
+  root.style.contain = 'strict';
+  document.body.appendChild(root);
+  return root;
+}
+
+function removeArchiveBrowserPreload(mediaId) {
+  const key = String(mediaId || '').trim();
+  const entry = _archiveBrowserPreloads.get(key);
+  if (!entry) return;
+  try { clearTimeout(entry.timer); } catch (_) {}
+  try { entry.node?.remove?.(); } catch (_) {}
+  _archiveBrowserPreloads.delete(key);
+}
+
+function primeArchiveBrowserMedia(mediaId, type = 'image') {
+  const key = String(mediaId || '').trim();
+  if (!/^med_[A-Za-z0-9_-]{6,120}$/.test(key)) return;
+  if (_archiveBrowserPreloads.has(key)) return;
+
+  const url = getMediaUrl(key);
+  if (!url) return;
+
+  const kind = String(type || '').toLowerCase() === 'video' ? 'video' : 'image';
+  const root = archiveBrowserPreloadRoot();
+  let node = null;
+
+  try {
+    if (kind === 'video') {
+      node = document.createElement('video');
+      node.muted = true;
+      node.playsInline = true;
+      node.preload = 'auto';
+      node.setAttribute('preload', 'auto');
+      node.setAttribute('aria-hidden', 'true');
+      node.dataset.mediaId = key;
+      node.src = url;
+      root.appendChild(node);
+      node.load();
+    } else {
+      node = document.createElement('img');
+      node.decoding = 'async';
+      node.loading = 'eager';
+      node.fetchPriority = 'low';
+      node.alt = '';
+      node.setAttribute('aria-hidden', 'true');
+      node.dataset.mediaId = key;
+      node.src = url;
+      root.appendChild(node);
+    }
+
+    const timer = window.setTimeout(() => {
+      // Keep the browser cache useful while preventing an ever-growing hidden
+      // DOM. Visible Feed elements can reuse the same cached response.
+      removeArchiveBrowserPreload(key);
+    }, ARCHIVE_BROWSER_PRELOAD_RETENTION_MS);
+
+    _archiveBrowserPreloads.set(key, {
+      kind,
+      node,
+      timer
+    });
+  } catch (_) {
+    try { node?.remove?.(); } catch (__) {}
+  }
+}
+
+function primeArchiveBrowserHints(items) {
+  for (const item of (Array.isArray(items) ? items : []).slice(0, ARCHIVE_BROWSER_PRELOAD_MAX)) {
+    primeArchiveBrowserMedia(
+      item?.mediaId || item?.media_id,
+      item?.type || item?.media_type
+    );
+  }
+}
+
+function collectArchiveFeedPostMedia(post) {
+  if (!post || post?.source !== 'archive') return [];
+
+  let rawMedia = post?.post_meta?.media;
+  if (typeof rawMedia === 'string') {
+    try { rawMedia = JSON.parse(rawMedia); } catch (_) { rawMedia = null; }
+  }
+
+  if (Array.isArray(rawMedia)) {
+    return rawMedia
+      .map(item => ({
+        mediaId: String(item?.media_id || item?.mediaId || '').trim(),
+        type: String(item?.type || item?.media_type || '').toLowerCase() === 'video'
+          ? 'video'
+          : 'image',
+        position: Number.isFinite(Number(item?.position))
+          ? Number(item.position)
+          : 0
+      }))
+      .filter(item => /^med_[A-Za-z0-9_-]{6,120}$/.test(item.mediaId))
+      .sort((a, b) => a.position - b.position);
+  }
+
+  const singleId = String(post?.media_id || '').trim();
+  if (!/^med_[A-Za-z0-9_-]{6,120}$/.test(singleId)) return [];
+  return [{
+    mediaId: singleId,
+    type: String(post?.media_type || '').toLowerCase() === 'video'
+      ? 'video'
+      : 'image',
+    position: 0
+  }];
+}
+
+function primeArchiveFeedLookahead() {
+  if (_archiveBrowserPreloadRaf) return;
+  _archiveBrowserPreloadRaf = window.requestAnimationFrame(() => {
+    _archiveBrowserPreloadRaf = 0;
+
+    const root = $('feed-posts');
+    if (!root) return;
+
+    const posts = Array.isArray(_feedPosts) ? _feedPosts : [];
+    if (!posts.length) return;
+
+    const visibleCards = Array.from(
+      root.querySelectorAll('[data-post-id]')
+    ).filter(card => {
+      const rect = card.getBoundingClientRect();
+      return rect.bottom > 0 && rect.top < window.innerHeight;
+    });
+
+    const firstVisible = visibleCards[0];
+    if (!firstVisible) {
+      primeArchiveBrowserHints(
+        [..._archiveServerPreloadHints.entries()]
+          .slice(0, ARCHIVE_BROWSER_PRELOAD_MAX)
+          .map(([mediaId, meta]) => ({ mediaId, ...meta }))
+      );
+      return;
+    }
+
+    const visiblePostId = String(firstVisible.getAttribute('data-post-id') || '').trim();
+    const index = posts.findIndex(post => String(post?.id || '') === visiblePostId);
+    if (index < 0) return;
+
+    const lookahead = [];
+    for (let i = index; i < posts.length && lookahead.length < ARCHIVE_BROWSER_PRELOAD_MAX + 1; i += 1) {
+      const post = posts[i];
+      for (const media of collectArchiveFeedPostMedia(post)) {
+        lookahead.push(media);
+        if (lookahead.length >= ARCHIVE_BROWSER_PRELOAD_MAX + 1) break;
+      }
+    }
+
+    // Skip the asset most likely to already be loading in the visible card;
+    // prime the next three instead.
+    const upcoming = lookahead.slice(1, ARCHIVE_BROWSER_PRELOAD_MAX + 1);
+    primeArchiveBrowserHints(upcoming);
+
+    // When the currently loaded Feed page is almost exhausted, ask for the
+    // next archive page before the user reaches the bottom. Existing live/feed
+    // pagination remains untouched; this only advances the archive cursor.
+    const lastCard = root.querySelector('[data-post-id]:last-of-type');
+    if (lastCard && _feedHasMoreArchive) {
+      const rect = lastCard.getBoundingClientRect();
+      if (rect.top < window.innerHeight * 2.5 && !_feedLoading) {
+        fetchFeedPage(false);
+      }
+    }
+  });
+}
+
+function bindArchivePredictivePreload() {
+  if (_archiveBrowserPreloadBound) return;
+  _archiveBrowserPreloadBound = true;
+
+  const schedule = () => primeArchiveFeedLookahead();
+
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule, { passive: true });
+
+  const root = $('feed-posts');
+  if (root && 'MutationObserver' in window) {
+    const observer = new MutationObserver(schedule);
+    observer.observe(root, { childList: true, subtree: true });
+  }
+
+  // Run once immediately after the first successful page render.
+  schedule();
+}
+
 function getMediaUrl(mediaId) {
   if (!mediaId) return '';
   return `${MORTALIVE_MEDIA_WORKER_URL}/media/${encodeURIComponent(String(mediaId))}`;
@@ -9214,6 +9469,10 @@ function renderFeedPosts() {
 
   // Restore any comment sections that were open before the innerHTML was replaced
   if (openIds.length) _restoreOpenCommentSections(openIds);
+
+  // V197: keep the browser a few media items ahead of the user's viewport.
+  bindArchivePredictivePreload();
+  primeArchiveFeedLookahead();
 }
 
 
