@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-24-v201-feed-loadmore-3-post-boundary'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-24-v202-cold-media-gate'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -9411,39 +9411,150 @@ if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
   }, true);
 }
 
+/*
+ * Cold-media gate (V202): a 204 from the Worker means the archive media is
+ * currently being warmed into R2 by the background prewarm queue. Do not
+ * immediately hammer /media/:id again. Poll the cheap /media-status/:id
+ * endpoint at bounded intervals and only retry the real media URL once R2 is
+ * confirmed ready.
+ */
+async function waitForArchiveMediaReady(el, mediaId, attempt = 0) {
+  if (!el || !mediaId) return false;
+  if (el.dataset.mortaliveMediaStatusPolling === '1') return true;
+
+  const maxAttempts = 6;
+  const delays = [3000, 5000, 8000, 12000, 18000, 25000];
+  el.dataset.mortaliveMediaStatusPolling = '1';
+
+  try {
+    for (let index = Math.max(0, attempt); index < maxAttempts; index += 1) {
+      let payload = null;
+
+      try {
+        const statusUrl = `${MORTALIVE_MEDIA_WORKER_URL}/media-status/${encodeURIComponent(mediaId)}?check=${Date.now()}`;
+        const response = await fetch(statusUrl, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+          cache: 'no-store',
+          credentials: 'omit'
+        });
+        payload = await response.json().catch(() => null);
+      } catch (_) {
+        payload = null;
+      }
+
+      if (payload?.ready === true) {
+        const originalSrc = String(
+          el.dataset.mortaliveOriginalMediaSrc ||
+          el.getAttribute('src') ||
+          ''
+        ).split('?')[0];
+
+        if (!originalSrc) return false;
+
+        const retryUrl = `${originalSrc}?retry=${Date.now()}`;
+        try {
+          el.dataset.hydrationRetried = '1';
+          el.removeAttribute('data-mortalive-media-status-polling');
+          el.removeAttribute('data-mortaliveMediaStatusPolling');
+          el.setAttribute('src', retryUrl);
+          if (el instanceof HTMLVideoElement) {
+            el.load();
+          }
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
+
+      if (
+        payload?.prewarmable === false ||
+        payload?.retryable === false ||
+        String(payload?.status || '').toUpperCase() === 'UNAVAILABLE'
+      ) {
+        return false;
+      }
+
+      const serverDelay = Number(payload?.retryAfterMs || 0);
+      const waitMs = Math.max(
+        1500,
+        Math.min(
+          delays[index],
+          Number.isFinite(serverDelay) && serverDelay > 0
+            ? serverDelay
+            : delays[index]
+        )
+      );
+
+      await new Promise(resolve => window.setTimeout(resolve, waitMs));
+      if (!document.contains(el)) return false;
+    }
+  } finally {
+    delete el.dataset.mortaliveMediaStatusPolling;
+  }
+
+  return false;
+}
+
+function showArchiveMediaHydrationError(el, mediaId) {
+  const host = el?.closest?.('.feed-media-shell, .feed-carousel-slide, .feed-video-card, .feed-reel-card');
+  if (!host) return;
+  if (host.querySelector('.feed-media-hydration-error')) return;
+
+  const note = document.createElement('div');
+  note.className = 'feed-media-hydration-error';
+  note.textContent = 'Media unavailable — tap to retry';
+  note.dataset.mediaId = mediaId;
+  note.addEventListener('click', () => {
+    const retryUrl = `${MORTALIVE_MEDIA_WORKER_URL}/media/${encodeURIComponent(mediaId)}?retry=${Date.now()}`;
+    delete el.dataset.hydrationRetried;
+    el.dataset.mortaliveOriginalMediaSrc = retryUrl.split('?')[0];
+    el.setAttribute('src', retryUrl);
+    note.remove();
+    if (el instanceof HTMLVideoElement) {
+      try { el.load(); } catch (_) {}
+    }
+  });
+  host.appendChild(note);
+}
+
 if (!document.documentElement.dataset.mortaliveMediaHydrationGuardBound) {
   document.documentElement.dataset.mortaliveMediaHydrationGuardBound = '1';
   document.addEventListener('error', (event) => {
     const el = event.target;
     if (!(el instanceof HTMLImageElement || el instanceof HTMLVideoElement)) return;
-    const mediaId = el.getAttribute('data-media-id') || el.closest('[data-media-id]')?.getAttribute('data-media-id') || '';
+
+    const mediaId =
+      el.getAttribute('data-media-id') ||
+      el.closest('[data-media-id]')?.getAttribute('data-media-id') ||
+      '';
     if (!/^med_[a-zA-Z0-9_-]{6,120}$/.test(mediaId)) return;
+
     const currentUrl = el.getAttribute('src') || '';
-    if (!currentUrl || el.dataset.hydrationRetried === '1') {
-      const host = el.closest('.feed-media-shell, .feed-carousel-slide');
-      if (host && !host.querySelector('.feed-media-hydration-error')) {
-        const note = document.createElement('div');
-        note.className = 'feed-media-hydration-error';
-        note.textContent = 'Media unavailable — tap to retry';
-        note.dataset.mediaId = mediaId;
-        note.addEventListener('click', () => {
-          const retryUrl = `${MORTALIVE_MEDIA_WORKER_URL}/media/${encodeURIComponent(mediaId)}?retry=${Date.now()}`;
-          delete el.dataset.hydrationRetried;
-          el.src = retryUrl;
-          note.remove();
-        });
-        host.appendChild(note);
-      }
+    const isArchiveWorkerMedia =
+      currentUrl.startsWith(`${MORTALIVE_MEDIA_WORKER_URL}/media/`) ||
+      String(el.dataset.mortaliveOriginalMediaSrc || '').startsWith(`${MORTALIVE_MEDIA_WORKER_URL}/media/`);
+
+    if (!isArchiveWorkerMedia) return;
+
+    if (el.dataset.hydrationRetried === '1') {
+      showArchiveMediaHydrationError(el, mediaId);
       return;
     }
-    el.dataset.hydrationRetried = '1';
-    const retryUrl = `${MORTALIVE_MEDIA_WORKER_URL}/media/${encodeURIComponent(mediaId)}?retry=${Date.now()}`;
-    try {
-      el.src = retryUrl;
-      if (el instanceof HTMLVideoElement) {
-        el.load();
+
+    if (el.dataset.mortaliveMediaStatusPolling === '1') return;
+
+    el.dataset.mortaliveOriginalMediaSrc = currentUrl.split('?')[0];
+
+    void waitForArchiveMediaReady(el, mediaId).then((recovered) => {
+      if (recovered) return;
+      if (!document.contains(el)) return;
+      if (el.dataset.hydrationRetried === '1') {
+        showArchiveMediaHydrationError(el, mediaId);
+        return;
       }
-    } catch (_) {}
+      showArchiveMediaHydrationError(el, mediaId);
+    });
   }, true);
 }
 
