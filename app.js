@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-24-v197-predictive-feed-prewarm'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-24-v198-feed-media-demand'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -7466,8 +7466,16 @@ function initFeedPerformance(root = $('feed-posts')) {
       videos.forEach((video) => {
         if (entry.isIntersecting && entry.intersectionRatio >= 0.10) {
           video.dataset.mortaliveNearViewport = '1';
-          // Let the browser decide whether to fetch; do not force autoplay.
+
+          // A regular Feed video may have deliberately started with
+          // preload="none". Near the viewport is the point where its media
+          // request becomes useful; this keeps off-screen cards from opening
+          // Jio/R2 requests just because their DOM exists.
           if (video.preload === 'none') video.preload = 'metadata';
+
+          // Carousel videos/images that are one of the rendered cards keep
+          // their URL in data-media-src until the slide is actually activated.
+          // Do not hydrate inactive carousel siblings here.
         } else {
           video.dataset.mortaliveNearViewport = '0';
           if (!video.paused) video.pause();
@@ -9193,10 +9201,10 @@ function feedMediaMarkup(post) {
   if (media.length > 1) return feedCarouselMarkup(media, post);
   const item = media[0];
   if (item.type === 'video') {
-    return `<div class="feed-media-shell" data-media-id="${sanitizeHTML(item.mediaId || '')}" data-media-url="${sanitizeHTML(item.url)}"><video class="feed-post-video" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" controls playsinline preload="metadata"></video></div>`;
+    return `<div class="feed-media-shell" data-media-id="${sanitizeHTML(item.mediaId || '')}" data-media-url="${sanitizeHTML(item.url)}"><video class="feed-post-video" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" controls playsinline preload="none"></video></div>`;
   }
   const display = post?.author?.display_name || post?.author?.username || 'member';
-  return `<div class="feed-media-shell" data-media-id="${sanitizeHTML(item.mediaId || '')}" data-media-url="${sanitizeHTML(item.url)}"><img class="feed-post-media js-photo-open" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="eager" decoding="async" data-photo-url="${sanitizeHTML(item.url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}"></div>`;
+  return `<div class="feed-media-shell" data-media-id="${sanitizeHTML(item.mediaId || '')}" data-media-url="${sanitizeHTML(item.url)}"><img class="feed-post-media js-photo-open" data-media-id="${sanitizeHTML(item.mediaId || '')}" src="${sanitizeHTML(item.url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" decoding="async" data-photo-url="${sanitizeHTML(item.url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}"></div>`;
 }
 
 // Ordered multi-media strip (mixed image/video, arrow + dot navigation).
@@ -9205,11 +9213,11 @@ function feedMediaMarkup(post) {
 // clicking a playing video shouldn't be hijacked into opening the viewer.
 function feedCarouselMarkup(media, post) {
   const slides = media.map((m, i) => {
-    const loading = i === 0 ? 'eager' : 'lazy';
+    const active = i === 0;
     if (m.type === 'video') {
-      return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}" data-media-id="${sanitizeHTML(m.mediaId || '')}"><video class="feed-carousel-media" data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" controls playsinline preload="metadata"></video></div>`;
+      return `<div class="feed-carousel-slide${active ? ' active' : ''}" data-slide-index="${i}" data-media-id="${sanitizeHTML(m.mediaId || '')}"><video class="feed-carousel-media" data-media-id="${sanitizeHTML(m.mediaId || '')}" ${active ? `src="${sanitizeHTML(m.url)}"` : `data-media-src="${sanitizeHTML(m.url)}"`} controls playsinline preload="${active ? 'metadata' : 'none'}"></video></div>`;
     }
-    return `<div class="feed-carousel-slide${i === 0 ? ' active' : ''}" data-slide-index="${i}" data-media-id="${sanitizeHTML(m.mediaId || '')}"><img class="js-photo-open feed-carousel-media" data-media-id="${sanitizeHTML(m.mediaId || '')}" src="${sanitizeHTML(m.url)}" alt="" loading="${loading}" decoding="async" data-photo-url="${sanitizeHTML(m.url)}" data-profile-owner="${sanitizeHTML(post?.user_id || '')}"></div>`;
+    return `<div class="feed-carousel-slide${active ? ' active' : ''}" data-slide-index="${i}" data-media-id="${sanitizeHTML(m.mediaId || '')}"><img class="js-photo-open feed-carousel-media" data-media-id="${sanitizeHTML(m.mediaId || '')}" ${active ? `src="${sanitizeHTML(m.url)}"` : `data-media-src="${sanitizeHTML(m.url)}"`} alt="" loading="${active ? 'lazy' : 'lazy'}" decoding="async" data-photo-url="${sanitizeHTML(m.url)}" data-profile-owner="${sanitizeHTML(post?.user_id || '')}"></div>`;
   }).join('');
   const arrows = media.length > 1 ? `
     <button type="button" class="feed-carousel-arrow prev" data-carousel-dir="-1" aria-label="Previous">‹</button>
@@ -9220,6 +9228,24 @@ function feedCarouselMarkup(media, post) {
   return `<div class="feed-carousel" data-carousel-post-id="${sanitizeHTML(post?.id || '')}">
     <div class="feed-carousel-track">${slides}</div>${arrows}${dots}
   </div>`;
+}
+
+function hydrateFeedCarouselSlide(slide) {
+  if (!slide) return;
+  const media = slide.querySelector?.('img[data-media-src], video[data-media-src]');
+  if (!media) return;
+
+  const src = String(media.getAttribute('data-media-src') || '').trim();
+  if (!src) return;
+
+  try {
+    media.setAttribute('src', src);
+    media.removeAttribute('data-media-src');
+    if (media instanceof HTMLVideoElement) {
+      media.preload = 'metadata';
+      media.load();
+    }
+  } catch (_) {}
 }
 
 // Delegated nav for carousel arrows/dots — bound once at module load, same
@@ -9238,6 +9264,12 @@ if (!document.documentElement.dataset.mortaliveCarouselBound) {
     const current = Math.max(0, slides.findIndex(s => s.classList.contains('active')));
     let next = dirBtn ? current + Number(dirBtn.dataset.carouselDir) : Number(dotEl.dataset.dotIndex);
     next = Math.max(0, Math.min(slides.length - 1, next));
+
+    // Only the active carousel slide is a real browser media request.
+    // Inactive slides keep their URL in data-media-src until the user
+    // actually navigates to them.
+    hydrateFeedCarouselSlide(slides[next]);
+
     slides.forEach((s, i) => {
       s.classList.toggle('active', i === next);
       if (i !== next) s.querySelector('video')?.pause();
@@ -9383,7 +9415,7 @@ function buildFeedPostCardHTML(post) {
   const engagement = engagementFor(post.id);
   const durationSeconds = Number(post?.post_meta?.duration_seconds) || 0;
   const bodyHTML = post.post_type === 'video' && postMedia.length
-    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-video-toggle-glyph">▶</span><div class="feed-video-progress"><div class="feed-video-progress-fill"></div></div><button type="button" class="feed-video-mute-btn" aria-label="${_feedSoundEnabled ? 'Mute' : 'Unmute'}">${_feedSoundEnabled ? '🔊' : '🔇'}</button>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
+    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="none"></video><span class="feed-video-toggle-glyph">▶</span><div class="feed-video-progress"><div class="feed-video-progress-fill"></div></div><button type="button" class="feed-video-mute-btn" aria-label="${_feedSoundEnabled ? 'Mute' : 'Unmute'}">${_feedSoundEnabled ? '🔊' : '🔇'}</button>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
     : post.post_type === 'reel' && postMedia.length
       ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="metadata"></video><span class="feed-reel-play">▶</span></div>`
       : postMedia.length
