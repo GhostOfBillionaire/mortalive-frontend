@@ -7742,7 +7742,53 @@ async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
     }
 
     const payload = await response.json();
-    const rows = Array.isArray(payload?.posts) ? payload.posts : [];
+    let rows = Array.isArray(payload?.posts) ? payload.posts : [];
+
+    /*
+     * V205: archive-feed is a first-class Feed source. If the randomized
+     * archive query returns an empty page, retry once without randomization.
+     * This protects the public Feed from an overly sparse/random candidate
+     * window while keeping the Worker endpoint itself unchanged.
+     */
+    if (!rows.length) {
+      try {
+        const fallbackParams = new URLSearchParams({
+          limit: String(limit),
+          offset: String(offset)
+        });
+        if (archiveSeenIds.length) {
+          fallbackParams.set('exclude', archiveSeenIds.join(','));
+        }
+
+        const fallbackResponse = await fetch(
+          `${MORTALIVE_MEDIA_WORKER_URL}/api/archive-feed?${fallbackParams.toString()}`,
+          {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            cache: 'no-store',
+            credentials: 'omit'
+          }
+        );
+
+        if (fallbackResponse.ok) {
+          const fallbackPayload = await fallbackResponse.json();
+          const fallbackRows = Array.isArray(fallbackPayload?.posts)
+            ? fallbackPayload.posts
+            : [];
+          if (fallbackRows.length) {
+            rows = fallbackRows;
+          }
+        }
+      } catch (fallbackError) {
+        console.warn('[Archive Feed] deterministic fallback failed:', fallbackError?.message || fallbackError);
+      }
+    }
+
+    console.info('[Feed] Cloudflare archive source:', {
+      returned: rows.length,
+      hasMore: Boolean(payload?.hasMore),
+      endpoint
+    });
 
     const preloadItems = Array.isArray(payload?.preload?.items)
       ? payload.preload.items
@@ -7899,20 +7945,36 @@ async function fetchFeedPage(reset = false) {
     }
 
     /*
-     * Archive order is deliberately randomized by the Worker. Never re-sort
-     * the result by created_at here or refreshes would collapse back into the
-     * same chronological archive sequence. Mix live + archive candidates with
-     * a light Fisher-Yates pass so each refresh gets a different composition.
+     * V205: both sources are first-class Feed sources.
+     * Reserve a small archive share so a healthy Supabase page cannot visually
+     * starve the Cloudflare archive source. Cold archive media still renders as
+     * the existing Preparing-media state; only the media bytes are gated.
      */
+    const archiveQuota = Math.min(
+      5,
+      archivePosts.length,
+      FEED_PAGE_SIZE
+    );
+
+    const reservedArchive = archivePosts.slice(0, archiveQuota);
+    const remainingArchive = archivePosts.slice(archiveQuota);
+
     const incoming = [
-      ...archivePosts,
+      ...reservedArchive,
+      ...remainingArchive,
       ...mappedLive
     ].filter(Boolean);
 
-    for (let i = incoming.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
+    for (let i = incoming.length - 1; i > archiveQuota - 1; i -= 1) {
+      const j = archiveQuota + Math.floor(Math.random() * Math.max(1, i - archiveQuota + 1));
       [incoming[i], incoming[j]] = [incoming[j], incoming[i]];
     }
+
+    console.info('[Feed] source merge:', {
+      cloudflareArchive: archivePosts.length,
+      supabaseLive: livePosts.length,
+      reservedArchive: archiveQuota
+    });
 
     const seen = new Set();
     const combined = [
