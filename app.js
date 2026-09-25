@@ -7247,9 +7247,9 @@ function canonicalProfileTargetId(post, fallback = '') {
 
 /* ── Archive media demand telemetry / Phase 1 ─────────────────────────────
  * The browser reports coarse delivery/consumption signals to the Worker.
- * This is intentionally separate from live Supabase engagement. It does not
- * decide ranking or R2 eviction yet; it builds the demand history required by
- * the future hot-storage controller.
+ * This is intentionally separate from live Supabase engagement. The Worker
+ * aggregates it into media_heat_current and uses that signal for hot-cache
+ * eviction while Feed ranking remains unchanged.
  */
 const _archiveMediaTelemetrySeen = new Set();
 const _archiveMediaTelemetryQueue = [];
@@ -7266,7 +7266,18 @@ function isArchiveMediaElement(el) {
   const mediaId = String(el?.getAttribute?.('data-media-id') || '').trim();
   if (!/^med_[a-zA-Z0-9_-]{6,120}$/.test(mediaId)) return false;
   const postId = archiveMediaTelemetryPostId(el);
-  return !postId || /^post_[a-zA-Z0-9_-]{6,160}$/.test(String(postId));
+  if (!postId || !/^post_[a-zA-Z0-9_-]{6,160}$/.test(String(postId))) return false;
+
+  // Telemetry is specifically for the Cloudflare/D1 archive path. Keep live
+  // Supabase media out even if a future live card also receives a media_id.
+  const feedPost = Array.isArray(_feedPosts)
+    ? _feedPosts.find(post => String(post?.id || '') === String(postId))
+    : null;
+  const profilePost = Array.isArray(_profilePosts)
+    ? _profilePosts.find(post => String(post?.id || '') === String(postId))
+    : null;
+  const post = feedPost || profilePost;
+  return !!post && String(post?.source || '').toLowerCase() === 'archive';
 }
 
 function queueArchiveMediaTelemetry(eventType, el) {
@@ -7301,9 +7312,16 @@ async function flushArchiveMediaTelemetry() {
   const events = _archiveMediaTelemetryQueue.splice(0, 40);
   try {
     const endpoint = `${MORTALIVE_MEDIA_WORKER_URL}/api/media-telemetry`;
+    /*
+     * Deliberately use a CORS-safelisted content type. The previous
+     * application/json request forced an OPTIONS preflight; the HAR showed
+     * those preflights succeeding while the POSTs were never observed.
+     * Worker request.json() still parses the JSON body regardless of this
+     * media type.
+     */
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ events }),
       cache: 'no-store',
       credentials: 'omit',
@@ -7328,10 +7346,20 @@ if (!window.__mortaliveArchiveTelemetryLifecycleBound) {
     const events = _archiveMediaTelemetryQueue.splice(0, 40);
     try {
       const endpoint = `${MORTALIVE_MEDIA_WORKER_URL}/api/media-telemetry`;
-      const blob = new Blob([JSON.stringify({ events })], { type: 'application/json' });
+      const blob = new Blob(
+        [JSON.stringify({ events })],
+        { type: 'text/plain' }
+      );
       navigator.sendBeacon(endpoint, blob);
     } catch (_) {}
   }, { passive: true });
+}
+
+function markArchiveMediaRequestStarted(el) {
+  if (!isArchiveMediaElement(el)) return;
+  if (el.dataset.mortaliveMediaRequestStarted === '1') return;
+  el.dataset.mortaliveMediaRequestStarted = '1';
+  queueArchiveMediaTelemetry('media_call', el);
 }
 
 function initArchiveMediaTelemetry(root = document) {
@@ -7344,8 +7372,12 @@ function initArchiveMediaTelemetry(root = document) {
     if (el.dataset.mortaliveTelemetryBound === '1') return;
 
     el.dataset.mortaliveTelemetryBound = '1';
-    queueArchiveMediaTelemetry('media_call', el);
 
+    /*
+     * media_call now means a real archive media request is being mounted,
+     * not merely that a DOM node exists. COLD media therefore contributes
+     * impression/dwell signals but does not falsely count as a delivery call.
+     */
     const loadedEvent = el.tagName === 'VIDEO' ? 'loadedmetadata' : 'load';
     el.addEventListener(
       loadedEvent,
@@ -7519,6 +7551,7 @@ function hydrateFeedCardMedia(card) {
   if (!src) return;
 
   try {
+    markArchiveMediaRequestStarted(media);
     media.setAttribute('src', src);
     media.removeAttribute('data-media-src');
     if (media instanceof HTMLVideoElement) {
@@ -7549,6 +7582,7 @@ function initFeedReelMediaObserver(root) {
         const src = String(video.getAttribute('data-media-src') || '').trim();
         if (!src) return;
         try {
+          markArchiveMediaRequestStarted(video);
           video.setAttribute('src', src);
           video.removeAttribute('data-media-src');
           video.preload = 'metadata';
@@ -9146,65 +9180,20 @@ function removeArchiveBrowserPreload(mediaId) {
   _archiveBrowserPreloads.delete(key);
 }
 
-function primeArchiveBrowserMedia(mediaId, type = 'image') {
-  const key = String(mediaId || '').trim();
-  if (!/^med_[A-Za-z0-9_-]{6,120}$/.test(key)) return;
-  if (_archiveBrowserPreloads.has(key)) return;
-
-  const url = getMediaUrl(key);
-  if (!url) return;
-
-  const kind = String(type || '').toLowerCase() === 'video' ? 'video' : 'image';
-  const root = archiveBrowserPreloadRoot();
-  let node = null;
-
-  try {
-    if (kind === 'video') {
-      node = document.createElement('video');
-      node.muted = true;
-      node.playsInline = true;
-      node.preload = 'auto';
-      node.setAttribute('preload', 'auto');
-      node.setAttribute('aria-hidden', 'true');
-      node.dataset.mediaId = key;
-      node.src = url;
-      root.appendChild(node);
-      node.load();
-    } else {
-      node = document.createElement('img');
-      node.decoding = 'async';
-      node.loading = 'eager';
-      node.fetchPriority = 'low';
-      node.alt = '';
-      node.setAttribute('aria-hidden', 'true');
-      node.dataset.mediaId = key;
-      node.src = url;
-      root.appendChild(node);
-    }
-
-    const timer = window.setTimeout(() => {
-      // Keep the browser cache useful while preventing an ever-growing hidden
-      // DOM. Visible Feed elements can reuse the same cached response.
-      removeArchiveBrowserPreload(key);
-    }, ARCHIVE_BROWSER_PRELOAD_RETENTION_MS);
-
-    _archiveBrowserPreloads.set(key, {
-      kind,
-      node,
-      timer
-    });
-  } catch (_) {
-    try { node?.remove?.(); } catch (__) {}
-  }
+function primeArchiveBrowserMedia(mediaId, type = 'image', state = 'COLD') {
+  /*
+   * V206: intentionally no-op. The Worker already performs predictive
+   * server-side prewarm. Creating hidden <img>/<video> nodes here used to
+   * issue direct /media/:id requests before /media-status reported READY,
+   * which defeated the strict COLD gate and polluted media_call telemetry.
+   */
+  return false;
 }
 
 function primeArchiveBrowserHints(items) {
-  for (const item of (Array.isArray(items) ? items : []).slice(0, ARCHIVE_BROWSER_PRELOAD_MAX)) {
-    primeArchiveBrowserMedia(
-      item?.mediaId || item?.media_id,
-      item?.type || item?.media_type
-    );
-  }
+  // Retained as a compatibility seam for existing call sites, but browser-side
+  // hidden preloads are intentionally disabled in V206.
+  return false;
 }
 
 function collectArchiveFeedPostMedia(post) {
@@ -9282,11 +9271,10 @@ function primeArchiveFeedLookahead() {
       }
     }
 
-    // Server-side prewarm is the authoritative predictive layer. The browser
-    // does not issue hidden /media requests for lookahead assets; that would
-    // defeat the purpose by turning prediction into simultaneous demand.
+    // Server-side prewarm is the authoritative predictive layer. V206 keeps
+    // browser lookahead passive: no hidden /media request is allowed here.
     const upcoming = lookahead.slice(1, ARCHIVE_BROWSER_PRELOAD_MAX + 1);
-    primeArchiveBrowserHints(upcoming);
+    primeArchiveBrowserHints(upcoming); // no-op by design
 
     // Feed pagination is deliberately tied to the actual Load More boundary,
     // not to a fixed pixel distance. The next page is requested only when the
@@ -9571,11 +9559,25 @@ if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
     if (!video.duration) return;
     const fill = video.closest('.feed-video-card')?.querySelector('.feed-video-progress-fill');
     if (fill) fill.style.width = ((video.currentTime / video.duration) * 100).toFixed(2) + '%';
+
+    /* Archive consumption milestones: one event per milestone per DOM node. */
+    if (!isArchiveMediaElement(video)) return;
+    const ratio = Math.max(0, Math.min(1, Number(video.currentTime || 0) / Number(video.duration || 1)));
+    if (ratio >= 0.25) queueArchiveMediaTelemetry('video_25', video);
+    if (ratio >= 0.50) queueArchiveMediaTelemetry('video_50', video);
+    if (ratio >= 0.75) queueArchiveMediaTelemetry('video_75', video);
+  }, true);
+
+  document.addEventListener('ended', (event) => {
+    const video = event.target;
+    if (!(video instanceof HTMLVideoElement) || !video.classList?.contains('feed-video-thumb')) return;
+    if (!isArchiveMediaElement(video)) return;
+    queueArchiveMediaTelemetry('video_complete', video);
   }, true);
 }
 
 /*
- * Cold-media gate (V204): a 204 from the Worker means the archive media is
+ * Cold-media gate (V206): a 204 from the Worker means the archive media is
  * currently being warmed into R2 by the background prewarm queue. Do not
  * immediately hammer /media/:id again. Poll the cheap /media-status/:id
  * endpoint at bounded intervals and only retry the real media URL once R2 is
@@ -9620,6 +9622,7 @@ async function waitForArchiveMediaReady(el, mediaId, attempt = 0) {
           el.removeAttribute('data-mortaliveMediaStatusPolling');
           el.removeAttribute('data-mortalive-media-status-polling');
           el.setAttribute('data-media-src', directUrl);
+          markArchiveMediaRequestStarted(el);
           el.setAttribute('src', retryUrl);
           const host = el.closest?.('.feed-media-shell, .feed-carousel-slide, .feed-video-card, .feed-reel-card, .reel-thumb');
           host?.classList.remove('archive-media-cold');
