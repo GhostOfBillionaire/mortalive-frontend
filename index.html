@@ -5099,14 +5099,9 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
   padding: 20px 0;
 }
 
-/* Feed backdrop — dark grey canvas the white cards sit on. Nothing about the
-   cards themselves needed to change: they were already built as explicit
-   white boxes (background:#fff on .post-card, .sidebar-card, .right-card,
-   .compose-card, .feed-tabs), just placed on a page that was the same white
-   they are — which is what made the feed read as flat and empty rather than
-   as a set of distinct cards. Darkening only the page fixes that. */
+/* Feed backdrop — restore the original light surface used by the app. */
 #pg-feed{
-  background: #1b1f27;
+  background: var(--surface-2);
 }
 
 /* Feed uses a 3-column layout: left sidebar | centre feed | right panel */
