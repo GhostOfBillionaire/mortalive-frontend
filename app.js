@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-24-v202-cold-media-gate'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-25-v203-hot-first-media-gate'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -7451,23 +7451,49 @@ function applyFeedPerformanceStyles() {
   document.head.appendChild(style);
 }
 
+function startArchiveColdMediaGate(mediaEl) {
+  if (!mediaEl) return;
+  const mediaId = String(
+    mediaEl.getAttribute?.('data-media-id') ||
+    mediaEl.closest?.('[data-media-id]')?.getAttribute?.('data-media-id') ||
+    ''
+  ).trim();
+  if (!/^med_[A-Za-z0-9_-]{6,120}$/.test(mediaId)) return;
+  if (mediaEl.dataset.mortaliveMediaStatusPolling === '1') return;
+  mediaEl.dataset.mortaliveColdGate = '1';
+  void waitForArchiveMediaReady(mediaEl, mediaId, 0).then((ready) => {
+    if (!ready && document.contains(mediaEl)) {
+      const status = String(mediaEl.dataset.mortaliveArchiveStatus || '').toUpperCase();
+      if (status === 'UNAVAILABLE') {
+        showArchiveMediaHydrationError(mediaEl, mediaId);
+      }
+    }
+  });
+}
+
 function hydrateFeedCardMedia(card) {
   if (!card) return;
 
   // A carousel has exactly one active slide. Hydrate only that slide; all
-  // other media remain data-media-src until the user navigates to them.
+  // other media remain untouched until the user navigates to them.
   const activeSlide = card.querySelector?.('.feed-carousel-slide.active');
   if (activeSlide) {
     hydrateFeedCarouselSlide(activeSlide);
     return;
   }
 
-  // Normal single-media posts and long-form video cards carry their media URL
-  // in data-media-src. Moving it to src is the moment we intentionally allow
-  // the browser to make a media request.
-  const media = card.querySelector?.(
-    'img[data-media-src], video[data-media-src]'
-  );
+  // Cold archive media deliberately has no src/data-media-src. It is only
+  // allowed to begin its cheap /media-status poll when the card is near the
+  // viewport. The real /media/:id request is mounted only after READY.
+  const coldMedia = card.querySelector?.('[data-media-cold="1"][data-media-id]');
+  if (coldMedia) {
+    startArchiveColdMediaGate(coldMedia);
+    return;
+  }
+
+  // HOT/legacy media carry their URL in data-media-src. Moving it to src is
+  // the moment we intentionally allow the browser to make a media request.
+  const media = card.querySelector?.('img[data-media-src], video[data-media-src]');
   if (!media) return;
 
   const src = String(media.getAttribute('data-media-src') || '').trim();
@@ -9219,8 +9245,8 @@ function getMediaUrl(mediaId) {
 // they got.
 function getPostMedia(post) {
   // Archive/API responses may carry media[] either as an array or as a JSON
-  // string. Normalize both forms before rendering so carousel hydration does
-  // not depend on the Worker having pre-built browser URLs.
+  // string. Preserve the Worker-provided HOT/COLD state instead of collapsing
+  // every media_id into an immediately-requestable /media URL.
   let rawMedia = post?.post_meta?.media;
   if (typeof rawMedia === 'string') {
     try { rawMedia = JSON.parse(rawMedia); } catch (_) { rawMedia = null; }
@@ -9231,27 +9257,40 @@ function getPostMedia(post) {
       .map((m, i) => {
         const mediaId = m?.media_id ? String(m.media_id) : (m?.mediaId ? String(m.mediaId) : '');
         const explicitUrl = typeof m?.url === 'string' ? m.url.trim() : '';
-        // Prefer the secure media gateway whenever a media_id exists. This is
-        // the hydration seam for archive carousels and single archive media.
+        const isArchive = post?.source === 'archive' && !!mediaId;
+        const cacheState = isArchive
+          ? (String(m?.cache_state || (m?.ready === true ? 'HOT' : 'COLD')).toUpperCase() === 'HOT' ? 'HOT' : 'COLD')
+          : 'HOT';
+        // Keep the gateway URL as data, but the Feed renderer decides whether
+        // it is safe to place that URL into src. COLD media has no browser
+        // request until /media-status reports READY.
         const url = mediaId ? getMediaUrl(mediaId) : feedAvatarUrl(explicitUrl);
         return {
           mediaId,
           type: String(m?.type || '').toLowerCase() === 'video' || String(m?.media_type || '').toLowerCase() === 'video' ? 'video' : 'image',
           url,
+          cacheState,
+          ready: cacheState === 'HOT',
           position: Number.isFinite(Number(m?.position)) ? Number(m.position) : i
         };
       })
-      .filter(m => m.url)
+      .filter(m => m.url || m.mediaId)
       .sort((a, b) => a.position - b.position);
   }
 
   const mediaId = post?.media_id ? String(post.media_id) : '';
   const url = mediaId ? getMediaUrl(mediaId) : feedAvatarUrl(post?.media_url || '');
   if (!url) return [];
+  const isArchive = post?.source === 'archive' && !!mediaId;
+  const cacheState = isArchive
+    ? (String(post?.cache_state || (post?.ready === true ? 'HOT' : 'COLD')).toUpperCase() === 'HOT' ? 'HOT' : 'COLD')
+    : 'HOT';
   return [{
     mediaId,
     type: detectMediaType(post?.media_type, post?.media_url),
     url,
+    cacheState,
+    ready: cacheState === 'HOT',
     position: 0
   }];
 }
@@ -9264,11 +9303,17 @@ function feedMediaMarkup(post) {
   if (!media.length) return '';
   if (media.length > 1) return feedCarouselMarkup(media, post);
   const item = media[0];
+  const pending = item.cacheState !== 'HOT';
+  const mediaId = sanitizeHTML(item.mediaId || '');
+  const mediaUrl = sanitizeHTML(item.url || '');
+  const pendingAttrs = pending ? 'data-media-cold="1"' : `data-media-src="${mediaUrl}"`;
+  const pendingClass = pending ? ' archive-media-cold' : '';
+  const pendingOverlay = pending ? '<div class="feed-media-pending" aria-live="polite">Preparing media…</div>' : '';
   if (item.type === 'video') {
-    return `<div class="feed-media-shell" data-media-id="${sanitizeHTML(item.mediaId || '')}" data-media-url="${sanitizeHTML(item.url)}"><video class="feed-post-video" data-media-id="${sanitizeHTML(item.mediaId || '')}" data-media-src="${sanitizeHTML(item.url)}" controls playsinline preload="none"></video></div>`;
+    return `<div class="feed-media-shell${pendingClass}" data-media-id="${mediaId}" data-media-state="${pending ? 'COLD' : 'HOT'}" data-media-url="${mediaUrl}"><video class="feed-post-video" data-media-id="${mediaId}" ${pendingAttrs} controls playsinline preload="none"></video>${pendingOverlay}</div>`;
   }
   const display = post?.author?.display_name || post?.author?.username || 'member';
-  return `<div class="feed-media-shell" data-media-id="${sanitizeHTML(item.mediaId || '')}" data-media-url="${sanitizeHTML(item.url)}"><img class="feed-post-media js-photo-open" data-media-id="${sanitizeHTML(item.mediaId || '')}" data-media-src="${sanitizeHTML(item.url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" decoding="async" data-photo-url="${sanitizeHTML(item.url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}"></div>`;
+  return `<div class="feed-media-shell${pendingClass}" data-media-id="${mediaId}" data-media-state="${pending ? 'COLD' : 'HOT'}" data-media-url="${mediaUrl}"><img class="feed-post-media js-photo-open" data-media-id="${mediaId}" ${pendingAttrs} alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" decoding="async" data-photo-url="${mediaUrl}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">${pendingOverlay}</div>`;
 }
 
 // Ordered multi-media strip (mixed image/video, arrow + dot navigation).
@@ -9278,10 +9323,16 @@ function feedMediaMarkup(post) {
 function feedCarouselMarkup(media, post) {
   const slides = media.map((m, i) => {
     const active = i === 0;
+    const pending = m.cacheState !== 'HOT';
+    const mediaId = sanitizeHTML(m.mediaId || '');
+    const mediaUrl = sanitizeHTML(m.url || '');
+    const pendingAttrs = pending ? 'data-media-cold="1"' : `data-media-src="${mediaUrl}"`;
+    const pendingClass = pending ? ' archive-media-cold' : '';
+    const pendingOverlay = pending ? '<div class="feed-media-pending" aria-live="polite">Preparing media…</div>' : '';
     if (m.type === 'video') {
-      return `<div class="feed-carousel-slide${active ? ' active' : ''}" data-slide-index="${i}" data-media-id="${sanitizeHTML(m.mediaId || '')}"><video class="feed-carousel-media" data-media-id="${sanitizeHTML(m.mediaId || '')}" data-media-src="${sanitizeHTML(m.url)}" controls playsinline preload="none"></video></div>`;
+      return `<div class="feed-carousel-slide${active ? ' active' : ''}${pendingClass}" data-slide-index="${i}" data-media-id="${mediaId}" data-media-state="${pending ? 'COLD' : 'HOT'}"><video class="feed-carousel-media" data-media-id="${mediaId}" ${pendingAttrs} controls playsinline preload="none"></video>${pendingOverlay}</div>`;
     }
-    return `<div class="feed-carousel-slide${active ? ' active' : ''}" data-slide-index="${i}" data-media-id="${sanitizeHTML(m.mediaId || '')}"><img class="js-photo-open feed-carousel-media" data-media-id="${sanitizeHTML(m.mediaId || '')}" data-media-src="${sanitizeHTML(m.url)}" alt="" loading="lazy" decoding="async" data-photo-url="${sanitizeHTML(m.url)}" data-profile-owner="${sanitizeHTML(post?.user_id || '')}"></div>`;
+    return `<div class="feed-carousel-slide${active ? ' active' : ''}${pendingClass}" data-slide-index="${i}" data-media-id="${mediaId}" data-media-state="${pending ? 'COLD' : 'HOT'}"><img class="js-photo-open feed-carousel-media" data-media-id="${mediaId}" ${pendingAttrs} alt="" loading="lazy" decoding="async" data-photo-url="${mediaUrl}" data-profile-owner="${sanitizeHTML(post?.user_id || '')}">${pendingOverlay}</div>`;
   }).join('');
   const arrows = media.length > 1 ? `
     <button type="button" class="feed-carousel-arrow prev" data-carousel-dir="-1" aria-label="Previous">‹</button>
@@ -9296,6 +9347,12 @@ function feedCarouselMarkup(media, post) {
 
 function hydrateFeedCarouselSlide(slide) {
   if (!slide) return;
+  const coldMedia = slide.querySelector?.('[data-media-cold="1"][data-media-id]');
+  if (coldMedia) {
+    startArchiveColdMediaGate(coldMedia);
+    return;
+  }
+
   const media = slide.querySelector?.('img[data-media-src], video[data-media-src]');
   if (!media) return;
 
@@ -9424,6 +9481,9 @@ async function waitForArchiveMediaReady(el, mediaId, attempt = 0) {
 
   const maxAttempts = 6;
   const delays = [3000, 5000, 8000, 12000, 18000, 25000];
+  const directUrl = getMediaUrl(mediaId);
+  if (!directUrl) return false;
+
   el.dataset.mortaliveMediaStatusPolling = '1';
 
   try {
@@ -9443,24 +9503,23 @@ async function waitForArchiveMediaReady(el, mediaId, attempt = 0) {
         payload = null;
       }
 
-      if (payload?.ready === true) {
-        const originalSrc = String(
-          el.dataset.mortaliveOriginalMediaSrc ||
-          el.getAttribute('src') ||
-          ''
-        ).split('?')[0];
+      const status = String(payload?.status || '').toUpperCase();
+      el.dataset.mortaliveArchiveStatus = status;
 
-        if (!originalSrc) return false;
-
-        const retryUrl = `${originalSrc}?retry=${Date.now()}`;
+      if (payload?.ready === true || status === 'READY') {
+        const retryUrl = `${directUrl}?retry=${Date.now()}`;
         try {
           el.dataset.hydrationRetried = '1';
-          el.removeAttribute('data-mortalive-media-status-polling');
+          el.removeAttribute('data-media-cold');
           el.removeAttribute('data-mortaliveMediaStatusPolling');
+          el.removeAttribute('data-mortalive-media-status-polling');
+          el.setAttribute('data-media-src', directUrl);
           el.setAttribute('src', retryUrl);
-          if (el instanceof HTMLVideoElement) {
-            el.load();
-          }
+          const host = el.closest?.('.feed-media-shell, .feed-carousel-slide, .feed-video-card, .feed-reel-card, .reel-thumb');
+          host?.classList.remove('archive-media-cold');
+          host?.setAttribute('data-media-state', 'HOT');
+          host?.querySelector?.('.feed-media-pending')?.remove();
+          if (el instanceof HTMLVideoElement) el.load();
           return true;
         } catch (_) {
           return false;
@@ -9470,7 +9529,8 @@ async function waitForArchiveMediaReady(el, mediaId, attempt = 0) {
       if (
         payload?.prewarmable === false ||
         payload?.retryable === false ||
-        String(payload?.status || '').toUpperCase() === 'UNAVAILABLE'
+        status === 'UNAVAILABLE' ||
+        status === 'NOT_FOUND'
       ) {
         return false;
       }
@@ -9493,6 +9553,7 @@ async function waitForArchiveMediaReady(el, mediaId, attempt = 0) {
     delete el.dataset.mortaliveMediaStatusPolling;
   }
 
+  el.dataset.mortaliveArchiveStatus = 'TIMEOUT';
   return false;
 }
 
@@ -9501,19 +9562,30 @@ function showArchiveMediaHydrationError(el, mediaId) {
   if (!host) return;
   if (host.querySelector('.feed-media-hydration-error')) return;
 
+  host.querySelector('.feed-media-pending')?.remove();
+  host.classList.remove('archive-media-cold');
   const note = document.createElement('div');
   note.className = 'feed-media-hydration-error';
   note.textContent = 'Media unavailable — tap to retry';
   note.dataset.mediaId = mediaId;
   note.addEventListener('click', () => {
-    const retryUrl = `${MORTALIVE_MEDIA_WORKER_URL}/media/${encodeURIComponent(mediaId)}?retry=${Date.now()}`;
     delete el.dataset.hydrationRetried;
-    el.dataset.mortaliveOriginalMediaSrc = retryUrl.split('?')[0];
-    el.setAttribute('src', retryUrl);
+    delete el.dataset.mortaliveArchiveStatus;
     note.remove();
-    if (el instanceof HTMLVideoElement) {
-      try { el.load(); } catch (_) {}
+    el.dataset.mediaCold = '1';
+    el.setAttribute('data-media-cold', '1');
+    el.removeAttribute('data-media-src');
+    el.removeAttribute('src');
+    el.closest?.('.feed-media-shell, .feed-carousel-slide, .feed-video-card, .feed-reel-card')?.querySelector?.('.feed-media-pending')?.remove();
+    const host = el.closest?.('.feed-media-shell, .feed-carousel-slide, .feed-video-card, .feed-reel-card');
+    if (host && !host.querySelector('.feed-media-pending')) {
+      const pending = document.createElement('div');
+      pending.className = 'feed-media-pending';
+      pending.setAttribute('aria-live', 'polite');
+      pending.textContent = 'Preparing media…';
+      host.appendChild(pending);
     }
+    startArchiveColdMediaGate(el);
   });
   host.appendChild(note);
 }
@@ -9536,6 +9608,11 @@ if (!document.documentElement.dataset.mortaliveMediaHydrationGuardBound) {
       String(el.dataset.mortaliveOriginalMediaSrc || '').startsWith(`${MORTALIVE_MEDIA_WORKER_URL}/media/`);
 
     if (!isArchiveWorkerMedia) return;
+
+    // COLD media is intentionally mounted without src. Its first network
+    // operation is /media-status, not /media. Never convert that state into
+    // the generic unavailable UI.
+    if (el.dataset.mediaCold === '1') return;
 
     if (el.dataset.hydrationRetried === '1') {
       showArchiveMediaHydrationError(el, mediaId);
@@ -9589,10 +9666,14 @@ function buildFeedPostCardHTML(post) {
     : `<div class="post-avatar">${feedAvatarLetter(display)}</div>`;
   const engagement = engagementFor(post.id);
   const durationSeconds = Number(post?.post_meta?.duration_seconds) || 0;
+  const primaryMedia = postMedia[0] || null;
+  const primaryCold = !!primaryMedia && primaryMedia.cacheState !== 'HOT';
+  const primaryMediaAttrs = primaryMedia ? (primaryCold ? 'data-media-cold="1"' : `data-media-src="${sanitizeHTML(primaryMedia.url || '')}"`) : '';
+  const primaryPending = primaryCold ? '<div class="feed-media-pending" aria-live="polite">Preparing media…</div>' : '';
   const bodyHTML = post.post_type === 'video' && postMedia.length
-    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" data-media-src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="none"></video><span class="feed-video-toggle-glyph">▶</span><div class="feed-video-progress"><div class="feed-video-progress-fill"></div></div><button type="button" class="feed-video-mute-btn" aria-label="${_feedSoundEnabled ? 'Mute' : 'Unmute'}">${_feedSoundEnabled ? '🔊' : '🔇'}</button>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
+    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card${primaryCold ? ' archive-media-cold' : ''}" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(primaryMedia?.mediaId || '')}" data-media-state="${primaryCold ? 'COLD' : 'HOT'}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(primaryMedia?.mediaId || '')}" ${primaryMediaAttrs} muted playsinline preload="none"></video>${primaryPending}<span class="feed-video-toggle-glyph">▶</span><div class="feed-video-progress"><div class="feed-video-progress-fill"></div></div><button type="button" class="feed-video-mute-btn" aria-label="${_feedSoundEnabled ? 'Mute' : 'Unmute'}">${_feedSoundEnabled ? '🔊' : '🔇'}</button>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
     : post.post_type === 'reel' && postMedia.length
-      ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" data-media-src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="none"></video><span class="feed-reel-play">▶</span></div>`
+      ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card${primaryCold ? ' archive-media-cold' : ''}" data-reel-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(primaryMedia?.mediaId || '')}" data-media-state="${primaryCold ? 'COLD' : 'HOT'}"><video data-media-id="${sanitizeHTML(primaryMedia?.mediaId || '')}" ${primaryMediaAttrs} muted playsinline preload="none"></video>${primaryPending}<span class="feed-reel-play">▶</span></div>`
       : postMedia.length
         ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>${feedMediaMarkup(post)}`
         : post?.post_meta?.kind ? renderStructuredFeedPost(post) : `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>`;
@@ -9629,7 +9710,8 @@ function renderFeedReelsShelfHTML(reels) {
     const caption = String(post.content || '').trim();
     return `
       <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open Quid ${i + 1}">
-        <video class="reel-thumb-bg" data-media-id="${sanitizeHTML(media[0]?.mediaId || '')}" data-media-src="${sanitizeHTML(media[0]?.url || '')}" muted playsinline preload="none"></video>
+        <video class="reel-thumb-bg${media[0]?.cacheState !== 'HOT' ? ' archive-media-cold' : ''}" data-media-id="${sanitizeHTML(media[0]?.mediaId || '')}" ${media[0]?.cacheState !== 'HOT' ? 'data-media-cold="1"' : `data-media-src="${sanitizeHTML(media[0]?.url || '')}"`} muted playsinline preload="none"></video>
+        ${media[0]?.cacheState !== 'HOT' ? '<span class="feed-media-pending feed-media-pending-mini" aria-live="polite">Preparing media…</span>' : ''}
         <span class="reel-thumb-play">▶</span>
         ${duration > 0 ? `<span class="reel-thumb-duration">${formatVideoDuration(duration)}</span>` : ''}
         ${caption ? `<span class="reel-thumb-views">${sanitizeHTML(caption.slice(0, 28))}${caption.length > 28 ? '…' : ''}</span>` : ''}
