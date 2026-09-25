@@ -7836,8 +7836,62 @@ async function fetchFeedPage(reset = false) {
     })();
 
     const [archiveResult, liveResult] = await Promise.all([archivePromise, livePromise]);
-    const archivePosts = Array.isArray(archiveResult.posts) ? archiveResult.posts : [];
+    let archivePosts = Array.isArray(archiveResult.posts) ? archiveResult.posts : [];
     const livePosts = Array.isArray(liveResult.posts) ? liveResult.posts : [];
+
+    // Defensive recovery: if the normal randomized archive request returned
+    // no rows, make one deterministic catalogue request before giving up. This
+    // keeps Cloudflare/D1 content visible even when a randomized hot-set probe
+    // happens to produce an empty page. It never replaces existing live posts.
+    if (_feedFilter !== 'mine' && !archivePosts.length && _feedHasMoreArchive) {
+      try {
+        const fallbackParams = new URLSearchParams({
+          limit: String(Math.max(6, FEED_PAGE_SIZE)),
+          offset: '0',
+          random: '0'
+        });
+        const fallbackResponse = await fetch(
+          `${MORTALIVE_MEDIA_WORKER_URL}/api/archive-feed?${fallbackParams.toString()}`,
+          {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            cache: 'no-store',
+            credentials: 'omit'
+          }
+        );
+        if (fallbackResponse.ok) {
+          const fallbackPayload = await fallbackResponse.json();
+          const fallbackRows = Array.isArray(fallbackPayload?.posts) ? fallbackPayload.posts : [];
+          if (fallbackRows.length) {
+            archivePosts = fallbackRows.map(post => ({
+              ...post,
+              source: 'archive',
+              visibility: post.visibility || 'public',
+              post_meta: post.post_meta && typeof post.post_meta === 'object'
+                ? post.post_meta
+                : {}
+            }));
+          }
+          if (Array.isArray(fallbackPayload?.preload?.items)) {
+            _archiveServerPreloadHints = new Map(
+              fallbackPayload.preload.items
+                .map(item => {
+                  const mediaId = String(item?.mediaId || item?.media_id || '').trim();
+                  if (!/^med_[A-Za-z0-9_-]{6,120}$/.test(mediaId)) return null;
+                  return [mediaId, {
+                    type: String(item?.type || item?.media_type || '').toLowerCase() === 'video'
+                      ? 'video'
+                      : 'image'
+                  }];
+                })
+                .filter(Boolean)
+            );
+          }
+        }
+      } catch (fallbackError) {
+        console.warn('[Feed] deterministic Cloudflare archive fallback failed:', fallbackError?.message || fallbackError);
+      }
+    }
 
     _feedArchiveOffset += archivePosts.length;
     _feedHasMoreArchive = Boolean(archiveResult.hasMore);
@@ -7861,9 +7915,9 @@ async function fetchFeedPage(reset = false) {
 
     /*
      * Archive order is deliberately randomized by the Worker. Never re-sort
-     * the result by created_at here or refreshes would collapse back into the
-     * same chronological archive sequence. Mix live + archive candidates with
-     * a light Fisher-Yates pass so each refresh gets a different composition.
+     * the result by created_at here. Mix live + archive candidates with a
+     * light Fisher-Yates pass, then reserve a small archive share so the
+     * Cloudflare/D1 catalogue is actually represented in the public Feed.
      */
     const incoming = [
       ...archivePosts,
@@ -7891,8 +7945,46 @@ async function fetchFeedPage(reset = false) {
       [combined[i], combined[j]] = [combined[j], combined[i]];
     }
 
-    const pagePosts = combined.slice(0, FEED_PAGE_SIZE);
-    _feedMergeBuffer = combined.slice(FEED_PAGE_SIZE);
+    // Keep the archive source visibly represented in the public Feed. A page
+    // must not be able to contain only Supabase rows simply because the mixed
+    // shuffle happened to place all archive rows after the first page boundary.
+    // Preserve natural mixing, but reserve a small archive share whenever the
+    // Worker actually returned archive posts.
+    const ARCHIVE_MIN_VISIBLE_PER_PAGE = Math.min(6, Math.max(2, Math.floor(FEED_PAGE_SIZE * 0.25)));
+    const liveCandidates = combined.filter(post => post?.source !== 'archive');
+    const archiveCandidates = combined.filter(post => post?.source === 'archive');
+
+    let pagePosts;
+    if (archiveCandidates.length && liveCandidates.length) {
+      const archiveTake = Math.min(
+        ARCHIVE_MIN_VISIBLE_PER_PAGE,
+        archiveCandidates.length,
+        FEED_PAGE_SIZE
+      );
+      const liveTake = Math.max(0, FEED_PAGE_SIZE - archiveTake);
+      const reservedArchive = archiveCandidates.slice(0, archiveTake);
+      const remaining = [
+        ...liveCandidates.slice(0, liveTake),
+        ...archiveCandidates.slice(archiveTake)
+      ];
+
+      // Light shuffle only the remainder so the archive posts do not form a
+      // visually obvious block at the top of every page.
+      for (let i = remaining.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
+      }
+
+      pagePosts = [...reservedArchive, ...remaining.slice(0, Math.max(0, FEED_PAGE_SIZE - reservedArchive.length))];
+      for (let i = pagePosts.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pagePosts[i], pagePosts[j]] = [pagePosts[j], pagePosts[i]];
+      }
+    } else {
+      pagePosts = combined.slice(0, FEED_PAGE_SIZE);
+    }
+
+    _feedMergeBuffer = combined.filter(post => !pagePosts.includes(post));
 
     _feedPosts = reset || _feedOffset === 0
       ? pagePosts
@@ -7922,7 +8014,8 @@ async function fetchFeedPage(reset = false) {
     // Initial loads / explicit refreshes render the whole feed. Pagination does
     // NOT: append only the newly acquired page so the existing DOM stays in
     // place and the user's scroll position, playing media, open UI and visual
-    // continuity are preserved.
+    // continuity are preserved. Archive posts use the exact same renderer as
+    // Supabase posts; the source only changes where the data came from.
     const hadExistingFeed = !reset && container && container.querySelector('[data-post-id]');
     if (hadExistingFeed && pagePosts.length) {
       appendFeedPostCards(pagePosts);
