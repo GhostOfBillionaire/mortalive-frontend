@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-25-v204-cold-state-hardened'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-24-v202-cold-media-gate'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -7247,9 +7247,9 @@ function canonicalProfileTargetId(post, fallback = '') {
 
 /* ── Archive media demand telemetry / Phase 1 ─────────────────────────────
  * The browser reports coarse delivery/consumption signals to the Worker.
- * This is intentionally separate from live Supabase engagement. The Worker
- * aggregates it into media_heat_current and uses that signal for hot-cache
- * eviction while Feed ranking remains unchanged.
+ * This is intentionally separate from live Supabase engagement. It does not
+ * decide ranking or R2 eviction yet; it builds the demand history required by
+ * the future hot-storage controller.
  */
 const _archiveMediaTelemetrySeen = new Set();
 const _archiveMediaTelemetryQueue = [];
@@ -7266,18 +7266,7 @@ function isArchiveMediaElement(el) {
   const mediaId = String(el?.getAttribute?.('data-media-id') || '').trim();
   if (!/^med_[a-zA-Z0-9_-]{6,120}$/.test(mediaId)) return false;
   const postId = archiveMediaTelemetryPostId(el);
-  if (!postId || !/^post_[a-zA-Z0-9_-]{6,160}$/.test(String(postId))) return false;
-
-  // Telemetry is specifically for the Cloudflare/D1 archive path. Keep live
-  // Supabase media out even if a future live card also receives a media_id.
-  const feedPost = Array.isArray(_feedPosts)
-    ? _feedPosts.find(post => String(post?.id || '') === String(postId))
-    : null;
-  const profilePost = Array.isArray(_profilePosts)
-    ? _profilePosts.find(post => String(post?.id || '') === String(postId))
-    : null;
-  const post = feedPost || profilePost;
-  return !!post && String(post?.source || '').toLowerCase() === 'archive';
+  return !postId || /^post_[a-zA-Z0-9_-]{6,160}$/.test(String(postId));
 }
 
 function queueArchiveMediaTelemetry(eventType, el) {
@@ -7312,16 +7301,9 @@ async function flushArchiveMediaTelemetry() {
   const events = _archiveMediaTelemetryQueue.splice(0, 40);
   try {
     const endpoint = `${MORTALIVE_MEDIA_WORKER_URL}/api/media-telemetry`;
-    /*
-     * Deliberately use a CORS-safelisted content type. The previous
-     * application/json request forced an OPTIONS preflight; the HAR showed
-     * those preflights succeeding while the POSTs were never observed.
-     * Worker request.json() still parses the JSON body regardless of this
-     * media type.
-     */
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({ events }),
       cache: 'no-store',
       credentials: 'omit',
@@ -7346,20 +7328,10 @@ if (!window.__mortaliveArchiveTelemetryLifecycleBound) {
     const events = _archiveMediaTelemetryQueue.splice(0, 40);
     try {
       const endpoint = `${MORTALIVE_MEDIA_WORKER_URL}/api/media-telemetry`;
-      const blob = new Blob(
-        [JSON.stringify({ events })],
-        { type: 'text/plain' }
-      );
+      const blob = new Blob([JSON.stringify({ events })], { type: 'application/json' });
       navigator.sendBeacon(endpoint, blob);
     } catch (_) {}
   }, { passive: true });
-}
-
-function markArchiveMediaRequestStarted(el) {
-  if (!isArchiveMediaElement(el)) return;
-  if (el.dataset.mortaliveMediaRequestStarted === '1') return;
-  el.dataset.mortaliveMediaRequestStarted = '1';
-  queueArchiveMediaTelemetry('media_call', el);
 }
 
 function initArchiveMediaTelemetry(root = document) {
@@ -7372,12 +7344,8 @@ function initArchiveMediaTelemetry(root = document) {
     if (el.dataset.mortaliveTelemetryBound === '1') return;
 
     el.dataset.mortaliveTelemetryBound = '1';
+    queueArchiveMediaTelemetry('media_call', el);
 
-    /*
-     * media_call now means a real archive media request is being mounted,
-     * not merely that a DOM node exists. COLD media therefore contributes
-     * impression/dwell signals but does not falsely count as a delivery call.
-     */
     const loadedEvent = el.tagName === 'VIDEO' ? 'loadedmetadata' : 'load';
     el.addEventListener(
       loadedEvent,
@@ -7483,75 +7451,29 @@ function applyFeedPerformanceStyles() {
   document.head.appendChild(style);
 }
 
-function startArchiveColdMediaGate(mediaEl) {
-  if (!mediaEl) return;
-  const mediaId = String(
-    mediaEl.getAttribute?.('data-media-id') ||
-    mediaEl.closest?.('[data-media-id]')?.getAttribute?.('data-media-id') ||
-    ''
-  ).trim();
-  if (!/^med_[A-Za-z0-9_-]{6,120}$/.test(mediaId)) return;
-  if (mediaEl.dataset.mortaliveMediaStatusPolling === '1') return;
-
-  // Fail-closed visual state: once this gate is selected, the element is
-  // explicitly COLD and must not expose a real media URL to the browser.
-  mediaEl.dataset.mortaliveColdGate = '1';
-  mediaEl.dataset.mediaCold = '1';
-  mediaEl.setAttribute('data-media-cold', '1');
-  mediaEl.removeAttribute('data-media-src');
-  mediaEl.removeAttribute('src');
-
-  const host = mediaEl.closest?.('.feed-media-shell, .feed-carousel-slide, .feed-video-card, .feed-reel-card, .reel-thumb');
-  host?.classList.add('archive-media-cold');
-  host?.setAttribute('data-media-state', 'COLD');
-  if (host && !host.querySelector('.feed-media-pending')) {
-    const pending = document.createElement('div');
-    pending.className = 'feed-media-pending';
-    pending.setAttribute('aria-live', 'polite');
-    pending.textContent = 'Preparing media…';
-    host.appendChild(pending);
-  }
-
-  void waitForArchiveMediaReady(mediaEl, mediaId, 0).then((ready) => {
-    if (!ready && document.contains(mediaEl)) {
-      const status = String(mediaEl.dataset.mortaliveArchiveStatus || '').toUpperCase();
-      if (status === 'UNAVAILABLE' || status === 'TIMEOUT') {
-        showArchiveMediaHydrationError(mediaEl, mediaId);
-      }
-    }
-  });
-}
-
 function hydrateFeedCardMedia(card) {
   if (!card) return;
 
   // A carousel has exactly one active slide. Hydrate only that slide; all
-  // other media remain untouched until the user navigates to them.
+  // other media remain data-media-src until the user navigates to them.
   const activeSlide = card.querySelector?.('.feed-carousel-slide.active');
   if (activeSlide) {
     hydrateFeedCarouselSlide(activeSlide);
     return;
   }
 
-  // Cold archive media deliberately has no src/data-media-src. It is only
-  // allowed to begin its cheap /media-status poll when the card is near the
-  // viewport. The real /media/:id request is mounted only after READY.
-  const coldMedia = card.querySelector?.('[data-media-cold="1"][data-media-id]');
-  if (coldMedia) {
-    startArchiveColdMediaGate(coldMedia);
-    return;
-  }
-
-  // HOT/legacy media carry their URL in data-media-src. Moving it to src is
-  // the moment we intentionally allow the browser to make a media request.
-  const media = card.querySelector?.('img[data-media-src], video[data-media-src]');
+  // Normal single-media posts and long-form video cards carry their media URL
+  // in data-media-src. Moving it to src is the moment we intentionally allow
+  // the browser to make a media request.
+  const media = card.querySelector?.(
+    'img[data-media-src], video[data-media-src]'
+  );
   if (!media) return;
 
   const src = String(media.getAttribute('data-media-src') || '').trim();
   if (!src) return;
 
   try {
-    markArchiveMediaRequestStarted(media);
     media.setAttribute('src', src);
     media.removeAttribute('data-media-src');
     if (media instanceof HTMLVideoElement) {
@@ -7570,19 +7492,9 @@ function initFeedReelMediaObserver(root) {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return;
         const video = entry.target;
-
-        // Cold archive reels use the same readiness gate as normal Feed media.
-        // They must never fall through to a direct /media request.
-        if (video.dataset.mediaCold === '1') {
-          startArchiveColdMediaGate(video);
-          _feedReelMediaObserver?.unobserve(video);
-          return;
-        }
-
         const src = String(video.getAttribute('data-media-src') || '').trim();
         if (!src) return;
         try {
-          markArchiveMediaRequestStarted(video);
           video.setAttribute('src', src);
           video.removeAttribute('data-media-src');
           video.preload = 'metadata';
@@ -7592,9 +7504,6 @@ function initFeedReelMediaObserver(root) {
       });
     }, { threshold: [0.01], rootMargin: '450px 0px' });
   }
-  root.querySelectorAll('.reel-thumb-bg[data-media-cold="1"][data-media-id]').forEach((video) => {
-    _feedReelMediaObserver.observe(video);
-  });
   root.querySelectorAll('.reel-thumb-bg[data-media-src]').forEach((video) => {
     _feedReelMediaObserver.observe(video);
   });
@@ -7776,53 +7685,7 @@ async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
     }
 
     const payload = await response.json();
-    let rows = Array.isArray(payload?.posts) ? payload.posts : [];
-
-    /*
-     * V205: archive-feed is a first-class Feed source. If the randomized
-     * archive query returns an empty page, retry once without randomization.
-     * This protects the public Feed from an overly sparse/random candidate
-     * window while keeping the Worker endpoint itself unchanged.
-     */
-    if (!rows.length) {
-      try {
-        const fallbackParams = new URLSearchParams({
-          limit: String(limit),
-          offset: String(offset)
-        });
-        if (archiveSeenIds.length) {
-          fallbackParams.set('exclude', archiveSeenIds.join(','));
-        }
-
-        const fallbackResponse = await fetch(
-          `${MORTALIVE_MEDIA_WORKER_URL}/api/archive-feed?${fallbackParams.toString()}`,
-          {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
-            cache: 'no-store',
-            credentials: 'omit'
-          }
-        );
-
-        if (fallbackResponse.ok) {
-          const fallbackPayload = await fallbackResponse.json();
-          const fallbackRows = Array.isArray(fallbackPayload?.posts)
-            ? fallbackPayload.posts
-            : [];
-          if (fallbackRows.length) {
-            rows = fallbackRows;
-          }
-        }
-      } catch (fallbackError) {
-        console.warn('[Archive Feed] deterministic fallback failed:', fallbackError?.message || fallbackError);
-      }
-    }
-
-    console.info('[Feed] Cloudflare archive source:', {
-      returned: rows.length,
-      hasMore: Boolean(payload?.hasMore),
-      endpoint
-    });
+    const rows = Array.isArray(payload?.posts) ? payload.posts : [];
 
     const preloadItems = Array.isArray(payload?.preload?.items)
       ? payload.preload.items
@@ -7845,9 +7708,9 @@ async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
         .filter(Boolean)
     );
 
-    // V207: the Worker owns all archive warming. The Feed only consumes the
-    // READY/HOT rows returned by /api/archive-feed. No browser prewarm belongs
-    // in this path.
+    // Server-side prewarm is authoritative. Do not open hidden browser media
+    // requests here; visible/near-visible card hydration is handled by the
+    // Feed performance observers below.
     if (_archiveServerPreloadHints.size) {
       primeArchiveBrowserHints(
         [..._archiveServerPreloadHints.entries()]
@@ -7979,35 +7842,20 @@ async function fetchFeedPage(reset = false) {
     }
 
     /*
-     * V207: both sources remain first-class Feed sources. Archive rows returned
-     * by Cloudflare are already HOT/READY; cold/queued archive media is not a
-     * Feed concern and never enters this merge.
+     * Archive order is deliberately randomized by the Worker. Never re-sort
+     * the result by created_at here or refreshes would collapse back into the
+     * same chronological archive sequence. Mix live + archive candidates with
+     * a light Fisher-Yates pass so each refresh gets a different composition.
      */
-    const archiveQuota = Math.min(
-      5,
-      archivePosts.length,
-      FEED_PAGE_SIZE
-    );
-
-    const reservedArchive = archivePosts.slice(0, archiveQuota);
-    const remainingArchive = archivePosts.slice(archiveQuota);
-
     const incoming = [
-      ...reservedArchive,
-      ...remainingArchive,
+      ...archivePosts,
       ...mappedLive
     ].filter(Boolean);
 
-    for (let i = incoming.length - 1; i > archiveQuota - 1; i -= 1) {
-      const j = archiveQuota + Math.floor(Math.random() * Math.max(1, i - archiveQuota + 1));
+    for (let i = incoming.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
       [incoming[i], incoming[j]] = [incoming[j], incoming[i]];
     }
-
-    console.info('[Feed] source merge:', {
-      cloudflareArchive: archivePosts.length,
-      supabaseLive: livePosts.length,
-      reservedArchive: archiveQuota
-    });
 
     const seen = new Set();
     const combined = [
@@ -8075,45 +7923,13 @@ async function fetchFeedPage(reset = false) {
   }
 }
 
-/* V207 — Feed is hot-storage-only for archive media.
- * The Worker is responsible for Jio -> R2 warming. The browser Feed must
- * never render an archive post whose media is not explicitly READY/HOT.
- */
-function isArchiveFeedPostReady(post) {
-  if (!isArchivePost(post)) return true;
-
-  let rawMedia = post?.post_meta?.media;
-  if (typeof rawMedia === 'string') {
-    try { rawMedia = JSON.parse(rawMedia); } catch (_) { rawMedia = null; }
-  }
-
-  if (!Array.isArray(rawMedia) || rawMedia.length === 0) return true;
-
-  return rawMedia.every((media) => {
-    const mediaId = String(media?.media_id || media?.mediaId || '').trim();
-    if (!/^med_[A-Za-z0-9_-]{6,120}$/.test(mediaId)) return false;
-    const state = String(
-      media?.cache_state ||
-      (media?.ready === true ? 'HOT' : '')
-    ).toUpperCase();
-    const url = String(media?.url || '').trim();
-    return state === 'HOT' && !!url;
-  });
-}
-
 function filteredFeedPosts() {
   const base = _feedFilter === 'mine'
     ? _feedPosts.filter(post => post.user_id === S.userId)
     : _feedPosts;
-
-  // Archive media is Worker-owned hot storage. The public Feed receives only
-  // posts whose archive media is already READY/HOT. Keep this second fail-closed
-  // check in the browser as a safety net against stale/old Worker responses.
-  const hotOnly = base.filter(isArchiveFeedPostReady);
-
   // Optional viewer preference (audit 6.4). Off by default — the badge is what
   // satisfies "must be marked AI"; hiding is a convenience on top of it.
-  return _hideAiPosts ? hotOnly.filter(post => !isAiAuthored(post)) : hotOnly;
+  return _hideAiPosts ? base.filter(post => !isAiAuthored(post)) : base;
 }
 
 
@@ -9129,17 +8945,48 @@ function renderStructuredFeedPost(post) {
     const expirationLabel = Number.isFinite(expiresAt)
       ? (expired ? 'Poll ended' : `Ends ${new Date(expiresAt).toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })}`)
       : '';
+
+    // Polymarket-style probability bars rather than plain text buttons.
+    // Percentage and vote count are both real, already-live data from the
+    // same counts this page always had — nothing here is synthesized.
+    //
+    // What this deliberately does NOT include: a history-over-time line
+    // chart (the other half of Polymarket's look). That needs a time series
+    // — either periodic snapshots or per-vote timestamps — and today's data
+    // source (get_poll_results_v2) returns only current totals per option,
+    // no history. Faking a trend from data that isn't there would just be
+    // decoration wearing the shape of information, so this stays to what's
+    // real: current standing, precisely and clearly. A genuine trend line is
+    // a small, separate backend addition away if wanted later.
+    const withPct = options.map((option) => {
+      const optionId = String(option?.id || '');
+      const count = Number(counts.get(optionId) || 0);
+      const pct = totalVotes ? Math.round((count / totalVotes) * 100) : 0;
+      return { option, optionId, count, pct };
+    });
+    // Ranked by current standing once there's something to rank — exactly
+    // how Polymarket always leads with the favoured outcome. Before any
+    // votes exist there is nothing to rank, so options stay in the order
+    // they were written rather than being shuffled for no reason.
+    const ordered = totalVotes ? [...withPct].sort((a, b) => b.pct - a.pct) : withPct;
+    const maxPct = totalVotes ? Math.max(...withPct.map((o) => o.pct)) : -1;
+
     return `<div class="feed-structured-post" data-structured-kind="poll" data-structured-mode="mcq">
       <div class="feed-structured-title"><span>${icon}</span><span>${label}</span>${expirationLabel ? `<span class="feed-structured-duration">${sanitizeHTML(expirationLabel)}</span>` : ''}</div>
       <div class="feed-structured-question">${renderHashtagRichText(post.content || '')}</div>
-      <div class="feed-structured-options">${options.map((option) => {
-        const optionId = String(option?.id || '');
-        const count = Number(counts.get(optionId) || 0);
-        const pct = totalVotes ? Math.round((count / totalVotes) * 100) : 0;
+      <div class="feed-structured-options poll-market-options">${ordered.map(({ option, optionId, count, pct }) => {
         const selected = myVote === optionId;
+        const leading = totalVotes > 0 && pct === maxPct;
         const disabled = (myVote || expired) ? ' aria-disabled="true"' : '';
-        return `<button type="button" class="feed-structured-option${selected ? ' qna-selected' : ''}" data-structured-kind="poll" data-structured-option="${sanitizeHTML(optionId)}" data-post-id="${sanitizeHTML(post.id)}"${disabled}>`+
-          `<span>${sanitizeHTML(option?.label || '')}</span><span class="feed-structured-option-result">${totalVotes ? `${pct}%` : '›'}</span></button>`;
+        const stateClass = `${selected ? ' qna-selected' : ''}${leading ? ' poll-market-leading' : ''}`;
+        return `<button type="button" class="feed-structured-option${stateClass}" data-structured-kind="poll" data-structured-option="${sanitizeHTML(optionId)}" data-post-id="${sanitizeHTML(post.id)}"${disabled}>`+
+          `<span class="poll-market-row-top">`+
+            `<span class="poll-market-label">${sanitizeHTML(option?.label || '')}${selected ? '<span class="poll-market-check" aria-hidden="true">✓</span>' : ''}</span>`+
+            `<span class="poll-market-pct">${totalVotes ? `${pct}%` : '—'}</span>`+
+          `</span>`+
+          `<span class="poll-market-track"><span class="poll-market-fill" style="width:${totalVotes ? pct : 0}%"></span></span>`+
+          `<span class="poll-market-count">${count} vote${count === 1 ? '' : 's'}</span>`+
+        `</button>`;
       }).join('')}</div>
       <div class="feed-structured-open-note">${totalVotes} vote${totalVotes === 1 ? '' : 's'}${myVote ? ' · You voted' : ''}${expired ? ' · Voting closed' : ''}</div>
     </div>`;
@@ -9211,20 +9058,65 @@ function removeArchiveBrowserPreload(mediaId) {
   _archiveBrowserPreloads.delete(key);
 }
 
-function primeArchiveBrowserMedia(mediaId, type = 'image', state = 'COLD') {
-  /*
-   * V206: intentionally no-op. The Worker already performs predictive
-   * server-side prewarm. Creating hidden <img>/<video> nodes here used to
-   * issue direct /media/:id requests before /media-status reported READY,
-   * which defeated the strict COLD gate and polluted media_call telemetry.
-   */
-  return false;
+function primeArchiveBrowserMedia(mediaId, type = 'image') {
+  const key = String(mediaId || '').trim();
+  if (!/^med_[A-Za-z0-9_-]{6,120}$/.test(key)) return;
+  if (_archiveBrowserPreloads.has(key)) return;
+
+  const url = getMediaUrl(key);
+  if (!url) return;
+
+  const kind = String(type || '').toLowerCase() === 'video' ? 'video' : 'image';
+  const root = archiveBrowserPreloadRoot();
+  let node = null;
+
+  try {
+    if (kind === 'video') {
+      node = document.createElement('video');
+      node.muted = true;
+      node.playsInline = true;
+      node.preload = 'auto';
+      node.setAttribute('preload', 'auto');
+      node.setAttribute('aria-hidden', 'true');
+      node.dataset.mediaId = key;
+      node.src = url;
+      root.appendChild(node);
+      node.load();
+    } else {
+      node = document.createElement('img');
+      node.decoding = 'async';
+      node.loading = 'eager';
+      node.fetchPriority = 'low';
+      node.alt = '';
+      node.setAttribute('aria-hidden', 'true');
+      node.dataset.mediaId = key;
+      node.src = url;
+      root.appendChild(node);
+    }
+
+    const timer = window.setTimeout(() => {
+      // Keep the browser cache useful while preventing an ever-growing hidden
+      // DOM. Visible Feed elements can reuse the same cached response.
+      removeArchiveBrowserPreload(key);
+    }, ARCHIVE_BROWSER_PRELOAD_RETENTION_MS);
+
+    _archiveBrowserPreloads.set(key, {
+      kind,
+      node,
+      timer
+    });
+  } catch (_) {
+    try { node?.remove?.(); } catch (__) {}
+  }
 }
 
 function primeArchiveBrowserHints(items) {
-  // Retained as a compatibility seam for existing call sites, but browser-side
-  // hidden preloads are intentionally disabled in V206.
-  return false;
+  for (const item of (Array.isArray(items) ? items : []).slice(0, ARCHIVE_BROWSER_PRELOAD_MAX)) {
+    primeArchiveBrowserMedia(
+      item?.mediaId || item?.media_id,
+      item?.type || item?.media_type
+    );
+  }
 }
 
 function collectArchiveFeedPostMedia(post) {
@@ -9302,10 +9194,11 @@ function primeArchiveFeedLookahead() {
       }
     }
 
-    // Server-side prewarm is the authoritative predictive layer. V206 keeps
-    // browser lookahead passive: no hidden /media request is allowed here.
+    // Server-side prewarm is the authoritative predictive layer. The browser
+    // does not issue hidden /media requests for lookahead assets; that would
+    // defeat the purpose by turning prediction into simultaneous demand.
     const upcoming = lookahead.slice(1, ARCHIVE_BROWSER_PRELOAD_MAX + 1);
-    primeArchiveBrowserHints(upcoming); // no-op by design
+    primeArchiveBrowserHints(upcoming);
 
     // Feed pagination is deliberately tied to the actual Load More boundary,
     // not to a fixed pixel distance. The next page is requested only when the
@@ -9357,8 +9250,8 @@ function getMediaUrl(mediaId) {
 // they got.
 function getPostMedia(post) {
   // Archive/API responses may carry media[] either as an array or as a JSON
-  // string. Preserve the Worker-provided HOT/COLD state instead of collapsing
-  // every media_id into an immediately-requestable /media URL.
+  // string. Normalize both forms before rendering so carousel hydration does
+  // not depend on the Worker having pre-built browser URLs.
   let rawMedia = post?.post_meta?.media;
   if (typeof rawMedia === 'string') {
     try { rawMedia = JSON.parse(rawMedia); } catch (_) { rawMedia = null; }
@@ -9369,55 +9262,27 @@ function getPostMedia(post) {
       .map((m, i) => {
         const mediaId = m?.media_id ? String(m.media_id) : (m?.mediaId ? String(m.mediaId) : '');
         const explicitUrl = typeof m?.url === 'string' ? m.url.trim() : '';
-        const isArchive = post?.source === 'archive' && !!mediaId;
-        // Archive readiness is fail-closed: if the Worker omits the per-media
-        // state for any reason, fall back to the post-level state and then COLD.
-        // We must never infer HOT merely because a media_id exists.
-        const inheritedArchiveState =
-          post?.cache_state ||
-          post?.post_meta?.cache_state ||
-          (post?.ready === true ? 'HOT' : 'COLD');
-        const cacheState = isArchive
-          ? (String(m?.cache_state ||
-              (m?.ready === true ? 'HOT' : inheritedArchiveState) ||
-              inheritedArchiveState).toUpperCase() === 'HOT' ? 'HOT' : 'COLD')
-          : 'HOT';
-        // V207: archive Feed media is already hot. Never synthesize a requestable
-        // /media URL for a non-HOT archive row. The Worker is the only component
-        // that turns cold catalog entries into hot media.
-        const url = isArchive
-          ? (cacheState === 'HOT' ? (explicitUrl || getMediaUrl(mediaId)) : '')
-          : (mediaId ? getMediaUrl(mediaId) : feedAvatarUrl(explicitUrl));
+        // Prefer the secure media gateway whenever a media_id exists. This is
+        // the hydration seam for archive carousels and single archive media.
+        const url = mediaId ? getMediaUrl(mediaId) : feedAvatarUrl(explicitUrl);
         return {
           mediaId,
           type: String(m?.type || '').toLowerCase() === 'video' || String(m?.media_type || '').toLowerCase() === 'video' ? 'video' : 'image',
           url,
-          cacheState,
-          ready: cacheState === 'HOT',
           position: Number.isFinite(Number(m?.position)) ? Number(m.position) : i
         };
       })
-      .filter(m => m.url || m.mediaId)
+      .filter(m => m.url)
       .sort((a, b) => a.position - b.position);
   }
 
   const mediaId = post?.media_id ? String(post.media_id) : '';
   const url = mediaId ? getMediaUrl(mediaId) : feedAvatarUrl(post?.media_url || '');
   if (!url) return [];
-  const isArchive = post?.source === 'archive' && !!mediaId;
-  const inheritedArchiveState =
-    post?.cache_state ||
-    post?.post_meta?.cache_state ||
-    (post?.ready === true ? 'HOT' : 'COLD');
-  const cacheState = isArchive
-    ? (String(inheritedArchiveState).toUpperCase() === 'HOT' ? 'HOT' : 'COLD')
-    : 'HOT';
   return [{
     mediaId,
     type: detectMediaType(post?.media_type, post?.media_url),
-    url: isArchive && cacheState !== 'HOT' ? '' : url,
-    cacheState,
-    ready: cacheState === 'HOT',
+    url,
     position: 0
   }];
 }
@@ -9430,17 +9295,11 @@ function feedMediaMarkup(post) {
   if (!media.length) return '';
   if (media.length > 1) return feedCarouselMarkup(media, post);
   const item = media[0];
-  const pending = item.cacheState !== 'HOT';
-  const mediaId = sanitizeHTML(item.mediaId || '');
-  const mediaUrl = sanitizeHTML(item.url || '');
-  const pendingAttrs = pending ? 'data-media-cold="1"' : `data-media-src="${mediaUrl}"`;
-  const pendingClass = pending ? ' archive-media-cold' : '';
-  const pendingOverlay = pending ? '<div class="feed-media-pending" aria-live="polite">Preparing media…</div>' : '';
   if (item.type === 'video') {
-    return `<div class="feed-media-shell${pendingClass}" data-media-id="${mediaId}" data-media-state="${pending ? 'COLD' : 'HOT'}" data-media-url="${mediaUrl}"><video class="feed-post-video" data-media-id="${mediaId}" ${pendingAttrs} controls playsinline preload="none"></video>${pendingOverlay}</div>`;
+    return `<div class="feed-media-shell" data-media-id="${sanitizeHTML(item.mediaId || '')}" data-media-url="${sanitizeHTML(item.url)}"><video class="feed-post-video" data-media-id="${sanitizeHTML(item.mediaId || '')}" data-media-src="${sanitizeHTML(item.url)}" controls playsinline preload="none"></video></div>`;
   }
   const display = post?.author?.display_name || post?.author?.username || 'member';
-  return `<div class="feed-media-shell${pendingClass}" data-media-id="${mediaId}" data-media-state="${pending ? 'COLD' : 'HOT'}" data-media-url="${mediaUrl}"><img class="feed-post-media js-photo-open" data-media-id="${mediaId}" ${pendingAttrs} alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" decoding="async" data-photo-url="${mediaUrl}" data-profile-owner="${sanitizeHTML(post.user_id || '')}">${pendingOverlay}</div>`;
+  return `<div class="feed-media-shell" data-media-id="${sanitizeHTML(item.mediaId || '')}" data-media-url="${sanitizeHTML(item.url)}"><img class="feed-post-media js-photo-open" data-media-id="${sanitizeHTML(item.mediaId || '')}" data-media-src="${sanitizeHTML(item.url)}" alt="Photo shared by ${sanitizeHTML(display)}" loading="lazy" decoding="async" data-photo-url="${sanitizeHTML(item.url)}" data-profile-owner="${sanitizeHTML(post.user_id || '')}"></div>`;
 }
 
 // Ordered multi-media strip (mixed image/video, arrow + dot navigation).
@@ -9450,16 +9309,10 @@ function feedMediaMarkup(post) {
 function feedCarouselMarkup(media, post) {
   const slides = media.map((m, i) => {
     const active = i === 0;
-    const pending = m.cacheState !== 'HOT';
-    const mediaId = sanitizeHTML(m.mediaId || '');
-    const mediaUrl = sanitizeHTML(m.url || '');
-    const pendingAttrs = pending ? 'data-media-cold="1"' : `data-media-src="${mediaUrl}"`;
-    const pendingClass = pending ? ' archive-media-cold' : '';
-    const pendingOverlay = pending ? '<div class="feed-media-pending" aria-live="polite">Preparing media…</div>' : '';
     if (m.type === 'video') {
-      return `<div class="feed-carousel-slide${active ? ' active' : ''}${pendingClass}" data-slide-index="${i}" data-media-id="${mediaId}" data-media-state="${pending ? 'COLD' : 'HOT'}"><video class="feed-carousel-media" data-media-id="${mediaId}" ${pendingAttrs} controls playsinline preload="none"></video>${pendingOverlay}</div>`;
+      return `<div class="feed-carousel-slide${active ? ' active' : ''}" data-slide-index="${i}" data-media-id="${sanitizeHTML(m.mediaId || '')}"><video class="feed-carousel-media" data-media-id="${sanitizeHTML(m.mediaId || '')}" data-media-src="${sanitizeHTML(m.url)}" controls playsinline preload="none"></video></div>`;
     }
-    return `<div class="feed-carousel-slide${active ? ' active' : ''}${pendingClass}" data-slide-index="${i}" data-media-id="${mediaId}" data-media-state="${pending ? 'COLD' : 'HOT'}"><img class="js-photo-open feed-carousel-media" data-media-id="${mediaId}" ${pendingAttrs} alt="" loading="lazy" decoding="async" data-photo-url="${mediaUrl}" data-profile-owner="${sanitizeHTML(post?.user_id || '')}">${pendingOverlay}</div>`;
+    return `<div class="feed-carousel-slide${active ? ' active' : ''}" data-slide-index="${i}" data-media-id="${sanitizeHTML(m.mediaId || '')}"><img class="js-photo-open feed-carousel-media" data-media-id="${sanitizeHTML(m.mediaId || '')}" data-media-src="${sanitizeHTML(m.url)}" alt="" loading="lazy" decoding="async" data-photo-url="${sanitizeHTML(m.url)}" data-profile-owner="${sanitizeHTML(post?.user_id || '')}"></div>`;
   }).join('');
   const arrows = media.length > 1 ? `
     <button type="button" class="feed-carousel-arrow prev" data-carousel-dir="-1" aria-label="Previous">‹</button>
@@ -9474,12 +9327,6 @@ function feedCarouselMarkup(media, post) {
 
 function hydrateFeedCarouselSlide(slide) {
   if (!slide) return;
-  const coldMedia = slide.querySelector?.('[data-media-cold="1"][data-media-id]');
-  if (coldMedia) {
-    startArchiveColdMediaGate(coldMedia);
-    return;
-  }
-
   const media = slide.querySelector?.('img[data-media-src], video[data-media-src]');
   if (!media) return;
 
@@ -9592,25 +9439,11 @@ if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
     if (!video.duration) return;
     const fill = video.closest('.feed-video-card')?.querySelector('.feed-video-progress-fill');
     if (fill) fill.style.width = ((video.currentTime / video.duration) * 100).toFixed(2) + '%';
-
-    /* Archive consumption milestones: one event per milestone per DOM node. */
-    if (!isArchiveMediaElement(video)) return;
-    const ratio = Math.max(0, Math.min(1, Number(video.currentTime || 0) / Number(video.duration || 1)));
-    if (ratio >= 0.25) queueArchiveMediaTelemetry('video_25', video);
-    if (ratio >= 0.50) queueArchiveMediaTelemetry('video_50', video);
-    if (ratio >= 0.75) queueArchiveMediaTelemetry('video_75', video);
-  }, true);
-
-  document.addEventListener('ended', (event) => {
-    const video = event.target;
-    if (!(video instanceof HTMLVideoElement) || !video.classList?.contains('feed-video-thumb')) return;
-    if (!isArchiveMediaElement(video)) return;
-    queueArchiveMediaTelemetry('video_complete', video);
   }, true);
 }
 
 /*
- * Cold-media gate (V206): a 204 from the Worker means the archive media is
+ * Cold-media gate (V202): a 204 from the Worker means the archive media is
  * currently being warmed into R2 by the background prewarm queue. Do not
  * immediately hammer /media/:id again. Poll the cheap /media-status/:id
  * endpoint at bounded intervals and only retry the real media URL once R2 is
@@ -9622,9 +9455,6 @@ async function waitForArchiveMediaReady(el, mediaId, attempt = 0) {
 
   const maxAttempts = 6;
   const delays = [3000, 5000, 8000, 12000, 18000, 25000];
-  const directUrl = getMediaUrl(mediaId);
-  if (!directUrl) return false;
-
   el.dataset.mortaliveMediaStatusPolling = '1';
 
   try {
@@ -9644,24 +9474,24 @@ async function waitForArchiveMediaReady(el, mediaId, attempt = 0) {
         payload = null;
       }
 
-      const status = String(payload?.status || '').toUpperCase();
-      el.dataset.mortaliveArchiveStatus = status;
+      if (payload?.ready === true) {
+        const originalSrc = String(
+          el.dataset.mortaliveOriginalMediaSrc ||
+          el.getAttribute('src') ||
+          ''
+        ).split('?')[0];
 
-      if (payload?.ready === true || status === 'READY') {
-        const retryUrl = `${directUrl}?retry=${Date.now()}`;
+        if (!originalSrc) return false;
+
+        const retryUrl = `${originalSrc}?retry=${Date.now()}`;
         try {
           el.dataset.hydrationRetried = '1';
-          el.removeAttribute('data-media-cold');
-          el.removeAttribute('data-mortaliveMediaStatusPolling');
           el.removeAttribute('data-mortalive-media-status-polling');
-          el.setAttribute('data-media-src', directUrl);
-          markArchiveMediaRequestStarted(el);
+          el.removeAttribute('data-mortaliveMediaStatusPolling');
           el.setAttribute('src', retryUrl);
-          const host = el.closest?.('.feed-media-shell, .feed-carousel-slide, .feed-video-card, .feed-reel-card, .reel-thumb');
-          host?.classList.remove('archive-media-cold');
-          host?.setAttribute('data-media-state', 'HOT');
-          host?.querySelector?.('.feed-media-pending')?.remove();
-          if (el instanceof HTMLVideoElement) el.load();
+          if (el instanceof HTMLVideoElement) {
+            el.load();
+          }
           return true;
         } catch (_) {
           return false;
@@ -9671,8 +9501,7 @@ async function waitForArchiveMediaReady(el, mediaId, attempt = 0) {
       if (
         payload?.prewarmable === false ||
         payload?.retryable === false ||
-        status === 'UNAVAILABLE' ||
-        status === 'NOT_FOUND'
+        String(payload?.status || '').toUpperCase() === 'UNAVAILABLE'
       ) {
         return false;
       }
@@ -9695,7 +9524,6 @@ async function waitForArchiveMediaReady(el, mediaId, attempt = 0) {
     delete el.dataset.mortaliveMediaStatusPolling;
   }
 
-  el.dataset.mortaliveArchiveStatus = 'TIMEOUT';
   return false;
 }
 
@@ -9704,30 +9532,19 @@ function showArchiveMediaHydrationError(el, mediaId) {
   if (!host) return;
   if (host.querySelector('.feed-media-hydration-error')) return;
 
-  host.querySelector('.feed-media-pending')?.remove();
-  host.classList.remove('archive-media-cold');
   const note = document.createElement('div');
   note.className = 'feed-media-hydration-error';
   note.textContent = 'Media unavailable — tap to retry';
   note.dataset.mediaId = mediaId;
   note.addEventListener('click', () => {
+    const retryUrl = `${MORTALIVE_MEDIA_WORKER_URL}/media/${encodeURIComponent(mediaId)}?retry=${Date.now()}`;
     delete el.dataset.hydrationRetried;
-    delete el.dataset.mortaliveArchiveStatus;
+    el.dataset.mortaliveOriginalMediaSrc = retryUrl.split('?')[0];
+    el.setAttribute('src', retryUrl);
     note.remove();
-    el.dataset.mediaCold = '1';
-    el.setAttribute('data-media-cold', '1');
-    el.removeAttribute('data-media-src');
-    el.removeAttribute('src');
-    el.closest?.('.feed-media-shell, .feed-carousel-slide, .feed-video-card, .feed-reel-card')?.querySelector?.('.feed-media-pending')?.remove();
-    const host = el.closest?.('.feed-media-shell, .feed-carousel-slide, .feed-video-card, .feed-reel-card');
-    if (host && !host.querySelector('.feed-media-pending')) {
-      const pending = document.createElement('div');
-      pending.className = 'feed-media-pending';
-      pending.setAttribute('aria-live', 'polite');
-      pending.textContent = 'Preparing media…';
-      host.appendChild(pending);
+    if (el instanceof HTMLVideoElement) {
+      try { el.load(); } catch (_) {}
     }
-    startArchiveColdMediaGate(el);
   });
   host.appendChild(note);
 }
@@ -9750,11 +9567,6 @@ if (!document.documentElement.dataset.mortaliveMediaHydrationGuardBound) {
       String(el.dataset.mortaliveOriginalMediaSrc || '').startsWith(`${MORTALIVE_MEDIA_WORKER_URL}/media/`);
 
     if (!isArchiveWorkerMedia) return;
-
-    // COLD media is intentionally mounted without src. Its first network
-    // operation is /media-status, not /media. Never convert that state into
-    // the generic unavailable UI.
-    if (el.dataset.mediaCold === '1') return;
 
     if (el.dataset.hydrationRetried === '1') {
       showArchiveMediaHydrationError(el, mediaId);
@@ -9808,16 +9620,10 @@ function buildFeedPostCardHTML(post) {
     : `<div class="post-avatar">${feedAvatarLetter(display)}</div>`;
   const engagement = engagementFor(post.id);
   const durationSeconds = Number(post?.post_meta?.duration_seconds) || 0;
-  const primaryMedia = postMedia[0] || null;
-  // Archive readiness is fail-closed: only explicit HOT gets a requestable URL.
-  // COLD and unknown readiness always render through the status gate.
-  const primaryCold = !!primaryMedia && (primaryMedia.cacheState !== 'HOT');
-  const primaryMediaAttrs = primaryMedia ? (primaryCold ? 'data-media-cold="1"' : `data-media-src="${sanitizeHTML(primaryMedia.url || '')}"`) : '';
-  const primaryPending = primaryCold ? '<div class="feed-media-pending" aria-live="polite">Preparing media…</div>' : '';
   const bodyHTML = post.post_type === 'video' && postMedia.length
-    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card${primaryCold ? ' archive-media-cold' : ''}" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(primaryMedia?.mediaId || '')}" data-media-state="${primaryCold ? 'COLD' : 'HOT'}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(primaryMedia?.mediaId || '')}" ${primaryMediaAttrs} muted playsinline preload="none"></video>${primaryPending}<span class="feed-video-toggle-glyph">▶</span><div class="feed-video-progress"><div class="feed-video-progress-fill"></div></div><button type="button" class="feed-video-mute-btn" aria-label="${_feedSoundEnabled ? 'Mute' : 'Unmute'}">${_feedSoundEnabled ? '🔊' : '🔇'}</button>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
+    ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" data-media-src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="none"></video><span class="feed-video-toggle-glyph">▶</span><div class="feed-video-progress"><div class="feed-video-progress-fill"></div></div><button type="button" class="feed-video-mute-btn" aria-label="${_feedSoundEnabled ? 'Mute' : 'Unmute'}">${_feedSoundEnabled ? '🔊' : '🔇'}</button>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
     : post.post_type === 'reel' && postMedia.length
-      ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card${primaryCold ? ' archive-media-cold' : ''}" data-reel-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(primaryMedia?.mediaId || '')}" data-media-state="${primaryCold ? 'COLD' : 'HOT'}"><video data-media-id="${sanitizeHTML(primaryMedia?.mediaId || '')}" ${primaryMediaAttrs} muted playsinline preload="none"></video>${primaryPending}<span class="feed-reel-play">▶</span></div>`
+      ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" data-media-src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="none"></video><span class="feed-reel-play">▶</span></div>`
       : postMedia.length
         ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>${feedMediaMarkup(post)}`
         : post?.post_meta?.kind ? renderStructuredFeedPost(post) : `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>`;
@@ -9854,8 +9660,7 @@ function renderFeedReelsShelfHTML(reels) {
     const caption = String(post.content || '').trim();
     return `
       <button type="button" class="reel-thumb" data-reel-post-id="${sanitizeHTML(post.id)}" aria-label="Open Quid ${i + 1}">
-        <video class="reel-thumb-bg${media[0]?.cacheState !== 'HOT' ? ' archive-media-cold' : ''}" data-media-id="${sanitizeHTML(media[0]?.mediaId || '')}" ${media[0]?.cacheState !== 'HOT' ? 'data-media-cold="1"' : `data-media-src="${sanitizeHTML(media[0]?.url || '')}"`} muted playsinline preload="none"></video>
-        ${media[0]?.cacheState !== 'HOT' ? '<span class="feed-media-pending feed-media-pending-mini" aria-live="polite">Preparing media…</span>' : ''}
+        <video class="reel-thumb-bg" data-media-id="${sanitizeHTML(media[0]?.mediaId || '')}" data-media-src="${sanitizeHTML(media[0]?.url || '')}" muted playsinline preload="none"></video>
         <span class="reel-thumb-play">▶</span>
         ${duration > 0 ? `<span class="reel-thumb-duration">${formatVideoDuration(duration)}</span>` : ''}
         ${caption ? `<span class="reel-thumb-views">${sanitizeHTML(caption.slice(0, 28))}${caption.length > 28 ? '…' : ''}</span>` : ''}
@@ -19197,6 +19002,19 @@ body.di2-msg .di2-pill.search-on {
 /* Show only on mobile */
 @media (max-width: 640px) {
   body.di2-live.di2-authenticated:not(.di2-on-landing):not(.di2-on-auth) #di2-bot { display: flex !important; }
+
+  /* The top island duplicates the bottom nav's own job on a phone: Talk,
+     Feed, Search, Messages, Notifications and Profile all exist as tabs
+     down here too. On a screen this narrow that's the same six destinations
+     rendered twice — a floating pill at the top AND a full bar at the
+     bottom — which is the "too much chrome, not enough content" complaint.
+     Desktop has no bottom nav at all, so the island stays the only
+     navigation there and this rule is scoped to leave it untouched.
+     display:none rather than opacity/visibility because #di2 is
+     position:fixed and out of document flow already — nothing else reflows
+     when it's gone, unlike the old .sakura-topbar pill above, which needed
+     its spacer preserved for exactly that reason. */
+  body.di2-live #di2 { display: none !important; }
 }
 
 /* Messages dark bottom nav */
