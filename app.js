@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-25-v203-hot-first-media-gate'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-25-v204-cold-state-hardened'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -7460,11 +7460,30 @@ function startArchiveColdMediaGate(mediaEl) {
   ).trim();
   if (!/^med_[A-Za-z0-9_-]{6,120}$/.test(mediaId)) return;
   if (mediaEl.dataset.mortaliveMediaStatusPolling === '1') return;
+
+  // Fail-closed visual state: once this gate is selected, the element is
+  // explicitly COLD and must not expose a real media URL to the browser.
   mediaEl.dataset.mortaliveColdGate = '1';
+  mediaEl.dataset.mediaCold = '1';
+  mediaEl.setAttribute('data-media-cold', '1');
+  mediaEl.removeAttribute('data-media-src');
+  mediaEl.removeAttribute('src');
+
+  const host = mediaEl.closest?.('.feed-media-shell, .feed-carousel-slide, .feed-video-card, .feed-reel-card, .reel-thumb');
+  host?.classList.add('archive-media-cold');
+  host?.setAttribute('data-media-state', 'COLD');
+  if (host && !host.querySelector('.feed-media-pending')) {
+    const pending = document.createElement('div');
+    pending.className = 'feed-media-pending';
+    pending.setAttribute('aria-live', 'polite');
+    pending.textContent = 'Preparing media…';
+    host.appendChild(pending);
+  }
+
   void waitForArchiveMediaReady(mediaEl, mediaId, 0).then((ready) => {
     if (!ready && document.contains(mediaEl)) {
       const status = String(mediaEl.dataset.mortaliveArchiveStatus || '').toUpperCase();
-      if (status === 'UNAVAILABLE') {
+      if (status === 'UNAVAILABLE' || status === 'TIMEOUT') {
         showArchiveMediaHydrationError(mediaEl, mediaId);
       }
     }
@@ -7518,6 +7537,15 @@ function initFeedReelMediaObserver(root) {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return;
         const video = entry.target;
+
+        // Cold archive reels use the same readiness gate as normal Feed media.
+        // They must never fall through to a direct /media request.
+        if (video.dataset.mediaCold === '1') {
+          startArchiveColdMediaGate(video);
+          _feedReelMediaObserver?.unobserve(video);
+          return;
+        }
+
         const src = String(video.getAttribute('data-media-src') || '').trim();
         if (!src) return;
         try {
@@ -7530,6 +7558,9 @@ function initFeedReelMediaObserver(root) {
       });
     }, { threshold: [0.01], rootMargin: '450px 0px' });
   }
+  root.querySelectorAll('.reel-thumb-bg[data-media-cold="1"][data-media-id]').forEach((video) => {
+    _feedReelMediaObserver.observe(video);
+  });
   root.querySelectorAll('.reel-thumb-bg[data-media-src]').forEach((video) => {
     _feedReelMediaObserver.observe(video);
   });
@@ -9258,8 +9289,17 @@ function getPostMedia(post) {
         const mediaId = m?.media_id ? String(m.media_id) : (m?.mediaId ? String(m.mediaId) : '');
         const explicitUrl = typeof m?.url === 'string' ? m.url.trim() : '';
         const isArchive = post?.source === 'archive' && !!mediaId;
+        // Archive readiness is fail-closed: if the Worker omits the per-media
+        // state for any reason, fall back to the post-level state and then COLD.
+        // We must never infer HOT merely because a media_id exists.
+        const inheritedArchiveState =
+          post?.cache_state ||
+          post?.post_meta?.cache_state ||
+          (post?.ready === true ? 'HOT' : 'COLD');
         const cacheState = isArchive
-          ? (String(m?.cache_state || (m?.ready === true ? 'HOT' : 'COLD')).toUpperCase() === 'HOT' ? 'HOT' : 'COLD')
+          ? (String(m?.cache_state ||
+              (m?.ready === true ? 'HOT' : inheritedArchiveState) ||
+              inheritedArchiveState).toUpperCase() === 'HOT' ? 'HOT' : 'COLD')
           : 'HOT';
         // Keep the gateway URL as data, but the Feed renderer decides whether
         // it is safe to place that URL into src. COLD media has no browser
@@ -9282,8 +9322,12 @@ function getPostMedia(post) {
   const url = mediaId ? getMediaUrl(mediaId) : feedAvatarUrl(post?.media_url || '');
   if (!url) return [];
   const isArchive = post?.source === 'archive' && !!mediaId;
+  const inheritedArchiveState =
+    post?.cache_state ||
+    post?.post_meta?.cache_state ||
+    (post?.ready === true ? 'HOT' : 'COLD');
   const cacheState = isArchive
-    ? (String(post?.cache_state || (post?.ready === true ? 'HOT' : 'COLD')).toUpperCase() === 'HOT' ? 'HOT' : 'COLD')
+    ? (String(inheritedArchiveState).toUpperCase() === 'HOT' ? 'HOT' : 'COLD')
     : 'HOT';
   return [{
     mediaId,
@@ -9469,7 +9513,7 @@ if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
 }
 
 /*
- * Cold-media gate (V202): a 204 from the Worker means the archive media is
+ * Cold-media gate (V204): a 204 from the Worker means the archive media is
  * currently being warmed into R2 by the background prewarm queue. Do not
  * immediately hammer /media/:id again. Poll the cheap /media-status/:id
  * endpoint at bounded intervals and only retry the real media URL once R2 is
@@ -9667,7 +9711,9 @@ function buildFeedPostCardHTML(post) {
   const engagement = engagementFor(post.id);
   const durationSeconds = Number(post?.post_meta?.duration_seconds) || 0;
   const primaryMedia = postMedia[0] || null;
-  const primaryCold = !!primaryMedia && primaryMedia.cacheState !== 'HOT';
+  // Archive readiness is fail-closed: only explicit HOT gets a requestable URL.
+  // COLD and unknown readiness always render through the status gate.
+  const primaryCold = !!primaryMedia && (primaryMedia.cacheState !== 'HOT');
   const primaryMediaAttrs = primaryMedia ? (primaryCold ? 'data-media-cold="1"' : `data-media-src="${sanitizeHTML(primaryMedia.url || '')}"`) : '';
   const primaryPending = primaryCold ? '<div class="feed-media-pending" aria-live="polite">Preparing media…</div>' : '';
   const bodyHTML = post.post_type === 'video' && postMedia.length
