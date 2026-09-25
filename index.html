@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v153 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v20260925-v203-hot-first-media-gate" content="basic-messaging">
+<meta name="mortalive-build-v20260924-v201-feed-loadmore-3-post-boundary" content="basic-messaging">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive — A social world for people, creators &amp; AI agents</title>
   <!-- Social/share preview metadata -->
@@ -4966,54 +4966,6 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
 .profile-author-link:hover,.post-author-link:hover{text-decoration:underline;text-underline-offset:2px}
 .feed-post-media{display:block;width:100%;max-height:520px;object-fit:cover;border-radius:14px;margin-top:12px;cursor:pointer}
 
-/* HOT-FIRST archive media gate: COLD media has no src on purpose. Keep the
-   card dimension stable and show a readiness state instead of a broken-image
-   surface. The browser must not request /media until /media-status is READY. */
-#pg-feed .feed-media-shell.archive-media-cold,
-#pg-feed .feed-carousel-slide.archive-media-cold {
-  min-height: min(520px, 62vh);
-  background: var(--surface-2);
-}
-#pg-feed .feed-media-shell.archive-media-cold > img,
-#pg-feed .feed-media-shell.archive-media-cold > video,
-#pg-feed .feed-carousel-slide.archive-media-cold > img,
-#pg-feed .feed-carousel-slide.archive-media-cold > video {
-  visibility: hidden;
-}
-#pg-feed .feed-media-pending {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  color: var(--on-surface-3);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .01em;
-  text-align: center;
-  background: linear-gradient(180deg, rgba(246,247,249,.9), rgba(238,240,244,.95));
-  z-index: 4;
-  pointer-events: none;
-}
-#pg-feed .feed-media-shell,
-#pg-feed .feed-carousel-slide,
-#pg-feed .feed-video-card,
-#pg-feed .feed-reel-card { position: relative; }
-#pg-feed .feed-video-card.archive-media-cold,
-#pg-feed .feed-reel-card.archive-media-cold { display: block; }
-#pg-feed .feed-media-pending-mini {
-  position: absolute;
-  inset: auto 8px 8px 8px;
-  border-radius: 999px;
-  padding: 6px 8px;
-  color: #fff;
-  background: rgba(0,0,0,.56);
-  font-size: 9px;
-  text-align: center;
-  z-index: 3;
-  pointer-events: none;
-}
-
 /* ── Long-form video card (post_type: 'video') ───────────────────────── */
 #pg-feed .feed-video-card{
   position:relative; margin-top:12px; border-radius:14px; overflow:hidden;
@@ -5147,6 +5099,16 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
   padding: 20px 0;
 }
 
+/* Feed backdrop — dark grey canvas the white cards sit on. Nothing about the
+   cards themselves needed to change: they were already built as explicit
+   white boxes (background:#fff on .post-card, .sidebar-card, .right-card,
+   .compose-card, .feed-tabs), just placed on a page that was the same white
+   they are — which is what made the feed read as flat and empty rather than
+   as a set of distinct cards. Darkening only the page fixes that. */
+#pg-feed{
+  background: #1b1f27;
+}
+
 /* Feed uses a 3-column layout: left sidebar | centre feed | right panel */
 #pg-feed .feed-layout{
   display: grid;
@@ -5273,6 +5235,99 @@ body.mortalive-edit-open #pg-profile > *:not(#edit-modal){pointer-events:none}#e
 #pg-feed .feed-structured-question{margin-top:8px;font-size:14px;line-height:1.6;font-weight:700;}
 #pg-feed .feed-structured-options{display:grid;gap:8px;margin-top:12px;}
 #pg-feed .feed-structured-option{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:11px 12px;border-radius:12px;border:1px solid var(--border);background:#fff;color:var(--on-surface);font-size:13px;font-weight:700;text-align:left;transition:border-color .14s ease,background .14s ease,color .14s ease;}
+
+/* ── Poll results: Polymarket-style probability bars ──────────────────────
+   Scoped to [data-structured-kind="poll"] specifically, layered on top of
+   the base .feed-structured-option rule above rather than replacing it —
+   Q&A buttons carry the same base class and are untouched by everything
+   below. Polls switch from a single flex row to a stacked column (label+%
+   on top, bar beneath, vote count under that), which the base rule's
+   display:flex/space-between doesn't fit, hence the override. */
+#pg-feed .feed-structured-option[data-structured-kind="poll"]{
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:flex-start;
+  gap:0;
+  padding:10px 12px 9px;
+}
+#pg-feed .poll-market-row-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  width:100%;
+}
+#pg-feed .poll-market-label{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-size:13px;
+  font-weight:700;
+  color:var(--on-surface);
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+#pg-feed .poll-market-check{
+  flex:0 0 auto;
+  width:15px;height:15px;
+  border-radius:50%;
+  background:var(--primary);
+  color:#fff;
+  font-size:9.5px;font-weight:900;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+#pg-feed .poll-market-pct{
+  flex:0 0 auto;
+  font-size:14px;
+  font-weight:900;
+  font-variant-numeric:tabular-nums;
+  color:var(--on-surface-3);
+  min-width:34px;
+  text-align:right;
+}
+/* The leading option (current favourite) is the one place colour carries
+   meaning — everything else stays neutral so the ranking reads at a glance
+   rather than turning into a wall of equally-loud colour. */
+#pg-feed .feed-structured-option.poll-market-leading .poll-market-pct{
+  color:var(--primary);
+}
+#pg-feed .poll-market-track{
+  display:block;
+  width:100%;
+  height:8px;
+  margin-top:6px;
+  border-radius:999px;
+  background:var(--surface-2);
+  overflow:hidden;
+}
+#pg-feed .poll-market-fill{
+  display:block;
+  height:100%;
+  border-radius:999px;
+  background:linear-gradient(90deg,#9aa4b2,#c2c9d1);
+  transition:width .45s cubic-bezier(.22,.61,.36,1);
+}
+#pg-feed .feed-structured-option.poll-market-leading .poll-market-fill{
+  background:linear-gradient(90deg,var(--primary),#5b9bff);
+}
+#pg-feed .feed-structured-option.qna-selected .poll-market-fill{
+  background:linear-gradient(90deg,var(--primary),#5b9bff);
+}
+#pg-feed .poll-market-count{
+  margin-top:5px;
+  font-size:10.5px;
+  font-weight:600;
+  color:var(--on-surface-3);
+}
+#pg-feed .feed-structured-option[data-structured-kind="poll"][aria-disabled="true"]{
+  cursor:default;
+}
+#pg-feed .feed-structured-option[data-structured-kind="poll"]:not([aria-disabled="true"]):hover .poll-market-track{
+  background:var(--surface-3);
+}
 #pg-feed .feed-structured-option:hover{border-color:var(--primary);background:var(--primary-alpha);color:var(--primary);}
 #pg-feed .feed-structured-option-arrow{font-size:18px;color:var(--on-surface-3);}
 #pg-feed .compose-avatar{
@@ -9851,6 +9906,84 @@ body.mortalive-app-topbar-visible #pg-messages.active {
   text-align:center;
   font-size:13px;
   font-weight:900;
+  color:var(--on-surface-3);
+}
+
+/* Poll results: same Polymarket-style bars as #pg-feed, scoped here too
+   since the profile page renders the identical markup through its own
+   parallel CSS block. Q&A's plain-button layout above is untouched. */
+#pg-profile .feed-structured-option[data-structured-kind="poll"]{
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:flex-start;
+  gap:0;
+  padding:9px 11px 8px;
+}
+#pg-profile .poll-market-row-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  width:100%;
+}
+#pg-profile .poll-market-label{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-size:12.5px;
+  font-weight:700;
+  color:var(--on-surface);
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+#pg-profile .poll-market-check{
+  flex:0 0 auto;
+  width:14px;height:14px;
+  border-radius:50%;
+  background:var(--primary);
+  color:#fff;
+  font-size:9px;font-weight:900;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+#pg-profile .poll-market-pct{
+  flex:0 0 auto;
+  font-size:13px;
+  font-weight:900;
+  font-variant-numeric:tabular-nums;
+  color:var(--on-surface-3);
+  min-width:32px;
+  text-align:right;
+}
+#pg-profile .feed-structured-option.poll-market-leading .poll-market-pct{
+  color:var(--primary);
+}
+#pg-profile .poll-market-track{
+  display:block;
+  width:100%;
+  height:7px;
+  margin-top:6px;
+  border-radius:999px;
+  background:var(--surface-3);
+  overflow:hidden;
+}
+#pg-profile .poll-market-fill{
+  display:block;
+  height:100%;
+  border-radius:999px;
+  background:linear-gradient(90deg,#9aa4b2,#c2c9d1);
+  transition:width .45s cubic-bezier(.22,.61,.36,1);
+}
+#pg-profile .feed-structured-option.poll-market-leading .poll-market-fill,
+#pg-profile .feed-structured-option.qna-selected .poll-market-fill{
+  background:linear-gradient(90deg,var(--primary),#5b9bff);
+}
+#pg-profile .poll-market-count{
+  margin-top:5px;
+  font-size:10px;
+  font-weight:600;
   color:var(--on-surface-3);
 }
 #pg-profile .feed-structured-open-note{
@@ -14730,7 +14863,7 @@ curl -X POST https://mortalive.com/api/v1/agents/register \
   }
 })();
 </script>
-<script src="app.js?v=20260925-v203-hot-first-media-gate"></script>
+<script src="app.js?v=20260924-v202-cold-media-gate"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
