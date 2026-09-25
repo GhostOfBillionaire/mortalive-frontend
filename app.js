@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-24-v202-cold-media-gate'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-25-v209-long-video-feed'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -7583,8 +7583,22 @@ function initFeedPerformance(root = $('feed-posts')) {
     _feedAutoplayObserver = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         const video = entry.target;
+        if (!(video instanceof HTMLVideoElement)) return;
+        // Only short-form `reel` media autoplays inline. Long-form `video`
+        // posts remain normal click-to-play content and open in the standard
+        // post viewer.
+        if (!video.classList?.contains('feed-reel-video')) {
+          if (!entry.isIntersecting && !video.paused) video.pause();
+          return;
+        }
         if (entry.isIntersecting) {
           if (video.paused) {
+            const lazySrc = String(video.getAttribute('data-media-src') || '').trim();
+            if (lazySrc && !video.getAttribute('src')) {
+              video.setAttribute('src', lazySrc);
+              video.removeAttribute('data-media-src');
+              try { video.load(); } catch (_) {}
+            }
             video.muted = true;
             const playResult = video.play();
             if (playResult?.then) {
@@ -7623,8 +7637,12 @@ function initFeedPerformance(root = $('feed-posts')) {
       });
     }, { threshold: [0], rootMargin: '0px' });
   }
-  root.querySelectorAll(':scope > .post-card .feed-video-thumb').forEach((video) => {
-    _feedAutoplayObserver.observe(video);
+  // Reels are the only feed media that use scroll-triggered autoplay.
+  root.querySelectorAll(':scope > .post-card .feed-reel-video').forEach((video) => {
+    if (!video.dataset.mortaliveAutoplayObserved) {
+      video.dataset.mortaliveAutoplayObserved = '1';
+      _feedAutoplayObserver.observe(video);
+    }
   });
 
   if (!_feedPerformanceBound) {
@@ -7637,7 +7655,7 @@ function initFeedPerformance(root = $('feed-posts')) {
           _feedPerformanceObserver.observe(card);
         }
       });
-      _feedPerformanceRoot.querySelectorAll(':scope > .post-card .feed-video-thumb').forEach((video) => {
+      _feedPerformanceRoot.querySelectorAll(':scope > .post-card .feed-reel-video').forEach((video) => {
         if (!video.dataset.mortaliveAutoplayObserved) {
           video.dataset.mortaliveAutoplayObserved = '1';
           _feedAutoplayObserver.observe(video);
@@ -9388,7 +9406,7 @@ if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
   // button. Any in-flight fade-out from a rapid double-tap is cleared
   // first so it can't stack or flicker.
   document.addEventListener('click', (event) => {
-    const card = event.target.closest?.('.feed-video-card');
+    const card = event.target.closest?.('.feed-video-card, .feed-reel-card');
     if (!card) return;
 
     const muteBtn = event.target.closest?.('.feed-video-mute-btn');
@@ -9399,7 +9417,7 @@ if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
       return;
     }
 
-    const video = card.querySelector('.feed-video-thumb');
+    const video = card.querySelector('.feed-video-thumb, .feed-reel-video');
     if (!video) return;
     event.preventDefault();
     event.stopPropagation();
@@ -9408,7 +9426,13 @@ if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
     const post = postId ? getPostByIdForViewer(postId) : null;
     if (!post) return;
 
-    openReelViewer(post, collectFeedVideoPosts(_feedPosts));
+    if (post.post_type === 'reel') {
+      openReelViewer(post, reelCollectionForPost(post));
+    } else {
+      // Long-form `video` posts use the normal post viewer with native
+      // controls rather than being forced into the vertical reel scroller.
+      openPostViewer(post);
+    }
   }, true);
 
 
@@ -9421,13 +9445,15 @@ if (!document.documentElement.dataset.mortaliveFeedVideoBound) {
   // play/pause don't bubble, but a capture-phase listener still sees them.
   document.addEventListener('play', (event) => {
     const video = event.target;
-    if (!(video instanceof HTMLVideoElement) || !video.classList?.contains('feed-video-thumb')) return;
-    video.closest('.feed-video-card')?.classList.add('is-playing');
+    if (!(video instanceof HTMLVideoElement) ||
+        (!video.classList?.contains('feed-video-thumb') && !video.classList?.contains('feed-reel-video'))) return;
+    video.closest('.feed-video-card, .feed-reel-card')?.classList.add('is-playing');
   }, true);
   document.addEventListener('pause', (event) => {
     const video = event.target;
-    if (!(video instanceof HTMLVideoElement) || !video.classList?.contains('feed-video-thumb')) return;
-    video.closest('.feed-video-card')?.classList.remove('is-playing');
+    if (!(video instanceof HTMLVideoElement) ||
+        (!video.classList?.contains('feed-video-thumb') && !video.classList?.contains('feed-reel-video'))) return;
+    video.closest('.feed-video-card, .feed-reel-card')?.classList.remove('is-playing');
   }, true);
 
   // Thin progress bar at the bottom edge — passive position/duration
@@ -9623,7 +9649,7 @@ function buildFeedPostCardHTML(post) {
   const bodyHTML = post.post_type === 'video' && postMedia.length
     ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-video-card" data-post-id="${sanitizeHTML(post.id)}" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}"><video class="feed-video-thumb" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" data-media-src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="none"></video><span class="feed-video-toggle-glyph">▶</span><div class="feed-video-progress"><div class="feed-video-progress-fill"></div></div><button type="button" class="feed-video-mute-btn" aria-label="${_feedSoundEnabled ? 'Mute' : 'Unmute'}">${_feedSoundEnabled ? '🔊' : '🔇'}</button>${durationSeconds > 0 ? `<span class="feed-video-duration">${formatVideoDuration(durationSeconds)}</span>` : ''}</div>`
     : post.post_type === 'reel' && postMedia.length
-      ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" data-media-src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="none"></video><span class="feed-reel-play">▶</span></div>`
+      ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div><div class="feed-reel-card" data-reel-post-id="${sanitizeHTML(post.id)}"><video class="feed-reel-video" data-media-id="${sanitizeHTML(postMedia[0]?.mediaId || '')}" data-media-src="${sanitizeHTML(postMedia[0]?.url || '')}" muted playsinline preload="none"></video><span class="feed-reel-play">▶</span></div>`
       : postMedia.length
         ? `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>${feedMediaMarkup(post)}`
         : post?.post_meta?.kind ? renderStructuredFeedPost(post) : `<div class="post-text">${renderHashtagRichText(post.content || '')}</div>`;
@@ -9689,21 +9715,12 @@ function renderFeedPosts() {
     return;
   }
 
-  // Reels get pulled out of the vertical run entirely and shown as their own
-  // horizontal shelf (YouTube Shorts-shelf style) instead of as a full-width
-  // card, so short-form and long-form video read as genuinely different
-  // formats rather than the same card shape with a different aspect ratio.
-  const reelPosts = posts.filter(p => p.post_type === 'reel' && getPostMedia(p).length);
-  const mainPosts = posts.filter(p => !(p.post_type === 'reel' && getPostMedia(p).length));
-  const cardsHtml = mainPosts.map(buildFeedPostCardHTML);
-
-  if (reelPosts.length) {
-    const shelfHtml = renderFeedReelsShelfHTML(reelPosts.slice(0, 8));
-    const insertAt = Math.min(2, cardsHtml.length);
-    container.innerHTML = cardsHtml.slice(0, insertAt).join('') + shelfHtml + cardsHtml.slice(insertAt).join('');
-  } else {
-    container.innerHTML = cardsHtml.join('');
-  }
+  // Keep every post in the actual feed order, including reels. Reels are
+  // short-form content, so they autoplay inline when they enter the viewport;
+  // long-form video posts stay in the feed as normal 16:9 video cards. The
+  // media type is determined by post metadata, never by the Jio/R2 folder.
+  const cardsHtml = posts.map(buildFeedPostCardHTML);
+  container.innerHTML = cardsHtml.join('');
 
   // Restore any comment sections that were open before the innerHTML was replaced
   if (openIds.length) _restoreOpenCommentSections(openIds);
@@ -13851,12 +13868,9 @@ function collectAvailableReels(source = _profilePosts) {
   return Array.from(byId.values());
 }
 
-// Everything with playable video — regular in-feed 'video' posts AND short-
-// form 'reel' posts — in feed order. This is what backs the full-screen
-// swipeable viewer when a regular feed video is tapped, so swiping moves
-// through every video in the timeline the way X/Twitter's video viewer does,
-// not just the short-form Quid shelf. collectAvailableReels() above is left
-// completely untouched — the Reels grid/shelf still uses only that, unchanged.
+// Legacy helper retained for compatibility with older integrations. Full-screen
+// swipe navigation is intentionally reserved for short-form `reel` posts;
+// long-form `video` posts open in the standard post viewer.
 function collectFeedVideoPosts(source = _feedPosts) {
   const pool = Array.isArray(source)
     ? source.filter(p => (p?.post_type === 'video' || p?.post_type === 'reel') && getPostMedia(p).length)
@@ -13866,9 +13880,8 @@ function collectFeedVideoPosts(source = _feedPosts) {
 }
 
 // A reel opened from the main feed must swipe through the feed's own reels,
-// not the viewer's profile posts — this was previously hardcoded to
-// _profilePosts regardless of where the click came from. Pick the source
-// array the post actually came from instead of assuming one.
+// not through long-form video posts. Pick the source array the post actually
+// came from instead of assuming one.
 function reelCollectionForPost(post) {
   if (Array.isArray(_feedPosts) && _feedPosts.some(p => p.id === post?.id)) {
     return collectAvailableReels(_feedPosts);
