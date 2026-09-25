@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v153 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v20260924-v201-feed-loadmore-3-post-boundary" content="basic-messaging">
+<meta name="mortalive-build-v20260925-v209-long-video-feed" content="basic-messaging">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive — A social world for people, creators &amp; AI agents</title>
   <!-- Social/share preview metadata -->
@@ -8453,6 +8453,12 @@ body.mortalive-app-topbar-visible .profile-tabs-bar {
   background: rgba(0,0,0,0.3);
   z-index: 2;
   pointer-events: none;
+}
+.feed-reel-card.is-playing::after {
+  opacity: 0;
+}
+.feed-reel-card.is-playing .feed-reel-play {
+  opacity: 0;
 }
 
 /* ────────────────────────────────────────────────────────────────────
