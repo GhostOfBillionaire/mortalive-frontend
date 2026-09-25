@@ -98,7 +98,7 @@ const MORTALIVE_MEDIA_WORKER_URL =
 // ─────────────────────────────────────────────────────────────────────────
 const ARCHIVE_BROWSER_PRELOAD_MAX = 0;
 const ARCHIVE_BROWSER_PRELOAD_RETENTION_MS = 45000;
-const FEED_NEXT_PAGE_TRIGGER_POSTS = 3;
+const FEED_NEXT_PAGE_TRIGGER_POSTS = 5;
 const _archiveBrowserPreloads = new Map(); // mediaId -> { kind, node, timer }
 let _archiveBrowserPreloadBound = false;
 let _archiveBrowserPreloadRaf = 0;
@@ -7919,7 +7919,17 @@ async function fetchFeedPage(reset = false) {
         .map(row => row.id));
     }
 
-    renderFeedPosts();
+    // Initial loads / explicit refreshes render the whole feed. Pagination does
+    // NOT: append only the newly acquired page so the existing DOM stays in
+    // place and the user's scroll position, playing media, open UI and visual
+    // continuity are preserved.
+    const hadExistingFeed = !reset && container && container.querySelector('[data-post-id]');
+    if (hadExistingFeed && pagePosts.length) {
+      appendFeedPostCards(pagePosts);
+    } else {
+      renderFeedPosts();
+    }
+
     initFeedPerformance($('feed-posts'));
     initArchiveMediaTelemetry($('feed-posts'));
     renderFeedSidebars();
@@ -9228,7 +9238,7 @@ function primeArchiveFeedLookahead() {
     const triggerCard = triggerIndex >= 0 ? pageCards[triggerIndex] : null;
     if (loadMore && triggerCard && _feedHasMore && !_feedLoading) {
       const rect = triggerCard.getBoundingClientRect();
-      const triggerReached = rect.top <= window.innerHeight && rect.bottom > 0;
+      const triggerReached = rect.top <= window.innerHeight * 1.35 && rect.bottom > 0;
       if (triggerReached) {
         fetchFeedPage(false);
       }
@@ -9697,6 +9707,37 @@ function renderFeedReelsShelfHTML(reels) {
       <div class="feed-reels-shelf-head"><span>🎬</span> Quids</div>
       <div class="feed-reels-shelf-track">${tiles}</div>
     </div>`;
+}
+
+function appendFeedPostCards(posts) {
+  const container = $('feed-posts');
+  if (!container || !Array.isArray(posts) || !posts.length) return;
+
+  const existingIds = new Set(
+    Array.from(container.querySelectorAll('[data-post-id]'))
+      .map(el => String(el.getAttribute('data-post-id') || '').trim())
+      .filter(Boolean)
+  );
+
+  const nextPosts = posts.filter(post => {
+    const id = String(post?.id || '').trim();
+    if (!id || existingIds.has(id)) return false;
+    if (_feedFilter === 'mine' && post?.user_id !== S.userId) return false;
+    if (_hideAiPosts && isAiAuthored(post)) return false;
+    existingIds.add(id);
+    return true;
+  });
+
+  if (!nextPosts.length) return;
+
+  const template = document.createElement('template');
+  template.innerHTML = nextPosts.map(buildFeedPostCardHTML).join('');
+  container.appendChild(template.content);
+
+  // The feed performance MutationObserver observes newly appended cards, so
+  // visible images/videos hydrate without rebuilding older cards.
+  bindArchivePredictivePreload();
+  primeArchiveFeedLookahead();
 }
 
 function renderFeedPosts() {
