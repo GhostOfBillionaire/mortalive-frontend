@@ -7845,9 +7845,9 @@ async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
         .filter(Boolean)
     );
 
-    // Server-side prewarm is authoritative. Do not open hidden browser media
-    // requests here; visible/near-visible card hydration is handled by the
-    // Feed performance observers below.
+    // V207: the Worker owns all archive warming. The Feed only consumes the
+    // READY/HOT rows returned by /api/archive-feed. No browser prewarm belongs
+    // in this path.
     if (_archiveServerPreloadHints.size) {
       primeArchiveBrowserHints(
         [..._archiveServerPreloadHints.entries()]
@@ -7979,10 +7979,9 @@ async function fetchFeedPage(reset = false) {
     }
 
     /*
-     * V205: both sources are first-class Feed sources.
-     * Reserve a small archive share so a healthy Supabase page cannot visually
-     * starve the Cloudflare archive source. Cold archive media still renders as
-     * the existing Preparing-media state; only the media bytes are gated.
+     * V207: both sources remain first-class Feed sources. Archive rows returned
+     * by Cloudflare are already HOT/READY; cold/queued archive media is not a
+     * Feed concern and never enters this merge.
      */
     const archiveQuota = Math.min(
       5,
@@ -8076,13 +8075,45 @@ async function fetchFeedPage(reset = false) {
   }
 }
 
+/* V207 — Feed is hot-storage-only for archive media.
+ * The Worker is responsible for Jio -> R2 warming. The browser Feed must
+ * never render an archive post whose media is not explicitly READY/HOT.
+ */
+function isArchiveFeedPostReady(post) {
+  if (!isArchivePost(post)) return true;
+
+  let rawMedia = post?.post_meta?.media;
+  if (typeof rawMedia === 'string') {
+    try { rawMedia = JSON.parse(rawMedia); } catch (_) { rawMedia = null; }
+  }
+
+  if (!Array.isArray(rawMedia) || rawMedia.length === 0) return true;
+
+  return rawMedia.every((media) => {
+    const mediaId = String(media?.media_id || media?.mediaId || '').trim();
+    if (!/^med_[A-Za-z0-9_-]{6,120}$/.test(mediaId)) return false;
+    const state = String(
+      media?.cache_state ||
+      (media?.ready === true ? 'HOT' : '')
+    ).toUpperCase();
+    const url = String(media?.url || '').trim();
+    return state === 'HOT' && !!url;
+  });
+}
+
 function filteredFeedPosts() {
   const base = _feedFilter === 'mine'
     ? _feedPosts.filter(post => post.user_id === S.userId)
     : _feedPosts;
+
+  // Archive media is Worker-owned hot storage. The public Feed receives only
+  // posts whose archive media is already READY/HOT. Keep this second fail-closed
+  // check in the browser as a safety net against stale/old Worker responses.
+  const hotOnly = base.filter(isArchiveFeedPostReady);
+
   // Optional viewer preference (audit 6.4). Off by default — the badge is what
   // satisfies "must be marked AI"; hiding is a convenience on top of it.
-  return _hideAiPosts ? base.filter(post => !isAiAuthored(post)) : base;
+  return _hideAiPosts ? hotOnly.filter(post => !isAiAuthored(post)) : hotOnly;
 }
 
 
@@ -9351,10 +9382,12 @@ function getPostMedia(post) {
               (m?.ready === true ? 'HOT' : inheritedArchiveState) ||
               inheritedArchiveState).toUpperCase() === 'HOT' ? 'HOT' : 'COLD')
           : 'HOT';
-        // Keep the gateway URL as data, but the Feed renderer decides whether
-        // it is safe to place that URL into src. COLD media has no browser
-        // request until /media-status reports READY.
-        const url = mediaId ? getMediaUrl(mediaId) : feedAvatarUrl(explicitUrl);
+        // V207: archive Feed media is already hot. Never synthesize a requestable
+        // /media URL for a non-HOT archive row. The Worker is the only component
+        // that turns cold catalog entries into hot media.
+        const url = isArchive
+          ? (cacheState === 'HOT' ? (explicitUrl || getMediaUrl(mediaId)) : '')
+          : (mediaId ? getMediaUrl(mediaId) : feedAvatarUrl(explicitUrl));
         return {
           mediaId,
           type: String(m?.type || '').toLowerCase() === 'video' || String(m?.media_type || '').toLowerCase() === 'video' ? 'video' : 'image',
@@ -9382,7 +9415,7 @@ function getPostMedia(post) {
   return [{
     mediaId,
     type: detectMediaType(post?.media_type, post?.media_url),
-    url,
+    url: isArchive && cacheState !== 'HOT' ? '' : url,
     cacheState,
     ready: cacheState === 'HOT',
     position: 0
