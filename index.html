@@ -15846,5 +15846,42 @@ body.di2-msg #di2 .di2-sm-go:focus-visible{
   #di2-notification-panel { transition-duration: 0.001ms !important; }
 }
 </style>
+
+<style id="mortalive-v195-phone-portrait-no-dynamic-island">
+/* Phone portrait: the bottom navigation is the only app navigation surface.
+   Remove both the Dynamic Island and the legacy topbar/reserved top space so
+   the actual page content starts immediately under the device safe area. */
+@media (max-width: 640px) and (orientation: portrait) {
+  /* Search/notifications have later, more-specific v194 rules, so these
+     selectors intentionally match/exceed that specificity. */
+  html body.di2-live.di2-search #di2,
+  html body.di2-live.di2-notifications #di2,
+  html body.di2-live #di2 {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
+  #app-topbar-wrap,
+  .app-topbar-spacer {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    flex-basis: 0 !important;
+  }
+
+  html body.di2-live.mortalive-app-topbar-visible #pg-lobby.active,
+  html body.di2-live.mortalive-app-topbar-visible #pg-feed.active,
+  html body.di2-live.mortalive-app-topbar-visible #pg-messages.active,
+  html body.di2-live.mortalive-app-topbar-visible #pg-profile.active,
+  html body.di2-live.di2-search #pg-search.active,
+  html body.di2-live.di2-notifications #pg-notifications.active {
+    padding-top: 0 !important;
+  }
+}
+</style>
+
 </body>
 </html>
