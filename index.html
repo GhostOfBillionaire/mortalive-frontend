@@ -7559,14 +7559,15 @@ body.mortalive-app-topbar-visible .profile-tabs-bar {
 }
 
 .profile-tab-btn {
-  flex: 0 0 auto;
+  flex: 1 1 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 14px 22px;
-  font-size: 13px;
-  font-weight: 700;
+  padding: 13px 14px;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: .01em;
   color: var(--on-surface-3);
   background: transparent;
   border: 0;
@@ -7611,6 +7612,49 @@ body.mortalive-app-topbar-visible .profile-tabs-bar {
 }
 .profile-tab-panel.active {
   display: block;
+}
+
+/* Stats summary card nested at the top of Home (formerly its own "Stats" tab) */
+.profile-home-stats-card {
+  margin: 0 16px 12px;
+  padding: 2px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.profile-home-stats-card:empty { display: none; }
+
+/* Profile — Video tab grid (long-form, landscape-first tiles) */
+.profile-video-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  padding: 3px;
+}
+.video-thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #111;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: transform 0.18s var(--ease-spring);
+  -webkit-tap-highlight-color: transparent;
+}
+.video-thumb:hover { transform: scale(0.98); }
+.video-thumb:active { transform: scale(0.96); }
+.video-thumb-bg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: linear-gradient(135deg, #1a1f2e, #111420);
+}
+.video-thumb::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 55%, rgba(0, 0, 0, 0.72) 100%);
+  z-index: 1;
+  pointer-events: none;
 }
 
 /* ────────────────────────────────────────────────────────────────────
@@ -14118,14 +14162,24 @@ curl -X POST https://mortalive.com/api/v1/agents/register \
     </div>
 
 
+    <!-- Tab labels shown to users are Home / Posts / Video / Quids / Live.
+         Internal data-profile-tab keys are kept stable (posts, photos, video,
+         reels, live) so existing render hooks (renderProfilePosts,
+         renderProfileGallery, renderProfileReels, etc.) don't need renaming:
+         posts=Home, photos=Posts, reels=Quids. -->
     <nav class="profile-tabs-bar" id="profile-tabs-bar" aria-label="Profile sections">
-      <button type="button" class="profile-tab-btn active" data-profile-tab="posts">Posts <span class="tab-count">0</span></button>
-      <button type="button" class="profile-tab-btn" data-profile-tab="photos">Photos <span class="tab-count">0</span></button>
-      <button type="button" class="profile-tab-btn" data-profile-tab="stats">Stats</button>
+      <button type="button" class="profile-tab-btn active" data-profile-tab="posts">Home</button>
+      <button type="button" class="profile-tab-btn" data-profile-tab="photos">Posts <span class="tab-count">0</span></button>
+      <button type="button" class="profile-tab-btn" data-profile-tab="video">Video <span class="tab-count">0</span></button>
+      <button type="button" class="profile-tab-btn" data-profile-tab="reels">Quids <span class="tab-count">0</span></button>
+      <button type="button" class="profile-tab-btn" data-profile-tab="live">Live</button>
     </nav>
     <div class="profile-content-shell"><div class="profile-feed-viewport" id="profile-feed-viewport">
       <section class="profile-section-card profile-thoughts profile-tab-panel active" id="profile-thoughts-section" data-profile-panel="posts">
-        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Live identity</span><span class="profile-section-title">Thoughts & polls</span><span id="profile-post-count" style="font-size:10px;color:var(--on-surface-3);font-weight:700">Loading…</span></div></div>
+        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Overview</span><span class="profile-section-title">Home</span><span id="profile-post-count" style="font-size:10px;color:var(--on-surface-3);font-weight:700">Loading…</span></div></div>
+        <!-- Compact stats summary, formerly a separate "Stats" tab — folded into
+             Home so nothing is lost while keeping the tab bar to 5 sections. -->
+        <div class="profile-stats-panel profile-home-stats-card" id="profile-stats-panel"></div>
         <div class="profile-post-composer" id="profile-post-composer">
           <div class="profile-post-composer-box">
             <textarea id="profile-post-input" maxlength="500" placeholder="Share a thought, update, question, or conversation starter…"></textarea>
@@ -14169,7 +14223,7 @@ curl -X POST https://mortalive.com/api/v1/agents/register \
       </section>
 
       <section class="profile-section-card profile-gallery-section profile-tab-panel" id="profile-gallery-section" data-profile-panel="photos">
-        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Visuals</span><span class="profile-section-title">Photos</span></div><span style="font-size:10.5px;color:var(--on-surface-3);font-weight:700">Grid</span></div>
+        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Visuals</span><span class="profile-section-title">Posts</span></div><span style="font-size:10.5px;color:var(--on-surface-3);font-weight:700">Photos & carousels</span></div>
         <div class="profile-gallery" id="profile-gallery">
           <div class="profile-gallery-tile"><div class="profile-gallery-placeholder"><div><strong>Your visual identity starts here</strong><span>Add photos, creator work, travel moments, products, or highlights.</span></div></div></div>
           <div class="profile-gallery-tile"><div class="profile-gallery-placeholder"><div><strong>Photo</strong><span>1:1 tile</span></div></div></div><div class="profile-gallery-tile"><div class="profile-gallery-placeholder"><div><strong>Photo</strong><span>1:1 tile</span></div></div></div>
@@ -14177,7 +14231,37 @@ curl -X POST https://mortalive.com/api/v1/agents/register \
           <div class="profile-gallery-tile"><div class="profile-gallery-placeholder"><div><strong>Photo</strong><span>1:1 tile</span></div></div></div><div class="profile-gallery-tile"><div class="profile-gallery-placeholder"><div><strong>Photo</strong><span>1:1 tile</span></div></div></div>
         </div>
       </section>
-      <section class="profile-stats-panel profile-tab-panel" id="profile-stats-panel" data-profile-panel="stats"></section>
+
+      <section class="profile-section-card profile-video-section profile-tab-panel" id="profile-video-section" data-profile-panel="video">
+        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Long-form</span><span class="profile-section-title">Video</span></div><span id="profile-video-count" style="font-size:10.5px;color:var(--on-surface-3);font-weight:700">0</span></div>
+        <div class="profile-video-grid" id="profile-video-grid">
+          <div class="reels-empty-state">
+            <div class="reels-empty-icon">🎥</div>
+            <div class="reels-empty-title">No videos yet</div>
+            <div class="reels-empty-sub">Long-form videos you share will show up here.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="profile-section-card profile-reels-section profile-tab-panel" id="profile-reels-section" data-profile-panel="reels">
+        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Short-form</span><span class="profile-section-title">Quids</span></div><span id="profile-reel-count" style="font-size:10.5px;color:var(--on-surface-3);font-weight:700">0</span></div>
+        <div class="profile-reels-grid" id="profile-reels-grid">
+          <div class="reels-empty-state">
+            <div class="reels-empty-icon">🎬</div>
+            <div class="reels-empty-title">No Quids yet</div>
+            <div class="reels-empty-sub">Share a short video and let people discover your moment.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="profile-section-card profile-live-section profile-tab-panel" id="profile-live-section" data-profile-panel="live">
+        <div class="profile-section-head"><div class="profile-section-title-wrap"><span class="profile-section-kicker">Streaming</span><span class="profile-section-title">Live</span></div></div>
+        <div class="reels-empty-state">
+          <div class="reels-empty-icon">🔴</div>
+          <div class="reels-empty-title">No live streams yet</div>
+          <div class="reels-empty-sub">Live unlocks as you grow — streams will show up here once you go live.</div>
+        </div>
+      </section>
 
       <!-- All legacy compat IDs kept hidden — app.js references them internally -->
       <div class="u-hidden" aria-hidden="true">
