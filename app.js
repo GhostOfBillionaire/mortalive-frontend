@@ -11355,18 +11355,19 @@ function renderProfilePosts(posts = _profilePosts) {
   enforceSingleProfileTabPanel('posts');
 }
 function enforceProfileSectionSeparation() {
-  const postsPanel = $('profile-thoughts-section');
-  const photosPanel = $('profile-gallery-section');
+  // Stats no longer has its own tab — its card now lives nested at the top
+  // of Home (#profile-stats-panel inside #profile-thoughts-section). Talk
+  // Activity belongs exclusively to that card; strip any stale/legacy
+  // injection that may have landed in the other panels (it's fine for it to
+  // remain inside statsPanel itself, which sits inside the Home panel).
   const statsPanel = $('profile-stats-panel');
-
-  // Talk Activity belongs exclusively to Stats. Remove any stale/legacy
-  // injection that may have landed inside Posts or Photos.
-  [postsPanel, photosPanel].forEach(panel => {
+  const otherPanels = [$('profile-gallery-section'), $('profile-video-section'), $('profile-reels-section'), $('profile-live-section')];
+  otherPanels.forEach(panel => {
     panel?.querySelectorAll('.talk-pstats-card, #profile-talk-stats').forEach(el => el.remove());
   });
 
-  // Keep the canonical Talk host inside Stats. If an older render moved it,
-  // move it back instead of leaving duplicate cards behind.
+  // Keep the canonical Talk host inside the Stats card. If an older render
+  // moved it, move it back instead of leaving duplicate cards behind.
   if (statsPanel) {
     let talkHost = statsPanel.querySelector('#profile-talk-stats');
     if (!talkHost) {
@@ -11548,6 +11549,7 @@ async function hydrateProfilePosts(userId = S.userId, options = {}) {
         }
         renderProfilePosts(posts);
         renderProfileGallery(posts);
+        renderProfileVideos(posts);
         renderProfileReels(posts);
         refreshProfileTabs(posts);
       }
@@ -11865,6 +11867,7 @@ function initProfilePostComposer() {
 
       renderProfilePosts(_profilePosts);
       renderProfileGallery(_profilePosts);
+      renderProfileVideos(_profilePosts);
       renderProfileReels(_profilePosts);
       refreshProfileTabs(_profilePosts);
 
@@ -12325,6 +12328,7 @@ async function initPublicProfilePage(userId) {
   stabilizeProfileScrollAxes();
   initProfileScrollProgress();
   initProfileTabs();
+  renderProfileVideos(_profilePosts);
   renderProfileReels(_profilePosts);
   refreshProfileTabs(_profilePosts);
   $('profile-tabs-bar')?.querySelectorAll('.profile-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.profileTab === 'posts'));
@@ -14058,6 +14062,35 @@ function renderProfileReels(posts = _profilePosts) {
   }).join('');
 }
 
+// Video tab — long-form video posts only (post_type 'video'), kept separate
+// from Quids (post_type 'reel'). Mirrors renderProfileReels but with
+// landscape-first tiles since long-form video can be portrait or landscape.
+function renderProfileVideos(posts = _profilePosts) {
+  const grid = $('profile-video-grid');
+  const count = $('profile-video-count');
+  if (!grid) return;
+  const videos = collectAvailableVideos(posts);
+  if (count) count.textContent = videos.length.toLocaleString();
+  if (!videos.length) {
+    grid.innerHTML = `
+      <div class="reels-empty-state">
+        <div class="reels-empty-icon">🎥</div>
+        <div class="reels-empty-title">No videos yet</div>
+        <div class="reels-empty-sub">Long-form videos you share will show up here.</div>
+      </div>`;
+    return;
+  }
+  grid.innerHTML = videos.map((p, i) => {
+    const media = getPostMedia(p).find(item => item.type === 'video') || getPostMedia(p)[0];
+    const caption = String(p.content || '').trim();
+    return `<button type="button" class="video-thumb" data-video-post-id="${sanitizeHTML(p.id)}" aria-label="Open video ${i + 1}">
+      <video class="video-thumb-bg" src="${sanitizeHTML(media?.url || '')}" muted playsinline preload="metadata"></video>
+      <span class="reel-thumb-play">▶</span>
+      ${caption ? `<span class="reel-thumb-views">${sanitizeHTML(caption.slice(0,36))}${caption.length>36?'…':''}</span>` : ''}
+    </button>`;
+  }).join('');
+}
+
 function renderProfileStatsPanel() {
   const host = $('profile-stats-panel');
   if (!host) return;
@@ -14088,7 +14121,9 @@ function renderProfileStatsPanel() {
     </div>`;
   if (typeof window.renderProfileTalkStats === 'function') window.renderProfileTalkStats();
   enforceProfileSectionSeparation();
-  enforceSingleProfileTabPanel($('profile-stats-panel')?.classList.contains('active') ? 'stats' : 'posts');
+  // Stats is now a nested card inside Home rather than its own tab — just
+  // preserve whichever tab is currently showing instead of forcing one.
+  enforceSingleProfileTabPanel($('pg-profile')?.dataset.profileActivePanel || 'posts');
 }
 
 function initProfileTabs() {
@@ -14124,16 +14159,24 @@ function initProfileTabs() {
       });
       page.dataset.profileActivePanel = tab;
       page.scrollTo({ top: 0, behavior: 'instant' in document.documentElement.style ? 'instant' : 'auto' });
+      // Tab keys: posts=Home, photos=Posts, video=Video, reels=Quids, live=Live.
+      if (tab === 'photos') renderProfileGallery(_profilePosts);
+      if (tab === 'video') renderProfileVideos(_profilePosts);
       if (tab === 'reels') renderProfileReels(_profilePosts);
-      if (tab === 'stats') renderProfileStatsPanel();
     });
   }
   if (!bar.querySelector('.profile-tab-btn.active')) bar.querySelector('.profile-tab-btn[data-profile-tab="posts"]')?.classList.add('active');
 }
+function collectAvailableVideos(source = _profilePosts) {
+  const pool = Array.isArray(source) ? source.filter(p => p?.post_type === 'video' && getPostMedia(p).length) : [];
+  const byId = new Map(pool.map(p => [p.id, p]));
+  return Array.from(byId.values());
+}
+
 function refreshProfileTabCounts(posts = _profilePosts) {
   const sets = {
-    posts: (posts || []).filter(p => p?.post_type !== 'reel').length,
-    photos: (posts || []).filter(p => p.media_url && p?.post_type !== 'reel').length,
+    photos: (posts || []).filter(p => p?.post_type !== 'reel' && getPostMedia(p).some(m => m.type === 'image')).length,
+    video: collectAvailableVideos(posts).length,
     reels: collectAvailableReels(posts).length
   };
   Object.entries(sets).forEach(([key, value]) => {
@@ -14146,6 +14189,7 @@ function refreshProfileTabs(posts = _profilePosts) {
   enforceProfileSectionSeparation();
   initProfileTabs();
   refreshProfileTabCounts(posts);
+  renderProfileVideos(posts);
   renderProfileReels(posts);
   renderProfileStatsPanel();
 }
