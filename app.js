@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-26-v213-di2-cascade-safe'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-26-v210-sober-dual-feed'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -19116,8 +19116,9 @@ body.di2-msg .di2-pill.search-on {
   .di2-right { padding: 0 11px 0 6px; }
   .di2-status { max-width: 64px; font-size: 10.5px; }
 
-  /* The top island has no layout footprint on mobile. Search/Notifications
-     can re-enable the fixed island below without reserving page space. */
+  /* The island itself is fully hidden on mobile (see the display:none rule
+     below), so the space reserved for it collapses to nothing rather than
+     shrinking to fit a smaller version that no longer renders. */
   body.di2-live .app-topbar-spacer { height: 0 !important; flex-basis: 0 !important; }
 
   /* Give pages room for bottom nav */
@@ -19160,61 +19161,18 @@ body.di2-msg .di2-pill.search-on {
 @media (max-width: 640px) {
   body.di2-live.di2-authenticated:not(.di2-on-landing):not(.di2-on-auth) #di2-bot { display: flex !important; }
 
-  /* Mobile visibility is intentionally state-based and lives entirely in
-     this stylesheet.  The old implementation split the rule across app.js
-     and later <style> blocks in index.html, making document order part of
-     the behavior.  Search + Notifications get the compact top island;
-     all other mobile app pages use only the bottom navigation. */
-  body.di2-live:not(.di2-search):not(.di2-notifications) #di2 {
-    display: none;
-  }
-
-  body.di2-live.di2-search #di2,
-  body.di2-live.di2-notifications #di2 {
-    display: flex;
-    top: 10px;
-    left: 50%;
-    z-index: 9999;
-  }
-
-  /* Search + Notifications compact top-island presentation. This is the
-     former v194 block, moved here so it cannot be reordered by body-level
-     <style> tags later in index.html. */
-  body.di2-live.di2-search #di2 .di2-pill,
-  body.di2-live.di2-notifications #di2 .di2-pill {
-    display: flex !important;
-    width: auto !important;
-    min-width: 150px !important;
-    max-width: calc(100vw - 24px) !important;
-    height: 42px !important;
-    border-radius: 21px !important;
-    overflow: hidden !important;
-  }
-
-  body.di2-live.di2-search #di2 .di2-nav,
-  body.di2-live.di2-search #di2 .di2-cta,
-  body.di2-live.di2-search #di2 .di2-score,
-  body.di2-live.di2-search #di2 .di2-badge,
-  body.di2-live.di2-search #di2 .di2-sm-back,
-  body.di2-live.di2-search #di2 .di2-sm-go,
-  body.di2-live.di2-notifications #di2 .di2-nav,
-  body.di2-live.di2-notifications #di2 .di2-cta,
-  body.di2-live.di2-notifications #di2 .di2-score,
-  body.di2-live.di2-notifications #di2 .di2-badge,
-  body.di2-live.di2-notifications #di2 .di2-sm-back,
-  body.di2-live.di2-notifications #di2 .di2-sm-go {
-    display: none !important;
-  }
-
-  body.di2-live.di2-search #pg-search.active,
-  body.di2-live.di2-notifications #pg-notifications.active {
-    padding-top: 70px !important;
-  }
-
-  body.di2-live.di2-search #di2 .di2-right,
-  body.di2-live.di2-notifications #di2 .di2-right {
-    display: flex !important;
-  }
+  /* The top island duplicates the bottom nav's own job on a phone: Talk,
+     Feed, Search, Messages, Notifications and Profile all exist as tabs
+     down here too. On a screen this narrow that's the same six destinations
+     rendered twice — a floating pill at the top AND a full bar at the
+     bottom — which is the "too much chrome, not enough content" complaint.
+     Desktop has no bottom nav at all, so the island stays the only
+     navigation there and this rule is scoped to leave it untouched.
+     display:none rather than opacity/visibility because #di2 is
+     position:fixed and out of document flow already — nothing else reflows
+     when it's gone, unlike the old .sakura-topbar pill above, which needed
+     its spacer preserved for exactly that reason. */
+  body.di2-live #di2 { display: none !important; }
 }
 
 /* Messages dark bottom nav */
