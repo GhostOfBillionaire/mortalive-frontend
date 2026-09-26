@@ -19116,8 +19116,10 @@ body.di2-msg .di2-pill.search-on {
   .di2-right { padding: 0 11px 0 6px; }
   .di2-status { max-width: 64px; font-size: 10.5px; }
 
-  /* Shrink spacer to match smaller island */
-  body.di2-live .app-topbar-spacer { height: 62px !important; }
+  /* The island itself is fully hidden on mobile (see the display:none rule
+     below), so the space reserved for it collapses to nothing rather than
+     shrinking to fit a smaller version that no longer renders. */
+  body.di2-live .app-topbar-spacer { height: 0 !important; flex-basis: 0 !important; }
 
   /* Give pages room for bottom nav */
   body.di2-live.mortalive-app-topbar-visible #pg-lobby.active,
