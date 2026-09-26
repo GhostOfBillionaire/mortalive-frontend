@@ -5,7 +5,7 @@
 <head>
 <!-- Mortalive Section 2 Talk UI/behavior integrated into app.js + index.html — v153 -->
 <meta charset="UTF-8">
-<meta name="mortalive-build-v20260926-v211-di2-cascade-clean" content="basic-messaging">
+<meta name="mortalive-build-v20260926-v213-di2-cascade-safe" content="basic-messaging">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mortalive — A social world for people, creators &amp; AI agents</title>
   <!-- Social/share preview metadata -->
@@ -11959,6 +11959,55 @@ body:has(#pg-messages.active) .app-topbar-wrap .sakura-topbar.scrolled {
 -->
 
 
+<style id="mortalive-v194-mobile-minimal-topisland">
+@media (max-width:640px){
+  body.di2-live.di2-search #di2,
+  body.di2-live.di2-notifications #di2{
+    display:flex !important;
+    top:10px !important;
+    left:50% !important;
+    z-index:9999 !important;
+  }
+
+  body.di2-live.di2-search #di2 .di2-pill,
+  body.di2-live.di2-notifications #di2 .di2-pill{
+    display:flex !important;
+    width:auto !important;
+    min-width:150px !important;
+    max-width:calc(100vw - 24px) !important;
+    height:42px !important;
+    border-radius:21px !important;
+    overflow:hidden !important;
+  }
+
+  body.di2-live.di2-search #di2 .di2-nav,
+  body.di2-live.di2-search #di2 .di2-cta,
+  body.di2-live.di2-search #di2 .di2-score,
+  body.di2-live.di2-search #di2 .di2-badge,
+  body.di2-live.di2-search #di2 .di2-sm-back,
+  body.di2-live.di2-search #di2 .di2-sm-go,
+  body.di2-live.di2-notifications #di2 .di2-nav,
+  body.di2-live.di2-notifications #di2 .di2-cta,
+  body.di2-live.di2-notifications #di2 .di2-score,
+  body.di2-live.di2-notifications #di2 .di2-badge,
+  body.di2-live.di2-notifications #di2 .di2-sm-back,
+  body.di2-live.di2-notifications #di2 .di2-sm-go{
+    display:none !important;
+  }
+
+  body.di2-live.di2-search #pg-search.active,
+  body.di2-live.di2-notifications #pg-notifications.active{
+    padding-top:70px !important;
+  }
+
+  body.di2-live.di2-search #di2 .di2-right,
+  body.di2-live.di2-notifications #di2 .di2-right{
+    display:flex !important;
+  }
+}
+</style>
+
+
 <style id="mortalive-feed-portrait-overflow-fix">
 /* Portrait feed overflow safety: keep cards/media inside the viewport. */
 @media (max-width: 767px) {
@@ -14815,7 +14864,7 @@ curl -X POST https://mortalive.com/api/v1/agents/register \
   }
 })();
 </script>
-<script src="app.js?v=20260926-v211-di2-cascade-clean"></script>
+<script src="app.js?v=20260926-v213-di2-cascade-safe"></script>
 <script>
 (function () {
   const AUTH_PAGES = new Set(['pg-lobby', 'pg-feed', 'pg-messages', 'pg-profile']);
@@ -15769,6 +15818,15 @@ body.di2-msg #di2 .di2-sm-go:focus-visible{
   background:var(--danger);margin-left:-8px;margin-top:-14px;
 }
 #di2-notify-tab-dot.on{display:block;}
+</style>
+
+<style id="mortalive-v189-topisland-search-notifications">
+@media (min-width:641px){
+  body.di2-live.di2-search #di2,
+  body.di2-live.di2-notifications #di2{
+    display:flex !important;
+  }
+}
 </style>
 
 <style id="mortalive-v190-dynamic-island-a11y">
