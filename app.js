@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-25-v209-long-video-feed'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-26-v210-sober-dual-feed'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -89,12 +89,10 @@ const MORTALIVE_MEDIA_WORKER_URL =
   'https://mortalive-media-dev.pdrive777yhgtu.workers.dev';
 
 // ─────────────────────────────────────────────────────────────────────────
-// V197 — predictive Feed media preloading.
-// Server-side prewarming fills R2 ahead of the user via the Worker queue.
-// This browser layer separately primes the next few archive assets so the
-// browser/player can reuse the already-warm R2 response with minimal delay.
-// It is deliberately small and bounded: never more than 3 upcoming assets
-// are actively primed in the browser at once.
+// V197 — bounded archive Feed media loading.
+// The browser performs NO hidden archive-media preloads. Archive media is
+// requested only when a rendered card enters the near viewport. This keeps
+// scrolling from turning catalogue browsing into an R2 warming workload.
 // ─────────────────────────────────────────────────────────────────────────
 const ARCHIVE_BROWSER_PRELOAD_MAX = 0;
 const ARCHIVE_BROWSER_PRELOAD_RETENTION_MS = 45000;
@@ -6987,7 +6985,18 @@ window.fetchEligibleMessageContacts = fetchEligibleMessageContacts;
 // for this phase; likes/comments/polls remain later relational phases.
 // ═══════════════════════════════════════════════════════════════════
 const FEED_PAGE_SIZE = 10;
-const FEED_MAX_POST_CHARS = 500;
+// Sober public Feed composition: exactly 8 Supabase/live + 2 archive candidates
+// per fetch cycle. This keeps Cloudflare/D1 traffic proportional to the user's
+// scroll position instead of fetching a second full 10-post page and discarding it.
+const FEED_LIVE_PAGE_SIZE = 8;
+const FEED_ARCHIVE_PAGE_SIZE = 2;
+// Keep the archive request deterministic. The browser mixes the returned rows
+// with live posts, so the Worker does not need its more expensive randomized
+// archive selection path for normal scrolling.
+const ARCHIVE_FEED_RANDOMIZE = false;
+// A failed/empty archive request must not trigger a second D1-backed request.
+// The public Feed can continue normally with the Supabase source.
+const ENABLE_ARCHIVE_FEED_FALLBACK = false;
 let _feedInitialized = false;
 let _feedFilter = 'all';
 let _feedOffset = 0;
@@ -7502,7 +7511,7 @@ function initFeedReelMediaObserver(root) {
           _feedReelMediaObserver?.unobserve(video);
         } catch (_) {}
       });
-    }, { threshold: [0.01], rootMargin: '450px 0px' });
+    }, { threshold: [0.01], rootMargin: '150px 0px' });
   }
   root.querySelectorAll('.reel-thumb-bg[data-media-src]').forEach((video) => {
     _feedReelMediaObserver.observe(video);
@@ -7540,7 +7549,7 @@ function initFeedPerformance(root = $('feed-posts')) {
         }
       });
     });
-  }, { threshold: [0, 0.10, 0.5], rootMargin: '600px 0px' });
+  }, { threshold: [0, 0.10, 0.5], rootMargin: '200px 0px' });
 
   root.querySelectorAll(':scope > .post-card, :scope > .feed-reels-shelf').forEach((card) => {
     _feedPerformanceObserver.observe(card);
@@ -7667,7 +7676,7 @@ function initFeedPerformance(root = $('feed-posts')) {
   }
 }
 
-async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
+async function fetchArchiveFeedPage(limit = FEED_ARCHIVE_PAGE_SIZE, offset = 0) {
   const archiveSeenIds = Array.from(
     new Set(
       (_feedPosts || [])
@@ -7680,10 +7689,10 @@ async function fetchArchiveFeedPage(limit = FEED_PAGE_SIZE, offset = 0) {
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
-    random: '1'
+    random: ARCHIVE_FEED_RANDOMIZE ? '1' : '0'
   });
 
-  if (archiveSeenIds.length) {
+  if (ARCHIVE_FEED_RANDOMIZE && archiveSeenIds.length) {
     params.set('exclude', archiveSeenIds.join(','));
   }
 
@@ -7802,7 +7811,7 @@ async function fetchFeedPage(reset = false) {
     // public Feed is hydrated instead of waiting for Supabase to finish.
     const archivePromise =
       _feedFilter !== 'mine' && _feedHasMoreArchive
-        ? fetchArchiveFeedPage(FEED_PAGE_SIZE, _feedArchiveOffset)
+        ? fetchArchiveFeedPage(FEED_ARCHIVE_PAGE_SIZE, _feedArchiveOffset)
         : Promise.resolve({ posts: [], hasMore: _feedHasMoreArchive });
 
     const livePromise = (async () => {
@@ -7813,7 +7822,7 @@ async function fetchFeedPage(reset = false) {
           .from('posts')
           .select(postSelectColumns())
           .order('created_at', { ascending: false })
-          .range(_feedLiveOffset, _feedLiveOffset + FEED_PAGE_SIZE - 1);
+          .range(_feedLiveOffset, _feedLiveOffset + FEED_LIVE_PAGE_SIZE - 1);
 
         if (_feedFilter === 'mine') {
           query = query.eq('user_id', S.userId);
@@ -7827,7 +7836,7 @@ async function fetchFeedPage(reset = false) {
         const rows = Array.isArray(data) ? data : [];
         return {
           posts: rows,
-          hasMore: rows.length === FEED_PAGE_SIZE
+          hasMore: rows.length === FEED_LIVE_PAGE_SIZE
         };
       } catch (liveError) {
         console.warn('[Feed] Supabase source failed; archive source remains available:', liveError?.message || liveError);
@@ -7843,7 +7852,7 @@ async function fetchFeedPage(reset = false) {
     // no rows, make one deterministic catalogue request before giving up. This
     // keeps Cloudflare/D1 content visible even when a randomized hot-set probe
     // happens to produce an empty page. It never replaces existing live posts.
-    if (_feedFilter !== 'mine' && !archivePosts.length && _feedHasMoreArchive) {
+    if (ENABLE_ARCHIVE_FEED_FALLBACK && _feedFilter !== 'mine' && !archivePosts.length && _feedHasMoreArchive) {
       try {
         const fallbackParams = new URLSearchParams({
           limit: String(Math.max(6, FEED_PAGE_SIZE)),
@@ -7914,10 +7923,10 @@ async function fetchFeedPage(reset = false) {
     }
 
     /*
-     * Archive order is deliberately randomized by the Worker. Never re-sort
-     * the result by created_at here. Mix live + archive candidates with a
-     * light Fisher-Yates pass, then reserve a small archive share so the
-     * Cloudflare/D1 catalogue is actually represented in the public Feed.
+     * The Worker is queried deterministically for only two archive rows.
+     * Mix those rows with eight Supabase/live rows locally, then keep the
+     * existing archive-share safeguard so archive content remains visible
+     * without creating extra Cloudflare requests.
      */
     const incoming = [
       ...archivePosts,
