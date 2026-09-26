@@ -3,7 +3,7 @@
 /* Mortalive — simplified frontend app
    Omegle-style UI, desktop-safe layout, text/video chat, demo fallback. */
 
-const BUILD_TAG = 'mortalive-build-2026-09-26-v212-di2-backend-resilient'; // bump this string on every deploy to confirm cache is fresh
+const BUILD_TAG = 'mortalive-build-2026-09-26-v213-di2-cascade-safe'; // bump this string on every deploy to confirm cache is fresh
 // V131 engineer note: restore the Talk video DOM defensively before real or synthetic playback.
 // Random maintenance note: keep profile controls resilient across rerenders.
 // Security audit v47: public media endpoints are retired; admin media stays session-gated.
@@ -75,32 +75,11 @@ function emitLimited(event, payload, limitKey = event, notify = false) {
   return true;
 }
 
-const SERVER_URL = String(
+const SERVER_URL =
   window.MORTALIVE_SERVER_URL ||
   (location.hostname === 'localhost'
     ? 'http://localhost:3001'
-    : 'https://mortalive-server.onrender.com')
-).replace(/\/+$/, '');
-
-// Backend startup must never be allowed to block the entire SPA.
-// Render/cold-start/network failures are non-fatal for landing/guest UI;
-// authenticated/backend features retry when they actually need the server.
-const BACKEND_FETCH_TIMEOUT_MS = 7000;
-
-async function fetchBackend(url, options = {}, timeoutMs = BACKEND_FETCH_TIMEOUT_MS) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } catch (error) {
-    if (error?.name === 'AbortError') {
-      throw new Error(`Backend request timed out after ${Math.ceil(timeoutMs / 1000)}s`);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
-}
+    : 'https://mortalive-server.onrender.com');
 
 // Archive/media data is served by the dedicated Cloudflare Worker.
 // Keep this separate from SERVER_URL because the archive does not live on
@@ -1661,7 +1640,7 @@ let _publicConfigPromise = null;
 async function loadRuntimeIceServers() {
   try {
     if (!SERVER_URL) return;
-    const res = await fetchBackend(`${SERVER_URL}/api/ice-servers`, {
+    const res = await fetch(`${SERVER_URL.replace(/\/$/, '')}/api/ice-servers`, {
       method: 'GET',
       cache: 'no-store',
       credentials: 'omit',
@@ -1690,8 +1669,8 @@ async function loadRuntimeIceServers() {
 async function loadPublicRuntimeConfig() {
   if (_publicConfigPromise) return _publicConfigPromise;
   _publicConfigPromise = (async () => {
-    const configUrl = `${SERVER_URL}/api/public-config`;
-    const res = await fetchBackend(configUrl, {
+    const configUrl = `${SERVER_URL.replace(/\/$/, '')}/api/public-config`;
+    const res = await fetch(configUrl, {
       method: 'GET',
       cache: 'no-store',
       headers: { 'Accept': 'application/json' }
@@ -5373,19 +5352,20 @@ function finishStartupSplash() {
 })();
 
 ready(async () => {
-  // Backend config is deliberately non-blocking. A cold/unreachable Render
-  // instance must not strand the entire page before landing/guest UI appears.
-  // window.sb is already initialized by index.html for normal auth startup;
-  // the public-config refresh below only upgrades runtime configuration.
-  loadPublicRuntimeConfig().catch((error) => {
-    console.warn('[Mortalive] Runtime config unavailable; continuing with existing client config:', error?.message || error);
-  });
+  // Load public runtime configuration before binding auth/feed/profile controls.
+  // This keeps keys/configuration out of the browser source while preserving
+  // normal guest-mode startup if the backend config endpoint is temporarily unavailable.
+  try {
+    await loadPublicRuntimeConfig();
+  } catch (error) {
+    console.error('[Mortalive] Runtime config failed:', error?.message || error);
+    toast('Some account features are temporarily unavailable. Please try again shortly.', '⚠️');
+  }
 
-  // TURN/STUN config is also non-blocking. WebRTC keeps the built-in public
-  // STUN fallback until the backend responds.
-  loadRuntimeIceServers().catch((error) => {
-    console.warn('[Mortalive] Runtime ICE config unavailable; keeping STUN fallback:', error?.message || error);
-  });
+  // Fetch TURN/STUN runtime configuration before any Talk session can create
+  // its RTCPeerConnection. Failure is non-fatal: the built-in public STUN
+  // fallback remains available so existing WebRTC behavior is preserved.
+  await loadRuntimeIceServers();
 
   stabilizeProfileScrollAxes();
   // Hard maximum: the branded splash can never remain on screen longer than
